@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_output.c,v 1.163 2007/12/20 19:53:32 dyoung Exp $	*/
+/*	$NetBSD: tcp_output.c,v 1.171 2011/04/14 16:08:53 yamt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -89,13 +89,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -142,7 +135,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.163 2007/12/20 19:53:32 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.171 2011/04/14 16:08:53 yamt Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -199,6 +192,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.163 2007/12/20 19:53:32 dyoung Exp 
 #include <netinet/tcp_seq.h>
 #include <netinet/tcp_timer.h>
 #include <netinet/tcp_var.h>
+#include <netinet/tcp_private.h>
 #include <netinet/tcp_congctl.h>
 #include <netinet/tcpip.h>
 #include <netinet/tcp_debug.h>
@@ -221,7 +215,7 @@ extern struct mbuf *m_copypack();
 int	tcp_cwm = 0;
 int	tcp_cwm_burstsize = 4;
 
-int	tcp_do_autosndbuf = 0;
+int	tcp_do_autosndbuf = 1;
 int	tcp_autosndbuf_inc = 8 * 1024;
 int	tcp_autosndbuf_max = 256 * 1024;
 
@@ -444,16 +438,19 @@ tcp_build_datapkt(struct tcpcb *tp, struct socket *so, int off,
     long len, int hdrlen, struct mbuf **mp)
 {
 	struct mbuf *m, *m0;
+	uint64_t *tcps;
 
+	tcps = TCP_STAT_GETREF();
 	if (tp->t_force && len == 1)
-		tcpstat.tcps_sndprobe++;
+		tcps[TCP_STAT_SNDPROBE]++;
 	else if (SEQ_LT(tp->snd_nxt, tp->snd_max)) {
-		tcpstat.tcps_sndrexmitpack++;
-		tcpstat.tcps_sndrexmitbyte += len;
+		tcps[TCP_STAT_SNDREXMITPACK]++;
+		tcps[TCP_STAT_SNDREXMITBYTE] += len;
 	} else {
-		tcpstat.tcps_sndpack++;
-		tcpstat.tcps_sndbyte += len;
+		tcps[TCP_STAT_SNDPACK]++;
+		tcps[TCP_STAT_SNDBYTE] += len;
 	}
+	TCP_STAT_PUTREF();
 #ifdef notyet
 	if ((m = m_copypack(so->so_snd.sb_mb, off,
 	    (int)len, max_linkhdr + hdrlen)) == 0)
@@ -576,10 +573,12 @@ tcp_output(struct tcpcb *tp)
 	bool alwaysfrag;
 	int sack_rxmit;
 	int sack_bytes_rxmt;
+	int ecn_tos;
 	struct sackhole *p;
 #ifdef TCP_SIGNATURE
 	int sigoff = 0;
 #endif
+	uint64_t *tcps;
 
 #ifdef DIAGNOSTIC
 	if (tp->t_inpcb && tp->t_in6pcb)
@@ -638,7 +637,7 @@ tcp_output(struct tcpcb *tp)
 		  IPSEC_PCB_SKIP_IPSEC(tp->t_inpcb->inp_sp,
 		  		       IPSEC_DIR_OUTBOUND) &&
 #endif
-		  (rt = rtcache_getrt(&tp->t_inpcb->inp_route)) != NULL &&
+		  (rt = rtcache_validate(&tp->t_inpcb->inp_route)) != NULL &&
 		  (rt->rt_ifp->if_capenable & IFCAP_TSOv4) != 0;
 #endif /* defined(INET) */
 #if defined(INET6)
@@ -647,7 +646,7 @@ tcp_output(struct tcpcb *tp)
 		  IPSEC_PCB_SKIP_IPSEC(tp->t_in6pcb->in6p_sp,
 		  		       IPSEC_DIR_OUTBOUND) &&
 #endif
-		  (rt = rtcache_getrt(&tp->t_in6pcb->in6p_route)) != NULL &&
+		  (rt = rtcache_validate(&tp->t_in6pcb->in6p_route)) != NULL &&
 		  (rt->rt_ifp->if_capenable & IFCAP_TSOv6) != 0;
 #endif /* defined(INET6) */
 	has_tso = (has_tso4 || has_tso6) && !alwaysfrag;
@@ -700,6 +699,7 @@ tcp_output(struct tcpcb *tp)
 
 	txsegsize_nosack = txsegsize;
 again:
+	ecn_tos = 0;
 	use_tso = has_tso;
 	if ((tp->t_flags & (TF_ECN_SND_CWR|TF_ECN_SND_ECE)) != 0) {
 		/* don't duplicate CWR/ECE. */
@@ -960,9 +960,7 @@ again:
 			 * stack (rather than big-small-big-small-...).
 			 */
 #ifdef INET6
-#if IPV6_MAXPACKET != IP_MAXPACKET
-#error IPV6_MAXPACKET != IP_MAXPACKET
-#endif
+			CTASSERT(IPV6_MAXPACKET == IP_MAXPACKET);
 #endif
 			len = (min(len, IP_MAXPACKET) / txsegsize) * txsegsize;
 			if (len <= txsegsize) {
@@ -1222,7 +1220,7 @@ send:
 		*bp++ = TCPOPT_SIGNATURE;
 		*bp++ = TCPOLEN_SIGNATURE;
 		sigoff = optlen + 2;
-		bzero(bp, TCP_SIGLEN);
+		memset(bp, 0, TCP_SIGLEN);
 		bp += TCP_SIGLEN;
 		optlen += TCPOLEN_SIGNATURE;
 		/*
@@ -1263,14 +1261,16 @@ send:
 		if (off + len == so->so_snd.sb_cc)
 			flags |= TH_PUSH;
 	} else {
+		tcps = TCP_STAT_GETREF();
 		if (tp->t_flags & TF_ACKNOW)
-			tcpstat.tcps_sndacks++;
+			tcps[TCP_STAT_SNDACKS]++;
 		else if (flags & (TH_SYN|TH_FIN|TH_RST))
-			tcpstat.tcps_sndctrl++;
+			tcps[TCP_STAT_SNDCTRL]++;
 		else if (SEQ_GT(tp->snd_up, tp->snd_una))
-			tcpstat.tcps_sndurg++;
+			tcps[TCP_STAT_SNDURG]++;
 		else
-			tcpstat.tcps_sndwinup++;
+			tcps[TCP_STAT_SNDWINUP]++;
+		TCP_STAT_PUTREF();
 
 		MGETHDR(m, M_DONTWAIT, MT_HEADER);
 		if (m != NULL && max_linkhdr + hdrlen > MHLEN) {
@@ -1344,19 +1344,8 @@ send:
 		 */
 		if (len > 0 && SEQ_GEQ(tp->snd_nxt, tp->snd_max) &&
 		    !(tp->t_force && len == 1)) {
-			switch (af) {
-#ifdef INET
-			case AF_INET:
-				tp->t_inpcb->inp_ip.ip_tos |= IPTOS_ECN_ECT0;
-				break;
-#endif
-#ifdef INET6
-			case AF_INET6:
-				ip6->ip6_flow |= htonl(IPTOS_ECN_ECT0 << 20);
-				break;
-#endif
-			}
-			tcpstat.tcps_ecn_ect++;
+			ecn_tos = IPTOS_ECN_ECT0;
+			TCP_STATINC(TCP_STAT_ECN_ECT);
 		}
 
 		/*
@@ -1520,7 +1509,7 @@ send:
 			if (tp->t_rtttime == 0) {
 				tp->t_rtttime = tcp_now;
 				tp->t_rtseq = startseq;
-				tcpstat.tcps_segstimed++;
+				TCP_STATINC(TCP_STAT_SEGSTIMED);
 			}
 		}
 
@@ -1569,12 +1558,12 @@ timer:
 		packetlen = m->m_pkthdr.len;
 		if (tp->t_inpcb) {
 			ip->ip_ttl = tp->t_inpcb->inp_ip.ip_ttl;
-			ip->ip_tos = tp->t_inpcb->inp_ip.ip_tos;
+			ip->ip_tos = tp->t_inpcb->inp_ip.ip_tos | ecn_tos;
 		}
 #ifdef INET6
 		else if (tp->t_in6pcb) {
 			ip->ip_ttl = in6_selecthlim(tp->t_in6pcb, NULL); /*XXX*/
-			ip->ip_tos = 0;	/*XXX*/
+			ip->ip_tos = ecn_tos;	/*XXX*/
 		}
 #endif
 		break;
@@ -1591,10 +1580,11 @@ timer:
 			 * be changed via Neighbor Discovery.
 			 */
 			ip6->ip6_hlim = in6_selecthlim(tp->t_in6pcb,
-				(rt = rtcache_getrt(ro)) != NULL ? rt->rt_ifp
-				                                 : NULL);
+				(rt = rtcache_validate(ro)) != NULL ? rt->rt_ifp
+				                                    : NULL);
 		}
-		/* ip6->ip6_flow = ??? */
+		ip6->ip6_flow |= htonl(ecn_tos << 20);
+		/* ip6->ip6_flow = ??? (from template) */
 		/* ip6_plen will be filled in ip6_output(). */
 		break;
 #endif
@@ -1641,7 +1631,7 @@ timer:
 	if (error) {
 out:
 		if (error == ENOBUFS) {
-			tcpstat.tcps_selfquench++;
+			TCP_STATINC(TCP_STAT_SELFQUENCH);
 #ifdef INET
 			if (tp->t_inpcb)
 				tcp_quench(tp->t_inpcb, 0);
@@ -1671,9 +1661,11 @@ out:
 	if (packetlen > tp->t_pmtud_mtu_sent)
 		tp->t_pmtud_mtu_sent = packetlen;
 	
-	tcpstat.tcps_sndtotal++;
+	tcps = TCP_STAT_GETREF();
+	tcps[TCP_STAT_SNDTOTAL]++;
 	if (tp->t_flags & TF_DELACK)
-		tcpstat.tcps_delack++;
+		tcps[TCP_STAT_DELACK]++;
+	TCP_STAT_PUTREF();
 
 	/*
 	 * Data sent (as far as we can tell).

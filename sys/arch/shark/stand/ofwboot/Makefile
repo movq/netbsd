@@ -1,8 +1,10 @@
-#	$NetBSD: Makefile,v 1.10 2006/01/27 01:57:29 uwe Exp $
+#	$NetBSD: Makefile,v 1.12 2011/01/22 19:19:23 joerg Exp $
+
+.include <bsd.own.mk>
 
 S=		${.CURDIR}/../../../..
 
-WARNS=		4
+WARNS=		2
 PROG=		ofwboot
 SRCS=		srt0.S Locore.c alloc.c boot.c ofdev.c net.c netif_of.c vers.c
 CFLAGS+=	-ffreestanding -Wno-main
@@ -64,7 +66,8 @@ LIBSA=		${SALIB}
 
 .PHONY: vers.c
 vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version "shark" ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${.CURDIR}/version "shark" ${NEWVERSWHAT}
 
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 	${LD} -s -N -Ttext ${RELOC} -Bstatic -e ${ENTRY} -o ${.TARGET}.aout \

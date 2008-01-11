@@ -1,4 +1,4 @@
-/*	$NetBSD: df.c,v 1.78 2007/12/22 00:23:36 yamt Exp $ */
+/*	$NetBSD: df.c,v 1.86 2009/06/06 09:30:45 mlelstv Exp $ */
 
 /*
  * Copyright (c) 1980, 1990, 1993, 1994
@@ -37,15 +37,15 @@
 #include <sys/cdefs.h>
 #ifndef lint
 __COPYRIGHT(
-"@(#) Copyright (c) 1980, 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+"@(#) Copyright (c) 1980, 1990, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)df.c	8.7 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: df.c,v 1.78 2007/12/22 00:23:36 yamt Exp $");
+__RCSID("$NetBSD: df.c,v 1.86 2009/06/06 09:30:45 mlelstv Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,6 +57,7 @@ __RCSID("$NetBSD: df.c,v 1.78 2007/12/22 00:23:36 yamt Exp $");
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <util.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,16 +92,19 @@ main(int argc, char *argv[])
 	int ch, i, maxwidth, width;
 	char *mntpt;
 
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
+
 	while ((ch = getopt(argc, argv, "aGghiklmnPt:")) != -1)
 		switch (ch) {
 		case 'a':
 			aflag = 1;
 			break;
-		case 'G':
+		case 'g':
 			hflag = 0;
 			usize = 1024 * 1024 * 1024;
 			break;
-		case 'g':
+		case 'G':
 			gflag = 1;
 			break;
 		case 'h':
@@ -129,7 +133,8 @@ main(int argc, char *argv[])
 			break;
 		case 't':
 			if (typelist != NULL)
-				errx(1, "only one -t option may be specified.");
+				errx(EXIT_FAILURE,
+				    "only one -t option may be specified.");
 			maketypelist(optarg);
 			break;
 		case '?':
@@ -138,26 +143,34 @@ main(int argc, char *argv[])
 		}
 
 	if (gflag && (Pflag || iflag))
-		errx(1, "only one of -g and -P or -i may be specified");
+		errx(EXIT_FAILURE,
+		    "only one of -G and -P or -i may be specified");
 	if (Pflag && iflag)
-		errx(1, "only one of -P and -i may be specified");
+		errx(EXIT_FAILURE,
+		    "only one of -P and -i may be specified");
+#if 0
+	/*
+	 * The block size cannot be checked until after getbsize() is called.
+	 */
 	if (Pflag && (hflag || (usize != 1024 && usize != 512)))
-		errx(1, "non-standard block size incompatible with -P");
-
+		errx(EXIT_FAILURE,
+		    "non-standard block size incompatible with -P");
+#endif
 	argc -= optind;
 	argv += optind;
 
 	mntsize = getmntinfo(&mntbuf, MNT_NOWAIT);
 	if (mntsize == 0)
-		err(1, "retrieving information on mounted file systems");
+		err(EXIT_FAILURE,
+		    "retrieving information on mounted file systems");
 
 	if (*argv == NULL) {
 		mntsize = regetmntinfo(&mntbuf, mntsize);
 	} else {
 		if ((mntbuf = malloc(argc * sizeof(*mntbuf))) == NULL)
-			err(1, "can't allocate statvfs array");
+			err(EXIT_FAILURE, "can't allocate statvfs array");
 		mntsize = 0;
-		for (; *argv != NULL; argv++) {
+		for (/*EMPTY*/; *argv != NULL; argv++) {
 			if (stat(*argv, &stbuf) < 0) {
 				if ((mntpt = getmntpt(*argv)) == 0) {
 					warn("%s", *argv);
@@ -193,7 +206,7 @@ main(int argc, char *argv[])
 
 	maxwidth = 0;
 	for (i = 0; i < mntsize; i++) {
-		width = strlen(mntbuf[i].f_mntfromname);
+		width = (int)strlen(mntbuf[i].f_mntfromname);
 		if (width > maxwidth)
 			maxwidth = width;
 	}
@@ -240,7 +253,7 @@ maketypelist(char *fslist)
 	char *nextcp, **av;
 
 	if ((fslist == NULL) || (fslist[0] == '\0'))
-		errx(1, "empty type list");
+		errx(EXIT_FAILURE, "empty type list");
 
 	/*
 	 * XXX
@@ -260,7 +273,7 @@ maketypelist(char *fslist)
 
 	/* Build an array of that many types. */
 	if ((av = typelist = malloc((i + 1) * sizeof(char *))) == NULL)
-		err(1, "can't allocate type array");
+		err(EXIT_FAILURE, "can't allocate type array");
 	av[0] = fslist;
 	for (i = 1, nextcp = fslist;
 	    (nextcp = strchr(nextcp, ',')) != NULL; i++) {
@@ -318,7 +331,7 @@ prthumanval(int64_t bytes, const char *pad)
 {
 	char buf[6];
 
-	humanize_number(buf, sizeof(buf) - (bytes < 0 ? 0 : 1),
+	(void)humanize_number(buf, sizeof(buf) - (bytes < 0 ? 0 : 1),
 	    bytes, "", HN_AUTOSCALE,
 	    HN_B | HN_NOSPACE | HN_DECIMAL);
 
@@ -329,9 +342,9 @@ void
 prthuman(struct statvfs *sfsp, int64_t used, int64_t bavail)
 {
 
-	prthumanval(sfsp->f_blocks * sfsp->f_frsize, "   ");
-	prthumanval(used * sfsp->f_frsize, "    ");
-	prthumanval(bavail * sfsp->f_frsize, "    ");
+	prthumanval((int64_t)(sfsp->f_blocks * sfsp->f_frsize), "  ");
+	prthumanval((int64_t)(used * sfsp->f_frsize), "    ");
+	prthumanval((int64_t)(bavail * sfsp->f_frsize), "    ");
 }
 
 /*
@@ -339,9 +352,9 @@ prthuman(struct statvfs *sfsp, int64_t used, int64_t bavail)
  * Attempts to avoid overflow for large filesystems.
  */
 #define fsbtoblk(num, fsbs, bs)					\
-	(((fsbs) != 0 && (fsbs) < (bs)) ?			\
+	(((fsbs) != 0 && (uint64_t)(fsbs) < (uint64_t)(bs)) ?	\
 	    (int64_t)(num) / (int64_t)((bs) / (fsbs)) :		\
-	    (int64_t)(num) * ((fsbs) / (bs)))
+	    (int64_t)(num) * (int64_t)((fsbs) / (bs)))
 
 /*
  * Print out status about a filesystem.
@@ -361,9 +374,9 @@ prtstat(struct statvfs *sfsp, int maxwidth)
 		/*
 		 * From SunOS-5.6:
 		 *
-		 * /var               (/dev/dsk/c0t0d0s3 ):         8192 block size          1024 frag size  
+		 * /var               (/dev/dsk/c0t0d0s3 ):         8192 block size          1024 frag size
 		 *   984242 total blocks     860692 free blocks   859708 available         249984 total files
-		 *   248691 free files      8388611 filesys id  
+		 *   248691 free files      8388611 filesys id
 		 *      ufs fstype       0x00000004 flag             255 filename length
 		 *
 		 */
@@ -380,7 +393,7 @@ prtstat(struct statvfs *sfsp, int maxwidth)
 					 * block size" is the frag
 					 * size.
 					 */
-		(void)printf("%10" PRId64 " total blocks %10" PRId64 
+		(void)printf("%10" PRId64 " total blocks %10" PRId64
 		    " free blocks  %10" PRId64 " available\n",
 		    (uint64_t)sfsp->f_blocks, (uint64_t)sfsp->f_bfree,
 		    (uint64_t)sfsp->f_bavail);
@@ -407,20 +420,20 @@ prtstat(struct statvfs *sfsp, int maxwidth)
 		switch (blocksize = usize) {
 		case 1024:
 			header = Pflag ? "1024-blocks" : "1K-blocks";
-			headerlen = strlen(header);
+			headerlen = (int)strlen(header);
 			break;
 		case 1024 * 1024:
 			header = "1M-blocks";
-			headerlen = strlen(header);
+			headerlen = (int)strlen(header);
 			break;
 		case 1024 * 1024 * 1024:
 			header = "1G-blocks";
-			headerlen = strlen(header);
+			headerlen = (int)strlen(header);
 			break;
 		default:
 			if (hflag) {
 				header = "Size";
-				headerlen = strlen(header);
+				headerlen = (int)strlen(header);
 			} else
 				header = getbsize(&headerlen, &blocksize);
 			break;
@@ -432,6 +445,9 @@ prtstat(struct statvfs *sfsp, int maxwidth)
 			 * or:
 			 *  "Filesystem 512-blocks Used Available Capacity Mounted on\n"
 			 */
+			if (blocksize != 1024 && blocksize != 512)
+				errx(EXIT_FAILURE,
+				    "non-standard block size incompatible with -P");
 			(void)printf("Filesystem %s Used Available Capacity "
 			    "Mounted on\n", header);
 		} else {
@@ -453,13 +469,13 @@ prtstat(struct statvfs *sfsp, int maxwidth)
 		/*
 		 * "%s %d %d %d %s %s\n", <file system name>, <total space>,
 		 * <space used>, <space free>, <percentage used>,
-		 * <file system root>		   
+		 * <file system root>
 		 */
 		(void)printf("%s %" PRId64 " %" PRId64 " %" PRId64 " %s %s\n",
 		    sfsp->f_mntfromname,
-		    fsbtoblk(sfsp->f_blocks, sfsp->f_bsize, blocksize),
-		    fsbtoblk(used, sfsp->f_bsize, blocksize),
-		    fsbtoblk(sfsp->f_bavail, sfsp->f_bsize, blocksize),
+		    fsbtoblk(sfsp->f_blocks, sfsp->f_frsize, blocksize),
+		    fsbtoblk(used, sfsp->f_frsize, blocksize),
+		    fsbtoblk(bavail, sfsp->f_frsize, blocksize),
 		    availblks == 0 ? full : strpct64((uint64_t) used,
 		    (uint64_t) availblks, 0), sfsp->f_mntonname);
 		/*
@@ -471,7 +487,7 @@ prtstat(struct statvfs *sfsp, int maxwidth)
 		return;
 	}
 
-	(void)printf("%-*.*s", maxwidth, maxwidth, sfsp->f_mntfromname);
+	(void)printf("%-*.*s ", maxwidth, maxwidth, sfsp->f_mntfromname);
 
 	if (hflag)
 		prthuman(sfsp, used, bavail);

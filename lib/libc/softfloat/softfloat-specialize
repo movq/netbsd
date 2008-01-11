@@ -1,4 +1,4 @@
-/*	$NetBSD: softfloat-specialize,v 1.4 2004/09/26 21:13:27 jmmv Exp $	*/
+/*	$NetBSD: softfloat-specialize,v 1.6 2011/03/06 10:27:37 martin Exp $	*/
 
 /* This is a derivative work. */
 
@@ -33,6 +33,8 @@ this code that are retained.
 */
 
 #include <signal.h>
+#include <string.h>
+#include <unistd.h>
 
 /*
 -------------------------------------------------------------------------------
@@ -53,16 +55,35 @@ substitute a result value.  If traps are not implemented, this routine
 should be simply `float_exception_flags |= flags;'.
 -------------------------------------------------------------------------------
 */
+#ifdef SOFTFLOAT_FOR_GCC
+#define float_exception_mask	_softfloat_float_exception_mask
+#endif
 fp_except float_exception_mask = 0;
 void float_raise( fp_except flags )
 {
+    siginfo_t info;
 
     float_exception_flags |= flags;
 
     if ( flags & float_exception_mask ) {
-	raise( SIGFPE );
+	memset(&info, 0, sizeof info);
+	info.si_signo = SIGFPE;
+	info.si_pid = getpid();
+	info.si_uid = geteuid();
+	if (flags & float_flag_underflow)
+	    info.si_code = FPE_FLTUND;
+	else if (flags & float_flag_overflow)
+	    info.si_code = FPE_FLTOVF;
+	else if (flags & float_flag_divbyzero)
+	    info.si_code = FPE_FLTDIV;
+	else if (flags & float_flag_invalid)
+	    info.si_code = FPE_FLTINV;
+	else if (flags & float_flag_inexact)
+	    info.si_code = FPE_FLTRES;
+	sigqueueinfo(getpid(), &info);
     }
 }
+#undef float_exception_mask
 
 /*
 -------------------------------------------------------------------------------

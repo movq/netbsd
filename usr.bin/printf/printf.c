@@ -1,4 +1,4 @@
-/*	$NetBSD: printf.c,v 1.31 2005/03/22 23:55:46 dsl Exp $	*/
+/*	$NetBSD: printf.c,v 1.35 2011/03/15 23:11:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,8 +32,8 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if !defined(BUILTIN) && !defined(SHELL)
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif
 #endif
 
@@ -41,7 +41,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)printf.c	8.2 (Berkeley) 3/22/95";
 #else
-__RCSID("$NetBSD: printf.c,v 1.31 2005/03/22 23:55:46 dsl Exp $");
+__RCSID("$NetBSD: printf.c,v 1.35 2011/03/15 23:11:49 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -98,28 +98,30 @@ static char  **gargv;
 #define PF(f, func) { \
 	if (fieldwidth != -1) { \
 		if (precision != -1) \
-			(void)printf(f, fieldwidth, precision, func); \
+			error = printf(f, fieldwidth, precision, func); \
 		else \
-			(void)printf(f, fieldwidth, func); \
+			error = printf(f, fieldwidth, func); \
 	} else if (precision != -1) \
-		(void)printf(f, precision, func); \
+		error = printf(f, precision, func); \
 	else \
-		(void)printf(f, func); \
+		error = printf(f, func); \
 }
 
 #define APF(cpp, f, func) { \
 	if (fieldwidth != -1) { \
 		if (precision != -1) \
-			(void)asprintf(cpp, f, fieldwidth, precision, func); \
+			error = asprintf(cpp, f, fieldwidth, precision, func); \
 		else \
-			(void)asprintf(cpp, f, fieldwidth, func); \
+			error = asprintf(cpp, f, fieldwidth, func); \
 	} else if (precision != -1) \
-		(void)asprintf(cpp, f, precision, func); \
+		error = asprintf(cpp, f, precision, func); \
 	else \
-		(void)asprintf(cpp, f, func); \
+		error = asprintf(cpp, f, func); \
 }
 
-int main(int, char **);
+#ifdef main
+int main(int, char *[]);
+#endif
 int main(int argc, char *argv[])
 {
 	char *fmt, *start;
@@ -127,6 +129,7 @@ int main(int argc, char *argv[])
 	char nextch;
 	char *format;
 	int ch;
+	int error;
 
 #if !defined(SHELL) && !defined(BUILTIN)
 	(void)setlocale (LC_ALL, "");
@@ -151,8 +154,8 @@ int main(int argc, char *argv[])
 	format = *argv;
 	gargv = ++argv;
 
-#define SKIP1	"#-+ 0"
-#define SKIP2	"*0123456789"
+#define SKIP1	"#-+ 0'"
+#define SKIP2	"0123456789"
 	do {
 		/*
 		 * Basic algorithm is to scan the format string for conversion
@@ -182,13 +185,23 @@ int main(int argc, char *argv[])
 
 			/* skip to field width */
 			fmt += strspn(fmt, SKIP1);
-			fieldwidth = *fmt == '*' ? getwidth() : -1;
+			if (*fmt == '*') {
+				fmt++;
+				fieldwidth = getwidth();
+			} else
+				fieldwidth = -1;
 
 			/* skip to possible '.', get following precision */
 			fmt += strspn(fmt, SKIP2);
-			if (*fmt == '.')
-				++fmt;
-			precision = *fmt == '*' ? getwidth() : -1;
+			if (*fmt == '.') {
+				fmt++;
+				if (*fmt == '*') {
+					fmt++;
+					precision = getwidth();
+				} else
+					precision = -1;
+			} else
+				precision = -1;
 
 			fmt += strspn(fmt, SKIP2);
 
@@ -205,8 +218,12 @@ int main(int argc, char *argv[])
 
 			case 'B': {
 				const char *p = conv_expand(getstr());
+				if (p == NULL)
+					goto out;
 				*fmt = 's';
 				PF(start, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			case 'b': {
@@ -227,12 +244,14 @@ int main(int argc, char *argv[])
 				conv_escape_str(cp, b_count);
 				t = malloc(b_length + 1);
 				if (t == NULL)
-					break;
-				memset(t, 'x', b_length);
+					goto out;
+				(void)memset(t, 'x', b_length);
 				t[b_length] = 0;
 				/* Get printf to calculate the lengths */
 				*fmt = 's';
 				APF(&a, start, t);
+				if (error == -1)
+					goto out;
 				b_fmt = a;
 				/* Output leading spaces and data bytes */
 				conv_escape_str(cp, b_output);
@@ -243,11 +262,15 @@ int main(int argc, char *argv[])
 			case 'c': {
 				char p = getchr();
 				PF(start, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			case 's': {
 				char *p = getstr();
 				PF(start, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			case 'd':
@@ -255,6 +278,8 @@ int main(int argc, char *argv[])
 				intmax_t p = getintmax();
 				char *f = mklong(start, ch);
 				PF(f, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			case 'o':
@@ -264,6 +289,8 @@ int main(int argc, char *argv[])
 				uintmax_t p = getuintmax();
 				char *f = mklong(start, ch);
 				PF(f, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			case 'e':
@@ -273,6 +300,8 @@ int main(int argc, char *argv[])
 			case 'G': {
 				double p = getdouble();
 				PF(start, p);
+				if (error < 0)
+					goto out;
 				break;
 			}
 			default:
@@ -287,7 +316,10 @@ int main(int argc, char *argv[])
 		}
 	} while (gargv != argv && *gargv);
 
-	return rval;
+	return rval & ~0x100;
+out:
+	warn("print failed");
+	return 1;
 }
 
 /* helper functions for conv_escape_str */
@@ -454,7 +486,6 @@ static char *
 conv_expand(const char *str)
 {
 	static char *conv_str;
-	static char no_memory[] = "<no memory>";
 	char *cp;
 	int ch;
 
@@ -463,7 +494,7 @@ conv_expand(const char *str)
 	/* get a buffer that is definitely large enough.... */
 	conv_str = malloc(4 * strlen(str) + 1);
 	if (!conv_str)
-		return no_memory;
+		return NULL;
 	cp = conv_str;
 
 	while ((ch = *(const unsigned char *)str++) != '\0') {

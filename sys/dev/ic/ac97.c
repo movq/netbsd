@@ -1,4 +1,4 @@
-/*      $NetBSD: ac97.c,v 1.86 2007/02/21 22:59:59 thorpej Exp $ */
+/*      $NetBSD: ac97.c,v 1.91 2009/07/13 12:54:11 kiyohara Exp $ */
 /*	$OpenBSD: ac97.c,v 1.8 2000/07/19 09:01:35 csapuntz Exp $	*/
 
 /*
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ac97.c,v 1.86 2007/02/21 22:59:59 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ac97.c,v 1.91 2009/07/13 12:54:11 kiyohara Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,6 +103,7 @@ static int	ac97_write(struct ac97_softc *, uint8_t, uint16_t);
 
 static void	ac97_ad198x_init(struct ac97_softc *);
 static void	ac97_alc650_init(struct ac97_softc *);
+static void	ac97_ucb1400_init(struct ac97_softc *);
 static void	ac97_vt1616_init(struct ac97_softc *);
 
 static int	ac97_modem_offhook_set(struct ac97_softc *, int, int);
@@ -116,17 +117,104 @@ static int	ac97_sysctl_verify(SYSCTLFN_ARGS);
 static const struct audio_mixer_enum
 ac97_on_off = { 2, { { { AudioNoff, 0 } , 0 },
 		     { { AudioNon, 0 }  , 1 },
-        [2 ... 31] = { { "", 0 }, 0 } } };
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 }, } };
 
 static const struct audio_mixer_enum
 ac97_mic_select = { 2, { { { AudioNmicrophone "0", 0  }, 0 },
 			 { { AudioNmicrophone "1", 0  }, 1 },
-	    [2 ... 31] = { { "", 0 }, 0 } } };
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 },
+			 { { "", 0 }	, 0 }, } };
 
 static const struct audio_mixer_enum
 ac97_mono_select = { 2, { { { AudioNmixerout, 0  }, 0 },
 			  { { AudioNmicrophone, 0  }, 1 },
-	     [2 ... 31] = { { "", 0 }, 0 } } };
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 },
+			  { { "", 0 }	, 0 }, } };
 
 static const struct audio_mixer_enum
 ac97_source = { 8, { { { AudioNmicrophone, 0  } , 0 },
@@ -137,7 +225,30 @@ ac97_source = { 8, { { { AudioNmicrophone, 0  } , 0 },
 		     { { AudioNmixerout, 0 }, 5 },
 		     { { AudioNmixerout AudioNmono, 0 }, 6 },
 		     { { Ac97Nphone, 0 }, 7 },
-	[8 ... 31] = { { "", 0 }, 0 } } };
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 },
+		     { { "", 0 }	, 0 }, } };
 
 /*
  * Due to different values for each source that uses these structures,
@@ -609,7 +720,7 @@ static const struct ac97_codecid {
 	  AC97_VENDOR_ID_MASK,		"National Semiconductor unknown", NULL, },
 
 	{ AC97_CODEC_ID('P', 'S', 'C', 4),
-	  0xffffffff,			"Philips Semiconductor UCB1400", NULL, },
+	  0xffffffff,			"Philips Semiconductor UCB1400", ac97_ucb1400_init, },
 	{ AC97_CODEC_ID('P', 'S', 'C', 0),
 	  AC97_VENDOR_ID_MASK,		"Philips Semiconductor unknown", NULL, },
 
@@ -1099,13 +1210,13 @@ ac97_setup_source_info(struct ac97_softc *as)
 
 /* backward compatibility */
 int
-ac97_attach(struct ac97_host_if *host_if, struct device *sc_dev)
+ac97_attach(struct ac97_host_if *host_if, device_t sc_dev)
 {
 	return ac97_attach_type(host_if, sc_dev, AC97_CODEC_TYPE_AUDIO);
 }
 
 int
-ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
+ac97_attach_type(struct ac97_host_if *host_if, device_t sc_dev, int type)
 {
 	struct ac97_softc *as;
 	int error, i, j;
@@ -1185,7 +1296,7 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 	ac97_read(as, AC97_REG_VENDOR_ID2, &id2);
 
 	id = (id1 << 16) | id2;
-	aprint_normal("%s: ac97: ", sc_dev->dv_xname);
+	aprint_normal_dev(sc_dev, "ac97: ");
 
 	for (i = 0; ; i++) {
 		if (ac97codecid[i].id == 0) {
@@ -1226,18 +1337,16 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 		ac97_read(as, AC97_REG_EXT_AUDIO_ID, &as->ext_id);
 		if (as->ext_id != 0) {
 			/* Print capabilities */
-			bitmask_snprintf(as->ext_id,
-				 "\20\20SECONDARY10\17SECONDARY01"
-				 "\14AC97_23\13AC97_22\12AMAP\11LDAC\10SDAC"
-				 "\7CDAC\4VRM\3SPDIF\2DRA\1VRA",
-				 flagbuf, FLAGBUFLEN);
-			aprint_normal("%s: ac97: ext id %s\n", sc_dev->dv_xname,
+			snprintb(flagbuf, sizeof(flagbuf),
+			     "\20\20SECONDARY10\17SECONDARY01"
+			     "\14AC97_23\13AC97_22\12AMAP\11LDAC\10SDAC"
+			     "\7CDAC\4VRM\3SPDIF\2DRA\1VRA", as->ext_id);
+			aprint_normal_dev(sc_dev, "ac97: ext id %s\n",
 				      flagbuf);
 
 			/* Print unusual settings */
 			if (as->ext_id & AC97_EXT_AUDIO_DSA_MASK) {
-				aprint_normal("%s: ac97: Slot assignment: ",
-					      sc_dev->dv_xname);
+				aprint_normal_dev(sc_dev, "ac97: Slot assignment: ");
 				switch (as->ext_id & AC97_EXT_AUDIO_DSA_MASK) {
 				case AC97_EXT_AUDIO_DSA01:
 					aprint_normal("7&8, 6&9, 10&11.\n");
@@ -1251,9 +1360,8 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 				}
 			}
 			if (as->host_flags & AC97_HOST_INVERTED_EAMP) {
-				aprint_normal("%s: ac97: using inverted "
-					      "AC97_POWER_EAMP bit\n",
-					      sc_dev->dv_xname);
+				aprint_normal_dev(sc_dev, "ac97: using inverted "
+					      "AC97_POWER_EAMP bit\n");
 			}
 
 			/* Enable and disable features */
@@ -1289,9 +1397,8 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 				if (rate != 44100) {
 					/* We can't believe ext_id */
 					as->ext_id = 0;
-					aprint_normal(
-					    "%s: Ignore these capabilities.\n",
-					    sc_dev->dv_xname);
+					aprint_normal_dev(sc_dev, 
+					    "Ignore these capabilities.\n");
 				}
 				/* restore the default value */
 				ac97_write(as, AC97_REG_PCM_FRONT_DAC_RATE,
@@ -1308,17 +1415,15 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 
 		ac97_read(as, AC97_REG_EXT_MODEM_ID, &as->ext_mid);
 		if (as->ext_mid == 0 || as->ext_mid == 0xffff) {
-			aprint_normal("%s: no modem codec found\n",
-				      sc_dev->dv_xname);
+			aprint_normal_dev(sc_dev, "no modem codec found\n");
 			return ENXIO;
 		}
 		as->type = AC97_CODEC_TYPE_MODEM;
 
 		/* Print capabilities */
-		bitmask_snprintf(as->ext_mid,
-				 "\20\5CID2\4CID1\3HANDSET\2LINE2\1LINE1",
-				 flagbuf, FLAGBUFLEN);
-		aprint_normal("%s: ac97: ext mid %s", sc_dev->dv_xname,
+		snprintb(flagbuf, sizeof(flagbuf),
+		    "\20\5CID2\4CID1\3HANDSET\2LINE2\1LINE1", as->ext_mid);
+		aprint_normal_dev(sc_dev, "ac97: ext mid %s",
 			      flagbuf);
 		aprint_normal(", %s codec\n",
 			      (as->ext_mid & 0xc000) == 0 ?
@@ -1331,7 +1436,7 @@ ac97_attach_type(struct ac97_host_if *host_if, struct device *sc_dev, int type)
 		if (err != 0)
 			goto setup_modem;
 		err = sysctl_createv(&as->log, 0, NULL, &node, 0,
-				     CTLTYPE_NODE, sc_dev->dv_xname, NULL,
+				     CTLTYPE_NODE, device_xname(sc_dev), NULL,
 				     NULL, 0, NULL, 0, CTL_HW, CTL_CREATE,
 				     CTL_EOL);
 		if (err != 0)
@@ -1368,7 +1473,7 @@ setup_modem:
 		}
 		if (i <= 0) {
 			printf("%s: codec not responding, status=0x%x\n",
-			    sc_dev->dv_xname, reg);
+			    device_xname(sc_dev), reg);
 			return ENXIO;
 		}
 
@@ -2025,6 +2130,42 @@ ac97_alc650_init(struct ac97_softc *as)
 	ac97_add_port(as, &sources[3]);
 	ac97_add_port(as, &sources[4]);
 	ac97_add_port(as, &sources[5]);
+}
+
+#define UCB1400_REG_FEATURE_CSR1	0x6a
+#define		UCB1400_BB(bb)			(((bb) & 0xf) << 11)
+#define		UCB1400_TR(tr)			(((tr) & 0x3) << 9)
+#define		UCB1400_M_MAXIMUM		(3 << 7)
+#define		UCB1400_M_MINIMUM		(1 << 7)
+#define		UCB1400_M_FLAT			(0 << 7)
+#define		UCB1400_HPEN			(1 << 6)
+#define		UCB1400_DE			(1 << 5)
+#define		UCB1400_DC			(1 << 4)
+#define		UCB1400_HIPS			(1 << 3)
+#define		UCB1400_GIEN			(1 << 2)
+#define		UCB1400_OVFL			(1 << 0)
+#define UCB1400_REG_FEATURE_CSR2	0x6c
+#define		UCB1400_SMT			(1 << 15)	/* Must be 0 */
+#define		UCB1400_SUEV1			(1 << 14)	/* Must be 0 */
+#define		UCB1400_SUEV0			(1 << 13)	/* Must be 0 */
+#define		UCB1400_AVE			(1 << 12)
+#define		UCB1400_AVEN1			(1 << 11)	/* Must be 0 */
+#define		UCB1400_AVEN0			(1 << 10)	/* Must be 0 */
+#define		UCB1400_SLP_ON			\
+					(UCB1400_SLP_PLL | UCB1400_SLP_CODEC)
+#define		UCB1400_SLP_PLL			(2 << 4)
+#define		UCB1400_SLP_CODEC		(1 << 4)
+#define		UCB1400_SLP_NO			(0 << 4)
+#define		UCB1400_EV2			(1 << 2)	/* Must be 0 */
+#define		UCB1400_EV1			(1 << 1)	/* Must be 0 */
+#define		UCB1400_EV0			(1 << 0)	/* Must be 0 */
+static void
+ac97_ucb1400_init(struct ac97_softc *as)
+{
+
+	ac97_write(as, UCB1400_REG_FEATURE_CSR1,
+	    UCB1400_HPEN | UCB1400_DC | UCB1400_HIPS | UCB1400_OVFL);
+	ac97_write(as, UCB1400_REG_FEATURE_CSR2, UCB1400_AVE | UCB1400_SLP_ON);
 }
 
 #define VT1616_REG_IO_CONTROL	0x5a

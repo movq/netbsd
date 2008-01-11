@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.19 2008/01/01 14:06:42 chris Exp $	*/
+/*	$NetBSD: locore.S,v 1.25 2010/06/19 19:44:57 matt Exp $	*/
 
 /*
  * Copyright (C) 1994-1997 Mark Brinicombe
@@ -31,7 +31,6 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "opt_ipkdb.h"
 #include "assym.h"
 #include <sys/syscall.h>
 #include <sys/errno.h>
@@ -42,6 +41,8 @@
 
 /* What size should this really be ? It is only used by init_arm() */
 #define INIT_ARM_STACK_SIZE	2048
+
+	RCSID("$NetBSD: locore.S,v 1.25 2010/06/19 19:44:57 matt Exp $")
 
 /*
  * This is for kvm_mkdb, and should be the address of the beginning
@@ -57,8 +58,13 @@ ASENTRY_NP(start)
 	adr	r1, .Lstart
 	ldmia	r1, {r1, r2, sp}	/* Set initial stack and */
 	sub	r2, r2, r1		/* get zero init data */
-	mov	r3, #0
 
+#ifdef PROCESS_ID_IS_CURCPU
+	ldr	r3, .Lcpu_info_store
+	mcr	p15, 0, r3, c13, c0, 4
+#endif
+
+	mov	r3, #0
 .L1:
 	str	r3, [r1], #0x0004	/* Zero the bss */
 	subs	r2, r2, #4
@@ -80,6 +86,11 @@ ASENTRY_NP(start)
 	adr	r0, .Lmainreturned
 	b	_C_LABEL(panic)
 	/* NOTREACHED */
+
+#ifdef PROCESS_ID_IS_CURCPU
+.Lcpu_info_store:	
+	.word	_C_LABEL(cpu_info_store)
+#endif
 
 .Lstart:
 	.word	_edata
@@ -107,8 +118,8 @@ ENTRY_NP(cpu_reset)
 	mrs     r2, cpsr
 	bic	r2, r2, #(PSR_MODE)
 	orr     r2, r2, #(PSR_SVC32_MODE)
-	orr	r2, r2, #(I32_bit | F32_bit)
-	msr     cpsr_all, r2
+	orr	r2, r2, #(IF32_bits)
+	msr     cpsr_c, r2
 
 	ldr	r4, .Lcpu_reset_address
 	ldr	r4, [r4]
@@ -155,43 +166,6 @@ ENTRY_NP(cpu_reset)
 
 #endif	/* OFW */
 
-#ifdef IPKDB
-/*
- * Execute(inst, psr, args, sp)
- *
- * Execute INSTruction with PSR and ARGS[0] - ARGS[3] making
- * available stack at SP for next undefined instruction trap.
- *
- * Move the instruction onto the stack and jump to it.
- */
-ENTRY_NP(Execute)
-	mov	ip, sp
-	stmfd	sp!, {r2, r4-r7, fp, ip, lr, pc}
-	sub	fp, ip, #4
-	mov	ip, r3
-	ldr	r7, .Lreturn
-	stmfd	sp!, {r0, r7}
-	adr	r7, .LExec
-	mov	r5, r1
-	mrs	r4, cpsr
-	ldmia	r2, {r0-r3}
-	mov	r6, sp
-	mov	sp, ip
-	msr	cpsr_all, r5
-	mov	pc, r6
-.LExec:
-	mrs	r5, cpsr
-/* XXX Cannot switch thus easily back from user mode */
-	msr	cpsr_all, r4
-	add	sp, r6, #8
-	ldmfd	sp!, {r6}
-	stmia	r6, {r0-r3}
-	mov	r0, r5
-	ldmdb	fp, {r4-r7, fp, sp, pc}
-.Lreturn:
-	mov	pc, r7
-#endif
-
 /*
  * setjump + longjmp
  */
@@ -213,16 +187,13 @@ ENTRY_NP(abort)
 	b	_C_LABEL(abort)
 
 /*
- * part of doing a system dump, we need to save registers and cpsr onto the
- * stack, then save the rest of the registers into the dumppcb
+ * Part of doing a system dump, we need to save a switchframe onto the
+ * stack, then save the rest of the registers into the dumppcb.
  */
 ENTRY(dumpsys)
 	/* push registers onto stack */
-	stmfd	sp!, {r0-r7, lr}
-	
-	/* push the status bits onto the stack */
-	mrs	r0, cpsr_all
-	stmfd	sp!, {r0}
+	mov	ip, sp
+	stmfd	sp!, {r4-r7, ip, lr}
 
 	/* fill in dumppcb */
 	ldr	r0, .Ldumppcb
@@ -239,9 +210,7 @@ ENTRY(dumpsys)
 	bl	_C_LABEL(dodumpsys)
 
 	/* unwind the stack */
-	ldmfd	sp!, {r0}
-	nop
-	ldmfd	sp!, {r0-r7, pc}
+	ldmfd	sp, {r4-r7, sp, pc}
 
 .Ldumppcb:
 	.word	_C_LABEL(dumppcb)

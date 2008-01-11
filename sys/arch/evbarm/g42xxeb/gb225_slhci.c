@@ -1,4 +1,4 @@
-/*	$NetBSD: gb225_slhci.c,v 1.3 2006/02/23 05:37:47 thorpej Exp $ */
+/*	$NetBSD: gb225_slhci.c,v 1.5 2010/06/07 15:17:24 bsh Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -136,8 +129,7 @@ slhci_opio_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map I/O space */
 	if (bus_space_map(iot, oba->oba_addr, PORTSIZE, 0, &ioh)) {
-		printf("%s: can't map I/O space\n",
-			sc->sc_sc.sc_bus.bdev.dv_xname);
+		aprint_error_dev(self, "can't map I/O space\n");
 		return;
 	}
 
@@ -153,8 +145,7 @@ slhci_opio_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = obio_intr_establish(bsc, oba->oba_intr, IPL_BIO, 
 	    IST_LEVEL_HIGH, slhci_opio_intr, sc);
 	if( sc->sc_ih == NULL) {
-		printf("%s: can't establish interrupt\n",
-			sc->sc_sc.sc_bus.bdev.dv_xname);
+		aprint_error_dev(self, "can't establish interrupt\n");
 		return;
 	}
 

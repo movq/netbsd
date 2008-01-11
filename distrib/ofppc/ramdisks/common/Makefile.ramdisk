@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.ramdisk,v 1.1 2008/01/02 11:39:02 mrg Exp $
+#	$NetBSD: Makefile.ramdisk,v 1.7 2010/02/11 09:06:49 roy Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -16,11 +16,11 @@ LISTS=		${.CURDIR}/list ${OFPPCCOMMON}/list.ramdisk
 MTREECONF=	${DISTRIBDIR}/common/mtree.common ${.CURDIR}/../common/mtree.ramdisk
 IMAGEENDIAN=	le
 IMAGEDEPENDS+= 	${CRUNCHBIN} \
-		dot.profile termcap.mini \
+		dot.profile \
 		${DESTDIR}/usr/mdec/ofwboot \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
-		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols \
-		${NETBSDSRCDIR}/distrib/common/services
+		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
+		${DISTRIBDIR}/common/services
 PARSELISTENV+=	BOOTMODEL=${BOOTMODEL:Q}
 
 .if defined(USE_SYSINST)
@@ -36,6 +36,7 @@ HACKSRC=	${DISTRIBDIR}/utils/libhack
 ${CRUNCHBIN}:	libhack.o
 
 .include "${DISTRIBDIR}/common/Makefile.crunch"
+.include "${DISTRIBDIR}/common/Makefile.dhcpcd"
 .include "${DISTRIBDIR}/common/Makefile.makedev"
 .include "${DISTRIBDIR}/common/Makefile.image"
 

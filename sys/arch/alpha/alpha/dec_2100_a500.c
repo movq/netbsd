@@ -1,4 +1,4 @@
-/* $NetBSD: dec_2100_a500.c,v 1.17 2007/03/04 15:18:10 yamt Exp $ */
+/* $NetBSD: dec_2100_a500.c,v 1.19 2009/09/14 02:46:29 mhitch Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_2100_a500.c,v 1.17 2007/03/04 15:18:10 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_2100_a500.c,v 1.19 2009/09/14 02:46:29 mhitch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,6 +91,9 @@ __KERNEL_RCSID(0, "$NetBSD: dec_2100_a500.c,v 1.17 2007/03/04 15:18:10 yamt Exp 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
+
+#include <dev/ic/mlxio.h>
+#include <dev/ic/mlxvar.h>
 
 #include "pckbd.h"
 
@@ -250,7 +246,8 @@ dec_2100_a500_device_register(struct device *dev, void *aux)
 		return;
 
 	if (!initted) {
-		diskboot = (strcasecmp(b->protocol, "SCSI") == 0);
+		diskboot = (strcasecmp(b->protocol, "SCSI") == 0) ||
+		    (strcasecmp(b->protocol, "RAID") == 0);
 		netboot = (strcasecmp(b->protocol, "BOOTP") == 0) ||
 		    (strcasecmp(b->protocol, "MOP") == 0);
 #if 0
@@ -323,6 +320,27 @@ dec_2100_a500_device_register(struct device *dev, void *aux)
 		if (b->channel != periph->periph_channel->chan_channel)
 			return;
 
+		/* we've found it! */
+		booted_device = dev;
+#if 0
+		printf("\nbooted_device = %s\n", dev->dv_xname);
+#endif
+		found = 1;
+	}
+
+	if (device_is_a(dev, "ld") && device_is_a(parent, "mlx")) {
+		/*
+		 * Argh!  The attach arguments for ld devices is not
+		 * consistent, so each supported raid controller requires
+		 * different checks.
+		 */
+		struct mlx_attach_args *mlxa = aux;
+
+		if (parent != ctrlrdev)
+			return;
+
+		if (b->unit != mlxa->mlxa_unit)
+			return;
 		/* we've found it! */
 		booted_device = dev;
 #if 0

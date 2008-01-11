@@ -1,4 +1,4 @@
-/*	$NetBSD: libi386.h,v 1.23 2005/12/11 12:17:48 christos Exp $	*/
+/*	$NetBSD: libi386.h,v 1.36 2011/05/26 04:25:27 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -36,8 +36,10 @@ physaddr_t vtophys(void *);
 
 ssize_t pread(int, void *, size_t);
 void startprog(physaddr_t, int, unsigned long *, physaddr_t);
+void multiboot(physaddr_t, physaddr_t, physaddr_t);
 
-int exec_netbsd(const char *, physaddr_t, int);
+int exec_netbsd(const char *, physaddr_t, int, int, void (*)(void));
+int exec_multiboot(const char *, char *);
 
 void delay(int);
 int getbasemem(void);
@@ -53,6 +55,7 @@ void printmemlist(void);
 void reboot(void);
 void gateA20(void);
 
+void clear_pc_screen(void);
 void initio(int);
 #define CONSDEV_PC 0
 #define CONSDEV_COM0 1
@@ -66,6 +69,7 @@ void initio(int);
 #define CONSDEV_AUTO (-1)
 int iskey(int);
 char awaitkey(int, int);
+void wait_sec(int);
 
 /* this is in "user code"! */
 int parsebootfile(const char *, char **, char **, int *, int *, const char **);
@@ -89,9 +93,6 @@ struct bootblk_command {
 void bootmenu(void);
 void docommand(char *);
 
-/* getsecs.c */
-time_t getsecs(void);
-
 /* in "user code": */
 void command_help(char *);
 extern const struct bootblk_command commands[];
@@ -111,6 +112,7 @@ int congetc(void);
 int conisshift(void);
 int coniskey(void);
 void conputc(int);
+void conclr(void);
 
 int getextmem2(int *);
 int getextmemps2(void *);
@@ -119,8 +121,9 @@ int getmementry(int *, int *);
 int biosdisk_int13ext(int);
 int biosdisk_getinfo(int);
 struct biosdisk_extinfo;
-void biosdisk_getextinfo(int, struct biosdisk_extinfo *);
+int biosdisk_getextinfo(int, struct biosdisk_extinfo *);
 int get_harddrives(void);
+void biosdisk_probe(void);
 
 int pcibios_cfgread(unsigned int, int, int *);
 int pcibios_cfgwrite(unsigned int, int, int);
@@ -132,3 +135,10 @@ int dosopen(char *);
 int dosread(int, char *, int);
 int dosseek(int, int, int);
 extern int doserrno;	/* in dos_file.S */
+
+void module_add(char *);
+void splash_add(char *);
+void userconf_add(char *);
+
+struct btinfo_framebuffer;
+void framebuffer_configure(struct btinfo_framebuffer *);

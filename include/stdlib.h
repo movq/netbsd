@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.80 2007/12/24 17:26:09 perry Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.97 2011/03/16 00:48:34 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -48,7 +48,7 @@ typedef	_BSD_SIZE_T_	size_t;
 #undef	_BSD_SIZE_T_
 #endif
 
-#ifdef	_BSD_WCHAR_T_
+#if defined(_BSD_WCHAR_T_) && !defined(__cplusplus)
 typedef	_BSD_WCHAR_T_	wchar_t;
 #undef	_BSD_WCHAR_T_
 #endif
@@ -148,7 +148,7 @@ int	 rand_r(unsigned int *);
 /*
  * X/Open Portability Guide >= Issue 4
  */
-#if (_XOPEN_SOURCE - 0) >= 4 || defined(_NETBSD_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 double	 drand48(void);
 double	 erand48(unsigned short[3]);
 long	 jrand48(unsigned short[3]);
@@ -160,7 +160,7 @@ unsigned short *
 	 seed48(unsigned short[3]);
 void	 srand48(long);
 
-int	 putenv(const char *);
+int	 putenv(char *);
 #endif
 
 
@@ -176,6 +176,9 @@ char	*initstate(unsigned long, char *, size_t);
 long	 random(void);
 char	*setstate(char *);
 void	 srandom(unsigned long);
+#ifdef _NETBSD_SOURCE
+#define	RANDOM_MAX	0x7fffffff	/* (((long)1 << 31) - 1) */
+#endif
 
 char	*mkdtemp(char *);
 int	 mkstemp(char *);
@@ -238,13 +241,17 @@ int	 posix_memalign(void **, size_t, size_t);
 #if defined(_NETBSD_SOURCE)
 #if defined(alloca) && (alloca == __builtin_alloca) && \
 	defined(__GNUC__) && (__GNUC__ < 2)
-void	*alloca(int);     /* built-in for gcc */ 
-#else 
-void	*alloca(size_t); 
-#endif /* __GNUC__ */ 
+void	*alloca(int);     /* built-in for gcc */
+#elif defined(__PCC__) && !defined(__GNUC__)
+#define alloca(size) __builtin_alloca(size)
+#else
+void	*alloca(size_t);
+#endif /* __GNUC__ */
 
 uint32_t arc4random(void);
 void	 arc4random_stir(void);
+void	 arc4random_buf(void *, size_t);
+uint32_t arc4random_uniform(uint32_t);
 void	 arc4random_addrandom(u_char *, int);
 char	*getbsize(int *, long *);
 char	*cgetcap(char *, const char *, int);
@@ -257,9 +264,12 @@ int	 cgetnum(char *, const char *, long *);
 int	 cgetset(const char *);
 int	 cgetstr(char *, const char *, char **);
 int	 cgetustr(char *, const char *, char **);
+void	 csetexpandtc(int);
 
 int	 daemon(int, int);
-__aconst char *devname(dev_t, mode_t);
+#ifndef __LIBC12_SOURCE__
+__aconst char *devname(dev_t, mode_t) __RENAME(__devname50);
+#endif
 
 #define	HN_DECIMAL		0x01
 #define	HN_NOSPACE		0x02
@@ -272,7 +282,7 @@ __aconst char *devname(dev_t, mode_t);
 int	 humanize_number(char *, size_t, int64_t, const char *, int, int);
 int	 dehumanize_number(const char *, int64_t *);
 
-dev_t	 getdevmajor(const char *, mode_t);
+devmajor_t getdevmajor(const char *, mode_t);
 int	 getloadavg(double [], int);
 
 int	 getenv_r(const char *, char *, size_t);
@@ -287,9 +297,12 @@ int	 radixsort(const unsigned char **, int, const unsigned char *,
 int	 sradixsort(const unsigned char **, int, const unsigned char *,
 	    unsigned);
 
+void	 mi_vector_hash(const void * __restrict, size_t, uint32_t,
+	    uint32_t[3]);
+
 void	 setproctitle(const char *, ...)
-	    __attribute__((__format__(__printf__, 1, 2)));
-const char *getprogname(void) __attribute__((const));
+	    __printflike(1, 2);
+const char *getprogname(void) __constfunc;
 void	setprogname(const char *);
 
 quad_t	 qabs(quad_t);

@@ -1,4 +1,4 @@
-/*	$NetBSD: hash_log2.c,v 1.10 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: hash_log2.c,v 1.13 2008/09/11 12:33:55 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,13 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)hash_log2.c	8.2 (Berkeley) 5/31/94";
-#else
-__RCSID("$NetBSD: hash_log2.c,v 1.10 2007/02/03 23:46:09 christos Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
+__RCSID("$NetBSD: hash_log2.c,v 1.13 2008/09/11 12:33:55 joerg Exp $");
 
 #include <sys/types.h>
 
@@ -52,13 +46,17 @@ __RCSID("$NetBSD: hash_log2.c,v 1.10 2007/02/03 23:46:09 christos Exp $");
 #include "page.h"
 #include "extern.h"
 
-u_int32_t
-__log2(u_int32_t num)
+uint32_t
+__log2(uint32_t num)
 {
-	u_int32_t i, limit;
+	uint32_t i, limit;
 
-	limit = 1;
-	for (i = 0; limit < num; limit = limit << 1, i++)
+	if (num == 0)
+		return 0;
+	--num;
+
+	limit = 0;
+	for (i = 0; limit < num; limit = limit * 2 + 1, i++)
 		continue;
 	return (i);
 }

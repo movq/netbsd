@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.42 2007/10/17 19:53:41 garbled Exp $	*/
+/*	cpufunc.h,v 1.40.22.4 2007/11/08 10:59:33 matt Exp	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -45,7 +45,9 @@
 #ifdef _KERNEL
 
 #include <sys/types.h>
+#include <arm/armreg.h>
 #include <arm/cpuconf.h>
+#include <arm/armreg.h>
 
 struct cpu_functions {
 
@@ -155,7 +157,6 @@ extern struct cpu_functions cpufuncs;
 extern u_int cputype;
 
 #define cpu_id()		cpufuncs.cf_id()
-#define	cpu_cpwait()		cpufuncs.cf_cpwait()
 
 #define cpu_control(c, e)	cpufuncs.cf_control(c, e)
 #define cpu_domains(d)		cpufuncs.cf_domains(d)
@@ -276,6 +277,26 @@ void	arm8_setup		(char *);
 u_int	arm8_clock_config	(u_int, u_int);
 #endif
 
+#ifdef CPU_FA526
+void	fa526_setup		(char *);
+void	fa526_setttb		(u_int);
+void	fa526_context_switch	(u_int);
+void	fa526_cpu_sleep		(int);
+void	fa526_tlb_flushI_SE	(u_int);
+void	fa526_tlb_flushID_SE	(u_int);
+void	fa526_flush_prefetchbuf	(void);
+void	fa526_flush_brnchtgt_E	(u_int);
+
+void	fa526_icache_sync_all	(void);
+void	fa526_icache_sync_range(vaddr_t, vsize_t);
+void	fa526_dcache_wbinv_all	(void);
+void	fa526_dcache_wbinv_range(vaddr_t, vsize_t);
+void	fa526_dcache_inv_range	(vaddr_t, vsize_t);
+void	fa526_dcache_wb_range	(vaddr_t, vsize_t);
+void	fa526_idcache_wbinv_all(void);
+void	fa526_idcache_wbinv_range(vaddr_t, vsize_t);
+#endif
+
 #ifdef CPU_SA110
 void	sa110_setup		(char *);
 void	sa110_context_switch	(u_int);
@@ -344,7 +365,7 @@ extern unsigned arm9_dcache_index_max;
 extern unsigned arm9_dcache_index_inc;
 #endif
 
-#if defined(CPU_ARM9E) || defined(CPU_ARM10)
+#if defined(CPU_ARM9E) || defined(CPU_ARM10) || defined(CPU_SHEEVA)
 void	arm10_tlb_flushID_SE	(u_int);
 void	arm10_tlb_flushI_SE	(u_int);
 
@@ -353,24 +374,7 @@ void	arm10_context_switch	(u_int);
 void	arm10_setup		(char *);
 #endif
 
-#ifdef CPU_ARM11
-void	arm11_setttb		(u_int);
-
-void	arm11_tlb_flushID_SE	(u_int);
-void	arm11_tlb_flushI_SE	(u_int);
-
-void	arm11_context_switch	(u_int);
-
-void	arm11_setup		(char *string);
-void	arm11_tlb_flushID	(void);
-void	arm11_tlb_flushI	(void);
-void	arm11_tlb_flushD	(void);
-void	arm11_tlb_flushD_SE	(u_int va);
-
-void	arm11_drain_writebuf	(void);
-#endif
-
-#if defined(CPU_ARM9E) || defined (CPU_ARM10)
+#if defined(CPU_ARM9E) || defined (CPU_ARM10) || defined(CPU_SHEEVA)
 void	armv5_ec_setttb			(u_int);
 
 void	armv5_ec_icache_sync_all	(void);
@@ -385,7 +389,7 @@ void	armv5_ec_idcache_wbinv_all	(void);
 void	armv5_ec_idcache_wbinv_range	(vaddr_t, vsize_t);
 #endif
 
-#if defined (CPU_ARM10) || defined (CPU_ARM11)
+#if defined (CPU_ARM10) || defined (CPU_ARM11MPCORE)
 void	armv5_setttb		(u_int);
 
 void	armv5_icache_sync_all	(void);
@@ -405,10 +409,83 @@ extern unsigned armv5_dcache_index_max;
 extern unsigned armv5_dcache_index_inc;
 #endif
 
+#if defined(CPU_ARM11MPCORE)
+void	arm11mpcore_setup		(char *);
+#endif
+
+#if defined(CPU_ARM11) || defined(CPU_CORTEX)
+void	arm11_setttb		(u_int);
+
+void	arm11_tlb_flushID_SE	(u_int);
+void	arm11_tlb_flushI_SE	(u_int);
+
+void	arm11_context_switch	(u_int);
+
+void	arm11_cpu_sleep		(int);
+void	arm11_setup		(char *string);
+void	arm11_tlb_flushID	(void);
+void	arm11_tlb_flushI	(void);
+void	arm11_tlb_flushD	(void);
+void	arm11_tlb_flushD_SE	(u_int va);
+
+void	armv11_dcache_wbinv_all (void);
+void	armv11_idcache_wbinv_all(void);
+
+void	arm11_drain_writebuf	(void);
+void	arm11_sleep		(int);
+
+void	armv6_setttb		(u_int);
+
+void	armv6_icache_sync_all	(void);
+void	armv6_icache_sync_range	(vaddr_t, vsize_t);
+
+void	armv6_dcache_wbinv_all	(void);
+void	armv6_dcache_wbinv_range (vaddr_t, vsize_t);
+void	armv6_dcache_inv_range	(vaddr_t, vsize_t);
+void	armv6_dcache_wb_range	(vaddr_t, vsize_t);
+
+void	armv6_idcache_wbinv_all	(void);
+void	armv6_idcache_wbinv_range (vaddr_t, vsize_t);
+#endif
+
+#if defined(CPU_CORTEX)
+void	armv7_setttb(u_int);
+
+void	armv7_icache_sync_range(vaddr_t, vsize_t);
+void	armv7_dcache_wb_range(vaddr_t, vsize_t);
+void	armv7_dcache_wbinv_range(vaddr_t, vsize_t);
+void	armv7_dcache_inv_range(vaddr_t, vsize_t);
+void	armv7_idcache_wbinv_range(vaddr_t, vsize_t);
+
+void 	armv7_dcache_wbinv_all (void);
+void	armv7_idcache_wbinv_all(void);
+void	armv7_icache_sync_all(void);
+void	armv7_cpu_sleep(int);
+void	armv7_context_switch(u_int);
+void	armv7_tlb_flushID_SE(u_int);
+void	armv7_setup		(char *string);
+#endif
+
+
+#if defined(CPU_ARM1136)
+void	arm1136_setttb			(u_int);
+void	arm1136_idcache_wbinv_all	(void);
+void	arm1136_dcache_wbinv_all	(void);
+void	arm1136_icache_sync_all		(void);
+void	arm1136_flush_prefetchbuf	(void);
+void	arm1136_icache_sync_range	(vaddr_t, vsize_t);
+void	arm1136_idcache_wbinv_range	(vaddr_t, vsize_t);
+void	arm1136_setup			(char *string);
+void	arm1136_sleep_rev0		(int);	/* for errata 336501 */
+#endif
+
+
 #if defined(CPU_ARM9) || defined(CPU_ARM9E) || defined(CPU_ARM10) || \
     defined(CPU_SA110) || defined(CPU_SA1100) || defined(CPU_SA1110) || \
+    defined(CPU_FA526) || \
     defined(CPU_XSCALE_80200) || defined(CPU_XSCALE_80321) || \
-    defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425)
+    defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425) || \
+    defined(CPU_CORTEX) || defined(CPU_SHEEVA)
 
 void	armv4_tlb_flushID	(void);
 void	armv4_tlb_flushI	(void);
@@ -425,8 +502,11 @@ void	ixp12x0_setup		(char *);
 #endif
 
 #if defined(CPU_XSCALE_80200) || defined(CPU_XSCALE_80321) || \
-    defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425)
+    defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425) || \
+    defined(CPU_CORTEX)
+
 void	xscale_cpwait		(void);
+#define	cpu_cpwait()		cpufuncs.cf_cpwait()
 
 void	xscale_cpu_sleep	(int);
 
@@ -463,22 +543,36 @@ void	xscale_cache_flushD_rng	(vaddr_t, vsize_t);
 void	xscale_context_switch	(u_int);
 
 void	xscale_setup		(char *);
-#endif	/* CPU_XSCALE_80200 || CPU_XSCALE_80321 || __CPU_XSCALE_PXA2XX || CPU_XSCALE_IXP425 */
+#endif	/* CPU_XSCALE_80200 || CPU_XSCALE_80321 || __CPU_XSCALE_PXA2XX || CPU_XSCALE_IXP425 || CPU_CORTEX */
+
+#if defined(CPU_SHEEVA)
+void	sheeva_dcache_wbinv_range (vaddr_t, vsize_t);
+void	sheeva_dcache_inv_range	(vaddr_t, vsize_t);
+void	sheeva_dcache_wb_range	(vaddr_t, vsize_t);
+void	sheeva_idcache_wbinv_range (vaddr_t, vsize_t);
+void	sheeva_setup(char *);
+#endif
 
 #define tlb_flush	cpu_tlb_flushID
 #define setttb		cpu_setttb
 #define drain_writebuf	cpu_drain_writebuf
 
+#ifndef cpu_cpwait
+#define	cpu_cpwait()
+#endif
+
 /*
  * Macros for manipulating CPU interrupts
  */
 #ifdef __PROG32
-static __inline u_int32_t __set_cpsr_c(u_int bic, u_int eor) __attribute__((__unused__));
+static __inline u_int32_t __set_cpsr_c(uint32_t bic, uint32_t eor) __attribute__((__unused__));
+static __inline u_int32_t disable_interrupts(uint32_t mask) __attribute__((__unused__));
+static __inline u_int32_t enable_interrupts(uint32_t mask) __attribute__((__unused__));
 
-static __inline u_int32_t
-__set_cpsr_c(u_int bic, u_int eor)
+static __inline uint32_t
+__set_cpsr_c(uint32_t bic, uint32_t eor)
 {
-	u_int32_t	tmp, ret;
+	uint32_t	tmp, ret;
 
 	__asm volatile(
 		"mrs     %0, cpsr\n"	/* Get the CPSR */
@@ -491,15 +585,84 @@ __set_cpsr_c(u_int bic, u_int eor)
 	return ret;
 }
 
-#define disable_interrupts(mask)					\
-	(__set_cpsr_c((mask) & (I32_bit | F32_bit), \
-		      (mask) & (I32_bit | F32_bit)))
+static __inline uint32_t
+disable_interrupts(uint32_t mask)
+{
+	uint32_t	tmp, ret;
+	mask &= (I32_bit | F32_bit);
 
-#define enable_interrupts(mask)						\
-	(__set_cpsr_c((mask) & (I32_bit | F32_bit), 0))
+	__asm volatile(
+		"mrs     %0, cpsr\n"	/* Get the CPSR */
+		"orr	 %1, %0, %2\n"	/* set bits */
+		"msr     cpsr_c, %1\n"	/* Set the control field of CPSR */
+	: "=&r" (ret), "=&r" (tmp)
+	: "r" (mask)
+	: "memory");
+
+	return ret;
+}
+
+static __inline uint32_t
+enable_interrupts(uint32_t mask)
+{
+	uint32_t	ret, tmp;
+	mask &= (I32_bit | F32_bit);
+
+	__asm volatile(
+		"mrs     %0, cpsr\n"	/* Get the CPSR */
+		"bic	 %1, %0, %2\n"	/* Clear bits */
+		"msr     cpsr_c, %1\n"	/* Set the control field of CPSR */
+	: "=&r" (ret), "=&r" (tmp)
+	: "r" (mask)
+	: "memory");
+
+	return ret;
+}
 
 #define restore_interrupts(old_cpsr)					\
 	(__set_cpsr_c((I32_bit | F32_bit), (old_cpsr) & (I32_bit | F32_bit)))
+
+static inline void cpsie(register_t psw) __attribute__((__unused__));
+static inline register_t cpsid(register_t psw) __attribute__((__unused__));
+
+static inline void
+cpsie(register_t psw)
+{
+#ifdef _ARM_ARCH_6
+	if (!__builtin_constant_p(psw)) {
+		enable_interrupts(psw);
+		return;
+	}
+	switch (psw & (I32_bit|F32_bit)) {
+	case I32_bit:		__asm("cpsie\ti"); break;
+	case F32_bit:		__asm("cpsie\tf"); break;
+	case I32_bit|F32_bit:	__asm("cpsie\tif"); break;
+	}
+#else
+	enable_interrupts(psw);
+#endif
+}
+
+static inline register_t
+cpsid(register_t psw)
+{
+#ifdef _ARM_ARCH_6
+	register_t oldpsw;
+	if (!__builtin_constant_p(psw))
+		return disable_interrupts(psw);
+
+	__asm("mrs	%0, cpsr" : "=r"(oldpsw));
+	switch (psw & (I32_bit|F32_bit)) {
+	case I32_bit:		__asm("cpsid\ti"); break;
+	case F32_bit:		__asm("cpsid\tf"); break;
+	case I32_bit|F32_bit:	__asm("cpsid\tif"); break;
+	}
+	return oldpsw;
+#else 
+	return disable_interrupts(psw);
+#endif
+}
+
 #else /* ! __PROG32 */
 #define	disable_interrupts(mask)					\
 	(set_r15((mask) & (R15_IRQ_DISABLE | R15_FIQ_DISABLE),		\
@@ -555,6 +718,7 @@ extern int	arm_picache_ways;
 extern int	arm_pdcache_size;	/* and unified */
 extern int	arm_pdcache_line_size;
 extern int	arm_pdcache_ways;
+extern int	arm_cache_prefer_mask;
 
 extern int	arm_pcache_type;
 extern int	arm_pcache_unified;

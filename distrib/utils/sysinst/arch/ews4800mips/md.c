@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.4 2006/09/04 00:11:00 hubertf Exp $	*/
+/*	$NetBSD: md.c,v 1.9 2011/04/04 08:30:27 mbalmer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,27 +15,24 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
- *
  */
+
+/* md.c -- ews4800mips machine specific routines */
 
 #include <sys/types.h>
 #include <sys/disklabel.h>
@@ -51,6 +48,19 @@
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
+
+static int ews4800mips_boot_offset(void);
+
+void
+md_init(void)
+{
+}
+
+void
+md_init_set_status(int flags)
+{
+	(void)flags;
+}
 
 int
 md_get_info(void)
@@ -83,7 +93,7 @@ md_get_info(void)
 
 	/*
 	 * Compute whole disk size. Take max of (dlcyl*dlhead*dlsec)
-	 * and secperunit,  just in case the disk is already labelled.  
+	 * and secperunit,  just in case the disk is already labelled.
 	 * (If our new label's RAW_PART size ends up smaller than the
 	 * in-core RAW_PART size  value, updating the label will fail.)
 	 */
@@ -95,12 +105,30 @@ md_get_info(void)
 }
 
 /*
+ * md back-end code for menu-driven BSD disklabel editor.
+ */
+int
+md_make_bsd_partitions(void)
+{
+
+	return make_bsd_partitions();
+}
+
+/*
+ * any additional partition validation
+ */
+int
+md_check_partitions(void)
+{
+	return 1;
+}
+
+/*
  * hook called before writing new disklabel.
  */
 int
 md_pre_disklabel(void)
 {
-
 	bsdlabel[PART_BOOT].pi_offset = ews4800mips_boot_offset();
 
 	return 0;
@@ -112,16 +140,13 @@ md_pre_disklabel(void)
 int
 md_post_disklabel(void)
 {
-
 	return 0;
 }
 
 /*
- * MD hook called after upgrade() or install() has finished setting
+ * hook called after upgrade() or install() has finished setting
  * up the target disk but immediately before the user is given the
- * ``disks are now set up'' message, so that if power fails, they can
- * continue installation by booting the target disk and doing an
- * `upgrade'.
+ * ``disks are now set up'' message.
  *
  * On the ews4800mips, we use this opportunity to install the boot blocks.
  */
@@ -139,30 +164,23 @@ md_post_newfs(void)
 	return 0;
 }
 
-/*
- * some ports use this to copy the MD filesystem, we do not.
- */
 int
-md_copy_filesystem(void)
+md_post_extract(void)
 {
-
 	return 0;
 }
 
-int
-md_make_bsd_partitions(void)
+void
+md_cleanup_install(void)
 {
-
-	return make_bsd_partitions();
+#ifndef DEBUG
+	enable_rc_conf();
+#endif
 }
 
-/*
- * any additional partition validataion
- */
 int
-md_check_partitions(void)
+md_pre_update(void)
 {
-
 	return 1;
 }
 
@@ -170,47 +188,19 @@ md_check_partitions(void)
 int
 md_update(void)
 {
-
-	endwin();
-	md_copy_filesystem ();
 	md_post_newfs();
-	wrefresh(curscr);
-	wmove(stdscr, 0, 0);
-	wclear(stdscr);
-	wrefresh(stdscr);
 	return 1;
 }
 
-void
-md_cleanup_install(void)
-{
-
-	enable_rc_conf();
-
-	run_program(0, "rm -f %s", target_expand("/sysinst"));
-	run_program(0, "rm -f %s", target_expand("/.termcap"));
-	run_program(0, "rm -f %s", target_expand("/.profile"));
-}
-
-int
-md_pre_update(void)
-{
-
-	return 1;
-}
-
-void
-md_init(void)
-{
-}
-
-int
+static int
 ews4800mips_boot_offset(void)
 {
-
 	return dlcylsize;
 }
 
+/*
+ * used in bsddisklabel.c as BOOT_SIZE
+ */
 int
 ews4800mips_boot_size(void)
 {
@@ -227,15 +217,11 @@ ews4800mips_boot_size(void)
 	return i;
 }
 
+/*
+ * used in bsddisklabel.c as SYSVBFS_SIZE
+ */
 int
 ews4800mips_sysvbfs_size(void)
 {
-
 	return (8 * 1024 * 1024) / 512;	/* 8MB */
-}
-
-int
-md_post_extract(void)
-{
-	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ippool_y.y,v 1.3 2007/04/14 20:34:35 martin Exp $	*/
+/*	$NetBSD: ippool_y.y,v 1.5 2010/04/17 21:00:09 darrenr Exp $	*/
 
 /*
  * Copyright (C) 2001-2006 by Darren Reed.
@@ -69,7 +69,7 @@ static ip_pool_node_t *add_poolhosts __P((char *));
 
 %token  <num>   YY_NUMBER YY_HEX
 %token  <str>   YY_STR
-%token	  YY_COMMENT 
+%token	  YY_COMMENT
 %token	  YY_CMP_EQ YY_CMP_NE YY_CMP_LE YY_CMP_GE YY_CMP_LT YY_CMP_GT
 %token	  YY_RANGE_OUT YY_RANGE_IN
 %token  <ip6>   YY_IPV6
@@ -263,16 +263,16 @@ groupentry:
 
 range:	addrmask	{ $$ = calloc(1, sizeof(*$$));
 			  $$->ipn_info = 0;
-			  $$->ipn_addr.adf_len = sizeof($$->ipn_addr);
+			  $$->ipn_addr.adf_len = sizeof($$->ipn_addr) + 4;
 			  $$->ipn_addr.adf_addr.in4.s_addr = $1[0].s_addr;
-			  $$->ipn_mask.adf_len = sizeof($$->ipn_mask);
+			  $$->ipn_mask.adf_len = sizeof($$->ipn_mask) + 4;
 			  $$->ipn_mask.adf_addr.in4.s_addr = $1[1].s_addr;
 			}
 	| '!' addrmask	{ $$ = calloc(1, sizeof(*$$));
 			  $$->ipn_info = 1;
-			  $$->ipn_addr.adf_len = sizeof($$->ipn_addr);
+			  $$->ipn_addr.adf_len = sizeof($$->ipn_addr) + 4;
 			  $$->ipn_addr.adf_addr.in4.s_addr = $2[0].s_addr;
-			  $$->ipn_mask.adf_len = sizeof($$->ipn_mask);
+			  $$->ipn_mask.adf_len = sizeof($$->ipn_mask) + 4;
 			  $$->ipn_mask.adf_addr.in4.s_addr = $2[1].s_addr;
 			}
 	| YY_STR			{ $$ = add_poolhosts($1); }
@@ -499,8 +499,8 @@ char *url;
 		if (p == NULL)
 			break;
 
-		p->ipn_addr.adf_len = 8;
-		p->ipn_mask.adf_len = 8;
+		p->ipn_addr.adf_len = offsetof(addrfamily_t, adf_addr) + 4;
+		p->ipn_mask.adf_len = offsetof(addrfamily_t, adf_addr) + 4;
 
 		p->ipn_info = a->al_not;
 

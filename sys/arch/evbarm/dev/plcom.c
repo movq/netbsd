@@ -1,4 +1,4 @@
-/*	$NetBSD: plcom.c,v 1.25 2008/01/05 12:40:34 ad Exp $	*/
+/*	$NetBSD: plcom.c,v 1.32 2011/04/24 16:26:55 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2001 ARM Ltd
@@ -42,13 +42,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -101,7 +94,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plcom.c,v 1.25 2008/01/05 12:40:34 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plcom.c,v 1.32 2011/04/24 16:26:55 rmind Exp $");
 
 #include "opt_plcom.h"
 #include "opt_ddb.h"
@@ -132,7 +125,6 @@ __KERNEL_RCSID(0, "$NetBSD: plcom.c,v 1.25 2008/01/05 12:40:34 ad Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -400,7 +392,7 @@ plcom_attach_subr(struct plcom_softc *sc)
 	if (sc->sc_fifolen > 1)
 		SET(sc->sc_hwflags, PLCOM_HW_FIFO);
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = plcomstart;
 	tp->t_param = plcomparam;
 	tp->t_hwiflow = plcomhwiflow;
@@ -474,12 +466,18 @@ plcom_config(struct plcom_softc *sc)
 }
 
 int
-plcom_detach(self, flags)
-	struct device *self;
-	int flags;
+plcom_detach(struct device *self, int flags)
 {
 	struct plcom_softc *sc = (struct plcom_softc *)self;
 	int maj, mn;
+
+	if (sc->sc_hwflags & (PLCOM_HW_CONSOLE|PLCOM_HW_KGDB))
+		return EBUSY;
+
+	if (sc->disable != NULL && sc->enabled != 0) {
+		(*sc->disable)(sc);
+		sc->enabled = 0;
+	}
 
 	/* locate the major number */
 	maj = cdevsw_lookup_major(&plcom_cdevsw);
@@ -496,7 +494,7 @@ plcom_detach(self, flags)
 
 	/* Detach and free the tty. */
 	tty_detach(sc->sc_tty);
-	ttyfree(sc->sc_tty);
+	tty_free(sc->sc_tty);
 
 	/* Unhook the soft interrupt handler. */
 	softint_disestablish(sc->sc_si);
@@ -510,34 +508,17 @@ plcom_detach(self, flags)
 }
 
 int
-plcom_activate(struct device *self, enum devact act)
+plcom_activate(device_t self, enum devact act)
 {
-	struct plcom_softc *sc = (struct plcom_softc *)self;
-	int s, rv = 0;
+	struct plcom_softc *sc = device_private(self);
 
-	s = splserial();
-	PLCOM_LOCK(sc);
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
-		if (sc->sc_hwflags & (PLCOM_HW_CONSOLE|PLCOM_HW_KGDB)) {
-			rv = EBUSY;
-			break;
-		}
-
-		if (sc->disable != NULL && sc->enabled != 0) {
-			(*sc->disable)(sc);
-			sc->enabled = 0;
-		}
-		break;
+		sc->enabled = 0;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-
-	PLCOM_UNLOCK(sc);	
-	splx(s);
-	return rv;
 }
 
 void
@@ -557,8 +538,10 @@ plcom_shutdown(struct plcom_softc *sc)
 	plcom_break(sc, 0);
 
 	/* Turn off PPS capture on last close. */
+	mutex_spin_enter(&timecounter_lock);
 	sc->sc_ppsmask = 0;
 	sc->ppsparam.mode = 0;
+	mutex_spin_exit(&timecounter_lock);
 
 	/*
 	 * Hang up if necessary.  Wait a bit, so the other side has time to
@@ -603,7 +586,7 @@ plcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 	int s, s2;
 	int error;
 
-	sc = device_lookup(&plcom_cd, PLCOMUNIT(dev));
+	sc = device_lookup_private(&plcom_cd, PLCOMUNIT(dev));
 	if (sc == NULL || !ISSET(sc->sc_hwflags, PLCOM_HW_DEV_OK) ||
 		sc->sc_rbuf == NULL)
 		return ENXIO;
@@ -659,8 +642,11 @@ plcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 		sc->sc_msr = bus_space_read_1(sc->sc_iot, sc->sc_ioh, plcom_fr);
 
 		/* Clear PPS capture state on first open. */
+
+		mutex_spin_enter(&timecounter_lock);
 		sc->sc_ppsmask = 0;
 		sc->ppsparam.mode = 0;
+		mutex_spin_exit(&timecounter_lock);
 
 		PLCOM_UNLOCK(sc);
 		splx(s2);
@@ -747,7 +733,8 @@ bad:
 int
 plcomclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct plcom_softc *sc = device_lookup(&plcom_cd, PLCOMUNIT(dev));
+	struct plcom_softc *sc =
+		device_lookup_private(&plcom_cd, PLCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	/* XXX This is for cons.c. */
@@ -775,7 +762,8 @@ plcomclose(dev_t dev, int flag, int mode, struct lwp *l)
 int
 plcomread(dev_t dev, struct uio *uio, int flag)
 {
-	struct plcom_softc *sc = device_lookup(&plcom_cd, PLCOMUNIT(dev));
+	struct plcom_softc *sc =
+		device_lookup_private(&plcom_cd, PLCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (PLCOM_ISALIVE(sc) == 0)
@@ -787,7 +775,8 @@ plcomread(dev_t dev, struct uio *uio, int flag)
 int
 plcomwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct plcom_softc *sc = device_lookup(&plcom_cd, PLCOMUNIT(dev));
+	struct plcom_softc *sc =
+		device_lookup_private(&plcom_cd, PLCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (PLCOM_ISALIVE(sc) == 0)
@@ -799,7 +788,8 @@ plcomwrite(dev_t dev, struct uio *uio, int flag)
 int
 plcompoll(dev_t dev, int events, struct lwp *l)
 {
-	struct plcom_softc *sc = device_lookup(&plcom_cd, PLCOMUNIT(dev));
+	struct plcom_softc *sc =
+		device_lookup_private(&plcom_cd, PLCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (PLCOM_ISALIVE(sc) == 0)
@@ -811,7 +801,8 @@ plcompoll(dev_t dev, int events, struct lwp *l)
 struct tty *
 plcomtty(dev_t dev)
 {
-	struct plcom_softc *sc = device_lookup(&plcom_cd, PLCOMUNIT(dev));
+	struct plcom_softc *sc =
+		device_lookup_private(&plcom_cd, PLCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return tp;
@@ -820,7 +811,8 @@ plcomtty(dev_t dev)
 int
 plcomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct plcom_softc *sc = device_lookup(&plcom_cd, PLCOMUNIT(dev));
+	struct plcom_softc *sc =
+		device_lookup_private(&plcom_cd, PLCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int error;
 	int s;
@@ -889,7 +881,9 @@ plcomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	case PPS_IOC_GETPARAMS: {
 		pps_params_t *pp;
 		pp = (pps_params_t *)data;
+		mutex_spin_enter(&timecounter_lock);
 		*pp = sc->ppsparam;
+		mutex_spin_exit(&timecounter_lock);
 		break;
 	}
 
@@ -897,8 +891,10 @@ plcomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	  	pps_params_t *pp;
 		int mode;
 		pp = (pps_params_t *)data;
+		mutex_spin_enter(&timecounter_lock);
 		if (pp->mode & ~ppscap) {
 			error = EINVAL;
+			mutex_spin_exit(&timecounter_lock);
 			break;
 		}
 		sc->ppsparam = *pp;
@@ -943,6 +939,7 @@ plcomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 			error = EINVAL;
 			break;
 		}
+		mutex_spin_exit(&timecounter_lock);
 		break;
 	}
 
@@ -953,7 +950,9 @@ plcomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	case PPS_IOC_FETCH: {
 		pps_info_t *pi;
 		pi = (pps_info_t *)data;
+		mutex_spin_enter(&timecounter_lock);
 		*pi = sc->ppsinfo;
+		mutex_spin_exit(&timecounter_lock);
 		break;
 	}
 
@@ -963,6 +962,7 @@ plcomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		 * rising edge as the on-the-second signal. 
 		 * The old API has no way to specify PPS polarity.
 		 */
+		mutex_spin_enter(&timecounter_lock);
 		sc->sc_ppsmask = MSR_DCD;
 #ifndef PPS_TRAILING_EDGE
 		sc->sc_ppsassert = MSR_DCD;
@@ -975,6 +975,7 @@ plcomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		TIMESPEC_TO_TIMEVAL((struct timeval *)data, 
 		    &sc->ppsinfo.clear_timestamp);
 #endif
+		mutex_spin_exit(&timecounter_lock);
 		break;
 
 	default:
@@ -1139,7 +1140,8 @@ cflag2lcr(tcflag_t cflag)
 int
 plcomparam(struct tty *tp, struct termios *t)
 {
-	struct plcom_softc *sc = device_lookup(&plcom_cd, PLCOMUNIT(tp->t_dev));
+	struct plcom_softc *sc =
+		device_lookup_private(&plcom_cd, PLCOMUNIT(tp->t_dev));
 	int ospeed;
 	u_char lcr;
 	int s;
@@ -1352,7 +1354,8 @@ plcom_loadchannelregs(struct plcom_softc *sc)
 int
 plcomhwiflow(struct tty *tp, int block)
 {
-	struct plcom_softc *sc = device_lookup(&plcom_cd, PLCOMUNIT(tp->t_dev));
+	struct plcom_softc *sc =
+		device_lookup_private(&plcom_cd, PLCOMUNIT(tp->t_dev));
 	int s;
 
 	if (PLCOM_ISALIVE(sc) == 0)
@@ -1410,7 +1413,8 @@ plcom_hwiflow(struct plcom_softc *sc)
 void
 plcomstart(struct tty *tp)
 {
-	struct plcom_softc *sc = device_lookup(&plcom_cd, PLCOMUNIT(tp->t_dev));
+	struct plcom_softc *sc =
+		device_lookup_private(&plcom_cd, PLCOMUNIT(tp->t_dev));
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 	int s;
@@ -1474,7 +1478,8 @@ out:
 void
 plcomstop(struct tty *tp, int flag)
 {
-	struct plcom_softc *sc = device_lookup(&plcom_cd, PLCOMUNIT(tp->t_dev));
+	struct plcom_softc *sc =
+		device_lookup_private(&plcom_cd, PLCOMUNIT(tp->t_dev));
 	int s;
 
 	s = splserial();
@@ -1813,6 +1818,7 @@ plcomintr(void *arg)
 		 */
 		if (delta & sc->sc_ppsmask) {
 			struct timeval tv;
+			mutex_spin_enter(&timecounter_lock);
 		    	if ((msr & sc->sc_ppsmask) == sc->sc_ppsassert) {
 				/* XXX nanotime() */
 				microtime(&tv);
@@ -1849,6 +1855,7 @@ plcomintr(void *arg)
 				sc->ppsinfo.clear_sequence++;
 				sc->ppsinfo.current_mode = sc->ppsparam.mode;
 			}
+			mutex_spin_exit(&timecounter_lock);
 		}
 
 		/*

@@ -1,5 +1,6 @@
-# $NetBSD: Makefile,v 1.14 2007/05/28 12:06:34 tls Exp $
+# $NetBSD: Makefile,v 1.17 2009/04/22 15:23:03 lukem Exp $
 
+WARNS?=	2	# XXX -Wextra -Wsign-compare
 NOLINT= # defined
 
 .include <bsd.own.mk>
@@ -8,8 +9,6 @@ USE_FORT?= yes		# network client
 
 DIST=		${NETBSDSRCDIR}/crypto/dist
 .PATH: ${DIST}/heimdal/kdc
-
-WARNS?=  1
 
 PROG= hprop
 
@@ -30,16 +29,16 @@ CPPFLAGS+= -I.					\
 CPPFLAGS+=-DHAVE_IPV6
 .endif
 
-.if ${HAVE_GCC} == 4
+.if defined(HAVE_GCC) && ${HAVE_GCC} == 4
 COPTS.mit_dump.c+=	-Wno-pointer-sign
 .endif
 
 VERS!=	cd ${NETBSDSRCDIR}/lib/libvers && ${PRINTOBJDIR}
 
-LDADD+=	-lhdb -lkrb5 -lcrypto -lasn1 \
-	-lcom_err -L${VERS} -lvers -lroken -lcrypt
-DPADD+=	${LIBHDB} ${LIBKRB5} ${LIBCRYPTO} ${LIBASN1} \
-	${LIBCOM_ERR} ${VERS}/libvers.a ${LIBROKEN} ${LIBCRYPT}
+LDADD+=	-lhdb -lkrb5 -lhx509 -lcrypto -lasn1 \
+	-lcom_err -L${VERS} -lvers -lroken -lcrypt -lutil
+DPADD+=	${LIBHDB} ${LIBKRB5} ${LIBHX509} ${LIBCRYPTO} ${LIBASN1} \
+	${LIBCOM_ERR} ${VERS}/libvers.a ${LIBROKEN} ${LIBCRYPT} ${LIBUTIL}
 
 MAN=	hprop.8
 

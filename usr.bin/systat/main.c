@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.41 2007/12/31 00:22:15 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.45 2009/11/04 21:46:24 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -31,12 +31,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: main.c,v 1.41 2007/12/31 00:22:15 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.45 2009/11/04 21:46:24 dsl Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -86,6 +86,7 @@ int     turns = 2;	/* stay how many refresh-turns in 'all' mode? */
 int     allflag;
 int     allcounter;
 sig_atomic_t needsredraw = 0;
+int	use_sysctl = 1;
 
 static	WINDOW *wload;			/* one line window for load average */
 
@@ -102,7 +103,9 @@ main(int argc, char **argv)
 {
 	int ch;
 	char errbuf[_POSIX2_LINE_MAX];
+	const char *all;
 
+	all = "all";
 	egid = getegid();
 	(void)setegid(getgid());
 
@@ -110,6 +113,7 @@ main(int argc, char **argv)
 		switch(ch) {
 		case 'M':
 			memf = optarg;
+			use_sysctl = 0;
 			break;
 		case 'N':
 			nlistf = optarg;
@@ -151,7 +155,7 @@ main(int argc, char **argv)
 				break;
 			}
 
-			if(strstr("all",argv[0]) == "all"){
+			if (strstr(all, argv[0]) == all) {
 				allcounter=0;
 				allflag=1;
 			}
@@ -263,8 +267,14 @@ labels(void)
 void
 display(int signo)
 {
+	static int skip;
 	int j;
 	struct mode *p;
+	int ms_delay;
+
+	if (signo == SIGALRM && skip-- > 0)
+		/* Don't display on this timeout */
+		return;
 
 	/* Get the load average over the last minute. */
 	(void)getloadavg(avenrun, sizeof(avenrun) / sizeof(avenrun[0]));
@@ -304,9 +314,17 @@ display(int signo)
 			allcounter=0;
 		} else
 			allcounter++;
-       }
+	}
 
-	timeout(naptime * 1000);
+	/* curses timeout() uses VTIME, limited to 255 1/10th secs */
+	ms_delay = naptime * 1000;
+	if (ms_delay < 25500) {
+		timeout(ms_delay);
+		skip = 0;
+	} else {
+		skip = ms_delay / 25500;
+		timeout(ms_delay / (skip + 1));
+	}
 }
 
 void

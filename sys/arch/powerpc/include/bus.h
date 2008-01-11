@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.18 2007/10/17 19:56:40 garbled Exp $	*/
+/*	$NetBSD: bus.h,v 1.20 2008/04/28 20:23:32 martin Exp $	*/
 /*	$OpenBSD: bus.h,v 1.1 1997/10/13 10:53:42 pefo Exp $	*/
 
 /*-
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -319,7 +312,7 @@ void bus_space_mallocok(void);
     ((void)(*(t)->pbs_free)((t), (h), (s)))
 
 /*
- *	u_intN_t bus_space_read_N (bus_space_tag_t tag,
+ *	uintN_t bus_space_read_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset);
  *
  * Read a 1, 2, 4, or 8 byte quantity from bus space
@@ -336,7 +329,7 @@ void bus_space_mallocok(void);
 	((*(t)->pbs_scalar.pbss_read_8)((t), (h), (o)))
 
 /*
- *	u_intN_t bus_space_read_stream_N (bus_space_tag_t tag,
+ *	uintN_t bus_space_read_stream_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset);
  *
  * Read a 2, 4, or 8 byte quantity from bus space
@@ -353,7 +346,7 @@ void bus_space_mallocok(void);
 /*
  *	void bus_space_read_multi_N _P((bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    u_intN_t *addr, size_t count);
+ *	    uintN_t *addr, size_t count);
  *
  * Read `count' 1, 2, 4, or 8 byte quantities from bus space
  * described by tag/handle/offset and copy into buffer provided.
@@ -371,7 +364,7 @@ void bus_space_mallocok(void);
 /*
  *	void bus_space_read_multi_stream_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    u_intN_t *addr, size_t count);
+ *	    uintN_t *addr, size_t count);
  *
  * Read `count' 2, 4, or 8 byte stream quantities from bus space
  * described by tag/handle/offset and copy into buffer provided.
@@ -387,7 +380,7 @@ void bus_space_mallocok(void);
 /*
  *	void bus_space_write_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    u_intN_t value);
+ *	    uintN_t value);
  *
  * Write the 1, 2, 4, or 8 byte value `value' to bus space
  * described by tag/handle/offset.
@@ -405,7 +398,7 @@ void bus_space_mallocok(void);
 /*
  *	void bus_space_write_stream_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    u_intN_t value);
+ *	    uintN_t value);
  *
  * Write the 2, 4, or 8 byte stream value `value' to bus space
  * described by tag/handle/offset.
@@ -423,7 +416,7 @@ void bus_space_mallocok(void);
 /*
  *	void bus_space_write_multi_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const u_intN_t *addr, size_t count);
+ *	    const uintN_t *addr, size_t count);
  *
  * Write `count' 1, 2, 4, or 8 byte quantities from the buffer
  * provided to bus space described by tag/handle/offset.
@@ -441,7 +434,7 @@ void bus_space_mallocok(void);
 /*
  *	void bus_space_write_multi_stream_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const u_intN_t *addr, size_t count);
+ *	    const uintN_t *addr, size_t count);
  *
  * Write `count' 2, 4, or 8 byte stream quantities from the buffer
  * provided to bus space described by tag/handle/offset.
@@ -459,7 +452,7 @@ void bus_space_mallocok(void);
 /*
  *	void bus_space_read_region_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    u_intN_t *addr, size_t count);
+ *	    uintN_t *addr, size_t count);
  *
  * Read `count' 1, 2, 4, or 8 byte quantities from bus space
  * described by tag/handle and starting at `offset' and copy into
@@ -477,7 +470,7 @@ void bus_space_mallocok(void);
 /*
  *	void bus_space_read_region_stream_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    u_intN_t *addr, size_t count);
+ *	    uintN_t *addr, size_t count);
  *
  * Read `count' 2, 4, or 8 byte stream quantities from bus space
  * described by tag/handle and starting at `offset' and copy into
@@ -493,7 +486,7 @@ void bus_space_mallocok(void);
 /*
  *	void bus_space_write_region_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const u_intN_t *addr, size_t count);
+ *	    const uintN_t *addr, size_t count);
  *
  * Write `count' 1, 2, 4, or 8 byte quantities from the buffer provided
  * to bus space described by tag/handle starting at `offset'.
@@ -510,7 +503,7 @@ void bus_space_mallocok(void);
 /*
  *	void bus_space_write_region_stream_N (bus_space_tag_t tag,
  *	    bus_space_handle_t bsh, bus_size_t offset,
- *	    const u_intN_t *addr, size_t count);
+ *	    const uintN_t *addr, size_t count);
  *
  * Write `count' 2, 4, or 8 byte stream quantities from the buffer provided
  * to bus space described by tag/handle starting at `offset'.
@@ -525,7 +518,7 @@ void bus_space_mallocok(void);
 #if 0
 /*
  *	void bus_space_set_multi_N (bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, u_intN_t val,
+ *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
  *	    size_t count);
  *
  * Write the 1, 2, 4, or 8 byte value `val' to bus space described
@@ -542,7 +535,7 @@ void bus_space_mallocok(void);
 
 /*
  *	void bus_space_set_multi_stream_N (bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, u_intN_t val,
+ *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
  *	    size_t count);
  *
  * Write the 2, 4, or 8 byte stream value `val' to bus space described
@@ -559,7 +552,7 @@ void bus_space_mallocok(void);
 
 /*
  *	void bus_space_set_region_N (bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, u_intN_t val,
+ *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
  *	    size_t count);
  *
  * Write `count' 1, 2, 4, or 8 byte value `val' to bus space described
@@ -576,7 +569,7 @@ void bus_space_mallocok(void);
 
 /*
  *	void bus_space_set_region_stream_N (bus_space_tag_t tag,
- *	    bus_space_handle_t bsh, bus_size_t offset, u_intN_t val,
+ *	    bus_space_handle_t bsh, bus_size_t offset, uintN_t val,
  *	    size_t count);
  *
  * Write `count' 2, 4, or 8 byte stream value `val' to bus space described

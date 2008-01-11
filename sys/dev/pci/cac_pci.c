@@ -1,4 +1,4 @@
-/*	$NetBSD: cac_pci.c,v 1.26 2007/10/19 12:00:41 ad Exp $	*/
+/*	$NetBSD: cac_pci.c,v 1.32 2009/11/26 15:17:08 njoly Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac_pci.c,v 1.26 2007/10/19 12:00:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac_pci.c,v 1.32 2009/11/26 15:17:08 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -137,15 +130,14 @@ cac_pci_findtype(struct pci_attach_args *pa)
 }
 
 static int
-cac_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+cac_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return (cac_pci_findtype(aux) != NULL);
 }
 
 static void
-cac_pci_attach(struct device *parent, struct device *self, void *aux)
+cac_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa;
 	const struct cac_pci_type *ct;
@@ -158,7 +150,7 @@ cac_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_naive(": RAID controller\n");
 
-	sc = (struct cac_softc *)self;
+	sc = device_private(self);
 	pa = (struct pci_attach_args *)aux;
 	pc = pa->pa_pc;
 	ct = cac_pci_findtype(pa);
@@ -193,8 +185,7 @@ cac_pci_attach(struct device *parent, struct device *self, void *aux)
 		    &sc->sc_iot, &sc->sc_ioh, NULL, NULL))
 		    	ior = -1;
 	if (memr == -1 && ior == -1) {
-		aprint_error("%s: can't map i/o or memory space\n",
-		    self->dv_xname);
+		aprint_error_dev(self, "can't map i/o or memory space\n");
 		return;
 	}
 
@@ -215,8 +206,8 @@ cac_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error("can't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 
@@ -253,7 +244,7 @@ cac_pci_l0_completed(struct cac_softc *sc)
 
 	if ((off & 3) != 0)
 		printf("%s: failed command list returned: %lx\n",
-		    sc->sc_dv.dv_xname, (long)off);
+		    device_xname(&sc->sc_dv), (long)off);
 
 	off = (off & ~3) - sc->sc_ccbs_paddr;
 	ccb = (struct cac_ccb *)((char *)sc->sc_ccbs + off);

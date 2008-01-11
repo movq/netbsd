@@ -1,7 +1,7 @@
-/*	$NetBSD: loadfile.h,v 1.6 2007/06/05 08:48:49 martin Exp $	 */
+/*	$NetBSD: loadfile.h,v 1.12 2010/08/25 16:30:01 christos Exp $	 */
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,7 +49,10 @@
 #define	LOAD_BSS	0x0008
 #define	LOAD_SYM	0x0010
 #define	LOAD_HDR	0x0020
-#define LOAD_ALL	0x003f
+#define LOAD_NOTE	0x0040
+#define LOAD_ALL	0x007f
+#define LOAD_MINIMAL	0x002f
+#define LOAD_BACKWARDS	0x0050
 
 #define	COUNT_TEXT	0x0100
 #define	COUNT_TEXTA	0x0200
@@ -93,3 +89,6 @@ int	loadfile_elf64(int, Elf64_Ehdr *, u_long *, int);
 #include <sys/exec_aout.h>
 int	loadfile_aout(int, struct exec *, u_long *, int);
 #endif
+
+extern uint32_t	netbsd_version;
+extern u_int netbsd_elf_class;

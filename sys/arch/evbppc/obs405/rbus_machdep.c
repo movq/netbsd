@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.2 2005/12/11 12:17:12 christos Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.6 2011/01/18 01:08:55 matt Exp $	*/
 
 /*
  * Copyright (c) 2003
@@ -41,6 +41,8 @@
 #include <dev/pci/pcidevs.h>
 #include <dev/cardbus/rbus.h>
 
+#include <uvm/uvm_extern.h>
+
 #include "opt_pci.h"
 
 #ifndef PCI_NETBSD_CONFIGURE
@@ -54,12 +56,7 @@
 #endif
 
 int
-md_space_map(t, bpa, size, flags, bshp)
-	bus_space_tag_t t;
-	bus_addr_t bpa;
-	bus_size_t size;
-	int flags;
-	bus_space_handle_t *bshp;
+md_space_map(bus_space_tag_t t, bus_addr_t bpa, bus_size_t size, int flags, bus_space_handle_t *bshp)
 {
 	DPRINTF("md_space_map: 0x%x, 0x%x, 0x%x\n", t->pbs_base, bpa, size);
 
@@ -67,11 +64,7 @@ md_space_map(t, bpa, size, flags, bshp)
 }
 
 void
-md_space_unmap(t, bsh, size, adrp)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
-	bus_addr_t *adrp;
+md_space_unmap(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size, bus_addr_t *adrp)
 {
 	paddr_t pa;
 
@@ -85,8 +78,7 @@ md_space_unmap(t, bsh, size, adrp)
 }
 
 rbus_tag_t
-rbus_pccbb_parent_mem(pa)
-	struct pci_attach_args *pa;
+rbus_pccbb_parent_mem(struct pci_attach_args *pa)
 {
 	bus_addr_t start;
 	bus_size_t size;
@@ -100,8 +92,7 @@ rbus_pccbb_parent_mem(pa)
 }
 
 rbus_tag_t
-rbus_pccbb_parent_io(pa)
-	struct pci_attach_args *pa;
+rbus_pccbb_parent_io(struct pci_attach_args *pa)
 {
 	bus_addr_t start;
 	bus_size_t size;

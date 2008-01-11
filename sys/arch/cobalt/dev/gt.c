@@ -1,4 +1,4 @@
-/*	$NetBSD: gt.c,v 1.20 2006/09/10 06:41:09 tsutsui Exp $	*/
+/*	$NetBSD: gt.c,v 1.25 2011/05/17 17:34:48 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.20 2006/09/10 06:41:09 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.25 2011/05/17 17:34:48 dyoung Exp $");
 
 #include "opt_pci.h"
 #include "pci.h"
@@ -37,7 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.20 2006/09/10 06:41:09 tsutsui Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -62,15 +61,15 @@ __KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.20 2006/09/10 06:41:09 tsutsui Exp $");
 #include <cobalt/dev/gtreg.h>
 
 struct gt_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 
 	bus_space_tag_t sc_bst;
 	bus_space_handle_t sc_bsh;
 	struct cobalt_pci_chipset sc_pc;
 };
 
-static int	gt_match(struct device *, struct cfdata *, void *);
-static void	gt_attach(struct device *, struct device *, void *);
+static int	gt_match(device_t, cfdata_t, void *);
+static void	gt_attach(device_t, device_t, void *);
 static int	gt_print(void *aux, const char *pnp);
 
 static void	gt_timer_init(struct gt_softc *sc);
@@ -79,11 +78,11 @@ static void	gt_timer0_init(void *);
 static long	gt_timer0_read(void *);
 #endif
 
-CFATTACH_DECL(gt, sizeof(struct gt_softc),
+CFATTACH_DECL_NEW(gt, sizeof(struct gt_softc),
     gt_match, gt_attach, NULL, NULL);
 
 static int
-gt_match(struct device *parent, struct cfdata *match, void *aux)
+gt_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return 1;
@@ -92,23 +91,24 @@ gt_match(struct device *parent, struct cfdata *match, void *aux)
 #define GT_REG_REGION	0x1000
 
 static void
-gt_attach(struct device *parent, struct device *self, void *aux)
+gt_attach(device_t parent, device_t self, void *aux)
 {
+	struct gt_softc *sc = device_private(self);
 	struct mainbus_attach_args *ma = aux;
-	struct gt_softc *sc = (void *)self;
 #if NPCI > 0
 	pci_chipset_tag_t pc;
 	struct pcibus_attach_args pba;
 #endif
 
+	sc->sc_dev = self;
 	sc->sc_bst = ma->ma_iot;
 	if (bus_space_map(sc->sc_bst, ma->ma_addr, GT_REG_REGION,
 	    0, &sc->sc_bsh)) {
-		printf(": unable to map GT64111 registers\n");
+		aprint_error(": unable to map GT64111 registers\n");
 		return;
 	}
 
-	printf("\n");
+	aprint_normal("\n");
 
 	gt_timer_init(sc);
 
@@ -131,14 +131,13 @@ gt_attach(struct device *parent, struct device *self, void *aux)
 	pc->pc_memext = extent_create("pcimem", 0x12000000, 0x13ffffff,
 	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 	pci_configure_bus(pc, pc->pc_ioext, pc->pc_memext, NULL, 0,
-	    mips_dcache_align);
+	    mips_cache_info.mci_dcache_align);
 #endif
 	pba.pba_dmat = &pci_bus_dma_tag;
 	pba.pba_dmat64 = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 		PCI_FLAGS_MRL_OKAY | /*PCI_FLAGS_MRM_OKAY|*/ PCI_FLAGS_MWI_OKAY;
 	pba.pba_pc = pc;
 	config_found_ia(self, "pcibus", &pba, gt_print);

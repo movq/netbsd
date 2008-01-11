@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.61 2007/10/17 19:57:09 garbled Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.71 2011/02/10 14:46:47 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
@@ -81,10 +81,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.61 2007/10/17 19:57:09 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.71 2011/02/10 14:46:47 pooka Exp $");
 
 #include "opt_kstack_debug.h"
-#include "opt_coredump.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,7 +91,6 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.61 2007/10/17 19:57:09 garbled Exp 
 #include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/buf.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/exec.h>
 #include <sys/ptrace.h>
@@ -103,13 +101,12 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.61 2007/10/17 19:57:09 garbled Exp 
 
 #include <sh3/locore.h>
 #include <sh3/cpu.h>
-#include <sh3/reg.h>
+#include <sh3/pcb.h>
 #include <sh3/mmu.h>
 #include <sh3/cache.h>
 #include <sh3/userret.h>
 
 extern void lwp_trampoline(void);
-extern void lwp_setfunc_trampoline(void);
 
 static void sh3_setup_uarea(struct lwp *);
 
@@ -136,6 +133,7 @@ void
 cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack,
     size_t stacksize, void (*func)(void *), void *arg)
 {
+	struct pcb *pcb;
 	struct switchframe *sf;
 
 #if 0 /* FIXME: probably wrong for yamt-idlelwp */
@@ -153,7 +151,8 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack,
 		l2->l_md.md_regs->tf_r15 = (u_int)stack + stacksize;
 
 	/* When l2 is switched to, jump to the trampoline */
-	sf = &l2->l_md.md_pcb->pcb_sf;
+	pcb = lwp_getpcb(l2);
+	sf = &pcb->pcb_sf;
 	sf->sf_pr  = (int)lwp_trampoline;
 	sf->sf_r10 = (int)l2;	/* "new" lwp for lwp_startup() */
 	sf->sf_r11 = (int)arg;	/* hook function/argument */
@@ -164,26 +163,23 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack,
 /*
  * Reset the stack pointer for the lwp and arrange for it to call the
  * specified function with the specified argument on next switch.
- *
- * XXX: Scheduler activations relics!  Not used anymore but keep
- * around for reference in case we gonna revive SA.
  */
 void
 cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 {
-	struct switchframe *sf;
+	struct pcb *pcb = lwp_getpcb(l);
+	struct switchframe *sf = &pcb->pcb_sf;
 
 	sh3_setup_uarea(l);
 
 	l->l_md.md_regs->tf_ssr = PSL_USERSET;
 
 	/* When lwp is switched to, jump to the trampoline */
-	sf = &l->l_md.md_pcb->pcb_sf;
-	sf->sf_pr  = (int)lwp_setfunc_trampoline;
+	sf->sf_pr  = (int)lwp_trampoline;
+	sf->sf_r10 = (int)l;	/* "new" lwp for lwp_startup() */
 	sf->sf_r11 = (int)arg;	/* hook function/argument */
 	sf->sf_r12 = (int)func;
 }
-
 
 static void
 sh3_setup_uarea(struct lwp *l)
@@ -191,10 +187,12 @@ sh3_setup_uarea(struct lwp *l)
 	struct pcb *pcb;
 	struct trapframe *tf;
 	struct switchframe *sf;
-	vaddr_t spbase, fptop;
+	vaddr_t uv, spbase, fptop;
 #define	P1ADDR(x)	(SH3_PHYS_TO_P1SEG(*__pmap_kpte_lookup(x) & PG_PPN))
 
-	pcb = &l->l_addr->u_pcb;
+	pcb = lwp_getpcb(l);
+	pcb->pcb_onfault = NULL;
+	pcb->pcb_faultbail = 0;
 #ifdef SH3
 	/*
 	 * Accessing context store space must not cause exceptions.
@@ -213,22 +211,19 @@ sh3_setup_uarea(struct lwp *l)
 	l->l_md.md_regs = tf;
 
 	/* set up the kernel stack pointer */
-	spbase = (vaddr_t)l->l_addr + PAGE_SIZE;
+	uv = uvm_lwp_getuarea(l);
+	spbase = uv + PAGE_SIZE;
 #ifdef P1_STACK
 	/*
 	 * wbinv u-area to avoid cache-aliasing, since kernel stack
 	 * is accessed from P1 instead of P3.
 	 */
 	if (SH_HAS_VIRTUAL_ALIAS)
-		sh_dcache_wbinv_range((vaddr_t)l->l_addr, USPACE);
+		sh_dcache_wbinv_range(uv, USPACE);
 	spbase = P1ADDR(spbase);
 #else /* !P1_STACK */
-	/* Prepare u-area PTEs */
-#ifdef SH3
-	if (CPU_IS_SH3)
-		sh3_switch_setup(l);
-#endif
 #ifdef SH4
+	/* Prepare u-area PTEs */
 	if (CPU_IS_SH4)
 		sh4_switch_setup(l);
 #endif
@@ -236,8 +231,8 @@ sh3_setup_uarea(struct lwp *l)
 
 #ifdef KSTACK_DEBUG
 	/* Fill magic number for tracking */
-	memset((char *)fptop - PAGE_SIZE + sizeof(struct user), 0x5a,
-	    PAGE_SIZE - sizeof(struct user));
+	memset((char *)fptop - PAGE_SIZE + sizeof(struct pcb), 0x5a,
+	    PAGE_SIZE - sizeof(struct pcb));
 	memset((char *)spbase, 0xa5, (USPACE - PAGE_SIZE));
 	memset(&pcb->pcb_sf, 0xb4, sizeof(struct switchframe));
 #endif /* KSTACK_DEBUG */
@@ -275,7 +270,6 @@ child_return(void *arg)
 	ktrsysret(SYS_fork, 0, 0);
 }
 
-
 /*
  * struct emul e_startlwp (for _lwp_create(2))
  */
@@ -283,19 +277,15 @@ void
 startlwp(void *arg)
 {
 	ucontext_t *uc = arg;
-	struct lwp *l = curlwp;
+	lwp_t *l = curlwp;
 	int error;
 
 	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-#ifdef DIAGNOSTIC
-	if (error)
-		printf("startlwp: error %d from cpu_setmcontext()", error);
-#endif
-	pool_put(&lwp_uc_pool, uc);
+	KASSERT(error == 0);
 
+	kmem_free(uc, sizeof(ucontext_t));
 	userret(l);
 }
-
 
 /*
  * Exit hook
@@ -318,56 +308,12 @@ cpu_lwp_free2(struct lwp *l)
 	/* Nothing to do */
 }
 
-
-#ifdef COREDUMP
-/*
- * Dump the machine specific segment at the start of a core dump.
- */
-struct md_core {
-	struct reg intreg;
-};
-
-int
-cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
-{
-	struct md_core md_core;
-	struct coreseg cseg;
-	int error;
-
-	if (iocookie == NULL) {
-		CORE_SETMAGIC(*chdr, COREMAGIC, MID_MACHINE, 0);
-		chdr->c_hdrsize = ALIGN(sizeof(*chdr));
-		chdr->c_seghdrsize = ALIGN(sizeof(cseg));
-		chdr->c_cpusize = sizeof(md_core);
-		chdr->c_nseg++;
-		return 0;
-	}
-
-	/* Save integer registers. */
-	error = process_read_regs(l, &md_core.intreg);
-	if (error)
-		return error;
-
-	CORE_SETMAGIC(cseg, CORESEGMAGIC, MID_MACHINE, CORE_CPU);
-	cseg.c_addr = 0;
-	cseg.c_size = chdr->c_cpusize;
-
-	error = coredump_write(iocookie, UIO_SYSSPACE, &cseg,
-	    chdr->c_seghdrsize);
-	if (error)
-		return error;
-
-	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
-	    sizeof(md_core));
-}
-#endif /* COREDUMP */
-
 /*
  * Map an IO request into kernel virtual address space.  Requests fall into
  * one of five catagories:
  *
  *	B_PHYS|B_UAREA:	User u-area swap.
- *			Address is relative to start of u-area (p_addr).
+ *			Address is relative to start of u-area.
  *	B_PHYS|B_PAGET:	User page table swap.
  *			Address is a kernel VA in usrpt (Usrptmap).
  *	B_PHYS|B_DIRTY:	Dirty page push.
@@ -381,7 +327,7 @@ cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
  * (a name with only slightly more meaning than "kernel_map")
  */
 
-void
+int
 vmapbuf(struct buf *bp, vsize_t len)
 {
 	vaddr_t faddr, taddr, off;
@@ -419,6 +365,8 @@ vmapbuf(struct buf *bp, vsize_t len)
 		len -= PAGE_SIZE;
 	}
 	pmap_update(kpmap);
+
+	return 0;
 }
 
 /*

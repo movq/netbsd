@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_vnode.c,v 1.90 2008/01/02 11:49:21 ad Exp $	*/
+/*	$NetBSD: uvm_vnode.c,v 1.95 2011/04/23 18:14:13 rmind Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -20,12 +20,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor,
- *	Washington University, the University of California, Berkeley and
- *	its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -50,17 +45,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_vnode.c,v 1.90 2008/01/02 11:49:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_vnode.c,v 1.95 2011/04/23 18:14:13 rmind Exp $");
 
-#include "fs_nfs.h"
 #include "opt_uvmhist.h"
-#include "opt_ddb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/proc.h>
-#include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/disklabel.h>
 #include <sys/ioctl.h>
@@ -116,7 +107,7 @@ const struct uvm_pagerops uvm_vnodeops = {
 static void
 uvn_reference(struct uvm_object *uobj)
 {
-	VREF((struct vnode *)uobj);
+	vref((struct vnode *)uobj);
 }
 
 
@@ -372,34 +363,6 @@ uvm_vnp_setwritesize(struct vnode *vp, voff_t newsize)
 	KASSERT(vp->v_size <= newsize);
 	vp->v_writesize = newsize;
 	mutex_exit(&vp->v_interlock);
-}
-
-/*
- * uvm_vnp_zerorange:  set a range of bytes in a file to zero.
- */
-
-void
-uvm_vnp_zerorange(struct vnode *vp, off_t off, size_t len)
-{
-	void *win;
-	int flags;
-
-	/*
-	 * XXXUBC invent kzero() and use it
-	 */
-
-	while (len) {
-		vsize_t bytelen = len;
-
-		win = ubc_alloc(&vp->v_uobj, off, &bytelen, UVM_ADV_NORMAL,
-		    UBC_WRITE);
-		memset(win, 0, bytelen);
-		flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
-		ubc_release(win, flags);
-
-		off += bytelen;
-		len -= bytelen;
-	}
 }
 
 bool

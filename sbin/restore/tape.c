@@ -1,4 +1,4 @@
-/*	$NetBSD: tape.c,v 1.59 2007/02/09 09:36:02 hannken Exp $	*/
+/*	$NetBSD: tape.c,v 1.63 2009/04/07 12:38:13 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)tape.c	8.9 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: tape.c,v 1.59 2007/02/09 09:36:02 hannken Exp $");
+__RCSID("$NetBSD: tape.c,v 1.63 2009/04/07 12:38:13 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -256,7 +256,7 @@ setup(void)
 	vprintf(stdout, "Verify tape and initialize maps\n");
 #ifdef RRESTORE
 	if (host)
-		mt = rmtopen(magtape, 0);
+		mt = rmtopen(magtape, 0, 0);
 	else
 #endif
 	if (pipein)
@@ -426,7 +426,7 @@ again:
 	}
 #ifdef RRESTORE
 	if (host)
-		mt = rmtopen(magtape, 0);
+		mt = rmtopen(magtape, 0, 0);
 	else
 #endif
 		mt = open(magtape, O_RDONLY, 0);
@@ -864,7 +864,7 @@ loop:
 	for (i = 0; i < spcl.c_count; i++) {
 		if (spcl.c_addr[i]) {
 			readtape(&buf[curblk++][0]);
-			if (curblk == fssize / TP_BSIZE) {
+			if ((uint32_t)curblk == fssize / TP_BSIZE) {
 				(*fill)((char *)buf, (long)(size > TP_BSIZE ?
 				     fssize : (curblk - 1) * TP_BSIZE + size));
 				curblk = 0;
@@ -895,6 +895,12 @@ loop:
 	}
 	if (curblk > 0)
 		(*fill)((char *)buf, (long)((curblk * TP_BSIZE) + size));
+	/* Skip over Linux extended attributes. */
+	if (spcl.c_type == TS_INODE && (spcl.c_flags & DR_EXTATTRIBUTES)) {
+		for (i = 0; i < spcl.c_count; i++)
+			readtape(junk);
+		(void)gethead(&spcl);
+	}
 	findinode(&spcl);
 	gettingfile = 0;
 }
@@ -1189,7 +1195,7 @@ gethead(struct s_spcl *buf)
 		swap_old_header(&u_ospcl.s_ospcl);
 	}
 
-	memset(buf, 0, (long)TP_BSIZE);
+	memset(buf, 0, TP_BSIZE);
 	buf->c_type = u_ospcl.s_ospcl.c_type;
 	buf->c_date = u_ospcl.s_ospcl.c_date;
 	buf->c_ddate = u_ospcl.s_ospcl.c_ddate;

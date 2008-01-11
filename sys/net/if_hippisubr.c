@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hippisubr.c,v 1.33 2007/12/20 21:08:21 dyoung Exp $	*/
+/*	$NetBSD: if_hippisubr.c,v 1.39 2010/04/05 07:22:23 joerg Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -30,11 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_hippisubr.c,v 1.33 2007/12/20 21:08:21 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_hippisubr.c,v 1.39 2010/04/05 07:22:23 joerg Exp $");
 
 #include "opt_inet.h"
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,9 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_hippisubr.c,v 1.33 2007/12/20 21:08:21 dyoung Exp
 #include <net/if_dl.h>
 #include <net/if_types.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <net/if_hippi.h>
 
@@ -88,14 +85,14 @@ static int
 hippi_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
     struct rtentry *rt0)
 {
-	u_int16_t htype;
-	u_int32_t ifield = 0;
+	uint16_t htype;
+	uint32_t ifield = 0;
 	int error = 0;
 	struct mbuf *m = m0;
 	struct rtentry *rt;
 	struct hippi_header *hh;
-	u_int32_t *cci;
-	u_int32_t d2_len;
+	uint32_t *cci;
+	uint32_t d2_len;
 	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
@@ -189,8 +186,8 @@ hippi_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 		l->llc_dsap = l->llc_ssap = LLC_SNAP_LSAP;
 		l->llc_snap.org_code[0] = l->llc_snap.org_code[1] =
 			l->llc_snap.org_code[2] = 0;
-		bcopy((void *) &htype, (void *) &l->llc_snap.ether_type,
-		      sizeof(u_int16_t));
+		memcpy((void *) &l->llc_snap.ether_type, (void *) &htype,
+		      sizeof(uint16_t));
 	}
 
 	d2_len = m->m_pkthdr.len;
@@ -203,7 +200,7 @@ hippi_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 	M_PREPEND(m, sizeof (struct hippi_header) + 8, M_DONTWAIT);
 	if (m == 0)
 		senderr(ENOBUFS);
-	cci = mtod(m, u_int32_t *);
+	cci = mtod(m, uint32_t *);
 	memset(cci, 0, sizeof(struct hippi_header) + 8);
 	cci[0] = 0;
 	cci[1] = ifield;
@@ -216,7 +213,7 @@ hippi_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 	/* Pad out the D2 area to end on a quadword (64-bit) boundry. */
 
 	if (d2_len % 8 != 0) {
-		static u_int32_t buffer[2] = {0, 0};
+		static uint32_t buffer[2] = {0, 0};
 		m_copyback(m, m->m_pkthdr.len, 8 - d2_len % 8, (void *) buffer);
 	}
 
@@ -239,7 +236,7 @@ hippi_input(struct ifnet *ifp, struct mbuf *m)
 {
 	struct ifqueue *inq;
 	struct llc *l;
-	u_int16_t htype;
+	uint16_t htype;
 	struct hippi_header *hh;
 	int s;
 
@@ -339,9 +336,7 @@ hippi_ifattach(struct ifnet *ifp, void *lla)
 	ifp->if_input = hippi_input;
 	ifp->if_baudrate = IF_Mbps(800);	/* XXX double-check */
 
-	if_set_sadl(ifp, lla, 6);
+	if_set_sadl(ifp, lla, 6, true);
 
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_HIPPI, sizeof(struct hippi_header));
-#endif
+	bpf_attach(ifp, DLT_HIPPI, sizeof(struct hippi_header));
 }

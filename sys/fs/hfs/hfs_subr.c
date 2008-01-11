@@ -1,4 +1,4 @@
-/*	$NetBSD: hfs_subr.c,v 1.7 2008/01/02 11:48:41 ad Exp $	*/
+/*	$NetBSD: hfs_subr.c,v 1.15 2011/02/24 23:48:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */                                     
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hfs_subr.c,v 1.7 2008/01/02 11:48:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hfs_subr.c,v 1.15 2011/02/24 23:48:59 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,8 +46,11 @@ __KERNEL_RCSID(0, "$NetBSD: hfs_subr.c,v 1.7 2008/01/02 11:48:41 ad Exp $");
 #include <sys/disklabel.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
+#include <sys/buf.h>
 
 #include <fs/hfs/hfs.h>
+
+#include <miscfs/specfs/specdev.h>
 
 /*
  * Initialize the vnode associated with a new hfsnode.
@@ -58,7 +61,6 @@ hfs_vinit(struct mount *mp, int (**specops)(void *), int (**fifoops)(void *),
 {
 	struct hfsnode	*hp;
 	struct vnode	*vp;
-	struct vnode    *nvp;
 
 	vp = *vpp;
 	hp = VTOH(vp);
@@ -70,28 +72,8 @@ hfs_vinit(struct mount *mp, int (**specops)(void *), int (**fifoops)(void *),
 		case VCHR:
 		case VBLK:
 			vp->v_op = specops;
-			if ((nvp = checkalias(vp,
-					      HFS_CONVERT_RDEV(hp->h_rec.file.bsd.special.raw_device),
-					      mp)) != NULL) {
-			    /*
-			     * Discard unneeded vnode, but save its inode.
-			     */
-			    nvp->v_data = vp->v_data;
-			    vp->v_data = NULL;
-			    /* XXX spec_vnodeops has no locking,
-			       do it explicitly */
-			    vp->v_vflag &= ~VV_LOCKSWORK;
-			    VOP_UNLOCK(vp, 0);
-			    vp->v_op = specops;
-			    vgone(vp);
-			    lockmgr(&nvp->v_lock, LK_EXCLUSIVE,
-				    &nvp->v_interlock);
-			    /*
-			     * Reinitialize aliased inode.
-			     */
-			    vp = nvp;
-			    hp->h_vnode = vp;
-			}
+			spec_node_init(vp,
+			    HFS_CONVERT_RDEV(hp->h_rec.file.bsd.special.raw_device));
 			break;
 		case VFIFO:
 			vp->v_op = fifoops;
@@ -106,7 +88,7 @@ hfs_vinit(struct mount *mp, int (**specops)(void *), int (**fifoops)(void *),
 			break;
 	}
 
-	if (hp->h_rec.cnid == HFS_CNID_ROOT_FOLDER)
+	if (hp->h_rec.u.cnid == HFS_CNID_ROOT_FOLDER)
 		vp->v_vflag |= VV_ROOT;
 
 	*vpp = vp;
@@ -174,7 +156,7 @@ hfs_libcb_opendev(
 	hfs_libcb_data* cbdata = NULL;
 	hfs_libcb_argsopen* args;
 	struct partinfo dpart;
-	int result;
+	int result, mode;
 
 	result = 0;
 	args = (hfs_libcb_argsopen*)(cbargs->openvol);
@@ -194,16 +176,19 @@ hfs_libcb_opendev(
 	cbdata->devvp = NULL;
 	
 	/* Open the device node. */
-	if ((result = VOP_OPEN(args->devvp, vol->readonly? FREAD : FREAD|FWRITE,
+	mode = vol->readonly ? FREAD : FREAD|FWRITE;
+	if ((result = VOP_OPEN(args->devvp, mode,
 		FSCRED)) != 0)
 		goto error;
 
 	/* Flush out any old buffers remaining from a previous use. */
 	vn_lock(args->devvp, LK_EXCLUSIVE | LK_RETRY);
 	result = vinvalbuf(args->devvp, V_SAVE, args->cred, args->l, 0, 0);
-	VOP_UNLOCK(args->devvp, 0);
-	if (result != 0)
+	VOP_UNLOCK(args->devvp);
+	if (result != 0) {
+		VOP_CLOSE(args->devvp, mode, FSCRED);
 		goto error;
+	}
 
 	cbdata->devvp = args->devvp;
 
@@ -222,7 +207,7 @@ error:
 			vn_lock(cbdata->devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void)VOP_CLOSE(cbdata->devvp, vol->readonly ? FREAD :
 				FREAD | FWRITE, NOCRED);
-			VOP_UNLOCK(cbdata->devvp, 0);
+			VOP_UNLOCK(cbdata->devvp);
 		}
 		free(cbdata, M_HFSMNT);
 		vol->cbdata = NULL;
@@ -245,7 +230,7 @@ hfs_libcb_closedev(hfs_volume* in_vol, hfs_callback_args* cbargs)
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void)VOP_CLOSE(devvp,
 			    in_vol->readonly ? FREAD : FREAD | FWRITE, NOCRED);
-			/* XXX do we need a VOP_UNLOCK() here? */
+			VOP_UNLOCK(devvp);
 		}
 
 		free(in_vol->cbdata, M_HFSMNT);
@@ -331,7 +316,8 @@ hfs_pread(struct vnode *vp, void *buf, size_t secsz, uint64_t off,
 		 * XXX  start != off? Need to test this. */
 
 		error = bread(vp, (start + curoff) / DEV_BSIZE,/* no rounding involved*/
-		   RBSZ(min(len - curoff + (off - start), MAXBSIZE), secsz), cred, &bp);
+		   RBSZ(min(len - curoff + (off - start), MAXBSIZE), secsz),
+		   cred, 0, &bp);
 
 		if (error == 0)
 			memcpy((uint8_t*)buf + curoff, (uint8_t*)bp->b_data +
@@ -380,55 +366,38 @@ hfs_time_to_timespec(uint32_t hfstime, struct timespec *unixtime)
 uint16_t be16tohp(void** inout_ptr)
 {
 	uint16_t	result;
-	uint16_t *ptr;
 	
-	if(inout_ptr==NULL)
+	if(inout_ptr == NULL)
 		return 0;
 		
-	ptr = *inout_ptr;
-
-	result = be16toh(*ptr);
-
-	ptr++;
-	*inout_ptr = ptr;
+	memcpy(&result, *inout_ptr, sizeof(result));
+	*inout_ptr = (char *)*inout_ptr + sizeof(result);
 	
-	return result;
+	return be16toh(result);
 }
 
 uint32_t be32tohp(void** inout_ptr)
 {
 	uint32_t	result;
-	uint32_t *ptr;
 	
-	if(inout_ptr==NULL)
+	if(inout_ptr == NULL)
 		return 0;
 
-	ptr = *inout_ptr;
-
-	result = be32toh(*ptr);
-
-	ptr++;
-	*inout_ptr = ptr;
-	
-	return result;
+	memcpy(&result, *inout_ptr, sizeof(result));
+	*inout_ptr = (char *)*inout_ptr + sizeof(result);
+	return be32toh(result);
 }
 
 uint64_t be64tohp(void** inout_ptr)
 {
 	uint64_t	result;
-	uint64_t *ptr;
 	
-	if(inout_ptr==NULL)
+	if(inout_ptr == NULL)
 		return 0;
 
-	ptr = *inout_ptr;
-
-	result = be64toh(*ptr);
-
-	ptr++;
-	*inout_ptr = ptr;
-	
-	return result;
+	memcpy(&result, *inout_ptr, sizeof(result));
+	*inout_ptr = (char *)*inout_ptr + sizeof(result);
+	return be64toh(result);
 }
 
 enum vtype

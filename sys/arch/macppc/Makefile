@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2007/12/31 10:45:22 dyoung Exp $
+#	$NetBSD: Makefile,v 1.9 2009/08/07 18:48:38 snj Exp $
 
 # Makefile for macppc tags file
 
@@ -7,9 +7,9 @@ SIMACPPC=	${SYSDIR}/arch/macppc/macppc/*.[ch] \
 		${SYSDIR}/arch/macppc/include/*.h \
 		${SYSDIR}/arch/macppc/dev/*.[ch] \
 		${SYSDIR}/arch/macppc/pci/*.[ch] \
-		${SYSDIR}/contrib/dev/ath/*.[ch] \
-		${SYSDIR}/contrib/dev/ath/netbsd/*.[ch] \
-		${SYSDIR}/contrib/dev/ath/public/*.[ch]
+		${SYSDIR}/external/isc/atheros_hal/dist/*.[ch] \
+		${SYSDIR}/external/isc/atheros_hal/dist/*/*.[ch] \
+		${SYSDIR}/external/isc/atheros_hal/ic/*.[ch]
 SIMACPPC+=	${SYSDIR}/arch/powerpc/powerpc/*.[ch] \
 		${SYSDIR}/arch/powerpc/include/*.h \
 		${SYSDIR}/arch/powerpc/pci/*.[ch]
@@ -25,7 +25,8 @@ tags:
 	-echo ${SIMACPPC} | xargs ctags -wadtf ${TIMACPPC}
 	-${FINDCOMM} | xargs ctags -wadtf ${TIMACPPC}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${AIMACPPC} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3	\1	/^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+	"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3	\1	/^\2(\3\4$$/;" \
 		>> ${TIMACPPC}
 	sort -o ${TIMACPPC} ${TIMACPPC}
 

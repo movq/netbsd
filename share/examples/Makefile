@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.15 2007/11/12 15:01:50 jmmv Exp $
+#	$NetBSD: Makefile,v 1.18 2009/05/14 02:37:36 ginsbach Exp $
 
-SUBDIR= amd apm atf disktab emul fstab ftpd hostapd isdn racoon	\
+SUBDIR= amd apm disktab emul fstab ftpd getdate hostapd isdn pppd racoon \
 	supfiles syslogd wsmoused
 
 .include <bsd.subdir.mk>

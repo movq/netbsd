@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.h,v 1.32 2007/06/13 20:57:33 christos Exp $	*/
+/*	$NetBSD: linux_machdep.h,v 1.37 2010/07/07 01:30:34 chs Exp $	*/
 
 /*-
  * Copyright (c) 1995, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -203,17 +196,15 @@ struct linux_sigframe {
 #define LINUX_VMWARE_LAST 237
 
 /*
- * Range of ioctls to just pass on, so that LKMs (like VMWare) can
+ * Range of ioctls to just pass on, so that modules (like VMWare) can
  * handle them.
  */
 #define LINUX_IOCTL_MIN_PASS	LINUX_VMWARE_NONE
 #define LINUX_IOCTL_MAX_PASS	(LINUX_VMWARE_LAST+8)
 
 #define LINUX_UNAME_ARCH	linux_get_uname_arch()
-#ifdef notyet
-/* We need to implement GDT based TLS first */
-#define LINUX_NPTL
-#endif
+
+#define LINUX_LWP_SETPRIVATE	linux_lwp_setprivate
 
 #ifdef _KERNEL
 __BEGIN_DECLS

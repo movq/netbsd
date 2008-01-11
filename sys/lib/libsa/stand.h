@@ -1,4 +1,4 @@
-/*	$NetBSD: stand.h,v 1.63 2007/12/24 15:46:46 perry Exp $	*/
+/*	$NetBSD: stand.h,v 1.71 2011/02/25 00:17:36 joerg Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -83,13 +83,6 @@
 #define vprintf		libsa_vprintf
 #define vsprintf	libsa_vsprintf
 #endif
-#define bcmp(s1, s2, l)	memcmp(s1, s2, l)
-#ifdef LIBSA_USE_MEMSET
-#define	bzero(s, l)	memset(s, 0, l)
-#endif
-#ifdef LIBSA_USE_MEMCPY
-#define	bcopy(s, d, l)	memcpy(d, s, l)	/* For non-overlapping copies only */
-#endif
 
 struct open_file;
 
@@ -107,6 +100,9 @@ struct open_file;
  * This structure is used to define file system operations in a file system
  * independent way.
  */
+extern char *fsmod;
+extern char *fsmod2;
+
 #if !defined(LIBSA_SINGLE_FILESYSTEM)
 struct fs_ops {
 	int	(*open)(const char *, struct open_file *);
@@ -242,9 +238,9 @@ void	gets(char *);
 int	getfile(char *prompt, int mode);
 char	*strerror(int);
 __dead void	exit(int);
-__dead void	panic(const char *, ...);
+__dead void	panic(const char *, ...)
+    __attribute__((__format__(__printf__, 1, 2)));
 __dead void	_rtt(void);
-void	(bcopy)(const void *, void *, size_t);
 void	*memcpy(void *, const void *, size_t);
 void	*memmove(void *, const void *, size_t);
 int	memcmp(const void *, const void *, size_t);
@@ -260,7 +256,7 @@ int	ioctl(int, u_long, char *);
 int	stat(const char *, struct stat *);
 int	fstat(int, struct stat *);
 
-typedef int cmp_t __P((const void *, const void *));
+typedef int cmp_t(const void *, const void *);
 void	qsort(void *, size_t, size_t, cmp_t *);
 
 extern int opterr, optind, optopt, optreset;
@@ -289,7 +285,10 @@ ssize_t	oread(int, void *, size_t);
 off_t	olseek(int, off_t, int);
 #endif
 
-extern const char HEXDIGITS[];
 extern const char hexdigits[];
+
+/* XXX: These should be removed eventually. */
+void	bcopy(const void *, void *, size_t);
+void	bzero(void *, size_t);
 
 #endif /* _LIBSA_STAND_H_ */

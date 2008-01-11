@@ -1,4 +1,4 @@
-/*	$NetBSD: phantomas.c,v 1.3 2005/12/11 12:17:24 christos Exp $	*/
+/*	$NetBSD: phantomas.c,v 1.8 2011/01/13 21:15:14 skrll Exp $	*/
 /*	$OpenBSD: phantomas.c,v 1.1 2002/12/18 23:52:45 mickey Exp $	*/
 
 /*
@@ -13,11 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Michael Shalayeff.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -36,23 +31,24 @@
 #include <sys/systm.h>
 #include <sys/device.h>
 
+#include <machine/iomod.h>
 #include <machine/autoconf.h>
 
 #include <hp700/dev/cpudevs.h>
 
 struct phantomas_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 };
 
-int	phantomasmatch(struct device *, struct cfdata *, void *);
-void	phantomasattach(struct device *, struct device *, void *);
-static void phantomas_callback(struct device *self, struct confargs *ca);
+int	phantomasmatch(device_t, cfdata_t, void *);
+void	phantomasattach(device_t, device_t, void *);
+static device_t phantomas_callback(device_t self, struct confargs *ca);
 
-CFATTACH_DECL(phantomas, sizeof(struct phantomas_softc),
+CFATTACH_DECL_NEW(phantomas, sizeof(struct phantomas_softc),
     phantomasmatch, phantomasattach, NULL, NULL);
 
 int
-phantomasmatch(struct device *parent, struct cfdata *cfdata, void *aux)
+phantomasmatch(device_t parent, cfdata_t cfdata, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -64,17 +60,23 @@ phantomasmatch(struct device *parent, struct cfdata *cfdata, void *aux)
 }
 
 void
-phantomasattach(struct device *parent, struct device *self, void *aux)
+phantomasattach(device_t parent, device_t self, void *aux)
 {
-	struct confargs *ca = aux;
+	struct phantomas_softc *sc = device_private(self);
+	struct confargs *ca = aux, nca;
 
-	printf("\n");
-	(*pdc_scanbus)(self, ca, phantomas_callback);
+	sc->sc_dev = self;
+	nca = *ca;
+	nca.ca_hpabase = 0;
+	nca.ca_nmodules = MAXMODBUS;
+
+	aprint_normal("\n");
+	pdc_scanbus(self, &nca, phantomas_callback);
 }
 
-static void
-phantomas_callback(struct device *self, struct confargs *ca)
+static device_t
+phantomas_callback(device_t self, struct confargs *ca)
 {
 
-	config_found_sm_loc(self, "phantomas", NULL, ca, mbprint, mbsubmatch);
+	return config_found_sm_loc(self, "gedoens", NULL, ca, mbprint, mbsubmatch);
 }

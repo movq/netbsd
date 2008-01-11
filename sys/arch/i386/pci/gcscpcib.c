@@ -1,4 +1,4 @@
-/* $NetBSD: gcscpcib.c,v 1.4 2008/01/09 15:44:33 xtraeme Exp $ */
+/* $NetBSD: gcscpcib.c,v 1.8 2009/09/27 18:31:58 jakllsch Exp $ */
 /* $OpenBSD: gcscpcib.c,v 1.6 2007/11/17 17:02:47 mbalmer Exp $	*/
 
 /*
@@ -24,7 +24,7 @@
  * AMD CS5535/CS5536 series LPC bridge also containing timer, watchdog and GPIO.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gcscpcib.c,v 1.4 2008/01/09 15:44:33 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gcscpcib.c,v 1.8 2009/09/27 18:31:58 jakllsch Exp $");
 
 #include "gpio.h"
 
@@ -49,6 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: gcscpcib.c,v 1.4 2008/01/09 15:44:33 xtraeme Exp $")
 #include <dev/sysmon/sysmonvar.h>
 
 #include <arch/i386/pci/gcscpcibreg.h>
+#include <arch/x86/pci/pcibvar.h>
 
 /* define if you need to select MFGPT for watchdog manually (0-5). */
 /* #define AMD553X_WDT_FORCEUSEMFGPT 	0 */
@@ -73,8 +74,9 @@ __KERNEL_RCSID(0, "$NetBSD: gcscpcib.c,v 1.4 2008/01/09 15:44:33 xtraeme Exp $")
 #define AMD553X_WDT_COUNTMAX	(0xffff / AMD553X_WDT_TICK)
 
 struct gcscpcib_softc {
-	pci_chipset_tag_t	sc_pc;
-	pcitag_t		sc_pcitag; 
+	/* we call pcibattach() which assumes softc starts like this: */
+	struct pcib_softc	sc_pcib;
+
 	pcireg_t		sc_pirqrc;
 
 	struct timecounter	sc_timecounter;
@@ -85,11 +87,13 @@ struct gcscpcib_softc {
 	struct sysmon_wdog	sc_smw;
 	int			sc_wdt_mfgpt;
 
+#if NGPIO > 0
 	/* GPIO interface */
 	bus_space_tag_t		sc_gpio_iot;
 	bus_space_handle_t	sc_gpio_ioh;
 	struct gpio_chipset_tag	sc_gpio_gc;
 	gpio_pin_t		sc_gpio_pins[AMD553X_GPIO_NPINS];
+#endif
 
 	/* SMbus/i2c interface */ 
 #if 0
@@ -101,14 +105,11 @@ struct gcscpcib_softc {
 #endif
 };
 
-static int	gcscpcib_match(device_t, struct cfdata *, void *);
+static int	gcscpcib_match(device_t, cfdata_t, void *);
 static void	gcscpcib_attach(device_t, device_t, void *);
 
 CFATTACH_DECL_NEW(gcscpcib, sizeof(struct gcscpcib_softc),
 	gcscpcib_match, gcscpcib_attach, NULL, NULL);
-
-/* from arch/<*>/pci/pcib.c */
-void		pcibattach(device_t, device_t, void *aux);
 
 static u_int	gcscpcib_get_timecount(struct timecounter *tc);
 static int	gscspcib_scan_mfgpt(struct gcscpcib_softc *sc);
@@ -126,7 +127,7 @@ static void	gcscpcib_gpio_pin_ctl(void *, int, int);
 #endif
 
 static int
-gcscpcib_match(device_t parent, struct cfdata *match, void *aux)
+gcscpcib_match(device_t parent, cfdata_t match, void *aux)
 { 
 	struct pci_attach_args *pa = aux;
 
@@ -157,10 +158,12 @@ gcscpcib_attach(device_t parent, device_t self, void *aux)
 	int i, gpio;
 #endif
 
-	sc->sc_pc = pa->pa_pc;
-	sc->sc_pcitag = pa->pa_tag;
+	sc->sc_pcib.sc_pc = pa->pa_pc;
+	sc->sc_pcib.sc_tag = pa->pa_tag;
 	sc->sc_iot = pa->pa_iot;
+#if NGPIO > 0
 	sc->sc_gpio_iot = pa->pa_iot;
+#endif
 
 	/* Attach the PCI-ISA bridge at first */
 	pcibattach(parent, self, aux);

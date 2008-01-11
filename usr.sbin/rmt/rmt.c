@@ -1,4 +1,4 @@
-/*	$NetBSD: rmt.c,v 1.14 2003/08/07 11:25:42 agc Exp $	*/
+/*	$NetBSD: rmt.c,v 1.16 2009/04/18 09:25:50 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rmt.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: rmt.c,v 1.14 2003/08/07 11:25:42 agc Exp $");
+__RCSID("$NetBSD: rmt.c,v 1.16 2009/04/18 09:25:50 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,7 +61,6 @@ __RCSID("$NetBSD: rmt.c,v 1.14 2003/08/07 11:25:42 agc Exp $");
 
 int	tape = -1;
 
-char	*record;
 int	maxrecsize = -1;
 
 #define	SSIZE	64
@@ -85,6 +84,7 @@ main(argc, argv)
 	int argc;
 	char **argv;
 {
+	char *record = NULL;
 	int rval;
 	char c;
 	int n, i, cc;

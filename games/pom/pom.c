@@ -1,4 +1,4 @@
-/*	$NetBSD: pom.c,v 1.16 2007/12/15 19:44:42 perry Exp $	*/
+/*	$NetBSD: pom.c,v 1.20 2010/12/05 04:34:22 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -33,15 +33,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)pom.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: pom.c,v 1.16 2007/12/15 19:44:42 perry Exp $");
+__RCSID("$NetBSD: pom.c,v 1.20 2010/12/05 04:34:22 pgoyette Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,12 +84,12 @@ __RCSID("$NetBSD: pom.c,v 1.16 2007/12/15 19:44:42 perry Exp $");
 #define	Pzero	  36.340410	/* lunar mean long of perigee at EPOCH */
 #define	Nzero	  318.510107	/* lunar mean long of node at EPOCH */
 
-void	adj360(double *);
-double	dtor(double);
 int	main(int, char *[]);
-double	potm(double);
-time_t	parsetime(char *);
-void	badformat(void) __dead;
+static void adj360(double *);
+static double dtor(double);
+static double potm(double);
+static time_t parsetime(char *);
+static void badformat(void) __dead;
 
 int
 main(int argc, char *argv[])
@@ -148,7 +148,7 @@ main(int argc, char *argv[])
  * potm --
  *	return phase of the moon
  */
-double
+static double
 potm(double days)
 {
 	double N, Msol, Ec, LambdaSol, l, Mm, Ev, Ac, A3, Mmprime;
@@ -184,7 +184,7 @@ potm(double days)
  * dtor --
  *	convert degrees to radians
  */
-double
+static double
 dtor(double deg)
 {
 	return(deg * PI / 180);
@@ -194,7 +194,7 @@ dtor(double deg)
  * adj360 --
  *	adjust value so 0 <= deg <= 360
  */
-void
+static void
 adj360(double *deg)
 {
 	for (;;)
@@ -207,17 +207,17 @@ adj360(double *deg)
 }
 
 #define	ATOI2(ar)	((ar)[0] - '0') * 10 + ((ar)[1] - '0'); (ar) += 2;
-time_t
+static time_t
 parsetime(char *p)
 {
 	struct tm *lt;
 	int bigyear;
 	int yearset = 0;
 	time_t tval;
-	unsigned char *t;
+	char *t;
 	
 	for (t = p; *t; ++t) {
-		if (isdigit(*t))
+		if (isdigit((unsigned char) *t))
 			continue;
 		badformat();
 	}
@@ -268,10 +268,11 @@ parsetime(char *p)
 	return (tval);
 }
 
-void
+static void
 badformat(void)
 {
 	warnx("illegal time format");
-	(void)fprintf(stderr, "usage: pom [[[[[cc]yy]mm]dd]HH]\n");
+	(void)fprintf(stderr, "usage: %s [[[[[cc]yy]mm]dd]HH]\n",
+	    getprogname());
 	exit(EXIT_FAILURE);
 }

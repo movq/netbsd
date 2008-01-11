@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_mutex.c,v 1.30 2008/01/05 12:31:39 ad Exp $	*/
+/*	$NetBSD: kern_mutex.c,v 1.51 2011/04/11 19:11:08 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,11 +40,10 @@
 #define	__MUTEX_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.30 2008/01/05 12:31:39 ad Exp $");
-
-#include "opt_multiprocessor.h"
+__KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.51 2011/04/11 19:11:08 rmind Exp $");
 
 #include <sys/param.h>
+#include <sys/atomic.h>
 #include <sys/proc.h>
 #include <sys/mutex.h>
 #include <sys/sched.h>
@@ -59,13 +51,15 @@ __KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.30 2008/01/05 12:31:39 ad Exp $");
 #include <sys/systm.h>
 #include <sys/lockdebug.h>
 #include <sys/kernel.h>
-#include <sys/atomic.h>
 #include <sys/intr.h>
 #include <sys/lock.h>
+#include <sys/types.h>
 
 #include <dev/lockstat.h>
 
 #include <machine/lock.h>
+
+#include "opt_sa.h"
 
 /*
  * When not running a debug kernel, spin mutexes are not much
@@ -82,9 +76,9 @@ __KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.30 2008/01/05 12:31:39 ad Exp $");
 
 #define	MUTEX_WANTLOCK(mtx)					\
     LOCKDEBUG_WANTLOCK(MUTEX_DEBUG_P(mtx), (mtx),		\
-        (uintptr_t)__builtin_return_address(0), 0)
+        (uintptr_t)__builtin_return_address(0), false, false)
 #define	MUTEX_LOCKED(mtx)					\
-    LOCKDEBUG_LOCKED(MUTEX_DEBUG_P(mtx), (mtx),			\
+    LOCKDEBUG_LOCKED(MUTEX_DEBUG_P(mtx), (mtx), NULL,		\
         (uintptr_t)__builtin_return_address(0), 0)
 #define	MUTEX_UNLOCKED(mtx)					\
     LOCKDEBUG_UNLOCKED(MUTEX_DEBUG_P(mtx), (mtx),		\
@@ -123,17 +117,16 @@ do {								\
 /*
  * Spin mutex SPL save / restore.
  */
-#ifndef MUTEX_COUNT_BIAS
-#define	MUTEX_COUNT_BIAS	0
-#endif
 
 #define	MUTEX_SPIN_SPLRAISE(mtx)					\
 do {									\
-	struct cpu_info *x__ci = curcpu();				\
+	struct cpu_info *x__ci;						\
 	int x__cnt, s;							\
-	x__cnt = x__ci->ci_mtx_count--;					\
 	s = splraiseipl(mtx->mtx_ipl);					\
-	if (x__cnt == MUTEX_COUNT_BIAS)					\
+	x__ci = curcpu();						\
+	x__cnt = x__ci->ci_mtx_count--;					\
+	__insn_barrier();						\
+	if (x__cnt == 0)						\
 		x__ci->ci_mtx_oldspl = (s);				\
 } while (/* CONSTCOND */ 0)
 
@@ -142,7 +135,7 @@ do {									\
 	struct cpu_info *x__ci = curcpu();				\
 	int s = x__ci->ci_mtx_oldspl;					\
 	__insn_barrier();						\
-	if (++(x__ci->ci_mtx_count) == MUTEX_COUNT_BIAS)		\
+	if (++(x__ci->ci_mtx_count) == 0)			\
 		splx(s);						\
 } while (/* CONSTCOND */ 0)
 
@@ -161,16 +154,16 @@ do {									\
 	(((int)(mtx)->mtx_owner & MUTEX_BIT_WAITERS) != 0)
 
 #define	MUTEX_INITIALIZE_ADAPTIVE(mtx, dodebug)				\
+	if (!dodebug)							\
+		(mtx)->mtx_owner |= MUTEX_BIT_NODEBUG;			\
 do {									\
-	if (dodebug)							\
-		(mtx)->mtx_owner |= MUTEX_BIT_DEBUG;			\
 } while (/* CONSTCOND */ 0);
 
 #define	MUTEX_INITIALIZE_SPIN(mtx, dodebug, ipl)			\
 do {									\
 	(mtx)->mtx_owner = MUTEX_BIT_SPIN;				\
-	if (dodebug)							\
-		(mtx)->mtx_owner |= MUTEX_BIT_DEBUG;			\
+	if (!dodebug)							\
+		(mtx)->mtx_owner |= MUTEX_BIT_NODEBUG;			\
 	(mtx)->mtx_ipl = makeiplcookie((ipl));				\
 	__cpu_simple_lock_init(&(mtx)->mtx_lock);			\
 } while (/* CONSTCOND */ 0)
@@ -185,10 +178,10 @@ do {									\
 #define	MUTEX_ADAPTIVE_P(mtx)		\
     (((mtx)->mtx_owner & MUTEX_BIT_SPIN) == 0)
 
-#define	MUTEX_DEBUG_P(mtx)	(((mtx)->mtx_owner & MUTEX_BIT_DEBUG) != 0)
+#define	MUTEX_DEBUG_P(mtx)	(((mtx)->mtx_owner & MUTEX_BIT_NODEBUG) == 0)
 #if defined(LOCKDEBUG)
-#define	MUTEX_OWNED(owner)		(((owner) & ~MUTEX_BIT_DEBUG) != 0)
-#define	MUTEX_INHERITDEBUG(new, old)	(new) |= (old) & MUTEX_BIT_DEBUG
+#define	MUTEX_OWNED(owner)		(((owner) & ~MUTEX_BIT_NODEBUG) != 0)
+#define	MUTEX_INHERITDEBUG(new, old)	(new) |= (old) & MUTEX_BIT_NODEBUG
 #else /* defined(LOCKDEBUG) */
 #define	MUTEX_OWNED(owner)		((owner) != 0)
 #define	MUTEX_INHERITDEBUG(new, old)	/* nothing */
@@ -254,19 +247,18 @@ __strong_alias(mutex_spin_enter,mutex_vector_enter);
 __strong_alias(mutex_spin_exit,mutex_vector_exit);
 #endif
 
-void	mutex_abort(kmutex_t *, const char *, const char *);
-void	mutex_dump(volatile void *);
-int	mutex_onproc(uintptr_t, struct cpu_info **);
+static void		mutex_abort(kmutex_t *, const char *, const char *);
+static void		mutex_dump(volatile void *);
 
 lockops_t mutex_spin_lockops = {
 	"Mutex",
-	0,
+	LOCKOPS_SPIN,
 	mutex_dump
 };
 
 lockops_t mutex_adaptive_lockops = {
 	"Mutex",
-	1,
+	LOCKOPS_SLEEP,
 	mutex_dump
 };
 
@@ -300,17 +292,12 @@ mutex_dump(volatile void *cookie)
  *	generates a lot of machine code in the DIAGNOSTIC case, so
  *	we ask the compiler to not inline it.
  */
-
-#if __GNUC_PREREQ__(3, 0)
-__attribute ((noinline)) __attribute ((noreturn))
-#endif
-void
+void __noinline
 mutex_abort(kmutex_t *mtx, const char *func, const char *msg)
 {
 
 	LOCKDEBUG_ABORT(mtx, (MUTEX_SPIN_P(mtx) ?
 	    &mutex_spin_lockops : &mutex_adaptive_lockops), func, msg);
-	/* NOTREACHED */
 }
 
 /*
@@ -389,51 +376,47 @@ mutex_destroy(kmutex_t *mtx)
 	MUTEX_DESTROY(mtx);
 }
 
+#ifdef MULTIPROCESSOR
 /*
- * mutex_onproc:
+ * mutex_oncpu:
  *
  *	Return true if an adaptive mutex owner is running on a CPU in the
  *	system.  If the target is waiting on the kernel big lock, then we
  *	must release it.  This is necessary to avoid deadlock.
- *
- *	Note that we can't use the mutex owner field as an LWP pointer.  We
- *	don't have full control over the timing of our execution, and so the
- *	pointer could be completely invalid by the time we dereference it.
  */
-#ifdef MULTIPROCESSOR
-int
-mutex_onproc(uintptr_t owner, struct cpu_info **cip)
+static bool
+mutex_oncpu(uintptr_t owner)
 {
-	CPU_INFO_ITERATOR cii;
 	struct cpu_info *ci;
-	struct lwp *l;
+	lwp_t *l;
 
-	if (!MUTEX_OWNED(owner))
-		return 0;
-	l = (struct lwp *)MUTEX_OWNER(owner);
+	KASSERT(kpreempt_disabled());
 
-	/* See if the target is running on a CPU somewhere. */
-	if ((ci = *cip) != NULL && ci->ci_curlwp == l)
-		goto run;
-	for (CPU_INFO_FOREACH(cii, ci))
-		if (ci->ci_curlwp == l)
-			goto run;
+	if (!MUTEX_OWNED(owner)) {
+		return false;
+	}
 
-	/* No: it may be safe to block now. */
-	*cip = NULL;
-	return 0;
+	/*
+	 * See lwp_dtor() why dereference of the LWP pointer is safe.
+	 * We must have kernel preemption disabled for that.
+	 */
+	l = (lwp_t *)MUTEX_OWNER(owner);
+	ci = l->l_cpu;
 
- run:
- 	/* Target is running; do we need to block? */
- 	*cip = ci;
-	return ci->ci_biglock_wanted != l;
+	if (ci && ci->ci_curlwp == l) {
+		/* Target is running; do we need to block? */
+		return (ci->ci_biglock_wanted != l);
+	}
+
+	/* Not running.  It may be safe to block now. */
+	return false;
 }
 #endif	/* MULTIPROCESSOR */
 
 /*
  * mutex_vector_enter:
  *
- *	Support routine for mutex_enter() that must handles all cases.  In
+ *	Support routine for mutex_enter() that must handle all cases.  In
  *	the LOCKDEBUG case, mutex_enter() is always aliased here, even if
  *	fast-path stubs are available.  If an mutex_spin_enter() stub is
  *	not available, then it is also aliased directly here.
@@ -444,8 +427,10 @@ mutex_vector_enter(kmutex_t *mtx)
 	uintptr_t owner, curthread;
 	turnstile_t *ts;
 #ifdef MULTIPROCESSOR
-	struct cpu_info *ci = NULL;
 	u_int count;
+#endif
+#ifdef KERN_SA
+	int f;
 #endif
 	LOCKSTAT_COUNTER(spincnt);
 	LOCKSTAT_COUNTER(slpcnt);
@@ -520,8 +505,8 @@ mutex_vector_enter(kmutex_t *mtx)
 	 * determine that the owner is not running on a processor,
 	 * then we stop spinning, and sleep instead.
 	 */
-	for (;;) {
-		owner = mtx->mtx_owner;
+	KPREEMPT_DISABLE(curlwp);
+	for (owner = mtx->mtx_owner;;) {
 		if (!MUTEX_OWNED(owner)) {
 			/*
 			 * Mutex owner clear could mean two things:
@@ -534,29 +519,31 @@ mutex_vector_enter(kmutex_t *mtx)
 			 */
 			if (MUTEX_ACQUIRE(mtx, curthread))
 				break;
+			owner = mtx->mtx_owner;
 			continue;
 		}
-
-		if (panicstr != NULL)
+		if (__predict_false(panicstr != NULL)) {
+			kpreempt_enable();
 			return;
-		if (MUTEX_OWNER(owner) == curthread)
+		}
+		if (__predict_false(MUTEX_OWNER(owner) == curthread)) {
 			MUTEX_ABORT(mtx, "locking against myself");
-
+		}
 #ifdef MULTIPROCESSOR
 		/*
 		 * Check to see if the owner is running on a processor.
 		 * If so, then we should just spin, as the owner will
 		 * likely release the lock very soon.
 		 */
-		if (mutex_onproc(owner, &ci)) {
+		if (mutex_oncpu(owner)) {
 			LOCKSTAT_START_TIMER(lsflag, spintime);
 			count = SPINLOCK_BACKOFF_MIN;
-			for (;;) {
-				owner = mtx->mtx_owner;
-				if (!mutex_onproc(owner, &ci))
-					break;
+			do {
+				kpreempt_enable();
 				SPINLOCK_BACKOFF(count);
-			}
+				kpreempt_disable();
+				owner = mtx->mtx_owner;
+			} while (mutex_oncpu(owner));
 			LOCKSTAT_STOP_TIMER(lsflag, spintime);
 			LOCKSTAT_COUNT(spincnt, 1);
 			if (!MUTEX_OWNED(owner))
@@ -573,6 +560,7 @@ mutex_vector_enter(kmutex_t *mtx)
 		 */
 		if (!MUTEX_SET_WAITERS(mtx, owner)) {
 			turnstile_exit(mtx);
+			owner = mtx->mtx_owner;
 			continue;
 		}
 
@@ -595,7 +583,7 @@ mutex_vector_enter(kmutex_t *mtx)
 		 *		..	          clear lock word, waiters 
 		 *	  return success
 		 *
-		 * There is a another race that can occur: a third CPU could
+		 * There is another race that can occur: a third CPU could
 		 * acquire the mutex as soon as it is released.  Since
 		 * adaptive mutexes are primarily spin mutexes, this is not
 		 * something that we need to worry about too much.  What we
@@ -640,23 +628,23 @@ mutex_vector_enter(kmutex_t *mtx)
 		 * waiters field) and check the lock holder's status again.
 		 * Some of the possible outcomes (not an exhaustive list):
 		 *
-		 * 1. The onproc check returns true: the holding LWP is
+		 * 1. The on-CPU check returns true: the holding LWP is
 		 *    running again.  The lock may be released soon and
 		 *    we should spin.  Importantly, we can't trust the
 		 *    value of the waiters flag.
 		 *
-		 * 2. The onproc check returns false: the holding LWP is
-		 *    not running.  We now have the oppertunity to check
+		 * 2. The on-CPU check returns false: the holding LWP is
+		 *    not running.  We now have the opportunity to check
 		 *    if mutex_exit() has blatted the modifications made
 		 *    by MUTEX_SET_WAITERS().
 		 *
-		 * 3. The onproc check returns false: the holding LWP may
+		 * 3. The on-CPU check returns false: the holding LWP may
 		 *    or may not be running.  It has context switched at
 		 *    some point during our check.  Again, we have the
 		 *    chance to see if the waiters bit is still set or
 		 *    has been overwritten.
 		 *
-		 * 4. The onproc check returns false: the holding LWP is
+		 * 4. The on-CPU check returns false: the holding LWP is
 		 *    running on a CPU, but wants the big lock.  It's OK
 		 *    to check the waiters field in this case.
 		 *
@@ -670,12 +658,23 @@ mutex_vector_enter(kmutex_t *mtx)
 		 * If the waiters bit is not set it's unsafe to go asleep,
 		 * as we might never be awoken.
 		 */
-		if ((membar_consumer(), mutex_onproc(owner, &ci)) ||
+		if ((membar_consumer(), mutex_oncpu(owner)) ||
 		    (membar_consumer(), !MUTEX_HAS_WAITERS(mtx))) {
 			turnstile_exit(mtx);
+			owner = mtx->mtx_owner;
 			continue;
 		}
 #endif	/* MULTIPROCESSOR */
+
+#ifdef KERN_SA
+		/*
+		 * Sleeping for a mutex should not generate an upcall.
+		 * So set LP_SA_NOBLOCK to indicate this.
+		 * f indicates if we should clear LP_SA_NOBLOCK when done.
+		 */
+		f = ~curlwp->l_pflag & LP_SA_NOBLOCK;
+		curlwp->l_pflag |= LP_SA_NOBLOCK;
+#endif /* KERN_SA */
 
 		LOCKSTAT_START_TIMER(lsflag, slptime);
 
@@ -683,7 +682,14 @@ mutex_vector_enter(kmutex_t *mtx)
 
 		LOCKSTAT_STOP_TIMER(lsflag, slptime);
 		LOCKSTAT_COUNT(slpcnt, 1);
+
+#ifdef KERN_SA
+		curlwp->l_pflag ^= f;
+#endif /* KERN_SA */
+
+		owner = mtx->mtx_owner;
 	}
+	KPREEMPT_ENABLE(curlwp);
 
 	LOCKSTAT_EVENT(lsflag, mtx, LB_ADAPTIVE_MUTEX | LB_SLEEP1,
 	    slpcnt, slptime);
@@ -708,8 +714,11 @@ mutex_vector_exit(kmutex_t *mtx)
 
 	if (MUTEX_SPIN_P(mtx)) {
 #ifdef FULL
-		if (!__SIMPLELOCK_LOCKED_P(&mtx->mtx_lock))
+		if (__predict_false(!__SIMPLELOCK_LOCKED_P(&mtx->mtx_lock))) {
+			if (panicstr != NULL)
+				return;
 			MUTEX_ABORT(mtx, "exiting unheld spin mutex");
+		}
 		MUTEX_UNLOCKED(mtx);
 		__cpu_simple_unlock(&mtx->mtx_lock);
 #endif
@@ -796,6 +805,8 @@ int
 mutex_owned(kmutex_t *mtx)
 {
 
+	if (mtx == NULL)
+		return 0;
 	if (MUTEX_ADAPTIVE_P(mtx))
 		return MUTEX_OWNER(mtx->mtx_owner) == (uintptr_t)curlwp;
 #ifdef FULL

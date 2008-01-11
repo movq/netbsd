@@ -1,4 +1,4 @@
-/*	$NetBSD: dkwedge_bsdlabel.c,v 1.14 2007/06/09 02:10:30 dyoung Exp $	*/
+/*	$NetBSD: dkwedge_bsdlabel.c,v 1.16 2009/12/05 16:29:14 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dkwedge_bsdlabel.c,v 1.14 2007/06/09 02:10:30 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dkwedge_bsdlabel.c,v 1.16 2009/12/05 16:29:14 pooka Exp $");
 
 #include <sys/param.h>
 #ifdef _KERNEL
@@ -127,7 +120,7 @@ static const struct disklabel_location {
 	{ 0,	128 },	/* sparc, sun68k */
 	{ 1,	0 },	/* amd64, arc, arm, bebox, cobalt, evbppc, hp700,
 			   hpcarm, hpcmips, i386, ibmnws, mipsco, mvmeppc,
-			   ofppc, playstation2, pmppc, prep, sandpoint,
+			   ofppc, pmppc, prep, sandpoint,
 			   sbmips, sgimips, sh3 */
 	/* XXX atari is weird */
 	{ 2,	0 },	/* cesfic, hp300 */

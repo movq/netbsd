@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: scan.l,v 1.9 2007/11/09 23:41:08 cube Exp $	*/
+/*	$NetBSD: scan.l,v 1.16 2010/04/30 20:47:18 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -105,9 +105,10 @@ static int endinclude(void);
 static int getincludepath(void);
 static int getcurifdef(void);
 
-#define	yywrap() 1
 
 %}
+
+%option  noyywrap
 
 PATH	[A-Za-z_0-9]*[./][-A-Za-z_0-9./]*
 QCHARS	([^"\n]|\\\")+
@@ -135,6 +136,7 @@ defflag		return DEFFLAG;
 defopt		return DEFOPT;
 defparam	return DEFPARAM;
 defpseudo	return DEFPSEUDO;
+defpseudodev	return DEFPSEUDODEV;
 devclass	return DEVCLASS;
 device		return DEVICE;
 device-major	return DEVICE_MAJOR;
@@ -143,6 +145,8 @@ file		return XFILE;
 file-system	return FILE_SYSTEM;
 flags		return FLAGS;
 ident		return IDENT;
+ioconf		return IOCONF;
+linkzero	return LINKZERO;
 machine		return XMACHINE;
 major		return MAJOR;
 makeoptions	return MAKEOPTIONS;
@@ -158,9 +162,12 @@ on		return ON;
 options		return OPTIONS;
 prefix		return PREFIX;
 pseudo-device	return PSEUDO_DEVICE;
+pseudo-root	return PSEUDO_ROOT;
 root		return ROOT;
+single		return SINGLE;
 source		return SOURCE;
 type		return TYPE;
+vector 		return VECTOR;
 version 	return VERSION;
 with		return WITH;
 
@@ -386,8 +393,10 @@ curdir_push(const char *fname)
 	else {
 		char *cwd, buf[PATH_MAX];
 
-		if ((cwd = getcwd(buf, sizeof(buf))) == NULL)
+		if ((cwd = getcwd(buf, sizeof(buf))) == NULL) {
+			free(f);
 			return (-1);
+		}
 		p = emalloc(strlen(cwd) + strlen(d) + 2);
 		sprintf(p, "%s/%s", cwd, d);
 	}
@@ -409,7 +418,7 @@ curdir_pop(void)
 	if (SLIST_EMPTY(&curdirs))
 		panic("curdirs is empty");
 	/* LINTED cast away const (pf_prefix is malloc'd for curdirs) */
-	free((void *)pf->pf_prefix);
+	free((void *)__UNCONST(pf->pf_prefix));
 	free(pf);
 }
 
@@ -556,7 +565,7 @@ getincludepath()
 	}
 
 	len = e-p;
-	if (len > sizeof(curinclpath)-1)
+	if (len > (ptrdiff_t)sizeof(curinclpath)-1)
 		len = sizeof(curinclpath)-1;
 	strncpy(curinclpath, p, sizeof(curinclpath));
 	curinclpath[len] = '\0';

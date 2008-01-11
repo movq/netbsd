@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.25 2002/09/19 03:09:33 lukem Exp $
+#	$NetBSD: Makefile,v 1.27 2011/05/25 15:24:07 joerg Exp $
 
 .include <bsd.own.mk>
 
@@ -9,9 +9,11 @@ SRCS=		bc.y execute.c global.c load.c main.c \
 		number.c scan.l storage.c util.c
 CPPFLAGS+=	-D_POSIX_SOURCE -funsigned-char -I. -I${.CURDIR} -I${DIST}/bc/bc -I${DIST}/bc/h
 LFLAGS+=	-I8
-LDADD+=		-ll -ledit -ltermcap
-DPADD+=		${LIBL} ${LIBEDIT} ${LIBTERMCAP}
+LDADD+=		-ll -ledit -lterminfo
+DPADD+=		${LIBL} ${LIBEDIT} ${LIBTERMINFO}
 YHEADER=1
+
+WARNS?=		0	# pointer sign issues
 
 TEXINFO=	bc.texi
 

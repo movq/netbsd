@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_proto.c,v 1.20 2007/02/18 23:16:59 matt Exp $	*/
+/*	$NetBSD: uipc_proto.c,v 1.22 2011/05/29 03:32:46 manu Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_proto.c,v 1.20 2007/02/18 23:16:59 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_proto.c,v 1.22 2011/05/29 03:32:46 manu Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -65,6 +65,13 @@ const struct protosw unixsw[] = {
 		.pr_ctloutput = uipc_ctloutput,
 		.pr_usrreq = uipc_usrreq,
 	}, {
+		.pr_type = SOCK_SEQPACKET,
+		.pr_domain = &unixdomain,
+		.pr_flags = PR_CONNREQUIRED|PR_WANTRCVD|PR_RIGHTS|PR_LISTEN|
+			    PR_ATOMIC,
+		.pr_ctloutput = uipc_ctloutput,
+		.pr_usrreq = uipc_usrreq,
+	}, {
 		.pr_input = raw_input,
 		.pr_ctlinput = raw_ctlinput,
 		.pr_usrreq = raw_usrreq,
@@ -74,6 +81,7 @@ const struct protosw unixsw[] = {
 
 struct domain unixdomain = {
 	.dom_family = AF_LOCAL,
+	.dom_init = uipc_init,
 	.dom_name = "unix",
 	.dom_externalize = unp_externalize,
 	.dom_dispose = unp_dispose,

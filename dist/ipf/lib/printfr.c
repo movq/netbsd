@@ -1,11 +1,11 @@
-/*	$NetBSD: printfr.c,v 1.1.1.7 2007/05/15 22:26:09 martin Exp $	*/
+/*	$NetBSD: printfr.c,v 1.1.1.9 2010/04/17 20:45:57 darrenr Exp $	*/
 
 /*
  * Copyright (C) 2000-2006 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: printfr.c,v 1.43.2.18 2007/05/07 06:55:38 darrenr Exp
+ * Id: printfr.c,v 1.43.2.21 2009/12/27 06:58:06 darrenr Exp
  */
 
 #include "ipf.h"
@@ -173,7 +173,7 @@ ioctlfunc_t	iocfunc;
 		putchar(' ');
 	}
 
-	if (*fp->fr_dif.fd_ifname || (fp->fr_flags & FR_DUP))
+	if (*fp->fr_dif.fd_ifname && (fp->fr_flags & FR_DUP))
 		print_toif("dup-to", &fp->fr_dif);
 	if (*fp->fr_tif.fd_ifname)
 		print_toif("to", &fp->fr_tif);
@@ -443,7 +443,6 @@ ioctlfunc_t	iocfunc;
 			if (fp->fr_flags & FR_FRSTRICT)
 				printf("strict");
 			printf(")");
-				
 		}
 	}
 	if (fp->fr_isc != (struct ipscan *)-1) {

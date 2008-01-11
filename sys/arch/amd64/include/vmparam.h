@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.17 2008/01/06 20:53:38 ad Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.27 2011/03/04 13:24:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -34,8 +34,10 @@
  *	@(#)vmparam.h	5.9 (Berkeley) 5/12/91
  */
 
-#ifndef _VMPARAM_H_
-#define _VMPARAM_H_
+#ifndef _X86_64_VMPARAM_H_
+#define _X86_64_VMPARAM_H_
+
+#ifdef __x86_64__
 
 #include <sys/tree.h>
 #include <sys/mutex.h>
@@ -78,10 +80,10 @@
 #define	MAXDSIZ		(8L*1024*1024*1024)	/* max data size */
 #endif
 #ifndef	DFLSSIZ
-#define	DFLSSIZ		(2*1024*1024)		/* initial stack size limit */
+#define	DFLSSIZ		(4*1024*1024)		/* initial stack size limit */
 #endif
 #ifndef	MAXSSIZ
-#define	MAXSSIZ		(32*1024*1024)		/* max stack size */
+#define	MAXSSIZ		(128*1024*1024)		/* max stack size */
 #endif
 
 /*
@@ -100,13 +102,6 @@
 #endif
 #ifndef	MAXSSIZ32
 #define	MAXSSIZ32	(64*1024*1024)		/* max stack size */
-#endif
-
-/*
- * Size of shared memory map
- */
-#ifndef SHMMAXPGS
-#define SHMMAXPGS	2048
 #endif
 
 /*
@@ -155,30 +150,16 @@
 
 #define VM_PHYSSEG_MAX		10	/* 1 "hole" + 9 free lists */
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
-#define VM_PHYSSEG_NOADD		/* can't add RAM after vm_mem_init */
 
-#define	VM_NFREELIST		2
+#define	VM_NFREELIST		3
 #define	VM_FREELIST_DEFAULT	0
-#define	VM_FREELIST_FIRST16	1
+#define	VM_FREELIST_FIRST4G	1
+#define	VM_FREELIST_FIRST16	2
 
-#define	__HAVE_VM_PAGE_MD
-#define	VM_MDPAGE_INIT(pg)							\
-	memset(&(pg)->mdpage, 0, sizeof((pg)->mdpage));				\
-	mutex_init(&(pg)->mdpage.mp_pvhead.pvh_lock, MUTEX_NODEBUG, IPL_VM);	\
-	SPLAY_INIT(&(pg)->mdpage.mp_pvhead.pvh_root);
+#else	/*	!__x86_64__	*/
 
-struct pv_entry;
+#include <i386/vmparam.h>
 
-struct pv_head {
-	kmutex_t pvh_lock;		/* locks every pv in this tree */
-	SPLAY_HEAD(pvtree, pv_entry) pvh_root;
-					/* head of tree (locked by pvh_lock) */
-};
+#endif	/*	__x86_64__	*/
 
-struct vm_page_md {
-	struct pv_head mp_pvhead;
-	struct vm_page *mp_link;
-	int mp_attrs;	/* only 2 bits (PG_U and PG_M) are actually used. */
-};
-
-#endif /* _VMPARAM_H_ */
+#endif /* _X86_64_VMPARAM_H_ */

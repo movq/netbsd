@@ -1,4 +1,4 @@
-#	$NetBSD: files.shark,v 1.16 2007/12/03 15:34:19 ad Exp $
+#	$NetBSD: files.shark,v 1.18 2011/03/23 04:06:03 macallan Exp $
 #
 # First try for arm-specific configuration info
 #
@@ -21,11 +21,6 @@ define todservice {}
 # ISA and mixed ISA+EISA or ISA+PCI drivers
 #
 include "dev/isa/files.isa"
-
-# Include WSCONS stuff
-include "dev/wscons/files.wscons"
-include "dev/rasops/files.rasops"
-include "dev/wsfont/files.wsfont"
 
 # Include pckbport stuff
 include "dev/pckbport/files.pckbport"
@@ -130,6 +125,10 @@ file	arch/shark/ofw/vga_ofbus.c		vga_ofbus	needs-flag
 # ofbus CyberPro
 attach	igsfb at ofbus with igsfb_ofbus
 file	arch/shark/ofw/igsfb_ofbus.c		igsfb_ofbus needs-flag
+
+# ofbus C&T 65550
+attach	chipsfb at ofbus with chipsfb_ofbus
+file	arch/shark/ofw/chipsfb_ofbus.c		chipsfb_ofbus needs-flag
 
 # Smart Card Reader
 device	scr: tty

@@ -1,4 +1,4 @@
-/* $NetBSD: bt463.c,v 1.12 2005/12/11 12:21:26 christos Exp $ */
+/* $NetBSD: bt463.c,v 1.15 2010/11/13 13:52:00 uebayasi Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,7 +62,7 @@
   */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bt463.c,v 1.12 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bt463.c,v 1.15 2010/11/13 13:52:00 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,8 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: bt463.c,v 1.12 2005/12/11 12:21:26 christos Exp $");
 #include <sys/buf.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/tgareg.h>
@@ -246,8 +237,7 @@ bt463_cninit(v, sched_update, wr, rd)
 }
 
 void
-bt463_init(rc)
-	struct ramdac_cookie *rc;
+bt463_init(struct ramdac_cookie *rc)
 {
 	struct bt463data *data = (struct bt463data *)rc;
 
@@ -356,9 +346,7 @@ bt463_init(rc)
 }
 
 int
-bt463_set_cmap(rc, cmapp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cmap *cmapp;
+bt463_set_cmap(struct ramdac_cookie *rc, struct wsdisplay_cmap *cmapp)
 {
 	struct bt463data *data = (struct bt463data *)rc;
 	u_int count, index;
@@ -393,9 +381,7 @@ bt463_set_cmap(rc, cmapp)
 }
 
 int
-bt463_get_cmap(rc, cmapp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cmap *cmapp;
+bt463_get_cmap(struct ramdac_cookie *rc, struct wsdisplay_cmap *cmapp)
 {
 	struct bt463data *data = (struct bt463data *)rc;
 	u_int count, index;
@@ -419,9 +405,7 @@ bt463_get_cmap(rc, cmapp)
 }
 
 int
-bt463_check_curcmap(rc, cursorp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cursor *cursorp;
+bt463_check_curcmap(struct ramdac_cookie *rc, struct wsdisplay_cursor *cursorp)
 {
 	struct bt463data *data = (struct bt463data *)rc;
 	int count, index, error;
@@ -444,9 +428,7 @@ bt463_check_curcmap(rc, cursorp)
 }
 
 void
-bt463_set_curcmap(rc, cursorp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cursor *cursorp;
+bt463_set_curcmap(struct ramdac_cookie *rc, struct wsdisplay_cursor *cursorp)
 {
 	struct bt463data *data = (struct bt463data *)rc;
 	int count, index;
@@ -461,9 +443,7 @@ bt463_set_curcmap(rc, cursorp)
 }
 
 int
-bt463_get_curcmap(rc, cursorp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cursor *cursorp;
+bt463_get_curcmap(struct ramdac_cookie *rc, struct wsdisplay_cursor *cursorp)
 {
 	struct bt463data *data = (struct bt463data *)rc;
 	int error;
@@ -518,8 +498,7 @@ int bt463_readback(void *v)
 }
 
 int
-bt463_debug(v)
-	void *v;
+bt463_debug(void *v)
 {
 	struct bt463data *data = (struct bt463data *)v;
 	int i;
@@ -545,8 +524,7 @@ bt463_debug(v)
 }
 
 void
-bt463_copyback(p)
-	 void *p;
+bt463_copyback(void *p)
 {
 	struct bt463data *data = (struct bt463data *)p;
 	int i;
@@ -561,17 +539,14 @@ bt463_copyback(p)
 #endif
 
 inline void
-bt463_wraddr(data, ireg)
-	struct bt463data *data;
-	u_int16_t ireg;
+bt463_wraddr(struct bt463data *data, u_int16_t ireg)
 {
 	data->ramdac_wr(data->cookie, BT463_REG_ADDR_LOW, ireg & 0xff);
 	data->ramdac_wr(data->cookie, BT463_REG_ADDR_HIGH, (ireg >> 8) & 0xff);
 }
 
 void
-bt463_update(p)
-	void *p;
+bt463_update(void *p)
 {
 	struct bt463data *data = (struct bt463data *)p;
 	int i, v;

@@ -1,7 +1,7 @@
-/*	$NetBSD: infokey.c,v 1.2 2004/07/13 19:02:44 he Exp $	*/
+/*	$NetBSD: infokey.c,v 1.4 2008/09/02 08:41:51 christos Exp $	*/
 
 /* infokey.c -- compile ~/.infokey to ~/.info.
-   Id: infokey.c,v 1.3 2004/03/14 00:57:29 karl Exp
+   Id: infokey.c,v 1.9 2004/12/14 00:15:36 karl Exp
 
    Copyright (C) 1999, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
 

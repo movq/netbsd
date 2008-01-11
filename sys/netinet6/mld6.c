@@ -1,4 +1,4 @@
-/*	$NetBSD: mld6.c,v 1.41 2007/10/16 20:31:33 joerg Exp $	*/
+/*	$NetBSD: mld6.c,v 1.52 2011/04/21 06:58:31 dholland Exp $	*/
 /*	$KAME: mld6.c,v 1.25 2001/01/16 14:14:18 itojun Exp $	*/
 
 /*
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mld6.c,v 1.41 2007/10/16 20:31:33 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mld6.c,v 1.52 2011/04/21 06:58:31 dholland Exp $");
 
 #include "opt_inet.h"
 
@@ -110,6 +110,7 @@ __KERNEL_RCSID(0, "$NetBSD: mld6.c,v 1.41 2007/10/16 20:31:33 joerg Exp $");
 #include <sys/systm.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
+#include <sys/socketvar.h>
 #include <sys/protosw.h>
 #include <sys/syslog.h>
 #include <sys/sysctl.h>
@@ -125,6 +126,7 @@ __KERNEL_RCSID(0, "$NetBSD: mld6.c,v 1.41 2007/10/16 20:31:33 joerg Exp $");
 #include <netinet6/ip6_var.h>
 #include <netinet6/scope6_var.h>
 #include <netinet/icmp6.h>
+#include <netinet6/icmp6_private.h>
 #include <netinet6/mld6_var.h>
 
 #include <net/net_osdep.h>
@@ -166,7 +168,7 @@ static void mld_stoptimer(struct in6_multi *);
 static u_long mld_timerresid(struct in6_multi *);
 
 void
-mld_init()
+mld_init(void)
 {
 	static u_int8_t hbh_buf[8];
 	struct ip6_hbh *hbh = (struct ip6_hbh *)hbh_buf;
@@ -180,7 +182,7 @@ mld_init()
 	hbh_buf[3] = 0;
 	hbh_buf[4] = IP6OPT_RTALERT;
 	hbh_buf[5] = IP6OPT_RTALERT_LEN - 2;
-	bcopy((void *)&rtalert_code, &hbh_buf[6], sizeof(u_int16_t));
+	memcpy(&hbh_buf[6], (void *)&rtalert_code, sizeof(u_int16_t));
 
 	ip6_opts.ip6po_hbh = hbh;
 	/* We will specify the hoplimit by a multicast option. */
@@ -220,7 +222,9 @@ static void
 mld_timeo(void *arg)
 {
 	struct in6_multi *in6m = arg;
-	int s = splsoftnet();
+
+	mutex_enter(softnet_lock);
+	KERNEL_LOCK(1, NULL);
 
 	in6m->in6m_timer = IN6M_TIMER_UNDEF;
 
@@ -233,7 +237,8 @@ mld_timeo(void *arg)
 		break;
 	}
 
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
 }
 
 static u_long
@@ -257,7 +262,7 @@ mld_timerresid(struct in6_multi *in6m)
 	}
 
 	/* return the remaining time in milliseconds */
-	return (((u_long)(diff.tv_sec * 1000000 + diff.tv_usec)) / 1000);
+	return diff.tv_sec * 1000 + diff.tv_usec / 1000;
 }
 
 static void
@@ -319,17 +324,17 @@ mld_stop_listening(struct in6_multi *in6m)
 void
 mld_input(struct mbuf *m, int off)
 {
-	struct ip6_hdr *ip6 = mtod(m, struct ip6_hdr *);
+	struct ip6_hdr *ip6;
 	struct mld_hdr *mldh;
 	struct ifnet *ifp = m->m_pkthdr.rcvif;
 	struct in6_multi *in6m = NULL;
 	struct in6_addr mld_addr, all_in6;
 	struct in6_ifaddr *ia;
-	int timer = 0;		/* timer value in the MLD query header */
+	u_long timer = 0;	/* timer value in the MLD query header */
 
 	IP6_EXTHDR_GET(mldh, struct mld_hdr *, m, off, sizeof(*mldh));
 	if (mldh == NULL) {
-		icmp6stat.icp6s_tooshort++;
+		ICMP6_STATINC(ICMP6_STAT_TOOSHORT);
 		return;
 	}
 
@@ -436,9 +441,9 @@ mld_input(struct mbuf *m, int off)
 				mld_sendpkt(in6m, MLD_LISTENER_REPORT, NULL);
 				in6m->in6m_state = MLD_IREPORTEDLAST;
 			} else if (in6m->in6m_timer == IN6M_TIMER_UNDEF ||
-			    mld_timerresid(in6m) > (u_long)timer) {
-				in6m->in6m_timer = arc4random() %
-				    (int)(((long)timer * hz) / 1000);
+			    mld_timerresid(in6m) > timer) {
+				in6m->in6m_timer =
+				   1 + (arc4random() % timer) * hz / 1000;
 				mld_starttimer(in6m);
 			}
 		}
@@ -536,7 +541,7 @@ mld_sendpkt(struct in6_multi *in6m, int type,
 	im6o.im6o_multicast_loop = (ip6_mrouter != NULL);
 
 	/* increment output statictics */
-	icmp6stat.icp6s_outhist[type]++;
+	ICMP6_STATINC(ICMP6_STAT_OUTHIST + type);
 	icmp6_ifstat_inc(ifp, ifs6_out_msg);
 	switch (type) {
 	case MLD_LISTENER_QUERY:
@@ -632,14 +637,13 @@ in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp,
 		 * and link it into the interface's multicast list.
 		 */
 		in6m = (struct in6_multi *)
-			malloc(sizeof(*in6m), M_IPMADDR, M_NOWAIT);
+			malloc(sizeof(*in6m), M_IPMADDR, M_NOWAIT|M_ZERO);
 		if (in6m == NULL) {
 			splx(s);
 			*errorp = ENOBUFS;
 			return (NULL);
 		}
 
-		memset(in6m, 0, sizeof(*in6m));
 		in6m->in6m_addr = *maddr6;
 		in6m->in6m_ifp = ifp;
 		in6m->in6m_refcount = 1;
@@ -660,11 +664,7 @@ in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp,
 		 * filter appropriately for the new address.
 		 */
 		sockaddr_in6_init(&ifr.ifr_addr, maddr6, 0, 0, 0);
-		if (ifp->if_ioctl == NULL)
-			*errorp = ENXIO; /* XXX: appropriate? */
-		else
-			*errorp = (*ifp->if_ioctl)(ifp, SIOCADDMULTI,
-			    (void *)&ifr);
+		*errorp = (*ifp->if_ioctl)(ifp, SIOCADDMULTI, &ifr);
 		if (*errorp) {
 			LIST_REMOVE(in6m, in6m_entry);
 			free(in6m, M_IPMADDR);
@@ -673,7 +673,7 @@ in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp,
 			return (NULL);
 		}
 
-		callout_init(&in6m->in6m_timer_ch, 0);
+		callout_init(&in6m->in6m_timer_ch, CALLOUT_MPSAFE);
 		callout_setfunc(&in6m->in6m_timer_ch, mld_timeo, in6m);
 		in6m->in6m_timer = timer;
 		if (in6m->in6m_timer > 0) {
@@ -739,8 +739,7 @@ in6_delmulti(struct in6_multi *in6m)
 		 * reception filter.
 		 */
 		sockaddr_in6_init(&ifr.ifr_addr, &in6m->in6m_addr, 0, 0, 0);
-		(*in6m->in6m_ifp->if_ioctl)(in6m->in6m_ifp,
-		    SIOCDELMULTI, (void *)&ifr);
+		(*in6m->in6m_ifp->if_ioctl)(in6m->in6m_ifp, SIOCDELMULTI, &ifr);
 		callout_destroy(&in6m->in6m_timer_ch);
 		free(in6m, M_IPMADDR);
 	}
@@ -754,13 +753,12 @@ in6_joingroup(struct ifnet *ifp, struct in6_addr *addr,
 {
 	struct in6_multi_mship *imm;
 
-	imm = malloc(sizeof(*imm), M_IPMADDR, M_NOWAIT);
-	if (!imm) {
+	imm = malloc(sizeof(*imm), M_IPMADDR, M_NOWAIT|M_ZERO);
+	if (imm == NULL) {
 		*errorp = ENOBUFS;
 		return NULL;
 	}
 
-	memset(imm, 0, sizeof(*imm));
 	imm->i6mm_maddr = in6_addmulti(addr, ifp, errorp, timer);
 	if (!imm->i6mm_maddr) {
 		/* *errorp is already set */
@@ -870,9 +868,8 @@ in6_createmkludge(struct ifnet *ifp)
 			return;
 	}
 
-	mk = malloc(sizeof(*mk), M_IPMADDR, M_WAITOK);
+	mk = malloc(sizeof(*mk), M_IPMADDR, M_ZERO|M_WAITOK);
 
-	memset(mk, 0, sizeof(*mk));
 	LIST_INIT(&mk->mk_head);
 	mk->mk_ifp = ifp;
 	LIST_INSERT_HEAD(&in6_mk, mk, mk_entry);

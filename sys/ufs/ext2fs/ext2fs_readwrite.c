@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_readwrite.c,v 1.50 2008/01/02 11:49:08 ad Exp $	*/
+/*	$NetBSD: ext2fs_readwrite.c,v 1.56 2010/04/23 15:38:46 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -43,11 +43,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -65,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.50 2008/01/02 11:49:08 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.56 2010/04/23 15:38:46 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -110,12 +105,11 @@ ext2fs_read(void *v)
 	struct m_ext2fs *fs;
 	struct buf *bp;
 	struct ufsmount *ump;
-	void *win;
 	vsize_t bytelen;
 	daddr_t lbn, nextlbn;
 	off_t bytesinfile;
 	long size, xfersize, blkoffset;
-	int error, flags;
+	int error;
 
 	vp = ap->a_vp;
 	ip = VTOI(vp);
@@ -135,7 +129,7 @@ ext2fs_read(void *v)
 		panic("%s: type %d", "ext2fs_read", vp->v_type);
 #endif
 	fs = ip->i_e2fs;
-	if ((u_int64_t)uio->uio_offset > ump->um_maxfilesize)
+	if ((uint64_t)uio->uio_offset > ump->um_maxfilesize)
 		return (EFBIG);
 	if (uio->uio_resid == 0)
 		return (0);
@@ -151,11 +145,8 @@ ext2fs_read(void *v)
 			if (bytelen == 0)
 				break;
 
-			win = ubc_alloc(&vp->v_uobj, uio->uio_offset,
-			    &bytelen, advice, UBC_READ);
-			error = uiomove(win, bytelen, uio);
-			flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
-			ubc_release(win, flags);
+			error = ubc_uiomove(&vp->v_uobj, uio, bytelen, advice,
+			    UBC_READ | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp));
 			if (error)
 				break;
 		}
@@ -177,11 +168,11 @@ ext2fs_read(void *v)
 			xfersize = bytesinfile;
 
 		if (lblktosize(fs, nextlbn) >= ext2fs_size(ip))
-			error = bread(vp, lbn, size, NOCRED, &bp);
+			error = bread(vp, lbn, size, NOCRED, 0, &bp);
 		else {
 			int nextsize = fs->e2fs_bsize;
 			error = breadn(vp, lbn,
-				size, &nextlbn, &nextsize, 1, NOCRED, &bp);
+				size, &nextlbn, &nextsize, 1, NOCRED, 0, &bp);
 		}
 		if (error)
 			break;
@@ -233,18 +224,18 @@ ext2fs_write(void *v)
 	struct inode *ip;
 	struct m_ext2fs *fs;
 	struct buf *bp;
-	struct proc *p;
 	struct ufsmount *ump;
 	daddr_t lbn;
 	off_t osize;
 	int blkoffset, error, flags, ioflag, resid, xfersize;
 	vsize_t bytelen;
-	void *win;
 	off_t oldoff = 0;					/* XXX */
 	bool async;
 	int extended = 0;
+	int advice;
 
 	ioflag = ap->a_ioflag;
+	advice = IO_ADV_DECODE(ioflag);
 	uio = ap->a_uio;
 	vp = ap->a_vp;
 	ip = VTOI(vp);
@@ -276,21 +267,8 @@ ext2fs_write(void *v)
 
 	fs = ip->i_e2fs;
 	if (uio->uio_offset < 0 ||
-	    (u_int64_t)uio->uio_offset + uio->uio_resid > ump->um_maxfilesize)
+	    (uint64_t)uio->uio_offset + uio->uio_resid > ump->um_maxfilesize)
 		return (EFBIG);
-	/*
-	 * Maybe this should be above the vnode op call, but so long as
-	 * file servers have no limits, I don't think it matters.
-	 */
-	p = curproc;
-	if (vp->v_type == VREG && p &&
-	    uio->uio_offset + uio->uio_resid >
-	    p->p_rlimit[RLIMIT_FSIZE].rlim_cur) {
-		mutex_enter(&proclist_mutex);
-		psignal(p, SIGXFSZ);
-		mutex_exit(&proclist_mutex);
-		return (EFBIG);
-	}
 	if (uio->uio_resid == 0)
 		return (0);
 
@@ -312,11 +290,8 @@ ext2fs_write(void *v)
 			    bytelen, ap->a_cred, 0);
 			if (error)
 				break;
-			win = ubc_alloc(&vp->v_uobj, uio->uio_offset,
-			    &bytelen, UVM_ADV_NORMAL, UBC_WRITE);
-			error = uiomove(win, bytelen, uio);
-			flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
-			ubc_release(win, flags);
+			error = ubc_uiomove(&vp->v_uobj, uio, bytelen, advice,
+			    UBC_WRITE | UBC_UNMAP_FLAG(vp));
 			if (error)
 				break;
 

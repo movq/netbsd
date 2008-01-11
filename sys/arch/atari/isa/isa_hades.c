@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_hades.c,v 1.4 2005/12/11 12:16:59 christos Exp $	*/
+/*	$NetBSD: isa_hades.c,v 1.9 2009/03/18 10:22:25 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_hades.c,v 1.4 2005/12/11 12:16:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_hades.c,v 1.9 2009/03/18 10:22:25 cegger Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -55,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: isa_hades.c,v 1.4 2005/12/11 12:16:59 christos Exp $
 void	isa_bus_init(void);
 
 void
-isa_bus_init()
+isa_bus_init(void)
 {
 }
 
@@ -72,12 +65,10 @@ isa_bus_init()
 
 static isa_intr_info_t iinfo[2] = { { -1 }, { -1 } };
 
-static int	iifun __P((int, int));
+static int	iifun(int, int);
 
 static int
-iifun(slot, sr)
-int	slot;
-int	sr;
+iifun(int slot, int sr)
 {
 	isa_intr_info_t *iinfo_p;
 	int		s;
@@ -128,11 +119,7 @@ int	sr;
  * XXXX to only generate interrupts for the slot the card is in...
  */
 int
-isa_intr_alloc(ic, mask, type, irq)
-	isa_chipset_tag_t ic;
-	int mask;
-	int type;
-	int *irq;
+isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 {
 	isa_intr_info_t *iinfo_p;
 	int		slot, i;
@@ -162,11 +149,7 @@ isa_intr_alloc(ic, mask, type, irq)
 	return (1);
 }
 void *
-isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
-	isa_chipset_tag_t ic;
-	int		  irq, type, level;
-	int		  (*ih_fun) __P((void *));
-	void		  *ih_arg;
+isa_intr_establish(isa_chipset_tag_t ic, int irq, int type, int level, int (*ih_fun)(void *), void *ih_arg)
 {
 	isa_intr_info_t *iinfo_p;
 	struct intrhand	*ihand;
@@ -210,9 +193,7 @@ isa_intr_establish(ic, irq, type, level, ih_fun, ih_arg)
 }
 
 void
-isa_intr_disestablish(ic, handler)
-	isa_chipset_tag_t	ic;
-	void			*handler;
+isa_intr_disestablish(isa_chipset_tag_t ic, void *handler)
 {
 	isa_intr_info_t *iinfo_p = (isa_intr_info_t *)handler;
 

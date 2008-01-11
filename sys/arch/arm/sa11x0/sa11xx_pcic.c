@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11xx_pcic.c,v 1.11 2007/12/06 17:00:31 ad Exp $	*/
+/*	$NetBSD: sa11xx_pcic.c,v 1.13 2009/05/29 14:15:44 rjs Exp $	*/
 
 /*
  * Copyright (c) 2001 IWAMOTO Toshihiro.  All rights reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa11xx_pcic.c,v 1.11 2007/12/06 17:00:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa11xx_pcic.c,v 1.13 2009/05/29 14:15:44 rjs Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -90,7 +90,7 @@ static	void	sapcic_event_thread(void *);
 static	void	sapcic_delay(int, const char *);
 
 #ifdef DEBUG
-#define DPRINTF(arg)	printf arg
+#define DPRINTF(arg)	aprint_normal arg
 #else
 #define DPRINTF(arg)
 #endif
@@ -122,20 +122,16 @@ sapcic_kthread_create(void *arg)
 
 	/* XXX attach card if already present */
 
-	mutex_init(&so->sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-
 	so->laststatus = (so->pcictag->read)(so, SAPCIC_STATUS_CARD);
 	if (so->laststatus == SAPCIC_CARD_VALID) {
-		printf("%s: card present\n",
-		       so->sc->sc_dev.dv_xname);
-
+		aprint_normal_dev(so->sc->sc_dev, "card present\n");
 		pcmcia_card_attach(so->pcmcia);
 	}
 
 	if (kthread_create(PRI_NONE, 0, NULL, sapcic_event_thread, so,
-	    &so->event_thread, "%s,%d", so->sc->sc_dev.dv_xname, so->socket)) {
-		printf("%s: unable to create event thread for socket %d\n",
-		       so->sc->sc_dev.dv_xname, so->socket);
+	    &so->event_thread, "%s,%d", device_xname(so->sc->sc_dev), so->socket)) {
+		aprint_normal_dev(so->sc->sc_dev, "unable to create event thread for socket %d\n",
+		       so->socket);
 		panic("sapcic_kthread_create");
 	}
 }
@@ -175,15 +171,13 @@ sapcic_event_thread(void *arg)
 		so->laststatus = newstatus;
 		switch (newstatus) {
 		case SAPCIC_CARD_VALID:
-			printf("%s: insertion event\n",
-			       so->sc->sc_dev.dv_xname);
+			aprint_normal_dev(so->sc->sc_dev, "insertion event\n");
 
 			pcmcia_card_attach(so->pcmcia);
 			break;
 
 		case SAPCIC_CARD_INVALID:
-			printf("%s: removal event\n",
-			       so->sc->sc_dev.dv_xname);
+			aprint_normal_dev(so->sc->sc_dev, "removal event\n");
 
 			pcmcia_card_detach(so->pcmcia, DETACH_FORCE);
 			break;
@@ -358,7 +352,7 @@ sapcic_socket_enable(pcmcia_chipset_handle_t pch)
 
 #if defined(DIAGNOSTIC) && defined(notyet)
 	if (so->flags & PCIC_FLAG_ENABLED)
-		printf("sapcic_socket_enable: enabling twice\n");
+		aprint_normal("sapcic_socket_enable: enabling twice\n");
 #endif
 
 	/* disable interrupts */

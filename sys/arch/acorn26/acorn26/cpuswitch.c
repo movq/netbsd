@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuswitch.c,v 1.15 2007/11/29 14:30:32 ad Exp $	*/
+/*	$NetBSD: cpuswitch.c,v 1.17 2009/11/21 20:32:17 rmind Exp $	*/
 
 /*
  * Copyright (c) 2000 Ben Harris.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpuswitch.c,v 1.15 2007/11/29 14:30:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpuswitch.c,v 1.17 2009/11/21 20:32:17 rmind Exp $");
 
 #include "opt_lockdebug.h"
 
@@ -46,7 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: cpuswitch.c,v 1.15 2007/11/29 14:30:32 ad Exp $");
 #include <sys/proc.h>
 #include <sys/sched.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <sys/ras.h>
 #include <sys/cpu.h>
 
@@ -55,14 +54,14 @@ __KERNEL_RCSID(0, "$NetBSD: cpuswitch.c,v 1.15 2007/11/29 14:30:32 ad Exp $");
 #include <machine/frame.h>
 #include <machine/machdep.h>
 
-struct pcb *curpcb;
-
 /*
  * Switch to the indicated lwp.
  */
 lwp_t *
 cpu_switchto(lwp_t *old, lwp_t *new, bool returning)
 {
+	struct cpu_info * const ci = curcpu();
+	struct pcb *pcb;
 	struct proc *p2;
 
 	/*
@@ -74,13 +73,14 @@ cpu_switchto(lwp_t *old, lwp_t *new, bool returning)
 #endif
 
 	curlwp = new;
-	curpcb = &curlwp->l_addr->u_pcb;
+	pcb = lwp_getpcb(curlwp);
+	ci->ci_curpcb = pcb;
 
 	if ((new->l_flag & LW_SYSTEM) == 0) {
 		/* Check for Restartable Atomic Sequences. */
 		p2 = new->l_proc;
 		if (p2->p_raslist != NULL) {
-			struct trapframe *tf = new->l_addr->u_pcb.pcb_tf;
+			struct trapframe *tf = pcb->pcb_tf;
 			void *pc;
 
 			pc = ras_lookup(p2, (void *)(tf->tf_r15 & R15_PC));

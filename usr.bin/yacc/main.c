@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.19 2007/12/15 19:44:54 perry Exp $	*/
+/*	$NetBSD: main.c,v 1.21 2009/04/14 09:41:30 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989 The Regents of the University of California.
@@ -38,15 +38,15 @@
 
 #include <sys/cdefs.h>
 #if defined(__COPYRIGHT) && !defined(lint)
-__COPYRIGHT("@(#) Copyright (c) 1989 The Regents of the University of California.\n"
-"All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)main.c	5.5 (Berkeley) 5/24/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.19 2007/12/15 19:44:54 perry Exp $");
+__RCSID("$NetBSD: main.c,v 1.21 2009/04/14 09:41:30 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -61,8 +61,8 @@ char rflag;
 char tflag;
 char vflag;
 
-char *symbol_prefix;
-char *myname = "yacc";
+const char *symbol_prefix;
+const char *myname = "yacc";
 
 
 int lineno;
@@ -71,7 +71,7 @@ int outline;
 char *action_file_name;
 char *code_file_name;
 char *defines_file_name;
-char *input_file_name = "";
+const char *input_file_name = "";
 char *output_file_name;
 char *text_file_name;
 char *union_file_name;
@@ -110,8 +110,8 @@ char  *rassoc;
 short **derives;
 char *nullable;
 
-static char *file_prefix = "y";
-static char *temp_form = "yacc.XXXXXXX";
+static const char *file_prefix = "y";
+static const char *temp_form = "yacc.XXXXXXX";
 static int explicit_file_name;
 
 
@@ -300,7 +300,7 @@ static void
 create_file_names(void)
 {
     int i, len;
-    char *tmpdir;
+    const char *tmpdir;
 
     tmpdir = getenv("TMPDIR");
     if (tmpdir == 0) tmpdir = "/tmp";

@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.37 2008/01/07 16:40:16 joerg Exp $	*/
+/*	$NetBSD: types.h,v 1.41 2010/12/22 01:03:18 matt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -50,9 +50,16 @@ typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
 #endif
 
 typedef int		register_t;
+#define	PRIxREGISTER	"x"
 
 /*
  * BBCCI/BBSSI can operate on bytes so let's save some space.
@@ -66,8 +73,8 @@ typedef volatile char	__cpu_simple_lock_t;
 #define	__NO_STRICT_ALIGNMENT
 
 #define	__HAVE_DEVICE_REGISTER
-#define	__HAVE_GENERIC_TODR
 #define	__HAVE_SYSCALL_INTERN
-#define	__HAVE_TIMECOUNTER
+#define	__HAVE_FAST_SOFTINTS
+#define	__HAVE_CPU_DATA_FIRST
 
 #endif	/* _MACHTYPES_H_ */

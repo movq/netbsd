@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.2 2007/12/11 16:51:14 ad Exp $	*/
+/*	$NetBSD: intr.c,v 1.4 2010/12/20 00:25:36 matt Exp $	*/
 
 /*-
  * Copyright (c) 2005 NONAKA Kimihiro
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.2 2007/12/11 16:51:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.4 2010/12/20 00:25:36 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,6 +77,8 @@ intc_intr(int ssr, int spc, int ssp)
 	struct intc_intrhand *ih;
 	struct clockframe cf;
 	int evtcode;
+
+	curcpu()->ci_data.cpu_nintr++;
 
 	evtcode = _reg_read_4(SH4_INTEVT);
 	ih = EVTCODE_IH(evtcode);
@@ -191,15 +193,7 @@ extintr_establish(int irq, int level, int (*ih_fun)(void *), void *ih_arg)
 	ih->ih_enable = 1;
 	ih->ih_level = level;
 	ih->ih_irq = irq - 5;
-	if (irq != 5) {
-		name = extintr_names[irq - 5];
-	} else if (level == IPL_BIO) {
-		name = "ehci";
-	} else if (level == IPL_NET) {
-		name = "rtk";
-	} else {
-		name = "unknown";
-	}
+	name = extintr_names[irq - 5];
 	evcnt_attach_dynamic(&ih->ih_evcnt, EVCNT_TYPE_INTR,
 	    NULL, "ext", name);
 	*p = ih;

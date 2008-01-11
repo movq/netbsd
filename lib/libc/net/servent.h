@@ -1,4 +1,4 @@
-/*	$NetBSD: servent.h,v 1.2 2006/07/27 22:03:49 christos Exp $	*/
+/*	$NetBSD: servent.h,v 1.4 2010/04/25 00:54:46 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,14 +32,19 @@
 #include <stdio.h>
 
 struct servent_data {
-        void *db;
+	FILE *plainfile;
+	struct cdbr *cdb;
 	struct servent serv;
 	char **aliases;
 	size_t maxaliases;
 	int flags;
 #define	_SV_STAYOPEN	1
-#define	_SV_DB		2
-#define	_SV_FIRST	4
+#define	_SV_CDB		2
+#define	_SV_PLAINFILE	4
+#define	_SV_FIRST	8
+	uint32_t cdb_index;
+	uint8_t *cdb_buf;
+	size_t cdb_buf_len;
 	char *line;
 	void *dummy;
 };
@@ -63,3 +61,5 @@ int _servent_open(struct servent_data *);
 void _servent_close(struct servent_data *);
 int _servent_getline(struct servent_data *);
 struct servent *_servent_parseline(struct servent_data *, struct servent *);
+struct servent *_servent_parsedb(struct servent_data *, struct servent *,
+    const uint8_t *, size_t);

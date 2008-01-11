@@ -1,4 +1,4 @@
-.\" $NetBSD: mixerctl.1,v 1.20 2006/02/25 01:19:22 wiz Exp $
+.\" $NetBSD: mixerctl.1,v 1.25 2010/05/14 17:20:06 joerg Exp $
 .\"
 .\" Copyright (c) 1997 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -13,13 +13,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,7 +26,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 23, 2004
+.Dd August 15, 2008
 .Dt MIXERCTL 1
 .Os
 .Sh NAME
@@ -106,7 +99,7 @@ The
 flag shows the possible values of enumeration and set valued
 variables.
 Enumerated values are shown in brackets
-.Pp Dq []
+.Pq Dq []
 and set values are shown in curly braces
 .Pq Dq {} .
 .Pp
@@ -139,6 +132,10 @@ mixer control.
 For numeric controls, these operators increase or decrease, respectively,
 the value by an amount (the delta) suitable to make
 the control assume the next possible value.
+For binary controls, these operators toggle between
+.Li on
+and
+.Li off .
 .Pp
 The operators += and -= change the value of a mixer control by the
 indicated number of steps.
@@ -169,6 +166,11 @@ record.record=220,220 volume
 record.record.source=mic  [ mic cd dac ]
 monitor.monitor=0 volume
 .Ed
+.Sh COMPATIBILITY
+The old
+.Fl f
+flag is still supported.
+This support will be removed eventually.
 .Sh SEE ALSO
 .Xr audioctl 1 ,
 .Xr audio 4 ,
@@ -179,8 +181,3 @@ The
 .Nm
 command first appeared in
 .Nx 1.3 .
-.Sh COMPATIBILITY
-The old
-.Fl f
-flag is still supported.
-This support will be removed eventually.

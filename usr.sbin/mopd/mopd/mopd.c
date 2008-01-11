@@ -1,4 +1,4 @@
-/*	$NetBSD: mopd.c,v 1.10 2002/11/05 14:18:05 thorpej Exp $	*/
+/*	$NetBSD: mopd.c,v 1.13 2009/11/17 18:58:07 drochner Exp $	*/
 
 /*
  * Copyright (c) 1993-96 Mats O Jansson.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopd.c,v 1.10 2002/11/05 14:18:05 thorpej Exp $");
+__RCSID("$NetBSD: mopd.c,v 1.13 2009/11/17 18:58:07 drochner Exp $");
 #endif
 
 /*
@@ -72,7 +67,7 @@ int	VersionFlag = 0;	/* print version              */
 int	Not3Flag = 0;		/* Not MOP V3 messages.       */
 int	Not4Flag = 0;		/* Not MOP V4 messages.       */
 int	promisc = 1;		/* Need promisc mode    */
-char	*MopdDir = MOP_FILE_PATH;  /* Path to mop directory  */
+const char *MopdDir = MOP_FILE_PATH;  /* Path to mop directory  */
 
 int
 main(argc, argv)
@@ -179,9 +174,9 @@ mopProcess(ii, pkt)
 	struct if_info *ii;
 	u_char *pkt;
 {
-	u_char	*dst, *src;
+	const u_char	*dst, *src;
 	u_short  ptype;
-	int	 index, trans, len;
+	int	 idx, trans, len;
 
 	/* We don't known with transport, Guess! */
 
@@ -192,8 +187,8 @@ mopProcess(ii, pkt)
 	if ((trans == TRANS_ETHER) && Not3Flag) return;
 	if ((trans == TRANS_8023) && Not4Flag)	return;
 
-	index = 0;
-	mopGetHeader(pkt, &index, &dst, &src, &ptype, &len, trans);
+	idx = 0;
+	mopGetHeader(pkt, &idx, &dst, &src, &ptype, &len, trans);
 
 	/*
 	 * Ignore our own transmissions
@@ -204,10 +199,10 @@ mopProcess(ii, pkt)
 
 	switch(ptype) {
 	case MOP_K_PROTO_DL:
-		mopProcessDL(stdout, ii, pkt, &index, dst, src, trans, len);
+		mopProcessDL(stdout, ii, pkt, &idx, dst, src, trans, len);
 		break;
 	case MOP_K_PROTO_RC:
-		mopProcessRC(stdout, ii, pkt, &index, dst, src, trans, len);
+		mopProcessRC(stdout, ii, pkt, &idx, dst, src, trans, len);
 		break;
 	default:
 		break;

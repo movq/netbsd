@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space_sparse.c,v 1.14 2006/06/25 16:44:02 tsutsui Exp $	*/
+/*	$NetBSD: bus_space_sparse.c,v 1.17 2011/02/20 07:52:42 matt Exp $	*/
 /*	NetBSD: bus_machdep.c,v 1.1 2000/01/26 18:48:00 drochner Exp 	*/
 
 /*-
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space_sparse.c,v 1.14 2006/06/25 16:44:02 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space_sparse.c,v 1.17 2011/02/20 07:52:42 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,7 +71,7 @@ arc_kseg2_make_cacheable(vaddr_t vaddr, vsize_t size)
 		pte = kvtopte(start);
 		entry = pte->pt_entry & mask;
 		pte->pt_entry &= entry;
-		MachTLBUpdate(start, entry);
+		tlb_update(start, entry);
 	}
 }
 
@@ -128,7 +121,8 @@ arc_sparse_bus_space_compose_handle(bus_space_tag_t bst, bus_addr_t addr,
 			      start, end);
 		for (va = vaddr; start < end;
 		     start += PAGE_SIZE, va += PAGE_SIZE)
-			pmap_kenter_pa(va, start, VM_PROT_READ|VM_PROT_WRITE);
+			pmap_kenter_pa(va, start,
+			    VM_PROT_READ|VM_PROT_WRITE, 0);
 		pmap_update(pmap_kernel());
 		vaddr += (offset & PGOFSET);
 		if (cacheable)

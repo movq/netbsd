@@ -1,4 +1,4 @@
-/*	$NetBSD: ses.c,v 1.38 2007/03/04 06:02:44 christos Exp $ */
+/*	$NetBSD: ses.c,v 1.42 2009/05/12 14:44:31 cegger Exp $ */
 /*
  * Copyright (C) 2000 National Aeronautics & Space Administration
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ses.c,v 1.38 2007/03/04 06:02:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ses.c,v 1.42 2009/05/12 14:44:31 cegger Exp $");
 
 #include "opt_scsi.h"
 
@@ -167,8 +167,8 @@ struct ses_softc {
 
 #define SESUNIT(x)       (minor((x)))
 
-static int ses_match(struct device *, struct cfdata *, void *);
-static void ses_attach(struct device *, struct device *, void *);
+static int ses_match(device_t, cfdata_t, void *);
+static void ses_attach(device_t, device_t, void *);
 static enctyp ses_device_type(struct scsipibus_attach_args *);
 
 CFATTACH_DECL(ses, sizeof (struct ses_softc),
@@ -184,7 +184,7 @@ static const struct scsipi_periphsw ses_switch = {
 };
 
 static int
-ses_match(struct device *parent, struct cfdata *match,
+ses_match(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
@@ -213,7 +213,7 @@ ses_match(struct device *parent, struct cfdata *match,
  * the softc available to set stuff in.
  */
 static void
-ses_attach(struct device *parent, struct device *self, void *aux)
+ses_attach(device_t parent, device_t self, void *aux)
 {
 	const char *tname;
 	struct ses_softc *softc = device_private(self);
@@ -274,7 +274,7 @@ ses_attach(struct device *parent, struct device *self, void *aux)
 		tname = "SAF-TE Compliant Device";
 		break;
 	}
-	printf("\n%s: %s\n", softc->sc_device.dv_xname, tname);
+	printf("\n%s: %s\n", device_xname(&softc->sc_device), tname);
 }
 
 
@@ -296,9 +296,7 @@ sesopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	int error, unit;
 
 	unit = SESUNIT(dev);
-	if (unit >= ses_cd.cd_ndevs)
-		return (ENXIO);
-	softc = ses_cd.cd_devs[unit];
+	softc = device_lookup_private(&ses_cd, unit);
 	if (softc == NULL)
 		return (ENXIO);
 
@@ -341,9 +339,7 @@ sesclose(dev_t dev, int flags, int fmt,
 	int unit;
 
 	unit = SESUNIT(dev);
-	if (unit >= ses_cd.cd_ndevs)
-		return (ENXIO);
-	softc = ses_cd.cd_devs[unit];
+	softc = device_lookup_private(&ses_cd, unit);
 	if (softc == NULL)
 		return (ENXIO);
 
@@ -359,7 +355,7 @@ sesioctl(dev_t dev, u_long cmd, void *arg_addr, int flag, struct lwp *l)
 	ses_encstat tmp;
 	ses_objstat objs;
 	ses_object obj, *uobj;
-	struct ses_softc *ssc = ses_cd.cd_devs[SESUNIT(dev)];
+	struct ses_softc *ssc = device_lookup_private(&ses_cd, SESUNIT(dev));
 	void *addr;
 	int error, i;
 
@@ -529,7 +525,7 @@ ses_log(struct ses_softc *ssc, const char *fmt, ...)
 {
 	va_list ap;
 
-	printf("%s: ", ssc->sc_device.dv_xname);
+	printf("%s: ", device_xname(&ssc->sc_device));
 	va_start(ap, fmt);
 	vprintf(fmt, ap);
 	va_end(ap);

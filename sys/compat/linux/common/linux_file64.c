@@ -1,7 +1,7 @@
-/*	$NetBSD: linux_file64.c,v 1.44 2007/12/20 23:02:54 dsl Exp $	*/
+/*	$NetBSD: linux_file64.c,v 1.51 2010/06/24 13:03:07 hannken Exp $	*/
 
 /*-
- * Copyright (c) 1995, 1998, 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 1995, 1998, 2000, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.44 2007/12/20 23:02:54 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.51 2010/06/24 13:03:07 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,8 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_file64.c,v 1.44 2007/12/20 23:02:54 dsl Exp $"
 #include <compat/linux/linux_syscallargs.h>
 
 #ifndef alpha
-
-# ifndef COMPAT_LINUX32
 
 static void bsd_to_linux_stat(struct stat *, struct linux_stat64 *);
 
@@ -132,7 +123,7 @@ linux_sys_fstat64(struct lwp *l, const struct linux_sys_fstat64_args *uap, regis
 	struct stat tmpst;
 	int error;
 
-	error = do_sys_fstat(l,  SCARG(uap, fd), &tmpst);
+	error = do_sys_fstat(SCARG(uap, fd), &tmpst);
 	if (error != 0)
 		return error;
 
@@ -148,7 +139,7 @@ linux_do_stat64(struct lwp *l, const struct linux_sys_stat64_args *uap, register
 	struct stat tmpst;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), flags, &tmpst);
+	error = do_sys_stat(SCARG(uap, path), flags, &tmpst);
 	if (error != 0)
 		return error;
 
@@ -190,7 +181,7 @@ linux_sys_truncate64(struct lwp *l, const struct linux_sys_truncate64_args *uap,
 
 	/* Linux doesn't have the 'pad' pseudo-parameter */
 	SCARG(&ta, path) = SCARG(uap, path);
-	SCARG(&ta, pad) = 0;
+	SCARG(&ta, PAD) = 0;
 	SCARG(&ta, length) = SCARG(uap, length);
 
 	return sys_truncate(l, &ta, retval);
@@ -207,99 +198,11 @@ linux_sys_ftruncate64(struct lwp *l, const struct linux_sys_ftruncate64_args *ua
 
 	/* Linux doesn't have the 'pad' pseudo-parameter */
 	SCARG(&ta, fd) = SCARG(uap, fd);
-	SCARG(&ta, pad) = 0;
+	SCARG(&ta, PAD) = 0;
 	SCARG(&ta, length) = SCARG(uap, length);
 
 	return sys_ftruncate(l, &ta, retval);
 }
-# endif /* !COMPAT_LINUX32 */
-
-# if !defined(__m68k__) && (!defined(__amd64__) || defined(COMPAT_LINUX32))
-static void bsd_to_linux_flock64(struct linux_flock64 *,
-    const struct flock *);
-static void linux_to_bsd_flock64(struct flock *,
-    const struct linux_flock64 *);
-
-static void
-bsd_to_linux_flock64(struct linux_flock64 *lfp, const struct flock *bfp)
-{
-
-	lfp->l_start = bfp->l_start;
-	lfp->l_len = bfp->l_len;
-	lfp->l_pid = bfp->l_pid;
-	lfp->l_whence = bfp->l_whence;
-	switch (bfp->l_type) {
-	case F_RDLCK:
-		lfp->l_type = LINUX_F_RDLCK;
-		break;
-	case F_UNLCK:
-		lfp->l_type = LINUX_F_UNLCK;
-		break;
-	case F_WRLCK:
-		lfp->l_type = LINUX_F_WRLCK;
-		break;
-	}
-}
-
-static void
-linux_to_bsd_flock64(struct flock *bfp, const struct linux_flock64 *lfp)
-{
-
-	bfp->l_start = lfp->l_start;
-	bfp->l_len = lfp->l_len;
-	bfp->l_pid = lfp->l_pid;
-	bfp->l_whence = lfp->l_whence;
-	switch (lfp->l_type) {
-	case LINUX_F_RDLCK:
-		bfp->l_type = F_RDLCK;
-		break;
-	case LINUX_F_UNLCK:
-		bfp->l_type = F_UNLCK;
-		break;
-	case LINUX_F_WRLCK:
-		bfp->l_type = F_WRLCK;
-		break;
-	}
-}
-
-int
-linux_sys_fcntl64(struct lwp *l, const struct linux_sys_fcntl64_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(int) fd;
-		syscallarg(int) cmd;
-		syscallarg(void *) arg;
-	} */
-	struct linux_flock64 lfl;
-	struct flock bfl;
-	int error;
-	void *arg = SCARG(uap, arg);
-	int cmd = SCARG(uap, cmd);
-	int fd = SCARG(uap, fd);
-
-	switch (cmd) {
-	case LINUX_F_GETLK64:
-		if ((error = copyin(arg, &lfl, sizeof lfl)) != 0)
-			return error;
-		linux_to_bsd_flock64(&bfl, &lfl);
-		error = do_fcntl_lock(l, fd, F_GETLK, &bfl);
-		if (error != 0)
-			return error;
-		bsd_to_linux_flock64(&lfl, &bfl);
-		return copyout(&lfl, arg, sizeof lfl);
-	case LINUX_F_SETLK64:
-	case LINUX_F_SETLKW64:
-		cmd = (cmd == LINUX_F_SETLK64 ? F_SETLK : F_SETLKW);
-		if ((error = copyin(arg, &lfl, sizeof lfl)) != 0)
-			return error;
-		linux_to_bsd_flock64(&bfl, &lfl);
-		return do_fcntl_lock(l, fd, cmd, &bfl);
-	default:
-		return linux_sys_fcntl(l, (const void *)uap, retval);
-	}
-}
-# endif /* !m69k && !amd64  && !COMPAT_LINUX32 */
-
 #endif /* !alpha */
 
 /*
@@ -316,7 +219,6 @@ linux_sys_fcntl64(struct lwp *l, const struct linux_sys_fcntl64_args *uap, regis
  *
  * Note that this doesn't handle union-mounted filesystems.
  */
-#ifndef COMPAT_LINUX32
 int
 linux_sys_getdents64(struct lwp *l, const struct linux_sys_getdents64_args *uap, register_t *retval)
 {
@@ -331,7 +233,7 @@ linux_sys_getdents64(struct lwp *l, const struct linux_sys_getdents64_args *uap,
 	int len, reclen;		/* BSD-format */
 	char *outp;			/* Linux-format */
 	int resid, linux_reclen = 0;	/* Linux-format */
-	struct file *fp;
+	file_t *fp;
 	struct uio auio;
 	struct iovec aiov;
 	struct linux_dirent64 idb;
@@ -341,8 +243,8 @@ linux_sys_getdents64(struct lwp *l, const struct linux_sys_getdents64_args *uap,
 	off_t *cookiebuf = NULL, *cookie;
 	int ncookies;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
 	if ((fp->f_flag & FREAD) == 0) {
@@ -434,19 +336,22 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == (void *)SCARG(uap, dent))
+	if (outp == (void *)SCARG(uap, dent)) {
+		if (cookiebuf)
+			free(cookiebuf, M_TEMP);
+		cookiebuf = NULL;
 		goto again;
+	}
 	fp->f_offset = off;	/* update the vnode offset */
 
 eof:
 	*retval = nbytes - resid;
 out:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	if (cookiebuf)
 		free(cookiebuf, M_TEMP);
 	free(tbuf, M_TEMP);
 out1:
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return error;
 }
-#endif /* !COMPAT_LINUX32 */

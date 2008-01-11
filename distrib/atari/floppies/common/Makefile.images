@@ -1,9 +1,12 @@
-#	$NetBSD: Makefile.images,v 1.6 2004/04/18 20:04:26 dsl Exp $
+#	$NetBSD: Makefile.images,v 1.8 2010/02/21 20:06:19 tsutsui Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 .include <bsd.kernobj.mk>
+
+WARNS=		1
+DBG=		-Os
 
 CRUNCHBIN=	instbin
 LISTS=		${.CURDIR}/list ${.CURDIR}/../common/list.images
@@ -30,6 +33,6 @@ ${CRUNCHBIN}: libhack.o
 .include "${DISTRIBDIR}/common/Makefile.image"
 
 release:: check_RELEASEDIR
-	${MAKESUMS} -t ${RELEASEDIR}/${MACHINE}/${IMAGE_RELEASEDIR} ${IMAGE}.gz
+	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/${IMAGE_RELEASEDIR} ${IMAGE}.gz
 
 .include <bsd.prog.mk>

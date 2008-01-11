@@ -1,4 +1,4 @@
-/*	$NetBSD: cypide.c,v 1.20 2007/02/09 21:55:27 ad Exp $	*/
+/*	$NetBSD: cypide.c,v 1.24 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cypide.c,v 1.20 2007/02/09 21:55:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cypide.c,v 1.24 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,13 +39,13 @@ __KERNEL_RCSID(0, "$NetBSD: cypide.c,v 1.20 2007/02/09 21:55:27 ad Exp $");
 #include <dev/pci/pciide_cy693_reg.h>
 #include <dev/pci/cy82c693var.h>
 
-static void cy693_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void cy693_chip_map(struct pciide_softc*, const struct pci_attach_args*);
 static void cy693_setup_channel(struct ata_channel*);
 
-static int  cypide_match(struct device *, struct cfdata *, void *);
-static void cypide_attach(struct device *, struct device *, void *);
+static int  cypide_match(device_t, cfdata_t, void *);
+static void cypide_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(cypide, sizeof(struct pciide_softc),
+CFATTACH_DECL_NEW(cypide, sizeof(struct pciide_softc),
     cypide_match, cypide_attach, NULL, NULL);
 
 static const struct pciide_product_desc pciide_cypress_products[] =  {
@@ -67,8 +62,7 @@ static const struct pciide_product_desc pciide_cypress_products[] =  {
 };
 
 static int
-cypide_match(struct device *parent, struct cfdata *match,
-    void *aux)
+cypide_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -82,10 +76,12 @@ cypide_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-cypide_attach(struct device *parent, struct device *self, void *aux)
+cypide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_cypress_products));
@@ -93,11 +89,10 @@ cypide_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static void
-cy693_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+cy693_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	pcireg_t interface = PCI_INTERFACE(pa->pa_class);
-	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
@@ -112,24 +107,24 @@ cy693_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	} else if (pa->pa_function == 2) {
 		sc->sc_cy_compatchan = 1;
 	} else {
-		aprint_error("%s: unexpected PCI function %d\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, pa->pa_function);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "unexpected PCI function %d\n", pa->pa_function);
 		return;
 	}
 	if (interface & PCIIDE_INTERFACE_BUS_MASTER_DMA) {
-		aprint_verbose("%s: bus-master DMA support present\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "bus-master DMA support present\n");
 		pciide_mapreg_dma(sc, pa);
 	} else {
-		aprint_normal("%s: hardware does not support DMA\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "hardware does not support DMA\n");
 		sc->sc_dma_ok = 0;
 	}
 
 	sc->sc_cy_handle = cy82c693_init(pa->pa_iot);
 	if (sc->sc_cy_handle == NULL) {
-		aprint_error("%s: unable to map hyperCache control registers\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "unable to map hyperCache control registers\n");
 		sc->sc_dma_ok = 0;
 	}
 
@@ -159,21 +154,19 @@ cy693_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	if (cp->ata_channel.ch_queue == NULL) {
 		aprint_error("%s primary channel: "
 		    "can't allocate memory for command queue",
-		sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		    device_xname(sc->sc_wdcdev.sc_atac.atac_dev));
 		return;
 	}
-	aprint_normal("%s: primary channel %s to ",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
+	aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "primary channel %s to ",
 	    (interface & PCIIDE_INTERFACE_SETTABLE(0)) ?
 	    "configured" : "wired");
 	if (interface & PCIIDE_INTERFACE_PCI(0)) {
 		aprint_normal("native-PCI mode\n");
-		pciide_mapregs_native(pa, cp, &cmdsize, &ctlsize,
-		    pciide_pci_intr);
+		pciide_mapregs_native(pa, cp, pciide_pci_intr);
 	} else {
 		aprint_normal("compatibility mode\n");
-		pciide_mapregs_compat(pa, cp, sc->sc_cy_compatchan, &cmdsize,
-		    &ctlsize);
+		pciide_mapregs_compat(pa, cp, sc->sc_cy_compatchan);
 		if ((cp->ata_channel.ch_flags & ATACH_DISABLED) == 0)
 			pciide_map_compat_intr(pa, cp, sc->sc_cy_compatchan);
 	}

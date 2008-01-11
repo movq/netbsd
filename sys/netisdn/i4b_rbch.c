@@ -27,7 +27,7 @@
  *	i4b_rbch.c - device driver for raw B channel data
  *	---------------------------------------------------
  *
- *	$Id: i4b_rbch.c,v 1.22 2007/12/05 17:20:02 pooka Exp $
+ *	$Id: i4b_rbch.c,v 1.25 2009/03/18 10:22:43 cegger Exp $
  *
  * $FreeBSD$
  *
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_rbch.c,v 1.22 2007/12/05 17:20:02 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_rbch.c,v 1.25 2009/03/18 10:22:43 cegger Exp $");
 
 #include "isdnbchan.h"
 
@@ -174,17 +174,17 @@ static void* rbch_get_softc(int unit);
 #ifndef __FreeBSD__
 #define PDEVSTATIC	/* - not static - */
 #define IOCTL_CMD_T	u_long
-void isdnbchanattach __P((void));
-int isdnbchanopen __P((dev_t dev, int flag, int fmt, struct lwp *l));
-int isdnbchanclose __P((dev_t dev, int flag, int fmt, struct lwp *l));
-int isdnbchanread __P((dev_t dev, struct uio *uio, int ioflag));
-int isdnbchanwrite __P((dev_t dev, struct uio *uio, int ioflag));
-int isdnbchanioctl __P((dev_t dev, IOCTL_CMD_T cmd, void *arg, int flag, struct lwp* l));
+void isdnbchanattach(void);
+int isdnbchanopen(dev_t dev, int flag, int fmt, struct lwp *l);
+int isdnbchanclose(dev_t dev, int flag, int fmt, struct lwp *l);
+int isdnbchanread(dev_t dev, struct uio *uio, int ioflag);
+int isdnbchanwrite(dev_t dev, struct uio *uio, int ioflag);
+int isdnbchanioctl(dev_t dev, IOCTL_CMD_T cmd, void *arg, int flag, struct lwp* l);
 #ifdef OS_USES_POLL
-int isdnbchanpoll __P((dev_t dev, int events, struct lwp *l));
-int isdnbchankqfilter __P((dev_t dev, struct knote *kn));
+int isdnbchanpoll(dev_t dev, int events, struct lwp *l);
+int isdnbchankqfilter(dev_t dev, struct knote *kn);
 #else
-PDEVSTATIC int isdnbchanselect __P((dev_t dev, int rw, struct lwp *l));
+PDEVSTATIC int isdnbchanselect(dev_t dev, int rw, struct lwp *l);
 #endif
 #endif
 
@@ -320,7 +320,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 isdnbchanattach(void *dummy)
 #else
-isdnbchanattach()
+isdnbchanattach(void)
 #endif
 {
 	int i;
@@ -351,6 +351,7 @@ isdnbchanattach()
 #endif
 #if defined(__NetBSD__) && __NetBSD_Version__ >= 104230000
 		callout_init(&rbch_softc[i].sc_callout, 0);
+		selinit(&rbch_softc[i].selp);
 #endif
 		rbch_softc[i].sc_fn = 1;
 #endif
@@ -1015,7 +1016,7 @@ rbch_connect(void *softc, void *cdp)
 		sc->sc_devstate |= ST_CONNECTED;
 		sc->sc_cd = cdp;
 		wakeup((void *)sc);
-		selwakeup(&sc->selp);
+		selnotify(&sc->selp, 0, 0);
 	}
 }
 
@@ -1060,7 +1061,7 @@ rbch_disconnect(void *softc, void *cdp)
 
 	splx(s);
 
-	selwakeup(&sc->selp);
+	selnotify(&sc->selp, 0, 0);
 }
 
 /*---------------------------------------------------------------------------*
@@ -1120,7 +1121,7 @@ rbch_rx_data_rdy(void *softc)
 	{
 		NDBGL4(L4_RBCHDBG, "(minor=%d) NO wakeup", sc->sc_unit);
 	}
-	selnotify(&sc->selp, 0);
+	selnotify(&sc->selp, 0, 0);
 }
 
 /*---------------------------------------------------------------------------*
@@ -1143,7 +1144,7 @@ rbch_tx_queue_empty(void *softc)
 	{
 		NDBGL4(L4_RBCHDBG, "(minor=%d) NO wakeup", sc->sc_unit);
 	}
-	selnotify(&sc->selp, 0);
+	selnotify(&sc->selp, 0, 0);
 }
 
 /*---------------------------------------------------------------------------*
@@ -1157,7 +1158,7 @@ rbch_activity(void *softc, int rxtx)
 
 	if (sc->sc_cd)
 		sc->sc_cd->last_active_time = SECOND;
-	selnotify(&sc->selp, 0);
+	selnotify(&sc->selp, 0, 0);
 }
 
 /*---------------------------------------------------------------------------*

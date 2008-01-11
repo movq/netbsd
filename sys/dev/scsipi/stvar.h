@@ -1,4 +1,4 @@
-/*	$NetBSD: stvar.h,v 1.17 2006/04/14 13:09:06 blymn Exp $ */
+/*	$NetBSD: stvar.h,v 1.21 2009/12/06 22:48:17 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -185,8 +178,8 @@ struct st_softc {
 			 ST_FIXEDBLOCKS | ST_READONLY | ST_FM_WRITTEN |	\
 			 ST_2FM_AT_EOD | ST_PER_ACTION | ST_POSUPDATED)
 
-void	stattach(struct device *, struct st_softc *, void *);
-int	stactivate(struct device *, enum devact);
-int	stdetach(struct device *, int);
+void	stattach(device_t, struct st_softc *, void *);
+int	stdetach(device_t, int);
+int	st_mode_select(struct st_softc *, int);
 
 extern struct cfdriver st_cd;

@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_op_asm.h,v 1.3 2007/12/22 23:19:40 mrg Exp $	*/
+/*	$NetBSD: atomic_op_asm.h,v 1.6 2011/01/17 18:11:09 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,28 +38,28 @@
 
 #define	ATOMIC_OP_ALIAS(a,s)		STRONG_ALIAS(a,s)
 
-#ifdef __sparc64__
-#define	ATOMIC_OP_ALIAS_SIZE(a,s)	STRONG_ALIAS(a,s/**/_64)
+#ifdef __arch64__
+#define	ATOMIC_OP_ALIAS_SIZE(a,s)	STRONG_ALIAS(a,s ## _64)
 #else
-#define	ATOMIC_OP_ALIAS_SIZE(a,s)	STRONG_ALIAS(a,s/**/_32)
+#define	ATOMIC_OP_ALIAS_SIZE(a,s)	STRONG_ALIAS(a,s ## _32)
 #endif
 
 #else /* _KERNEL */
 
 #define	ATOMIC_OP_ALIAS(a,s)		WEAK_ALIAS(a,s)
 
-#ifdef __sparc64__
-#define	ATOMIC_OP_ALIAS_SIZE(a,s)	WEAK_ALIAS(a,s/**/_64)
+#ifdef __arch64__
+#define	ATOMIC_OP_ALIAS_SIZE(a,s)	WEAK_ALIAS(a,s ## _64)
 #else
-#define	ATOMIC_OP_ALIAS_SIZE(a,s)	WEAK_ALIAS(a,s/**/_32)
+#define	ATOMIC_OP_ALIAS_SIZE(a,s)	WEAK_ALIAS(a,s ## _32)
 #endif
 
 #endif /* _KERNEL */
 
-#ifdef __sparc64__
-#define	STRONG_ALIAS_SIZE(a,s)		STRONG_ALIAS(a,s/**/_64)
+#ifdef __arch64__
+#define	STRONG_ALIAS_SIZE(a,s)		STRONG_ALIAS(a,s ## _64)
 #else
-#define	STRONG_ALIAS_SIZE(a,s)		STRONG_ALIAS(a,s/**/_32)
+#define	STRONG_ALIAS_SIZE(a,s)		STRONG_ALIAS(a,s ## _32)
 #endif
 
 #endif /* _ATOMIC_OP_ASM_H_ */

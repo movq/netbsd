@@ -1,4 +1,4 @@
-/*	$NetBSD: startprog.S,v 1.3 1999/11/27 03:10:16 simonb Exp $	*/
+/*	$NetBSD: startprog.S,v 1.8 2011/01/10 15:25:44 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,27 +38,35 @@
 
 #include <mips/asm.h>
 
+	.set	noreorder
 LEAF(startprog)
-        subu    sp,sp,32
-	addu	t0,a1,-CALLFRAME_SIZ	# new stack value
-	move	t1,a0
+        subu    sp,sp,CALLFRAME_SIZ
+	addu	t2,a1,-CALLFRAME_SIZ	# new stack value
+	move	t9,a0
 	move	a0,a2
 	move	a1,a3
 
-	lw	a2,48(sp)		# load everything from old stack we need
-	lw	a3,52(sp)
-	lw	v0,56(sp)
-	lw	v1,60(sp)
+#ifdef __mips_o32
+	lw	a2,CALLFRAME_SIZ+16(sp)	# load everything from old stack we need
+	lw	a3,CALLFRAME_SIZ+20(sp)
+	lw	$8,CALLFRAME_SIZ+24(sp)	# use a4/t0 in case N32/N64 kernel
+	lw	$9,CALLFRAME_SIZ+28(sp)	# use a5/t1 in case N32/N64 kernel
+#else
+	move	a2,a4
+	move	a3,a5
+	move	a4,a6
+	move	a5,a7
+#endif
 
-	move	sp,t0			# new stack pointer
-	sw	ra,24(sp)
+	move	sp,t2			# new stack pointer
+	sw	ra,CALLFRAME_RA(sp)
 
-	sw	v0,16(sp)
-	sw	v1,20(sp)
-	jal	ra,t1
-	nop				# BDslot
+	sw	$8,16(sp)		# save on stack for O32
+	sw	$9,20(sp)		# save on stack for O32
+	jal	ra,t9
+	 nop				# BDslot
 
-	lw	ra,24(sp)		# should not get back here!
+	lw	ra,CALLFRAME_RA(sp)	# should not get back here!
 	j	ra
-	addu	sp,sp,32
+	 addu	sp,sp,CALLFRAME_SIZ
 END(startprog)

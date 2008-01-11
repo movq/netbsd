@@ -1,4 +1,4 @@
-# $NetBSD: SANDPOINT,v 1.2 2007/10/17 19:56:55 garbled Exp $
+# $NetBSD: SANDPOINT,v 1.7 2010/06/30 17:49:32 phx Exp $
 #
 # Sandpoint X3/X2 machine description file
 # 
@@ -19,10 +19,11 @@
 # device.
 
 include 	"arch/sandpoint/conf/std.sandpoint"
+options 	PIC_I8259
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"SANDPOINT-$Revision: 1.2 $"
+#ident 		"SANDPOINT-$Revision: 1.7 $"
 
 maxusers	32
 
@@ -58,6 +59,7 @@ options 	COMPAT_15
 options 	COMPAT_16
 options 	COMPAT_20
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_386BSD_MBRPART	# recognize old partition ID
 #options 	COMPAT_LINUX		# Linux binary compatibility
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -73,13 +75,11 @@ file-system 	FDESC
 file-system 	KERNFS
 file-system 	NULLFS
 #file-system 	OVERLAY
-#file-system 	PORTAL
 file-system 	PROCFS
 #file-system 	UMAPFS
 #file-system 	UNION
 file-system	PTYFS		# /dev/pts/N support
 
-options 	SOFTDEP		# FFS soft updates support.
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 options 	INET
@@ -124,6 +124,8 @@ pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device	fss			# file system snapshot device
+
 #
 # device
 #

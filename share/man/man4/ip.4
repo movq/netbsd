@@ -1,4 +1,4 @@
-.\"	$NetBSD: ip.4,v 1.22 2006/12/23 06:58:20 wiz Exp $
+.\"	$NetBSD: ip.4,v 1.31 2011/05/19 21:16:45 riastradh Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)ip.4	8.2 (Berkeley) 11/30/93
 .\"
-.Dd December 5, 2006
+.Dd May 19, 2011
 .Dt IP 4
 .Os
 .Sh NAME
@@ -94,7 +94,7 @@ and
 sockets.
 For example,
 .Bd -literal
-int tos = IPTOS_LOWDELAY;       /* see \*[Lt]netinet/in.h\*[Gt] */
+int tos = IPTOS_LOWDELAY;       /* see \*[Lt]netinet/ip.h\*[Gt] */
 setsockopt(s, IPPROTO_IP, IP_TOS, \*[Am]tos, sizeof(tos));
 
 int ttl = 60;                   /* max = 255 */
@@ -115,7 +115,8 @@ controls how ephemeral ports are allocated for
 .Dv SOCK_STREAM
 and
 .Dv SOCK_DGRAM
-sockets. For example,
+sockets.
+For example,
 .Bd -literal
 int range = IP_PORTRANGE_LOW;       /* see \*[Lt]netinet/in.h\*[Gt] */
 setsockopt(s, IPPROTO_IP, IP_PORTRANGE, \*[Am]range, sizeof(range));
@@ -141,7 +142,7 @@ that contains a cmsghdr structure followed by the
 address.
 The cmsghdr fields have the following values:
 .Bd -literal
-cmsg_len = sizeof(struct in_addr)
+cmsg_len = CMSG_LEN(sizeof(struct in_addr))
 cmsg_level = IPPROTO_IP
 cmsg_type = IP_RECVDSTADDR
 .Ed
@@ -161,9 +162,45 @@ the msg_control field in the msghdr structure points to a buffer
 that contains a cmsghdr structure followed by the struct sockaddr_dl.
 The cmsghdr fields have the following values:
 .Bd -literal
-cmsg_len = sizeof(struct sockaddr_dl)
+cmsg_len = CMSG_LEN(sizeof(struct sockaddr_dl))
 cmsg_level = IPPROTO_IP
 cmsg_type = IP_RECVIF
+.Ed
+.Pp
+If the
+.Dv IP_RECVTTL
+option is enabled on a
+.Dv SOCK_DGRAM
+socket, the
+.Xr recvmsg 2
+call will return the
+.Tn TTL
+of the received datagram.
+The msg_control field in the msghdr structure points to a buffer
+that contains a cmsghdr structure followed by the
+.Tn TTL
+value.
+The cmsghdr fields have the following values:
+.Bd -literal
+cmsg_len = CMSG_LEN(sizeof(uint8_t))
+cmsg_level = IPPROTO_IP
+cmsg_type = IP_RECVTTL
+.Ed
+.Pp
+The
+.Dv IP_MINTTL
+option may be used on
+.Dv SOCK_DGRAM
+or
+.Dv SOCK_STREAM
+sockets to discard packets with a TTL lower than the option value.
+This can be used to implement the
+.Em Generalized TTL Security Mechanism (GTSM)
+according to RFC 3682.
+To discard all packets with a TTL lower than 255:
+.Bd -literal -offset indent
+int minttl = 255;
+setsockopt(s, IPPROTO_IP, IP_MINTTL, \*[Am]minttl, sizeof(minttl));
 .Ed
 .Ss MULTICAST OPTIONS
 .Tn IP
@@ -400,6 +437,7 @@ shorter than the minimum value or longer than the option buffer provided.
 .Xr getsockopt 2 ,
 .Xr recv 2 ,
 .Xr send 2 ,
+.Xr CMSG_DATA 3 ,
 .Xr ipsec_set_policy 3 ,
 .Xr icmp 4 ,
 .Xr inet 4 ,

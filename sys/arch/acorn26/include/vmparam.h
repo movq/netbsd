@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.8 2007/10/25 13:03:03 yamt Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.10 2010/11/06 15:42:43 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -59,13 +59,6 @@
 #endif
 
 /*
- * Size of shared memory map
- */
-#ifndef SHMMAXPGS
-#define SHMMAXPGS       1024
-#endif
-
-/*
  * Override the default pager_map size, there's not enough KVA.
  */
 #define PAGER_MAP_DEFAULT_SIZE          (1 * 1024 * 1024)
@@ -106,8 +99,6 @@
 #define VM_PHYSSEG_MAX		3
 
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
-
-#define VM_PHYSSEG_NOADD	/* We won't turn up extra memory during autoconfig */
 
 #define VM_NFREELIST		2
 #define VM_FREELIST_LOW		1 /* DMA-able memory (bottom 512k phys) */

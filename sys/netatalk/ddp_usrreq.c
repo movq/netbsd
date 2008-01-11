@@ -1,4 +1,4 @@
-/*	$NetBSD: ddp_usrreq.c,v 1.27 2008/01/10 08:04:18 dyoung Exp $	 */
+/*	$NetBSD: ddp_usrreq.c,v 1.40 2011/05/08 13:51:31 bouyer Exp $	 */
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ddp_usrreq.c,v 1.27 2008/01/10 08:04:18 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ddp_usrreq.c,v 1.40 2011/05/08 13:51:31 bouyer Exp $");
 
 #include "opt_mbuftrace.h"
 
@@ -42,28 +42,31 @@ __KERNEL_RCSID(0, "$NetBSD: ddp_usrreq.c,v 1.27 2008/01/10 08:04:18 dyoung Exp $
 #include <sys/socketvar.h>
 #include <sys/protosw.h>
 #include <sys/kauth.h>
+#include <sys/sysctl.h>
 #include <net/if.h>
 #include <net/route.h>
 #include <net/if_ether.h>
+#include <net/net_stats.h>
 #include <netinet/in.h>
 
 #include <netatalk/at.h>
 #include <netatalk/at_var.h>
 #include <netatalk/ddp_var.h>
+#include <netatalk/ddp_private.h>
 #include <netatalk/aarp.h>
 #include <netatalk/at_extern.h>
 
-static void at_pcbdisconnect __P((struct ddpcb *));
-static void at_sockaddr __P((struct ddpcb *, struct mbuf *));
-static int at_pcbsetaddr __P((struct ddpcb *, struct mbuf *, struct lwp *));
-static int at_pcbconnect __P((struct ddpcb *, struct mbuf *, struct lwp *));
-static void at_pcbdetach __P((struct socket *, struct ddpcb *));
-static int at_pcballoc __P((struct socket *));
+static void at_pcbdisconnect(struct ddpcb *);
+static void at_sockaddr(struct ddpcb *, struct mbuf *);
+static int at_pcbsetaddr(struct ddpcb *, struct mbuf *, struct lwp *);
+static int at_pcbconnect(struct ddpcb *, struct mbuf *, struct lwp *);
+static void at_pcbdetach(struct socket *, struct ddpcb *);
+static int at_pcballoc(struct socket *);
 
 struct ifqueue atintrq1, atintrq2;
 struct ddpcb   *ddp_ports[ATPORT_LAST];
 struct ddpcb   *ddpcb = NULL;
-struct ddpstat	ddpstat;
+percpu_t *ddpstat_percpu;
 struct at_ifaddrhead at_ifaddr;		/* Here as inited in this file */
 u_long ddp_sendspace = DDP_MAXSZ;	/* Max ddp size + 1 (ddp_type) */
 u_long ddp_recvspace = 25 * (587 + sizeof(struct sockaddr_at));
@@ -75,13 +78,7 @@ struct mowner atalk_tx_mowner = MOWNER_INIT("atalk", "tx");
 
 /* ARGSUSED */
 int
-ddp_usrreq(so, req, m, addr, rights, l)
-	struct socket  *so;
-	int             req;
-	struct mbuf    *m;
-	struct mbuf    *addr;
-	struct mbuf    *rights;
-	struct lwp *l;
+ddp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr, struct mbuf *rights, struct lwp *l)
 {
 	struct ddpcb   *ddp;
 	int             error = 0;
@@ -93,7 +90,9 @@ ddp_usrreq(so, req, m, addr, rights, l)
 		    (struct ifnet *) rights, l));
 	}
 	if (req == PRU_PURGEIF) {
+		mutex_enter(softnet_lock);
 		at_purgeif((struct ifnet *) rights);
+		mutex_exit(softnet_lock);
 		return (0);
 	}
 	if (rights && rights->m_len) {
@@ -110,6 +109,7 @@ ddp_usrreq(so, req, m, addr, rights, l)
 			error = EINVAL;
 			break;
 		}
+		sosetlock(so);
 		if ((error = at_pcballoc(so)) != 0) {
 			break;
 		}
@@ -223,9 +223,7 @@ release:
 }
 
 static void
-at_sockaddr(ddp, addr)
-	struct ddpcb   *ddp;
-	struct mbuf    *addr;
+at_sockaddr(struct ddpcb *ddp, struct mbuf *addr)
 {
 	struct sockaddr_at *sat;
 
@@ -235,10 +233,7 @@ at_sockaddr(ddp, addr)
 }
 
 static int
-at_pcbsetaddr(ddp, addr, l)
-	struct ddpcb   *ddp;
-	struct mbuf    *addr;
-	struct lwp	*l;
+at_pcbsetaddr(struct ddpcb *ddp, struct mbuf *addr, struct lwp *l)
 {
 	struct sockaddr_at lsat, *sat;
 	struct at_ifaddr *aa;
@@ -268,17 +263,20 @@ at_pcbsetaddr(ddp, addr, l)
 				return (EADDRNOTAVAIL);
 		}
 		if (sat->sat_port != ATADDR_ANYPORT) {
+			int error;
+
 			if (sat->sat_port < ATPORT_FIRST ||
 			    sat->sat_port >= ATPORT_LAST)
 				return (EINVAL);
 
 			if (sat->sat_port < ATPORT_RESERVED && l &&
-			    kauth_authorize_generic(l->l_cred,
-			    KAUTH_GENERIC_ISSUSER, NULL))
-				return (EACCES);
+			    (error = kauth_authorize_network(l->l_cred,
+			    KAUTH_NETWORK_BIND, KAUTH_REQ_NETWORK_BIND_PRIVPORT,
+			    ddpcb->ddp_socket, sat, NULL)) != 0)
+				return (error);
 		}
 	} else {
-		bzero((void *) & lsat, sizeof(struct sockaddr_at));
+		memset((void *) & lsat, 0, sizeof(struct sockaddr_at));
 		lsat.sat_len = sizeof(struct sockaddr_at);
 		lsat.sat_addr.s_node = ATADDR_ANYNODE;
 		lsat.sat_addr.s_net = ATADDR_ANYNET;
@@ -330,10 +328,7 @@ at_pcbsetaddr(ddp, addr, l)
 }
 
 static int
-at_pcbconnect(ddp, addr, l)
-	struct ddpcb   *ddp;
-	struct mbuf    *addr;
-	struct lwp     *l;
+at_pcbconnect(struct ddpcb *ddp, struct mbuf *addr, struct lwp *l)
 {
 	struct rtentry *rt;
 	const struct sockaddr_at *cdst;
@@ -366,8 +361,8 @@ at_pcbconnect(ddp, addr, l)
          * If we've changed our address, we may have an old "good looking"
          * route here.  Attempt to detect it.
          */
-	rtcache_check(ro);
-	if ((rt = rtcache_getrt(ro)) != NULL) {
+	if ((rt = rtcache_validate(ro)) != NULL ||
+	    (rt = rtcache_update(ro, 1)) != NULL) {
 		if (hintnet) {
 			net = hintnet;
 		} else {
@@ -386,13 +381,15 @@ at_pcbconnect(ddp, addr, l)
 		cdst = satocsat(rtcache_getdst(ro));
 		if (aa == NULL || (cdst->sat_addr.s_net !=
 		    (hintnet ? hintnet : sat->sat_addr.s_net) ||
-		    cdst->sat_addr.s_node != sat->sat_addr.s_node))
+		    cdst->sat_addr.s_node != sat->sat_addr.s_node)) {
 			rtcache_free(ro);
+			rt = NULL;
+		}
 	}
 	/*
          * If we've got no route for this interface, try to find one.
          */
-	if ((rt = rtcache_getrt(ro)) == NULL) {
+	if (rt == NULL) {
 		union {
 			struct sockaddr		dst;
 			struct sockaddr_at	dsta;
@@ -401,9 +398,7 @@ at_pcbconnect(ddp, addr, l)
 		sockaddr_at_init(&u.dsta, &sat->sat_addr, 0);
 		if (hintnet)
 			u.dsta.sat_addr.s_net = hintnet;
-		rtcache_setdst(ro, &u.dst);
-
-		rt = rtcache_init(ro);
+		rt = rtcache_lookup(ro, &u.dst);
 	}
 	/*
          * Make sure any route that we have has a valid interface.
@@ -424,8 +419,7 @@ at_pcbconnect(ddp, addr, l)
 }
 
 static void
-at_pcbdisconnect(ddp)
-	struct ddpcb   *ddp;
+at_pcbdisconnect(struct ddpcb *ddp)
 {
 	ddp->ddp_fsat.sat_addr.s_net = ATADDR_ANYNET;
 	ddp->ddp_fsat.sat_addr.s_node = ATADDR_ANYNODE;
@@ -433,12 +427,11 @@ at_pcbdisconnect(ddp)
 }
 
 static int
-at_pcballoc(so)
-	struct socket  *so;
+at_pcballoc(struct socket *so)
 {
 	struct ddpcb   *ddp;
 
-	MALLOC(ddp, struct ddpcb *, sizeof(*ddp), M_PCB, M_WAITOK|M_ZERO);
+	ddp = malloc(sizeof(*ddp), M_PCB, M_WAITOK|M_ZERO);
 	if (!ddp)
 		panic("at_pcballoc");
 	ddp->ddp_lsat.sat_port = ATADDR_ANYPORT;
@@ -462,13 +455,13 @@ at_pcballoc(so)
 }
 
 static void
-at_pcbdetach(so, ddp)
-	struct socket  *so;
-	struct ddpcb   *ddp;
+at_pcbdetach(struct socket *so, struct ddpcb *ddp)
 {
 	soisdisconnected(so);
 	so->so_pcb = 0;
+	/* sofree drops the lock */
 	sofree(so);
+	mutex_enter(softnet_lock);
 
 	/* remove ddp from ddp_ports list */
 	if (ddp->ddp_lsat.sat_port != ATADDR_ANYPORT &&
@@ -550,19 +543,23 @@ ddp_search(
  * Initialize all the ddp & appletalk stuff
  */
 void
-ddp_init()
+ddp_init(void)
 {
+
+	ddpstat_percpu = percpu_alloc(sizeof(uint64_t) * DDP_NSTATS);
+
 	TAILQ_INIT(&at_ifaddr);
 	atintrq1.ifq_maxlen = IFQ_MAXLEN;
 	atintrq2.ifq_maxlen = IFQ_MAXLEN;
 
 	MOWNER_ATTACH(&atalk_tx_mowner);
 	MOWNER_ATTACH(&atalk_rx_mowner);
+	MOWNER_ATTACH(&aarp_mowner);
 }
 
 #if 0
 static void
-ddp_clean()
+ddp_clean(void)
 {
 	struct ddpcb   *ddp;
 
@@ -570,3 +567,42 @@ ddp_clean()
 		at_pcbdetach(ddp->ddp_socket, ddp);
 }
 #endif
+
+static int
+sysctl_net_atalk_ddp_stats(SYSCTLFN_ARGS)
+{
+
+	return (NETSTAT_SYSCTL(ddpstat_percpu, DDP_NSTATS));
+}
+
+/*
+ * Sysctl for DDP variables.
+ */
+SYSCTL_SETUP(sysctl_net_atalk_ddp_setup, "sysctl net.atalk.ddp subtree setup")
+{
+
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "net", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_NET, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "atalk", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_NET, PF_APPLETALK, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "ddp",
+		       SYSCTL_DESCR("DDP related settings"),
+		       NULL, 0, NULL, 0,
+		       CTL_NET, PF_APPLETALK, ATPROTO_DDP, CTL_EOL);
+	
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRUCT, "stats",
+		       SYSCTL_DESCR("DDP statistics"),
+		       sysctl_net_atalk_ddp_stats, 0, NULL, 0,
+		       CTL_NET, PF_APPLETALK, ATPROTO_DDP, CTL_CREATE,
+		       CTL_EOL);
+}

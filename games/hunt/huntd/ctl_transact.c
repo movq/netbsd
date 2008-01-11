@@ -1,4 +1,4 @@
-/*	$NetBSD: ctl_transact.c,v 1.6 2003/06/11 12:00:22 wiz Exp $	*/
+/*	$NetBSD: ctl_transact.c,v 1.9 2009/07/04 04:29:54 dholland Exp $	*/
 /*
  * Copyright (c) 1983-2003, Regents of the University of California.
  * All rights reserved.
@@ -32,14 +32,14 @@
 
 #include "bsd.h"
 
-#if	defined(TALK_43) || defined(TALK_42)
+#if defined(TALK_43) || defined(TALK_42)
 
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)ctl_transact.c	5.2 (Berkeley) 3/13/86";
 #else
-__RCSID("$NetBSD: ctl_transact.c,v 1.6 2003/06/11 12:00:22 wiz Exp $");
+__RCSID("$NetBSD: ctl_transact.c,v 1.9 2009/07/04 04:29:54 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,11 +57,7 @@ __RCSID("$NetBSD: ctl_transact.c,v 1.6 2003/06/11 12:00:22 wiz Exp $");
  * of time
  */
 void
-ctl_transact(target, msg, type, rp)
-	struct in_addr target;
-	CTL_MSG msg;
-	int type;
-	CTL_RESPONSE *rp;
+ctl_transact(struct in_addr target, CTL_MSG msg, int type, CTL_RESPONSE *rp)
 {
 	struct pollfd set[1];
 	int nready, cc, retries;
@@ -80,7 +76,7 @@ ctl_transact(target, msg, type, rp)
 	do {
 		/* resend message until a response is obtained */
 		for (retries = MAX_RETRY; retries > 0; retries -= 1) {
-			cc = sendto(ctl_sockt, (char *)&msg, sizeof (msg), 0,
+			cc = sendto(ctl_sockt, &msg, sizeof (msg), 0,
 				&daemon_addr, sizeof (daemon_addr));
 			if (cc != sizeof (msg)) {
 				if (errno == EINTR)
@@ -104,7 +100,7 @@ ctl_transact(target, msg, type, rp)
 		 * request/acknowledgements being sent)
 		 */
 		do {
-			cc = recv(ctl_sockt, (char *)rp, sizeof (*rp), 0);
+			cc = recv(ctl_sockt, rp, sizeof (*rp), 0);
 			if (cc < 0) {
 				if (errno == EINTR)
 					continue;
@@ -113,20 +109,20 @@ ctl_transact(target, msg, type, rp)
 			/* an immediate poll */
 			nready = poll(set, 1, 0);
 		} while (nready > 0 && (
-#ifdef	TALK_43
+#ifdef TALK_43
 		    rp->vers != TALK_VERSION ||
 #endif
 		    rp->type != type));
 	} while (
-#ifdef	TALK_43
+#ifdef TALK_43
 	    rp->vers != TALK_VERSION ||
 #endif
 	    rp->type != type);
 	rp->id_num = ntohl(rp->id_num);
-#ifdef	TALK_43
+#ifdef TALK_43
 	rp->addr.sa_family = ntohs(rp->addr.sa_family);
-# else
+#else
 	rp->addr.sin_family = ntohs(rp->addr.sin_family);
-# endif
+#endif
 }
 #endif

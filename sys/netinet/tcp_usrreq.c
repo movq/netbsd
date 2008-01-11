@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_usrreq.c,v 1.140 2007/12/16 14:12:35 elad Exp $	*/
+/*	$NetBSD: tcp_usrreq.c,v 1.159 2011/05/03 18:28:45 dyoung Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -49,13 +49,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -102,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.140 2007/12/16 14:12:35 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.159 2011/05/03 18:28:45 dyoung Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -124,6 +117,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.140 2007/12/16 14:12:35 elad Exp $"
 #include <sys/domain.h>
 #include <sys/sysctl.h>
 #include <sys/kauth.h>
+#include <sys/uidinfo.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -151,9 +145,11 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_usrreq.c,v 1.140 2007/12/16 14:12:35 elad Exp $"
 #include <netinet/tcp_seq.h>
 #include <netinet/tcp_timer.h>
 #include <netinet/tcp_var.h>
+#include <netinet/tcp_private.h>
 #include <netinet/tcp_congctl.h>
 #include <netinet/tcpip.h>
 #include <netinet/tcp_debug.h>
+#include <netinet/tcp_vtw.h>
 
 #include "opt_tcp_space.h"
 
@@ -209,6 +205,7 @@ tcp_usrreq(struct socket *so, int req,
 	s = splsoftnet();
 
 	if (req == PRU_PURGEIF) {
+		mutex_enter(softnet_lock);
 		switch (family) {
 #ifdef INET
 		case PF_INET:
@@ -225,12 +222,17 @@ tcp_usrreq(struct socket *so, int req,
 			break;
 #endif
 		default:
+			mutex_exit(softnet_lock);
 			splx(s);
 			return (EAFNOSUPPORT);
 		}
+		mutex_exit(softnet_lock);
 		splx(s);
 		return (0);
 	}
+
+	if (req == PRU_ATTACH)
+		sosetlock(so);
 
 	switch (family) {
 #ifdef INET
@@ -361,15 +363,14 @@ tcp_usrreq(struct socket *so, int req,
 	case PRU_LISTEN:
 #ifdef INET
 		if (inp && inp->inp_lport == 0) {
-			error = in_pcbbind(inp, (struct mbuf *)0, l);
+			error = in_pcbbind(inp, NULL, l);
 			if (error)
 				break;
 		}
 #endif
 #ifdef INET6
 		if (in6p && in6p->in6p_lport == 0) {
-			error = in6_pcbbind(in6p, (struct mbuf *)0,
-			    (struct lwp *)0);
+			error = in6_pcbbind(in6p, NULL, l);
 			if (error)
 				break;
 		}
@@ -388,7 +389,7 @@ tcp_usrreq(struct socket *so, int req,
 #ifdef INET
 		if (inp) {
 			if (inp->inp_lport == 0) {
-				error = in_pcbbind(inp, (struct mbuf *)0, l);
+				error = in_pcbbind(inp, NULL, l);
 				if (error)
 					break;
 			}
@@ -398,8 +399,7 @@ tcp_usrreq(struct socket *so, int req,
 #ifdef INET6
 		if (in6p) {
 			if (in6p->in6p_lport == 0) {
-				error = in6_pcbbind(in6p, (struct mbuf *)0,
-				    (struct lwp *)0);
+				error = in6_pcbbind(in6p, NULL, l);
 				if (error)
 					break;
 			}
@@ -436,7 +436,7 @@ tcp_usrreq(struct socket *so, int req,
 		    (TCP_MAXWIN << tp->request_r_scale) < sb_max)
 			tp->request_r_scale++;
 		soisconnecting(so);
-		tcpstat.tcps_connattempt++;
+		TCP_STATINC(TCP_STAT_CONNATTEMPT);
 		tp->t_state = TCPS_SYN_SENT;
 		TCP_TIMER_ARM(tp, TCPT_KEEP, tp->t_keepinit);
 		tp->iss = tcp_new_iss(tp, 0);
@@ -639,8 +639,7 @@ change_keepalive(struct socket *so, struct tcpcb *tp)
 
 
 int
-tcp_ctloutput(int op, struct socket *so, int level, int optname,
-    struct mbuf **mp)
+tcp_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 {
 	int error = 0, s;
 	struct inpcb *inp;
@@ -648,10 +647,12 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 	struct in6pcb *in6p;
 #endif
 	struct tcpcb *tp;
-	struct mbuf *m;
-	int i;
 	u_int ui;
 	int family;	/* family of the socket */
+	int level, optname, optval;
+
+	level = sopt->sopt_level;
+	optname = sopt->sopt_name;
 
 	family = so->so_proto->pr_domain->dom_family;
 
@@ -682,20 +683,18 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 #endif
 	{
 		splx(s);
-		if (op == PRCO_SETOPT && *mp)
-			(void) m_free(*mp);
 		return (ECONNRESET);
 	}
 	if (level != IPPROTO_TCP) {
 		switch (family) {
 #ifdef INET
 		case PF_INET:
-			error = ip_ctloutput(op, so, level, optname, mp);
+			error = ip_ctloutput(op, so, sopt);
 			break;
 #endif
 #ifdef INET6
 		case PF_INET6:
-			error = ip6_ctloutput(op, so, level, optname, mp);
+			error = ip6_ctloutput(op, so, sopt);
 			break;
 #endif
 		}
@@ -712,18 +711,14 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 		tp = NULL;
 
 	switch (op) {
-
 	case PRCO_SETOPT:
-		m = *mp;
 		switch (optname) {
-
 #ifdef TCP_SIGNATURE
 		case TCP_MD5SIG:
-			if (m == NULL || m->m_len != sizeof(int))
-				error = EINVAL;
+			error = sockopt_getint(sopt, &optval);
 			if (error)
 				break;
-			if (*mtod(m, int *) > 0)
+			if (optval > 0)
 				tp->t_flags |= TF_SIGNATURE;
 			else
 				tp->t_flags &= ~TF_SIGNATURE;
@@ -731,33 +726,36 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 #endif /* TCP_SIGNATURE */
 
 		case TCP_NODELAY:
-			if (m == NULL || m->m_len != sizeof(int))
-				error = EINVAL;
-			else if (*mtod(m, int *))
+			error = sockopt_getint(sopt, &optval);
+			if (error)
+				break;
+			if (optval)
 				tp->t_flags |= TF_NODELAY;
 			else
 				tp->t_flags &= ~TF_NODELAY;
 			break;
 
 		case TCP_MAXSEG:
-			if (m && m->m_len == sizeof(int) &&
-			    (i = *mtod(m, int *)) > 0 &&
-			    i <= tp->t_peermss)
-				tp->t_peermss = i;  /* limit on send size */
+			error = sockopt_getint(sopt, &optval);
+			if (error)
+				break;
+			if (optval > 0 && optval <= tp->t_peermss)
+				tp->t_peermss = optval; /* limit on send size */
 			else
 				error = EINVAL;
 			break;
 #ifdef notyet
 		case TCP_CONGCTL:
-			if (m == NULL)
-				error = EINVAL;
-			error = tcp_congctl_select(tp, mtod(m, char *));
-#endif
+			/* XXX string overflow XXX */
+			error = tcp_congctl_select(tp, sopt->sopt_data);
 			break;
+#endif
 
 		case TCP_KEEPIDLE:
-			if (m && m->m_len == sizeof(u_int) &&
-			    (ui = *mtod(m, u_int *)) > 0) {
+			error = sockopt_get(sopt, &ui, sizeof(ui));
+			if (error)
+				break;
+			if (ui > 0) {
 				tp->t_keepidle = ui;
 				change_keepalive(so, tp);
 			} else
@@ -765,8 +763,10 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 			break;
 
 		case TCP_KEEPINTVL:
-			if (m && m->m_len == sizeof(u_int) &&
-			    (ui = *mtod(m, u_int *)) > 0) {
+			error = sockopt_get(sopt, &ui, sizeof(ui));
+			if (error)
+				break;
+			if (ui > 0) {
 				tp->t_keepintvl = ui;
 				change_keepalive(so, tp);
 			} else
@@ -774,8 +774,10 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 			break;
 
 		case TCP_KEEPCNT:
-			if (m && m->m_len == sizeof(u_int) &&
-			    (ui = *mtod(m, u_int *)) > 0) {
+			error = sockopt_get(sopt, &ui, sizeof(ui));
+			if (error)
+				break;
+			if (ui > 0) {
 				tp->t_keepcnt = ui;
 				change_keepalive(so, tp);
 			} else
@@ -783,8 +785,10 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 			break;
 
 		case TCP_KEEPINIT:
-			if (m && m->m_len == sizeof(u_int) &&
-			    (ui = *mtod(m, u_int *)) > 0) {
+			error = sockopt_get(sopt, &ui, sizeof(ui));
+			if (error)
+				break;
+			if (ui > 0) {
 				tp->t_keepinit = ui;
 				change_keepalive(so, tp);
 			} else
@@ -795,24 +799,23 @@ tcp_ctloutput(int op, struct socket *so, int level, int optname,
 			error = ENOPROTOOPT;
 			break;
 		}
-		if (m)
-			(void) m_free(m);
 		break;
 
 	case PRCO_GETOPT:
-		*mp = m = m_intopt(so, 0);
-
 		switch (optname) {
 #ifdef TCP_SIGNATURE
 		case TCP_MD5SIG:
-			*mtod(m, int *) = (tp->t_flags & TF_SIGNATURE) ? 1 : 0;
+			optval = (tp->t_flags & TF_SIGNATURE) ? 1 : 0;
+			error = sockopt_set(sopt, &optval, sizeof(optval));
 			break;
 #endif
 		case TCP_NODELAY:
-			*mtod(m, int *) = tp->t_flags & TF_NODELAY;
+			optval = tp->t_flags & TF_NODELAY;
+			error = sockopt_set(sopt, &optval, sizeof(optval));
 			break;
 		case TCP_MAXSEG:
-			*mtod(m, int *) = tp->t_peermss;
+			optval = tp->t_peermss;
+			error = sockopt_set(sopt, &optval, sizeof(optval));
 			break;
 #ifdef notyet
 		case TCP_CONGCTL:
@@ -1010,6 +1013,16 @@ tcp_usrclosed(struct tcpcb *tp)
 		 */
 		if ((tp->t_state == TCPS_FIN_WAIT_2) && (tp->t_maxidle > 0))
 			TCP_TIMER_ARM(tp, TCPT_2MSL, tp->t_maxidle);
+		else if (tp->t_state == TCPS_TIME_WAIT
+			 && ((tp->t_inpcb
+			      && (tcp4_vtw_enable & 1)
+			      && vtw_add(AF_INET, tp))
+			     ||
+			     (tp->t_in6pcb
+			      && (tcp6_vtw_enable & 1)
+			      && vtw_add(AF_INET6, tp)))) {
+			tp = 0;
+		}
 	}
 	return (tp);
 }
@@ -1106,6 +1119,7 @@ sysctl_net_inet_ip_ports(SYSCTLFN_ARGS)
 	 */
 	switch (rnode->sysctl_num) {
 	case IPCTL_ANONPORTMIN:
+	case IPV6CTL_ANONPORTMIN:
 		if (tmp >= apmax)
 			return (EINVAL);
 #ifndef IPNOPRIVPORTS
@@ -1115,6 +1129,7 @@ sysctl_net_inet_ip_ports(SYSCTLFN_ARGS)
 		break;
 
 	case IPCTL_ANONPORTMAX:
+	case IPV6CTL_ANONPORTMAX:
                 if (apmin >= tmp)
 			return (EINVAL);
 #ifndef IPNOPRIVPORTS
@@ -1125,6 +1140,7 @@ sysctl_net_inet_ip_ports(SYSCTLFN_ARGS)
 
 #ifndef IPNOPRIVPORTS
 	case IPCTL_LOWPORTMIN:
+	case IPV6CTL_LOWPORTMIN:
 		if (tmp >= lpmax ||
 		    tmp > IPPORT_RESERVEDMAX ||
 		    tmp < IPPORT_RESERVEDMIN)
@@ -1132,6 +1148,7 @@ sysctl_net_inet_ip_ports(SYSCTLFN_ARGS)
 		break;
 
 	case IPCTL_LOWPORTMAX:
+	case IPV6CTL_LOWPORTMAX:
 		if (lpmin >= tmp ||
 		    tmp > IPPORT_RESERVEDMAX ||
 		    tmp < IPPORT_RESERVEDMIN)
@@ -1148,23 +1165,6 @@ sysctl_net_inet_ip_ports(SYSCTLFN_ARGS)
 	return (0);
 }
 
-/*
- * The superuser can drop any connection.  Normal users can only drop
- * their own connections.
- */
-static inline int
-check_sockuid(struct socket *sockp, kauth_cred_t cred)
-{
-	uid_t sockuid;
-
-	sockuid = sockp->so_uidinfo->ui_uid;
-	if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) == 0 ||
-	    sockuid == kauth_cred_getuid(cred) ||
-	    sockuid == kauth_cred_geteuid(cred))
-		return 0;
-	return EACCES;
-}
-
 static inline int
 copyout_uid(struct socket *sockp, void *oldp, size_t *oldlenp)
 {
@@ -1172,7 +1172,7 @@ copyout_uid(struct socket *sockp, void *oldp, size_t *oldlenp)
 	int error;
 	uid_t uid;
 
-	uid = sockp->so_uidinfo->ui_uid;
+	uid = kauth_cred_geteuid(sockp->so_cred);
 	if (oldp) {
 		sz = MIN(sizeof(uid), *oldlenp);
 		error = copyout(&uid, oldp, sz);
@@ -1192,20 +1192,23 @@ inet4_ident_core(struct in_addr raddr, u_int rport,
 	struct inpcb *inp;
 	struct socket *sockp;
 
-	inp = in_pcblookup_connect(&tcbtable, raddr, rport, laddr, lport);
+	inp = in_pcblookup_connect(&tcbtable, raddr, rport, laddr, lport, 0);
 	
 	if (inp == NULL || (sockp = inp->inp_socket) == NULL)
 		return ESRCH;
 
 	if (dodrop) {
 		struct tcpcb *tp;
+		int error;
 		
 		if (inp == NULL || (tp = intotcpcb(inp)) == NULL ||
 		    (inp->inp_socket->so_options & SO_ACCEPTCONN) != 0)
 			return ESRCH;
-		
-		if (check_sockuid(inp->inp_socket, l->l_cred) != 0)
-			return EACCES;
+
+		error = kauth_authorize_network(l->l_cred, KAUTH_NETWORK_SOCKET,
+		    KAUTH_REQ_NETWORK_SOCKET_DROP, inp->inp_socket, tp, NULL);
+		if (error)
+			return (error);
 		
 		(void)tcp_drop(tp, ECONNABORTED);
 		return 0;
@@ -1224,20 +1227,23 @@ inet6_ident_core(struct in6_addr *raddr, u_int rport,
 	struct in6pcb *in6p;
 	struct socket *sockp;
 
-	in6p = in6_pcblookup_connect(&tcbtable, raddr, rport, laddr, lport, 0);
+	in6p = in6_pcblookup_connect(&tcbtable, raddr, rport, laddr, lport, 0, 0);
 
 	if (in6p == NULL || (sockp = in6p->in6p_socket) == NULL)
 		return ESRCH;
 	
 	if (dodrop) {
 		struct tcpcb *tp;
+		int error;
 		
 		if (in6p == NULL || (tp = in6totcpcb(in6p)) == NULL ||
 		    (in6p->in6p_socket->so_options & SO_ACCEPTCONN) != 0)
 			return ESRCH;
 
-		if (check_sockuid(in6p->in6p_socket, l->l_cred) != 0)
-			return EACCES;
+		error = kauth_authorize_network(l->l_cred, KAUTH_NETWORK_SOCKET,
+		    KAUTH_REQ_NETWORK_SOCKET_DROP, in6p->in6p_socket, tp, NULL);
+		if (error)
+			return (error);
 
 		(void)tcp_drop(tp, ECONNABORTED);
 		return 0;
@@ -1269,7 +1275,7 @@ sysctl_net_inet_tcp_ident(SYSCTLFN_ARGS)
 	struct sockaddr_in6 *si6[2];
 #endif /* INET6 */
 	struct sockaddr_storage sa[2];
-	int error, pf, dodrop, s;
+	int error, pf, dodrop;
 
 	dodrop = name[-1] == TCPCTL_DROP;
 	if (dodrop) {
@@ -1299,10 +1305,10 @@ sysctl_net_inet_tcp_ident(SYSCTLFN_ARGS)
 		laddr.s_addr = (uint32_t)name[2];
 		lport = (u_int)name[3];
 		
-		s = splsoftnet();
+		mutex_enter(softnet_lock);
 		error = inet4_ident_core(raddr, rport, laddr, lport,
 		    oldp, oldlenp, l, dodrop);
-		splx(s);
+		mutex_exit(softnet_lock);
 		return error;
 #else /* INET */
 		return EINVAL;
@@ -1339,11 +1345,11 @@ sysctl_net_inet_tcp_ident(SYSCTLFN_ARGS)
 			if (error)
 				return error;
 
-			s = splsoftnet();
+			mutex_enter(softnet_lock);
 			error = inet6_ident_core(&si6[0]->sin6_addr,
 			    si6[0]->sin6_port, &si6[1]->sin6_addr,
 			    si6[1]->sin6_port, oldp, oldlenp, l, dodrop);
-			splx(s);
+			mutex_exit(softnet_lock);
 			return error;
 		}
 
@@ -1363,11 +1369,11 @@ sysctl_net_inet_tcp_ident(SYSCTLFN_ARGS)
 		    si4[0]->sin_len != sizeof(*si4[1]))
 			return EINVAL;
 	
-		s = splsoftnet();
+		mutex_enter(softnet_lock);
 		error = inet4_ident_core(si4[0]->sin_addr, si4[0]->sin_port,
 		    si4[1]->sin_addr, si4[1]->sin_port,
 		    oldp, oldlenp, l, dodrop);
-		splx(s);
+		mutex_exit(softnet_lock);
 		return error;
 #endif /* INET */
 	default:
@@ -1435,6 +1441,8 @@ sysctl_inpcblist(SYSCTLFN_ARGS)
 	pf = oname[1];
 	proto = oname[2];
 	pf2 = (oldp != NULL) ? pf : 0;
+
+	mutex_enter(softnet_lock);
 
 	CIRCLEQ_FOREACH(inph, &pcbtbl->inpt_queue, inph_queue) {
 #ifdef INET
@@ -1547,21 +1555,23 @@ sysctl_inpcblist(SYSCTLFN_ARGS)
 
 		if (len >= elem_size && elem_count > 0) {
 			error = copyout(&pcb, dp, out_size);
-			if (error)
+			if (error) {
+				mutex_exit(softnet_lock);
 				return (error);
+			}
 			dp += elem_size;
 			len -= elem_size;
 		}
-		if (elem_count > 0) {
-			needed += elem_size;
-			if (elem_count != INT_MAX)
-				elem_count--;
-		}
+		needed += elem_size;
+		if (elem_count > 0 && elem_count != INT_MAX)
+			elem_count--;
 	}
 
 	*oldlenp = needed;
 	if (oldp == NULL)
 		*oldlenp += PCB_SLOP * sizeof(struct kinfo_pcb);
+
+	mutex_exit(softnet_lock);
 
 	return (error);
 }
@@ -1570,7 +1580,7 @@ static int
 sysctl_tcp_congctl(SYSCTLFN_ARGS)
 {
 	struct sysctlnode node;
-	int error, r;
+	int error;
 	char newname[TCPCC_MAXLEN];
 
 	strlcpy(newname, tcp_congctl_global_name, sizeof(newname) - 1);
@@ -1586,9 +1596,10 @@ sysctl_tcp_congctl(SYSCTLFN_ARGS)
 	    strncmp(newname, tcp_congctl_global_name, sizeof(newname)) == 0)
 		return error;
 
-	if ((r = tcp_congctl_select(NULL, newname)))
-		return r;
-	
+	mutex_enter(softnet_lock);
+	error = tcp_congctl_select(NULL, newname);
+	mutex_exit(softnet_lock);
+
 	return error;
 }
 
@@ -1607,11 +1618,21 @@ sysctl_tcp_keep(SYSCTLFN_ARGS)
 	if (error || newp == NULL)
 		return error;
 
+	mutex_enter(softnet_lock);
+
 	*(u_int *)rnode->sysctl_data = tmp;
 	tcp_tcpcb_template();	/* update the template */
+
+	mutex_exit(softnet_lock);
 	return 0;
 }
 
+static int
+sysctl_net_inet_tcp_stats(SYSCTLFN_ARGS)
+{
+
+	return (NETSTAT_SYSCTL(tcpstat_percpu, TCP_NSTATS));
+}
 
 /*
  * this (second stage) setup routine is a replacement for tcp_sysctl()
@@ -1625,6 +1646,8 @@ sysctl_net_inet_tcp_setup2(struct sysctllog **clog, int pf, const char *pfname,
 	const struct sysctlnode *abc_node;
 	const struct sysctlnode *ecn_node;
 	const struct sysctlnode *congctl_node;
+	const struct sysctlnode *mslt_node;
+	const struct sysctlnode *vtw_node;
 #ifdef TCP_DEBUG
 	extern struct tcp_debug tcp_debug[TCP_NDEBUG];
 	extern int tcp_debx;
@@ -1677,6 +1700,12 @@ sysctl_net_inet_tcp_setup2(struct sysctllog **clog, int pf, const char *pfname,
 		       SYSCTL_DESCR("Lower limit for TCP maximum segment size"),
 		       NULL, 0, &tcp_minmss, 0,
 		       CTL_NET, pf, IPPROTO_TCP, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "msl",
+		       SYSCTL_DESCR("Maximum Segment Life"),
+		       NULL, 0, &tcp_msl, 0,
+		       CTL_NET, pf, IPPROTO_TCP, TCPCTL_MSL, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "syn_cache_limit",
@@ -1959,9 +1988,16 @@ sysctl_net_inet_tcp_setup2(struct sysctllog **clog, int pf, const char *pfname,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "stats",
 		       SYSCTL_DESCR("TCP statistics"),
-		       NULL, 0, &tcpstat, sizeof(tcpstat),
+		       sysctl_net_inet_tcp_stats, 0, NULL, 0,
 		       CTL_NET, pf, IPPROTO_TCP, TCPCTL_STATS,
 		       CTL_EOL);
+        sysctl_createv(clog, 0, NULL, NULL,
+                       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+                       CTLTYPE_INT, "local_by_rtt",
+                       SYSCTL_DESCR("Use RTT estimator to decide which hosts "
+				    "are local"),
+		       NULL, 0, &tcp_rttlocal, 0,
+		       CTL_NET, pf, IPPROTO_TCP, CTL_CREATE, CTL_EOL);
 #ifdef TCP_DEBUG
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
@@ -2012,23 +2048,69 @@ sysctl_net_inet_tcp_setup2(struct sysctllog **clog, int pf, const char *pfname,
 		       CTLTYPE_INT, "aggressive",
 		       SYSCTL_DESCR("1: L=2*SMSS 0: L=1*SMSS"),
 		       NULL, 0, &tcp_abc_aggressive, 0, CTL_CREATE, CTL_EOL);
+
+	/* MSL tuning subtree */
+
+	sysctl_createv(clog, 0, NULL, &mslt_node,
+		       CTLFLAG_PERMANENT, CTLTYPE_NODE, "mslt",
+		       SYSCTL_DESCR("MSL Tuning for TIME_WAIT truncation"),
+		       NULL, 0, NULL, 0,
+		       CTL_NET, pf, IPPROTO_TCP, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &mslt_node, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "enable",
+		       SYSCTL_DESCR("Enable TIME_WAIT truncation"),
+		       NULL, 0, &tcp_msl_enable, 0, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &mslt_node, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "loopback",
+		       SYSCTL_DESCR("MSL value to use for loopback connections"),
+		       NULL, 0, &tcp_msl_loop, 0, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &mslt_node, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "local",
+		       SYSCTL_DESCR("MSL value to use for local connections"),
+		       NULL, 0, &tcp_msl_local, 0, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &mslt_node, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "remote",
+		       SYSCTL_DESCR("MSL value to use for remote connections"),
+		       NULL, 0, &tcp_msl_remote, 0, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &mslt_node, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "remote_threshold",
+		       SYSCTL_DESCR("RTT estimate value to promote local to remote"), 
+		       NULL, 0, &tcp_msl_remote_threshold, 0, CTL_CREATE, CTL_EOL);
+
+	/* vestigial TIME_WAIT tuning subtree */
+
+	sysctl_createv(clog, 0, NULL, &vtw_node,
+		       CTLFLAG_PERMANENT, CTLTYPE_NODE, "vtw",
+		       SYSCTL_DESCR("Tuning for Vestigial TIME_WAIT"),
+		       NULL, 0, NULL, 0,
+		       CTL_NET, pf, IPPROTO_TCP, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &vtw_node, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "enable",
+		       SYSCTL_DESCR("Enable Vestigial TIME_WAIT"),
+		       NULL, 0,
+	               (pf == AF_INET) ? &tcp4_vtw_enable : &tcp6_vtw_enable,
+		       0, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, &vtw_node, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READONLY,
+		       CTLTYPE_INT, "entries",
+		       SYSCTL_DESCR("Maximum number of vestigial TIME_WAIT entries"),
+		       NULL, 0, &tcp_vtw_entries, 0, CTL_CREATE, CTL_EOL);
 }
 
-/*
- * Sysctl for tcp variables.
- */
+void
+tcp_usrreq_init(void)
+{
+
 #ifdef INET
-SYSCTL_SETUP(sysctl_net_inet_tcp_setup, "sysctl net.inet.tcp subtree setup")
-{
-
-	sysctl_net_inet_tcp_setup2(clog, PF_INET, "inet", "tcp");
-}
-#endif /* INET */
-
+	sysctl_net_inet_tcp_setup2(NULL, PF_INET, "inet", "tcp");
+#endif
 #ifdef INET6
-SYSCTL_SETUP(sysctl_net_inet6_tcp6_setup, "sysctl net.inet6.tcp6 subtree setup")
-{
-
-	sysctl_net_inet_tcp_setup2(clog, PF_INET6, "inet6", "tcp6");
+	sysctl_net_inet_tcp_setup2(NULL, PF_INET6, "inet6", "tcp6");
+#endif
 }
-#endif /* INET6 */

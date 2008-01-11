@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_and.S,v 1.3 2007/12/22 23:19:40 mrg Exp $	*/
+/*	$NetBSD: atomic_and.S,v 1.6 2008/05/25 15:56:12 chs Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
 
 	.text
 
-ENTRY_NOPROFILE(_atomic_and_32)
+ENTRY(_atomic_and_32)
 	ld	[%o0], %o2
 1:	and	%o1, %o2, %o3
 	cas	[%o0], %o2, %o3
@@ -58,12 +51,12 @@ STRONG_ALIAS(_atomic_and_32_nv,_atomic_and_32)
 ATOMIC_OP_ALIAS(atomic_and_uint_nv,_atomic_and_32)
 STRONG_ALIAS(_atomic_and_uint_nv,_atomic_and_32)
 
-ENTRY_NOPROFILE(_atomic_and_64)
+ENTRY(_atomic_and_64)
 	ldx	[%o0], %o2
 1:	and	%o1, %o2, %o3
 	casx	[%o0], %o2, %o3
 	cmp	%o2, %o3
-	bne,a,pn %icc, 1b
+	bne,a,pn %xcc, 1b
 	 mov	%o3, %o2
 	retl
 	 and	%o1, %o2, %o0

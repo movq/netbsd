@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_mkdb.c,v 1.24 2007/12/15 19:44:55 perry Exp $	*/
+/*	$NetBSD: dev_mkdb.c,v 1.27 2009/04/15 01:01:06 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)dev_mkdb.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: dev_mkdb.c,v 1.24 2007/12/15 19:44:55 perry Exp $");
+__RCSID("$NetBSD: dev_mkdb.c,v 1.27 2009/04/15 01:01:06 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -138,7 +138,7 @@ main(int argc, char **argv)
 			errx(1, "dbname too long");
 	} else {
 		if (snprintf(dbname, sizeof(dbname), "%sdev.db",
-		    _PATH_VARRUN) >= sizeof(dbname))
+		    _PATH_VARRUN) >= (int)sizeof(dbname))
 			errx(1, "dbname too long");
 	}
 	/* 
@@ -155,7 +155,7 @@ main(int argc, char **argv)
 	do {
 		(void)gettimeofday(&tv, NULL);
 		(void)snprintf(q, sizeof(dbtmp) - (q - dbtmp), 
-		    "%ld.tmp", tv.tv_usec);
+		    "%ld.tmp", (long)tv.tv_usec);
 		db = dbopen(dbtmp, O_CREAT|O_EXCL|O_EXLOCK|O_RDWR|O_TRUNC,
 		    S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH, DB_HASH, &openinfo);
 	} while (!db && (errno == EEXIST));

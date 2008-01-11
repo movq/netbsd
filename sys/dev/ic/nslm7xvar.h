@@ -1,4 +1,4 @@
-/*	$NetBSD: nslm7xvar.h,v 1.23 2007/11/16 08:00:14 xtraeme Exp $ */
+/*	$NetBSD: nslm7xvar.h,v 1.27 2010/02/08 21:42:01 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -94,6 +87,7 @@
 
 /* Bank 0 regs */
 #define WB_BANK0_CHIPID	0x58	/* Chip ID */
+#define WB_BANK0_RESVD1	0x59	/* Resvd, bits 6-4 select temp sensor mode */
 #define WB_BANK0_FAN45	0x5c	/* Fan 4/5 Divisor Control (W83791D only) */
 #define WB_BANK0_VBAT	0x5d	/* VBAT Monitor Control */
 #define WB_BANK0_FAN4	0xba	/* Fan 4 reading (W83791D only) */
@@ -158,10 +152,7 @@
 #define WB_MAX_SENSORS		19
 
 struct lm_softc {
-	struct	device sc_dev;
-
-	bus_space_tag_t	lm_iot;
-	bus_space_handle_t lm_ioh;
+	device_t sc_dev;
 
 	callout_t sc_callout;
 
@@ -190,6 +181,6 @@ struct lm_sensor {
 
 void 	lm_attach(struct lm_softc *);
 void	lm_detach(struct lm_softc *);
-int 	lm_probe(bus_space_tag_t, bus_space_handle_t);
+int 	lm_probe(struct lm_softc *);
 
 #endif /* _DEV_ISA_NSLM7XVAR_H_ */

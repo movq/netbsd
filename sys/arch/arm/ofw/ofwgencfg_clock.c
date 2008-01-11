@@ -1,4 +1,4 @@
-/*	$NetBSD: ofwgencfg_clock.c,v 1.7 2007/03/08 20:48:39 matt Exp $	*/
+/*	$NetBSD: ofwgencfg_clock.c,v 1.10 2009/03/18 10:22:24 cegger Exp $	*/
 
 /*
  * Copyright 1997
@@ -36,7 +36,7 @@
 /* Include header files */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwgencfg_clock.c,v 1.7 2007/03/08 20:48:39 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwgencfg_clock.c,v 1.10 2009/03/18 10:22:24 cegger Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -79,8 +79,7 @@ clockhandler(struct clockframe *frame)
  */
 
 int
-statclockhandler(frame)
-	struct clockframe *frame;
+statclockhandler(struct clockframe *frame)
 {
 
 	statclock(frame);
@@ -113,7 +112,7 @@ setstatclockrate(int arg)
  */
  
 void
-cpu_initclocks()
+cpu_initclocks(void)
 {
 	/*
 	 * Load timer 0 with count down value
@@ -135,50 +134,6 @@ cpu_initclocks()
 	}
 }
 
-
-/*
- * void microtime(struct timeval *tvp)
- *
- * Fill in the specified timeval struct with the current time
- * accurate to the microsecond.
- */
-
-void
-microtime(tvp)
-	struct timeval *tvp;
-{
-	int s;
-	static struct timeval oldtv;
-
-	s = splhigh();
-
-	/* Fill in the timeval struct */
-
-	*tvp = time;    
-
-	/* Make sure the micro seconds don't overflow. */
-
-	while (tvp->tv_usec >= 1000000) {
-		tvp->tv_usec -= 1000000;
-		++tvp->tv_sec;
-	}
-
-	/* Make sure the time has advanced. */
-
-	if (tvp->tv_sec == oldtv.tv_sec &&
-	    tvp->tv_usec <= oldtv.tv_usec) {
-		tvp->tv_usec = oldtv.tv_usec + 1;
-		if (tvp->tv_usec >= 1000000) {
-			tvp->tv_usec -= 1000000;
-			++tvp->tv_sec;
-		}
-	}
-	    
-
-	oldtv = *tvp;
-	(void)splx(s);		
-}
-
 /*
  * Estimated loop for n microseconds
  */
@@ -190,8 +145,7 @@ microtime(tvp)
 int delaycount = 50;
 
 void
-delay(n)
-	u_int n;
+delay(u_int n)
 {
 	u_int i;
 

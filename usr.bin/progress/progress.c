@@ -1,4 +1,4 @@
-/*	$NetBSD: progress.c,v 1.15 2007/06/06 17:49:14 briggs Exp $ */
+/*	$NetBSD: progress.c,v 1.18 2010/07/17 10:51:03 tron Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: progress.c,v 1.15 2007/06/06 17:49:14 briggs Exp $");
+__RCSID("$NetBSD: progress.c,v 1.18 2010/07/17 10:51:03 tron Exp $");
 #endif				/* not lint */
 
 #include <sys/types.h>
@@ -66,8 +63,17 @@ __RCSID("$NetBSD: progress.c,v 1.15 2007/06/06 17:49:14 briggs Exp $");
 				 * declared */
 #include "progressbar.h"
 
+static void broken_pipe(int unused);
 static void usage(void);
 int main(int, char *[]);
+
+static void
+broken_pipe(int unused)
+{
+	signal(SIGPIPE, SIG_DFL);
+	progressmeter(1);
+	kill(getpid(), SIGPIPE);
+}
 
 static void
 usage(void)
@@ -106,7 +112,7 @@ main(int argc, char *argv[])
 		switch (ch) {
 		case 'b':
 			buffersize = (size_t) strsuftoll("buffer size", optarg,
-			    0, SIZE_T_MAX);
+			    0, SSIZE_MAX);
 			break;
 		case 'e':
 			eflag++;
@@ -229,13 +235,17 @@ main(int argc, char *argv[])
 	}
 	close(outpipe[0]);
 
+	signal(SIGPIPE, broken_pipe);
 	progressmeter(-1);
+
 	while ((nr = read(fd, fb_buf, buffersize)) > 0)
 		for (off = 0; nr; nr -= nw, off += nw, bytes += nw)
 			if ((nw = write(outpipe[1], fb_buf + off,
-			    (size_t) nr)) < 0)
+			    (size_t) nr)) < 0) {
+				progressmeter(1);
 				err(1, "writing %u bytes to output pipe",
 							(unsigned) nr);
+			}
 	close(outpipe[1]);
 
 	gzipstat = 0;
@@ -266,6 +276,7 @@ main(int argc, char *argv[])
 	}
 
 	progressmeter(1);
+	signal(SIGPIPE, SIG_DFL);
 
 	free(fb_buf);
 

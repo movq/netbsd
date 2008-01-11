@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_emit.c,v 1.26 2007/03/04 06:03:32 christos Exp $	*/
+/*	$NetBSD: tp_emit.c,v 1.30 2009/04/18 14:58:06 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -72,7 +72,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_emit.c,v 1.26 2007/03/04 06:03:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_emit.c,v 1.30 2009/04/18 14:58:06 tsutsui Exp $");
 
 #include "opt_iso.h"
 
@@ -191,7 +191,7 @@ tp_emit(
 			m->m_nextpkt = NULL;
 			m->m_data = m->m_pktdat;
 			m->m_flags = M_PKTHDR;
-			bzero(&m->m_pkthdr, sizeof(m->m_pkthdr));
+			memset(&m->m_pkthdr, 0, sizeof(m->m_pkthdr));
 		}
 	} else {
 		MGETHDR(m, M_DONTWAIT, TPMT_TPHDR);
@@ -207,7 +207,7 @@ tp_emit(
 	m->m_nextpkt = NULL;
 
 	hdr = mtod(m, struct tpdu *);
-	bzero((void *) hdr, sizeof(struct tpdu));
+	memset((void *) hdr, 0, sizeof(struct tpdu));
 
 	{
 		hdr->tpdu_type = dutype;
@@ -256,13 +256,6 @@ tp_emit(
 					tpcb->tp_sent_lcdt = tpcb->tp_lcredit;
 					hdr->tpdu_cdt = tpcb->tp_lcredit;
 				} else {
-#ifdef TPCONS
-					if (tpcb->tp_netservice == ISO_CONS) {
-						struct isopcb  *isop = (struct isopcb *) tpcb->tp_npcb;
-						struct pklcd   *lcp = (struct pklcd *) (isop->isop_chan);
-						lcp->lcd_flags &= ~X25_DG_CIRCUIT;
-					}
-#endif
 					hdr->tpdu_cdt = 0;
 				}
 				hdr->tpdu_CCclass = tp_mask_to_num(tpcb->tp_class);
@@ -650,9 +643,9 @@ tp_emit(
 				subseq = htons(tpcb->tp_r_subseq);
 				fcredit = htons(tpcb->tp_fcredit);
 
-				bcopy((void *) & lwe, (void *) & bogus[0], sizeof(SeqNum));
-				bcopy((void *) & subseq, (void *) & bogus[2], sizeof(u_short));
-				bcopy((void *) & fcredit, (void *) & bogus[3], sizeof(u_short));
+				memcpy((void *) & bogus[0], (void *) & lwe, sizeof(SeqNum));
+				memcpy((void *) & bogus[2], (void *) & subseq, sizeof(u_short));
+				memcpy((void *) & bogus[3], (void *) & fcredit, sizeof(u_short));
 
 #ifdef TPPT
 				if (tp_traceflags[D_ACKSEND]) {
@@ -1044,31 +1037,8 @@ tp_error_emit(
 #endif
 	}
 	if (cons_channel) {
-#ifdef TPCONS
-		struct pklcd   *lcp = (struct pklcd *) cons_channel;
-#ifdef notdef
-		struct isopcb  *isop = (struct isopcb *) lcp->lcd_upnext;
-#endif
-		tpcons_output_dg(m, datalen, cons_channel);
-#ifdef notdef
-		if (tpcb == 0) iso_pcbdetach(isop);
-#endif
-		/*
-		 * but other side may want to try again over same VC, so,
-		 * we'll depend on him closing it, but in case it gets
-		 * forgotten we'll mark it for garbage collection
-		 */
-		lcp->lcd_flags |= X25_DG_CIRCUIT;
-#ifdef ARGO_DEBUG
-		if (argo_debug[D_ERROR_EMIT]) {
-			printf("OUTPUT: dutype %#x channel %p\n",
-			       dutype, cons_channel);
-		}
-#endif
-#else
 		printf("TP panic! cons channel %p but not cons configured\n",
 		       cons_channel);
-#endif
 		return 0;
 	} else if (tpcb) {
 

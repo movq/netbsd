@@ -1,4 +1,4 @@
-/* $NetBSD: common.h,v 1.12 2006/05/18 17:54:19 christos Exp $ */
+/* $NetBSD: common.h,v 1.15 2011/03/07 05:09:09 joerg Exp $ */
 
 /*
  * Copyright (c) 1995 Christopher G. Demetriou
@@ -53,7 +53,7 @@
 typedef void Obj_Entry;
 #endif
 
-extern int	__syscall(quad_t, ...);
+extern quad_t	__syscall(quad_t, ...);
 #define	_exit(v)	__syscall(SYS_exit, (v))
 #define	write(fd, s, n)	__syscall(SYS_write, (fd), (s), (n))
 
@@ -71,6 +71,7 @@ struct ps_strings *__ps_strings = 0;
 
 extern void	_init(void);
 extern void	_fini(void);
+extern void	_libc_init(void);
 
 #ifdef DYNAMIC
 void	_rtld_setup(void (*)(void), const Obj_Entry *obj);
@@ -81,7 +82,7 @@ void	_rtld_setup(void (*)(void), const Obj_Entry *obj);
  * if we happen to be compiling without -static but with without any
  * shared libs present, things will still work.
  */
-extern int _DYNAMIC __weak_reference(_DYNAMIC);
+__weakref_visible int rtld_DYNAMIC __weak_reference(_DYNAMIC);
 #endif /* DYNAMIC */
 
 #ifdef MCRT0

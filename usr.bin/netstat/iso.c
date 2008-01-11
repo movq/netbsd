@@ -1,4 +1,4 @@
-/*	$NetBSD: iso.c,v 1.27 2007/02/18 01:56:17 hubertf Exp $	*/
+/*	$NetBSD: iso.c,v 1.32 2009/04/12 16:08:37 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)iso.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: iso.c,v 1.27 2007/02/18 01:56:17 hubertf Exp $");
+__RCSID("$NetBSD: iso.c,v 1.32 2009/04/12 16:08:37 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -95,10 +95,6 @@ SOFTWARE.
 #include <netiso/iso_pcb.h>
 #include <netiso/cltp_var.h>
 #include <netiso/cons.h>
-#ifdef IncStat
-#undef IncStat
-#endif
-#include <netiso/cons_pcb.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <kvm.h>
@@ -110,8 +106,8 @@ SOFTWARE.
 
 static void tprintstat __P((struct tp_stat *, int));
 static void isonetprint __P((struct sockaddr_iso *, int));
-static void hexprint __P((int, const char *, char *));
-extern void inetprint __P((struct in_addr *, int, char *));
+static void hexprint __P((int, const char *, const char *));
+extern void inetprint __P((struct in_addr *, u_int16_t, const char *, int));
 
 /*
  *	Dump esis stats
@@ -119,7 +115,7 @@ extern void inetprint __P((struct in_addr *, int, char *));
 void
 esis_stats(off, name)
 	u_long	off;
-	char	*name;
+	const char	*name;
 {
 	struct esis_stat esis_stat;
 
@@ -152,7 +148,7 @@ esis_stats(off, name)
 void
 clnp_stats(off, name)
 	u_long off;
-	char *name;
+	const char *name;
 {
 	struct clnp_stat clnp_stat;
 
@@ -192,7 +188,7 @@ clnp_stats(off, name)
 void
 cltp_stats(off, name)
 	u_long off;
-	char *name;
+	const char *name;
 {
 	struct cltpstat cltpstat;
 
@@ -234,7 +230,7 @@ static	int first = 1;
 void
 iso_protopr(off, name)
 	u_long off;
-	char *name;
+	const char *name;
 {
 	struct isopcb cb;
 	struct isopcb *prev, *next;
@@ -325,9 +321,9 @@ iso_protopr1(kern_addr, istp)
 void
 tp_protopr(off, name)
 	u_long off;
-	char *name;
+	const char *name;
 {
-	extern char *tp_sstring[];	/* from sys/netiso/tp_astring.c */
+	extern const char * const tp_sstring[];	/* from sys/netiso/tp_astring.c */
 	struct tp_ref *tpr, *tpr_base;
 	struct tp_refinfo tpkerninfo;
 	int size;
@@ -376,14 +372,14 @@ tp_inproto(pcb)
 	struct inpcb inpcb;
 
 	kget(tpcb.tp_npcb, inpcb);
-	if (!aflag && inet_lnaof(inpcb.inp_laddr) == INADDR_ANY)
+	if (!aflag && inet_lnaof(inpcb.inp_faddr) == INADDR_ANY)
 		return;
 	if (Aflag)
 		printf("%8lx ", pcb);
 	printf("%-5.5s %6ld %6ld ", "tpip",
 	    sockb.so_rcv.sb_cc, sockb.so_snd.sb_cc);
-	inetprint(&inpcb.inp_laddr, inpcb.inp_lport, "tp");
-	inetprint(&inpcb.inp_faddr, inpcb.inp_fport, "tp");
+	inetprint(&inpcb.inp_laddr, inpcb.inp_lport, "tp", 1);
+	inetprint(&inpcb.inp_faddr, inpcb.inp_fport, "tp", 1);
 }
 
 /*
@@ -557,7 +553,7 @@ struct	tp_stat tp_stat;
 void
 tp_stats(off, name)
 	u_long off;
-	caddr_t name;
+	const char *name;
 {
 
 	if (off == 0) {
@@ -571,7 +567,7 @@ tp_stats(off, name)
 
 struct tpstatpr {
 	size_t off;
-	char *text;
+	const char *text;
 };
 
 #define o(f) offsetof(struct tp_stat, f)
@@ -653,7 +649,7 @@ tprintstat(s, indent)
 {
 	int j, tpfirst, tpfirst2;
 
-	static char *rttname[]= {
+	static const char *rttname[]= {
 		"~LOCAL, PDN",
 		"~LOCAL,~PDN",
 		" LOCAL,~PDN",
@@ -856,9 +852,9 @@ static void
 hexprint(n, buf, delim)
 	int n;
 	const char *buf;
-	char *delim;
+	const char *delim;
 {
-	u_char *in = (u_char *)buf, *top = in + n;
+	const u_char *in = (const u_char *)buf, *top = in + n;
 	char *out = obuf;
 	int i;
 

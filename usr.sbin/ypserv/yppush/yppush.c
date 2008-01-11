@@ -1,7 +1,6 @@
-/*	$NetBSD: yppush.c,v 1.19 2004/10/30 16:01:48 dsl Exp $	*/
+/*	$NetBSD: yppush.c,v 1.23 2011/02/01 20:59:41 chuck Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor
  * All rights reserved.
  *
@@ -13,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +27,7 @@
 
 /*
  * yppush
- * author: Chuck Cranor <chuck@ccrc.wustl.edu>
+ * author: Chuck Cranor <chuck@netbsd>
  * date: 05-Nov-97
  *
  * notes: this is a full rewrite of Mats O Jansson <moj@stacken.kth.se>'s
@@ -45,7 +42,6 @@
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,7 +110,7 @@ main(int argc, char *argv[])
 	const char *cp;
 	char   *master;
 	DBM    *ypdb;
-	datum   datum;
+	datum   dat;
 	CLIENT *ypserv;
 	struct timeval tv;
 	enum clnt_stat retval;
@@ -175,20 +171,20 @@ main(int argc, char *argv[])
          * now open the database so we can extract "order number"
          * (i.e. timestamp) of the map.
          */
-	ypdb = ypdb_open(ypi.map, 0, O_RDONLY);
+	ypdb = ypdb_open(ypi.map);
 	if (ypdb == NULL)
 		err(1, "ypdb_open %s/%s/%s", YP_DB_PATH, ypi.ourdomain,
 		    ypi.map);
-	datum.dptr = YP_LAST_KEY;
-	datum.dsize = YP_LAST_LEN;
-	datum = ypdb_fetch(ypdb, datum);
-	if (datum.dptr == NULL)
+	dat.dptr = YP_LAST_KEY;
+	dat.dsize = YP_LAST_LEN;
+	dat = ypdb_fetch(ypdb, dat);
+	if (dat.dptr == NULL)
 		errx(1,
 		    "unable to fetch %s key: check database with 'makedbm -u'",
 		    YP_LAST_KEY);
 	ypi.order = 0;
-	cp = datum.dptr;
-	while (cp < datum.dptr + datum.dsize) {
+	cp = dat.dptr;
+	while (cp < dat.dptr + dat.dsize) {
 		if (!isdigit((unsigned char)*cp))
 			errx(1,
 		    "invalid order number: check database with 'makedbm -u'");

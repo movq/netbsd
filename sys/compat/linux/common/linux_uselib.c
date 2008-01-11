@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_uselib.c,v 1.26 2007/12/20 23:02:57 dsl Exp $	*/
+/*	$NetBSD: linux_uselib.c,v 1.30 2009/08/28 01:39:03 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_uselib.c,v 1.26 2007/12/20 23:02:57 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_uselib.c,v 1.30 2009/08/28 01:39:03 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_uselib.c,v 1.26 2007/12/20 23:02:57 dsl Exp $"
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/exec.h>
-#include <sys/exec_elf.h>
+#include <sys/exec_aout.h>
 
 #include <sys/mman.h>
 #include <sys/syscallargs.h>
@@ -96,20 +89,16 @@ linux_sys_uselib(struct lwp *l, const struct linux_sys_uselib_args *uap, registe
 		syscallarg(const char *) path;
 	} */
 	long bsize, dsize, tsize, taddr, baddr, daddr;
-	struct nameidata ni;
 	struct vnode *vp;
 	struct exec hdr;
 	struct exec_vmcmd_set vcset;
 	int i, magic, error;
 	size_t rem;
 
-	NDINIT(&ni, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG(uap, path));
-
-	if ((error = namei(&ni)))
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
 		return error;
-
-	vp = ni.ni_vp;
 
 	if ((error = vn_rdwr(UIO_READ, vp, (void *) &hdr, LINUX_AOUT_HDR_SIZE,
 			     0, UIO_SYSSPACE, IO_NODELOCKED, l->l_cred,

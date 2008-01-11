@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.15 2007/05/10 23:22:31 dogcow Exp $
+#	$NetBSD: Makefile,v 1.20 2010/02/11 09:06:49 roy Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -18,12 +18,12 @@ MTREECONF=	${DISTRIBDIR}/common/mtree.common
 IMAGEENDIAN=	be
 MAKEDEVTARGETS=	minimal
 IMAGEDEPENDS=	${CRUNCHBIN} \
-		dot.profile termcap.src \
+		dot.profile \
 		${DESTDIR}/usr/mdec/installboot \
 		${DESTDIR}/usr/mdec/boot ${DESTDIR}/usr/mdec/bootxx_ffs \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
-		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols \
-		${NETBSDSRCDIR}/distrib/common/services
+		${NETBSDSRCDIR}/etc/netconfig ${DISTRIBDIR}/common/protocols \
+		${DISTRIBDIR}/common/services
 
 IMAGETAR_RELEASEDIR=	installation/netboot
 

@@ -1,27 +1,33 @@
-#	$NetBSD: files.usb,v 1.81 2007/09/07 20:17:38 plunky Exp $
+#	$NetBSD: files.usb,v 1.105 2011/03/20 17:54:03 tsutsui Exp $
 #
 # Config file and device description for machine-independent USB code.
 # Included by ports that need it.  Ports that use it must provide
 # their own "major" declarations for the appropriate devices.
 
 defflag	USBVERBOSE
+defflag	opt_usb.h	USB_FRAG_DMA_WORKAROUND
 
+defflag	opt_uvideo.h	UVIDEO_DEBUG
+
+define	usbroothubif { }
 define	usbdevif { [port = -1], [configuration = -1], [interface = -1],
 		   [vendor = -1], [product = -1], [release = -1] }
 define	usbifif { [port = -1], [configuration = -1], [interface = -1],
 		  [vendor = -1], [product = -1], [release = -1] }
 
-device	usb: usbdevif
+device	usb: usbroothubif
 attach	usb at usbus
 file	dev/usb/usb.c			usb			needs-flag
 file	dev/usb/usbdi.c			usb
 file	dev/usb/usbdi_util.c		usb
-file	dev/usb/usb_mem.c		usb
+file	dev/usb/usb_mem.c		usb & usb_dma
 file	dev/usb/usb_subr.c		usb
 file	dev/usb/usb_quirks.c		usb
+file	dev/usb/usb_verbose.c		usb & usbverbose
 
 # Hub driver
 device	uhub: usbdevif, usbifif
+attach	uhub at usbroothubif with uroothub
 attach	uhub at usbdevif
 file	dev/usb/uhub.c			usb
 
@@ -50,7 +56,6 @@ file	dev/usb/ucom.c			ucom | ucombus		needs-flag
 
 
 # Generic devices
-defflag UGEN_BULK_RA_WB
 device	ugen
 attach	ugen at usbdevif
 file	dev/usb/ugen.c			ugen			needs-flag
@@ -128,12 +133,42 @@ device	ubt: btbus, bluetooth
 attach	ubt at usbdevif
 file	dev/usb/ubt.c			ubt
 
+#
+# Capture devices
+#
 
+# Sony PLAYSTATION(R) Eye
+device	pseye: videobus
+attach	pseye at usbifif
+file	dev/usb/pseye.c			pseye
+
+# USB Video Class capture devices
+device	uvideo: videobus
+attach	uvideo at usbifif
+file	dev/usb/uvideo.c		uvideo
+
+# Auvitek AU0828
+device	auvitek: videobus, i2cexec, usbifif, au8522, xc5k
+attach	auvitek at usbdevif
+file	dev/usb/auvitek.c		auvitek
+file	dev/usb/auvitek_audio.c		auvitek
+file	dev/usb/auvitek_board.c		auvitek
+file	dev/usb/auvitek_i2c.c		auvitek
+file	dev/usb/auvitek_video.c		auvitek
+
+#
 # Misc
+#
+
 # Diamond Multimedia Rio 500
 device	urio
 attach	urio at usbdevif
 file	dev/usb/urio.c			urio			needs-flag
+
+# BlackBerries
+device	uberry
+attach	uberry at usbdevif
+file	dev/usb/uberry.c			uberry
 
 # Handspring Visor
 device	uvisor: ucombus
@@ -145,6 +180,13 @@ device	ugensa: ucombus
 attach	ugensa at usbdevif
 file	dev/usb/ugensa.c		ugensa
 
+# 3G Modem
+device	u3g: ucombus
+attach	u3g at usbifif
+device	u3ginit
+attach	u3ginit at usbdevif
+file	dev/usb/u3g.c			u3g | u3ginit
+
 # YAP phone firmware loader
 device	uyap: ezload
 attach	uyap at usbdevif
@@ -155,6 +197,10 @@ device	udsbr: radiodev
 attach	udsbr at usbdevif
 file	dev/usb/udsbr.c			udsbr
 
+# TEMPerHUM HID
+device	uthum: hid, sysmon_envsys
+attach	uthum at uhidbus
+file	dev/usb/uthum.c			uthum
 
 # Ethernet adapters
 # ADMtek AN986 Pegasus
@@ -197,6 +243,10 @@ device	udav: arp, ether, ifnet, mii, mii_phy
 attach	udav at usbdevif
 file	dev/usb/if_udav.c		udav
 
+# Atheros AR9170
+device	otus: arp, ether, firmload, ifnet, wlan
+attach	otus at usbdevif
+file	dev/usb/if_otus.c		otus
 
 # Serial drivers
 # Modems
@@ -221,15 +271,27 @@ device	umct: ucombus
 attach	umct at usbdevif
 file	dev/usb/umct.c			umct
 
+# MOSCHIP MCS7xxx serial driver
+device	moscom: ucombus
+attach	moscom at usbdevif
+file	dev/usb/moscom.c		moscom
+
 # SUNTAC Slipper U VS-10U driver
 device	uvscom: ucombus
 attach	uvscom at usbdevif
 file	dev/usb/uvscom.c		uvscom
 
 # Belkin & other serial driver
-device	ubsa: ucombus
+define	ubsa_common
+file	dev/usb/ubsa_common.c		ubsa_common
+device	ubsa: ucombus, ubsa_common
 attach	ubsa at usbdevif
 file	dev/usb/ubsa.c			ubsa
+
+# Huawei E220 3G/HSDPA modem (ubsa)
+device	uhmodem: ucombus, ubsa_common
+attach	uhmodem at usbifif
+file	dev/usb/uhmodem.c		uhmodem
 
 # iPAQ PDAs
 device  uipaq: ucombus
@@ -240,6 +302,11 @@ file    dev/usb/uipaq.c			uipaq
 device	ukyopon: ucombus, umodem_common
 attach	ukyopon at usbifif
 file	dev/usb/ukyopon.c		ukyopon
+
+# ArkMicroChips 3116 based serial (used with some Nokia USB cables too)
+device	uark: ucombus
+attach	uark at usbdevif
+file	dev/usb/uark.c		uark
 
 # Silicon Labs CP210x serial driver
 device	uslsa: ucombus
@@ -267,6 +334,11 @@ device	atu: ether, ifnet, arp, wlan
 attach	atu at usbdevif
 file	dev/usb/if_atu.c		atu
 
+# Intersil PrismGT
+device	upgt: ether, ifnet, arp, wlan, firmload
+attach	upgt at usbdevif
+file	dev/usb/if_upgt.c		upgt
+
 # Ralink Technology RT2500USB
 attach	ral at usbdevif with ural
 file	dev/usb/if_ural.c		ural
@@ -289,3 +361,18 @@ file	dev/usb/xboxcontroller.c	xboxcontroller
 device	zyd: ether, ifnet, arp, wlan, firmload
 attach	zyd at usbdevif
 file	dev/usb/if_zyd.c		zyd
+
+# DisplayLink DL-1x0/DL-1x5
+device	udl: wsemuldisplaydev, rasops16, edid, firmload
+attach	udl at usbdevif
+file	dev/usb/udl.c			udl
+
+# Wireless WAN modems from Option N.V.
+device	uhso: ifnet
+attach	uhso at usbdevif
+file	dev/usb/uhso.c			uhso
+
+# Maywa-denki/Kayac YUREX
+device	uyurex: hid
+attach	uyurex at uhidbus
+file	dev/usb/uyurex.c		uyurex

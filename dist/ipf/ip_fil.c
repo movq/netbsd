@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_fil.c,v 1.14 2007/06/16 10:52:24 martin Exp $	*/
+/*	$NetBSD: ip_fil.c,v 1.19 2010/06/01 08:53:20 plunky Exp $	*/
 
 /*
  * Copyright (C) 1993-2001 by Darren Reed.
@@ -7,7 +7,7 @@
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)ip_fil.c	2.41 6/5/96 (C) 1993-2000 Darren Reed";
-static const char rcsid[] = "@(#)Id: ip_fil.c,v 2.133.2.16 2007/05/28 11:56:22 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ip_fil.c,v 2.133.2.21 2009/12/27 06:55:08 darrenr Exp";
 #endif
 
 #ifndef	SOLARIS
@@ -81,7 +81,7 @@ struct file;
 #include <sys/hashing.h>
 # endif
 #endif
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(SOLARIS2)
 # include "radix_ipf.h"
 #endif
 #ifndef __osf__
@@ -405,7 +405,7 @@ int v;
 		*addr++ = '\0';
 
 	for (ifpp = ifneta; ifpp && (ifp = *ifpp); ifpp++) {
-		COPYIFNAME(ifp, ifname);
+		COPYIFNAME(v, ifp, ifname);
 		if (!strcmp(name, ifname)) {
 			if (addr != NULL)
 				fr_setifpaddr(ifp, addr);
@@ -444,6 +444,9 @@ int v;
 	}
 	ifp = ifneta[nifs - 1];
 
+#if defined(__NetBSD__) || defined(__OpenBSD__) || defined(__FreeBSD__)
+	TAILQ_INIT(&ifp->if_addrlist);
+#endif
 #if (defined(NetBSD) && (NetBSD <= 1991011) && (NetBSD >= 199606)) || \
     (defined(OpenBSD) && (OpenBSD >= 199603)) || defined(linux) || \
     (defined(__FreeBSD__) && (__FreeBSD_version >= 501113))
@@ -706,7 +709,7 @@ fr_info_t *fin;
 /*                                                                          */
 /* Returns the next IPv4 ID to use for this packet.                         */
 /* ------------------------------------------------------------------------ */
-INLINE u_short fr_nextipid(fin)
+EXTERN_INLINE u_short fr_nextipid(fin)
 fr_info_t *fin;
 {
 	static u_short ipid = 0;
@@ -720,7 +723,7 @@ fr_info_t *fin;
 }
 
 
-INLINE void fr_checkv4sum(fin)
+EXTERN_INLINE void fr_checkv4sum(fin)
 fr_info_t *fin;
 {
 	if (fr_checkl4sum(fin) == -1)
@@ -729,7 +732,7 @@ fr_info_t *fin;
 
 
 #ifdef	USE_INET6
-INLINE void fr_checkv6sum(fin)
+EXTERN_INLINE void fr_checkv6sum(fin)
 fr_info_t *fin;
 {
 	if (fr_checkl4sum(fin) == -1)
@@ -812,4 +815,62 @@ struct in_addr *inp, *inpmask;
 int ipfsync()
 {
 	return 0;
+}
+
+
+/*
+ * This function is not meant to be random, rather just produce a
+ * sequence of numbers that isn't linear to show "randomness".
+ */
+u_32_t
+ipf_random()
+{
+	static int last = 0xa5a5a5a5;
+	static int calls = 0;
+	int number;
+
+	calls++;
+
+	/*
+	 * These are deliberately chosen to ensure that there is some
+	 * attempt to test whether the output covers the range in test n18.
+	 */
+	switch (calls)
+	{
+	case 1 :
+		number = 0;
+		break;
+	case 2 :
+		number = 4;
+		break;
+	case 3 :
+		number = 3999;
+		break;
+	case 4 :
+		number = 4000;
+		break;
+	case 5 :
+		number = 48999;
+		break;
+	case 6 :
+		number = 49000;
+		break;
+	default :
+		/*
+		 * So why not use srand/rand/srandom/random?  Because the
+		 * actual values returned vary from platform to platform
+		 * and what is needed is seomthing that is the same everywhere
+		 * so that regression tests can work.  Well, they could be
+		 * built on each platform to suit but that's a whole lot of
+		 * work for little gain given that we don't actually need
+		 * random numbers here, just a spread to test the NAT code
+		 * with.
+		 */
+		number = last;
+		last *= calls;
+		last++;
+		number ^= last;
+		break;
+	}
+	return number;
 }

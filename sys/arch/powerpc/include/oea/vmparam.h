@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,18 +67,11 @@
 #endif
 
 #ifndef	DFLDSIZ
-#define	DFLDSIZ			(128*1024*1024)		/* default data size */
+#define	DFLDSIZ			(256*1024*1024)		/* default data size */
 #endif
 
 #ifndef	DFLSSIZ
 #define	DFLSSIZ			(2*1024*1024)		/* default stack size */
-#endif
-
-/*
- * Default maximum amount of shared memory pages
- */
-#ifndef SHMMAXPGS
-#define	SHMMAXPGS		1024
 #endif
 
 /*
@@ -140,7 +126,7 @@
 	(((vsid) >> SR_VSID_SHFT) & VSID__KEYMASK)
 #define	VSID_TO_HASH(vsid) \
 	(((vsid) & SR_VSID) >> (SR_VSID_SHFT + VSID__HASHSHFT))
-#endif
+#endif /*0*/
 
 /*
  * Fixed segments
@@ -193,7 +179,6 @@
 #define	VM_PHYSSEG_MAX		16
 #endif
 #define	VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
-#define	VM_PHYSSEG_NOADD
 
 #ifndef VM_PHYS_SIZE
 #define	VM_PHYS_SIZE		(USRIOSIZE * PAGE_SIZE)
@@ -208,35 +193,5 @@
 #define	VM_FREELIST_FIRST256	1
 #define	VM_FREELIST_FIRST16	2
 #define	VM_FREELIST_MAX		3
-
-#ifndef _LOCORE
-
-LIST_HEAD(pvo_head, pvo_entry);
-
-#if __NetBSD_Version__ > 105180000
-#define	__HAVE_VM_PAGE_MD
-
-struct vm_page_md {
-	struct pvo_head mdpg_pvoh;
-	unsigned int mdpg_attrs; 
-};
-
-#define	VM_MDPAGE_INIT(pg) do {			\
-	LIST_INIT(&(pg)->mdpage.mdpg_pvoh);	\
-	(pg)->mdpage.mdpg_attrs = 0;		\
-} while (/*CONSTCOND*/0)
-
-#else
-
-#define	__HAVE_PMAP_PHYSSEG
-
-struct pmap_physseg {
-	struct pvo_head *pvoh;
-	char *attrs;
-};
-
-#endif
-
-#endif	/* _LOCORE */
 
 #endif /* _POWERPC_OEA_VMPARAM_H_ */

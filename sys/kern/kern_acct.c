@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_acct.c,v 1.81 2008/01/05 18:23:30 ad Exp $	*/
+/*	$NetBSD: kern_acct.c,v 1.92 2011/05/01 01:15:18 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.81 2008/01/05 18:23:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.92 2011/05/01 01:15:18 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -174,7 +174,7 @@ acct_chkfree(void)
 {
 	int error;
 	struct statvfs *sb;
-	int64_t bavail;
+	fsblkcnt_t bavail;
 
 	sb = kmem_alloc(sizeof(*sb), KM_SLEEP);
 	if (sb == NULL)
@@ -185,7 +185,11 @@ acct_chkfree(void)
 		return (error);
 	}
 
-	bavail = sb->f_bfree - sb->f_bresvd;
+	if (sb->f_bfree < sb->f_bresvd) {
+		bavail = 0;
+	} else {
+		bavail = sb->f_bfree - sb->f_bresvd;
+	}
 
 	switch (acct_state) {
 	case ACCT_SUSPENDED:
@@ -215,7 +219,7 @@ acct_stop(void)
 	KASSERT(rw_write_held(&acct_lock));
 
 	if (acct_vp != NULLVP && acct_vp->v_type != VBAD) {
-		error = vn_close(acct_vp, FWRITE, acct_cred, NULL);
+		error = vn_close(acct_vp, FWRITE, acct_cred);
 #ifdef DIAGNOSTIC
 		if (error != 0)
 			printf("acct_stop: failed to close, errno = %d\n",
@@ -290,6 +294,7 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 	/* {
 		syscallarg(const char *) path;
 	} */
+	struct pathbuf *pb;
 	struct nameidata nd;
 	int error;
 
@@ -305,17 +310,23 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 	if (SCARG(uap, path) != NULL) {
 		struct vattr va;
 		size_t pad;
-		NDINIT(&nd, LOOKUP, NOFOLLOW | TRYEMULROOT, UIO_USERSPACE,
-		    SCARG(uap, path));
-		if ((error = vn_open(&nd, FWRITE|O_APPEND, 0)) != 0)
-			return (error);
+
+		error = pathbuf_copyin(SCARG(uap, path), &pb);
+		if (error) {
+			return error;
+		}
+		NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, pb);
+		if ((error = vn_open(&nd, FWRITE|O_APPEND, 0)) != 0) {
+			pathbuf_destroy(pb);
+			return error;
+		}
 		if (nd.ni_vp->v_type != VREG) {
-			VOP_UNLOCK(nd.ni_vp, 0);
+			VOP_UNLOCK(nd.ni_vp);
 			error = EACCES;
 			goto bad;
 		}
 		if ((error = VOP_GETATTR(nd.ni_vp, &va, l->l_cred)) != 0) {
-			VOP_UNLOCK(nd.ni_vp, 0);
+			VOP_UNLOCK(nd.ni_vp);
 			goto bad;
 		}
 
@@ -326,15 +337,15 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 			    "%lu - incomplete record truncated\n",
 			    (unsigned long)sizeof(struct acct));
 #endif
-			VATTR_NULL(&va);
+			vattr_null(&va);
 			va.va_size = size;
 			error = VOP_SETATTR(nd.ni_vp, &va, l->l_cred);
 			if (error != 0) {
-				VOP_UNLOCK(nd.ni_vp, 0);
+				VOP_UNLOCK(nd.ni_vp);
 				goto bad;
 			}
 		}
-		VOP_UNLOCK(nd.ni_vp, 0);
+		VOP_UNLOCK(nd.ni_vp);
 	}
 
 	rw_enter(&acct_lock, RW_WRITER);
@@ -357,6 +368,8 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 	acct_cred = l->l_cred;
 	kauth_cred_hold(acct_cred);
 
+	pathbuf_destroy(pb);
+
 	error = acct_chkfree();		/* Initial guess. */
 	if (error != 0) {
 		acct_stop();
@@ -364,8 +377,8 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 	}
 
 	if (acct_dkwatcher == NULL) {
-		error = kthread_create(PRI_NONE, 0, NULL, acctwatch, NULL,
-		    &acct_dkwatcher, "acctwatch");
+		error = kthread_create(PRI_NONE, KTHREAD_MPSAFE, NULL,
+		    acctwatch, NULL, &acct_dkwatcher, "acctwatch");
 		if (error != 0)
 			acct_stop();
 	}
@@ -374,7 +387,8 @@ sys_acct(struct lwp *l, const struct sys_acct_args *uap, register_t *retval)
 	rw_exit(&acct_lock);
 	return (error);
  bad:
-	vn_close(nd.ni_vp, FWRITE, l->l_cred, l);
+	vn_close(nd.ni_vp, FWRITE, l->l_cred);
+	pathbuf_destroy(pb);
 	return error;
 }
 
@@ -409,7 +423,7 @@ acct_process(struct lwp *l)
 	 *
 	 * XXX We should think about the CPU limit, too.
 	 */
-	lim_privatise(p, false);
+	lim_privatise(p);
 	orlim = p->p_rlimit[RLIMIT_FSIZE];
 	/* Set current and max to avoid illegal values */
 	p->p_rlimit[RLIMIT_FSIZE].rlim_cur = RLIM_INFINITY;
@@ -423,9 +437,9 @@ acct_process(struct lwp *l)
 	memcpy(acct.ac_comm, p->p_comm, sizeof(acct.ac_comm));
 
 	/* (2) The amount of user and system time that was used */
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	calcru(p, &ut, &st, NULL, NULL);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	acct.ac_utime = encode_comp_t(ut.tv_sec, ut.tv_usec);
 	acct.ac_stime = encode_comp_t(st.tv_sec, st.tv_usec);
 
@@ -452,12 +466,12 @@ acct_process(struct lwp *l)
 	acct.ac_gid = kauth_cred_getgid(l->l_cred);
 
 	/* (7) The terminal from which the process was started */
-	mutex_enter(&proclist_lock);
+	mutex_enter(proc_lock);
 	if ((p->p_lflag & PL_CONTROLT) && p->p_pgrp->pg_session->s_ttyp)
 		acct.ac_tty = p->p_pgrp->pg_session->s_ttyp->t_dev;
 	else
 		acct.ac_tty = NODEV;
-	mutex_exit(&proclist_lock);
+	mutex_exit(proc_lock);
 
 	/* (8) The boolean flags that tell how the process terminated, etc. */
 	acct.ac_flag = p->p_acflag;
@@ -465,7 +479,6 @@ acct_process(struct lwp *l)
 	/*
 	 * Now, just write the accounting information to the file.
 	 */
-	VOP_LEASE(acct_vp, l->l_cred, LEASE_WRITE);
 	error = vn_rdwr(UIO_WRITE, acct_vp, (void *)&acct,
 	    sizeof(acct), (off_t)0, UIO_SYSSPACE, IO_APPEND|IO_UNIT,
 	    acct_cred, NULL, NULL);

@@ -1,9 +1,11 @@
-#	$NetBSD: Makefile,v 1.2 2006/11/09 20:07:15 christos Exp $
+#	$NetBSD: Makefile,v 1.5 2011/05/26 12:56:27 joerg Exp $
 
 REQUIRETOOLS=	yes
 NOLINT=		# defined
 NOPIC=		# defined
 NOPROFILE=	# defined
+
+CWARNFLAGS.clang+=	-Wno-parentheses
 
 .include <bsd.own.mk>
 
@@ -12,7 +14,7 @@ LIB=		supc++
 .if exists(${.CURDIR}/../libstdc++-v3_4/arch/${MACHINE_ARCH}/defs.mk) && ${MKGCC} != "no"
 .include "${.CURDIR}/../libstdc++-v3_4/arch/${MACHINE_ARCH}/defs.mk"
 
-SHLIB_MAJOR=	0
+SHLIB_MAJOR=	1
 SHLIB_MINOR=	0
 
 .include "${.CURDIR}/../libsupc++4/Makefile.common"
@@ -40,9 +42,4 @@ CLEANFILES+= unwind.h
 ${OBJS}: ${.CURDIR}/../libstdc++-v3_4/arch/${MACHINE_ARCH}/defs.mk
 .else
 .include <bsd.prog.mk> # do nothing
-.endif
-
-.if (${OBJECT_FMT} == "a.out")
-LDADD=	${DESTDIR}/usr/lib/c++rt0.o
-DPADD=	${DESTDIR}/usr/lib/c++rt0.o
 .endif

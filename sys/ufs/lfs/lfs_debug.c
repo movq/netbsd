@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_debug.c,v 1.36 2008/01/02 11:49:10 ad Exp $	*/
+/*	$NetBSD: lfs_debug.c,v 1.38 2009/07/19 04:16:23 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_debug.c,v 1.36 2008/01/02 11:49:10 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_debug.c,v 1.38 2009/07/19 04:16:23 dholland Exp $");
 
 #ifdef DEBUG
 
@@ -89,9 +82,11 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_debug.c,v 1.36 2008/01/02 11:49:10 ad Exp $");
 int lfs_lognum;
 struct lfs_log_entry lfs_log[LFS_LOGLENGTH];
 
-int lfs_bwrite_log(struct buf *bp, const char *file, int line)
+int
+lfs_bwrite_log(struct buf *bp, const char *file, int line)
 {
 	struct vop_bwrite_args a;
+
 	a.a_desc = VDESC(vop_bwrite);
 	a.a_bp = bp;
 
@@ -102,7 +97,8 @@ int lfs_bwrite_log(struct buf *bp, const char *file, int line)
 	return (VCALL(bp->b_vp, VOFFSET(vop_bwrite), &a));
 }
 
-void lfs_dumplog(void)
+void
+lfs_dumplog(void)
 {
 	int i;
 	const char *cp;

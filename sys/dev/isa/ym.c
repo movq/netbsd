@@ -1,4 +1,4 @@
-/*	$NetBSD: ym.c,v 1.32 2007/10/19 12:00:24 ad Exp $	*/
+/*	$NetBSD: ym.c,v 1.39 2010/02/24 22:37:59 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ym.c,v 1.32 2007/10/19 12:00:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ym.c,v 1.39 2010/02/24 22:37:59 dyoung Exp $");
 
 #include "mpu_ym.h"
 #include "opt_ym.h"
@@ -145,7 +138,7 @@ int	ymdebug = 0;
 #else
 #define DPRINTF(x)
 #endif
-#define DVNAME(softc)	((softc)->sc_ad1848.sc_ad1848.sc_dev.dv_xname)
+#define DVNAME(softc)	(device_xname(&(softc)->sc_ad1848.sc_ad1848.sc_dev))
 
 int	ym_getdev(void *, struct audio_device *);
 int	ym_mixer_set_port(void *, mixer_ctrl_t *);
@@ -155,7 +148,6 @@ int	ym_intr(void *);
 #ifndef AUDIO_NO_POWER_CTL
 static void ym_save_codec_regs(struct ym_softc *);
 static void ym_restore_codec_regs(struct ym_softc *);
-void	ym_power_hook(int, void *);
 int	ym_codec_power_ctl(void *, int);
 static void ym_chip_powerdown(struct ym_softc *);
 static void ym_chip_powerup(struct ym_softc *, int);
@@ -170,6 +162,8 @@ static void ym_hvol_to_master_gain(struct ym_softc *);
 static void ym_set_mic_gain(struct ym_softc *, int);
 static void ym_set_3d(struct ym_softc *, mixer_ctrl_t *,
 	struct ad1848_volume *, int);
+static bool ym_suspend(device_t, const pmf_qual_t *);
+static bool ym_resume(device_t, const pmf_qual_t *);
 
 
 const struct audio_hw_if ym_hw_if = {
@@ -303,7 +297,10 @@ ym_attach(struct ym_softc *sc)
 #endif
 	ym_powerdown_blocks(sc);
 
-	powerhook_establish(DVNAME(sc), ym_power_hook, sc);
+	if (!pmf_device_register(&ac->sc_dev, ym_suspend, ym_resume)) {
+		aprint_error_dev(&ac->sc_dev,
+		    "cannot set power mgmt handler\n");
+	}
 #endif
 
 	/* Set tone control to the default position. */
@@ -1017,11 +1014,13 @@ ym_query_devinfo(void *addr, mixer_devinfo_t *dip)
 int
 ym_intr(void *arg)
 {
-	struct ym_softc *sc;
+	struct ym_softc *sc = arg;
+#if NMPU_YM > 0
+	struct mpu_softc *sc_mpu = device_private(sc->sc_mpudev);
+#endif
 	u_int8_t ist;
 	int processed;
 
-	sc = arg;
 	/* OPL3 timer is currently unused. */
 	if (((ist = ym_read(sc, SA3_IRQA_STAT)) &
 	     ~(SA3_IRQ_STAT_SB|SA3_IRQ_STAT_OPL3)) == 0) {
@@ -1044,7 +1043,7 @@ ym_intr(void *arg)
 		 * MPU401 interrupt.
 		 */
 		if (ist & SA3_IRQ_STAT_MPU) {
-			mpu_intr(sc->sc_mpudev);
+			mpu_intr(sc_mpu);
 			processed = 1;
 		}
 #endif
@@ -1107,76 +1106,77 @@ ym_restore_codec_regs(struct ym_softc *sc)
  * Currently only the parameters, such as output gain, are restored.
  * DMA state should also be restored.  FIXME.
  */
-void
-ym_power_hook(int why, void *v)
+static bool
+ym_suspend(device_t self, const pmf_qual_t *qual)
 {
-	struct ym_softc *sc;
-	int i, xmax;
+	struct ym_softc *sc = device_private(self);
 	int s;
 
-	sc = v;
-	DPRINTF(("%s: ym_power_hook: why = %d\n", DVNAME(sc), why));
+	DPRINTF(("%s: ym_power_hook: suspend\n", DVNAME(sc)));
 
 	s = splaudio();
 
-	switch (why) {
-	case PWR_SUSPEND:
-	case PWR_STANDBY:
-		/*
-		 * suspending...
-		 */
-		callout_stop(&sc->sc_powerdown_ch);
-		if (sc->sc_turning_off)
-			ym_powerdown_blocks(sc);
+	/*
+	 * suspending...
+	 */
+	callout_stop(&sc->sc_powerdown_ch);
+	if (sc->sc_turning_off)
+		ym_powerdown_blocks(sc);
 
-		/*
-		 * Save CODEC registers.
-		 * Note that the registers read incorrect
-		 * if the CODEC part is in power-down mode.
-		 */
-		if (sc->sc_on_blocks & YM_POWER_CODEC_DIGITAL)
-			ym_save_codec_regs(sc);
+	/*
+	 * Save CODEC registers.
+	 * Note that the registers read incorrect
+	 * if the CODEC part is in power-down mode.
+	 */
+	if (sc->sc_on_blocks & YM_POWER_CODEC_DIGITAL)
+		ym_save_codec_regs(sc);
 
-		/*
-		 * Save OPL3-SA3 control registers and power-down the chip.
-		 * Note that the registers read incorrect
-		 * if the chip is in global power-down mode.
-		 */
-		sc->sc_sa3_scan[SA3_PWR_MNG] = ym_read(sc, SA3_PWR_MNG);
-		if (sc->sc_on_blocks)
-			ym_chip_powerdown(sc);
-		break;
-
-	case PWR_RESUME:
-		/*
-		 * resuming...
-		 */
-		ym_chip_powerup(sc, 1);
-		ym_init(sc);		/* power-on CODEC */
-
-		/* Restore control registers. */
-		xmax = YM_IS_SA3(sc)? YM_SAVE_REG_MAX_SA3 : YM_SAVE_REG_MAX_SA2;
-		for (i = SA3_PWR_MNG + 1; i <= xmax; i++) {
-			if (i == SA3_SB_SCAN || i == SA3_SB_SCAN_DATA ||
-			    i == SA3_DPWRDWN)
-				continue;
-			ym_write(sc, i, sc->sc_sa3_scan[i]);
-		}
-
-		/* Restore CODEC registers (including mixer). */
-		ym_restore_codec_regs(sc);
-
-		/* Restore global/digital power-down state. */
-		ym_write(sc, SA3_PWR_MNG, sc->sc_sa3_scan[SA3_PWR_MNG]);
-		if (YM_IS_SA3(sc))
-			ym_write(sc, SA3_DPWRDWN, sc->sc_sa3_scan[SA3_DPWRDWN]);
-		break;
-	case PWR_SOFTSUSPEND:
-	case PWR_SOFTSTANDBY:
-	case PWR_SOFTRESUME:
-		break;
-	}
+	/*
+	 * Save OPL3-SA3 control registers and power-down the chip.
+	 * Note that the registers read incorrect
+	 * if the chip is in global power-down mode.
+	 */
+	sc->sc_sa3_scan[SA3_PWR_MNG] = ym_read(sc, SA3_PWR_MNG);
+	if (sc->sc_on_blocks)
+		ym_chip_powerdown(sc);
 	splx(s);
+	return true;
+}
+
+static bool
+ym_resume(device_t self, const pmf_qual_t *qual)
+{
+	struct ym_softc *sc = device_private(self);
+	int i, xmax;
+	int s;
+
+	DPRINTF(("%s: ym_power_hook: resume\n", DVNAME(sc)));
+
+	s = splaudio();
+	/*
+	 * resuming...
+	 */
+	ym_chip_powerup(sc, 1);
+	ym_init(sc);		/* power-on CODEC */
+
+	/* Restore control registers. */
+	xmax = YM_IS_SA3(sc)? YM_SAVE_REG_MAX_SA3 : YM_SAVE_REG_MAX_SA2;
+	for (i = SA3_PWR_MNG + 1; i <= xmax; i++) {
+		if (i == SA3_SB_SCAN || i == SA3_SB_SCAN_DATA ||
+		    i == SA3_DPWRDWN)
+			continue;
+		ym_write(sc, i, sc->sc_sa3_scan[i]);
+	}
+
+	/* Restore CODEC registers (including mixer). */
+	ym_restore_codec_regs(sc);
+
+	/* Restore global/digital power-down state. */
+	ym_write(sc, SA3_PWR_MNG, sc->sc_sa3_scan[SA3_PWR_MNG]);
+	if (YM_IS_SA3(sc))
+		ym_write(sc, SA3_DPWRDWN, sc->sc_sa3_scan[SA3_DPWRDWN]);
+	splx(s);
+	return true;
 }
 
 int

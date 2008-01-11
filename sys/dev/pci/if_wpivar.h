@@ -1,4 +1,4 @@
-/*  $NetBSD: if_wpivar.h,v 1.11 2008/01/09 20:15:40 degroote Exp $    */
+/*  $NetBSD: if_wpivar.h,v 1.15 2010/01/19 22:07:02 pooka Exp $    */
 
 /*-
  * Copyright (c) 2006
@@ -102,6 +102,7 @@ struct wpi_rx_ring {
 	struct wpi_rx_data	data[WPI_RX_RING_COUNT];
 	struct wpi_rbuf		rbuf[WPI_RBUF_COUNT];
 	SLIST_HEAD(, wpi_rbuf)	freelist;
+	kmutex_t		freelist_mtx;
 	int			nb_free_entries;
 	int			cur;
 };
@@ -141,6 +142,7 @@ struct wpi_softc {
 
 	/* firmware DMA transfer */
 	struct wpi_dma_info	fw_dma;
+	bool			fw_used;
 
 	struct wpi_tx_ring	txq[4];
 	struct wpi_tx_ring	cmdq;
@@ -167,8 +169,7 @@ struct wpi_softc {
 
 	int			sc_tx_timer;
 
-#if NBPFILTER > 0
-	void *			sc_drvbpf;
+	struct bpf_if *		sc_drvbpf;
 
 	union {
 		struct wpi_rx_radiotap_header th;
@@ -183,7 +184,6 @@ struct wpi_softc {
 	} sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int			sc_txtap_len;
-#endif
 
 	bool		is_scanning;
 

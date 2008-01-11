@@ -1,4 +1,4 @@
-/* $NetBSD: macekbc.c,v 1.2 2007/04/14 15:11:39 jmcneill Exp $ */
+/* $NetBSD: macekbc.c,v 1.5 2011/02/20 07:59:51 matt Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: macekbc.c,v 1.2 2007/04/14 15:11:39 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: macekbc.c,v 1.5 2011/02/20 07:59:51 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -113,12 +107,6 @@ static struct pckbport_accessops macekbc_ops = {
 static int
 macekbc_match(struct device *parent, struct cfdata *match, void *aux)
 {
-	const char *consdev;
-
-	/* XXX don't bother attaching if we're using a serial console */
-	consdev = ARCBIOS->GetEnvironmentVariable("ConsoleIn");
-	if (consdev == NULL || strcmp(consdev, "keyboard()") != 0)
-		return 0;
 
 	return 1;
 }
@@ -130,6 +118,7 @@ macekbc_attach(struct device *parent, struct device *self, void *aux)
 	struct macekbc_softc *sc;
 	struct macekbc_internal *t;
 	int slot;
+	const char *consdev;
 
 	maa = aux;
 	sc = device_private(self);
@@ -170,6 +159,10 @@ macekbc_attach(struct device *parent, struct device *self, void *aux)
 	macekbc_reset(t, PCKBPORT_KBD_SLOT);
 	macekbc_reset(t, PCKBPORT_AUX_SLOT);
 
+	consdev = arcbios_GetEnvironmentVariable("ConsoleIn");
+	if (consdev != NULL && strcmp(consdev, "keyboard()") == 0)
+		pckbport_cnattach(t, &macekbc_ops, PCKBPORT_KBD_SLOT);
+
 	t->t_pt = pckbport_attach(t, &macekbc_ops);
 	if (pckbport_attach_slot(&sc->sc_dev, t->t_pt, PCKBPORT_KBD_SLOT))
 		t->t_present[PCKBPORT_KBD_SLOT] = 1;
@@ -206,7 +199,7 @@ macekbc_intr(void *opaque)
 		}
 	}
 
-	return rv; 
+	return rv;
 }
 
 static void

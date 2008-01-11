@@ -1,4 +1,4 @@
-/*	$NetBSD: uha_isa.c,v 1.32 2007/10/19 12:00:23 ad Exp $	*/
+/*	$NetBSD: uha_isa.c,v 1.38 2009/11/23 02:13:47 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uha_isa.c,v 1.32 2007/10/19 12:00:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uha_isa.c,v 1.38 2009/11/23 02:13:47 rmind Exp $");
 
 #include "opt_ddb.h"
 
@@ -46,7 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: uha_isa.c,v 1.32 2007/10/19 12:00:23 ad Exp $");
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -63,8 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: uha_isa.c,v 1.32 2007/10/19 12:00:23 ad Exp $");
 
 #define	UHA_ISA_IOSIZE	16
 
-int	uha_isa_probe(struct device *, struct cfdata *, void *);
-void	uha_isa_attach(struct device *, struct device *, void *);
+int	uha_isa_probe(device_t, cfdata_t, void *);
+void	uha_isa_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(uha_isa, sizeof(struct uha_softc),
     uha_isa_probe, uha_isa_attach, NULL, NULL);
@@ -85,8 +77,7 @@ void	u14_init(struct uha_softc *);
  * the actual probe routine to check it out.
  */
 int
-uha_isa_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+uha_isa_probe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -141,7 +132,7 @@ uha_isa_probe(struct device *parent, struct cfdata *match,
  * Attach all the sub-devices we can find
  */
 void
-uha_isa_attach(struct device *parent, struct device *self, void *aux)
+uha_isa_attach(device_t parent, device_t self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	struct uha_softc *sc = (void *)self;
@@ -155,7 +146,7 @@ uha_isa_attach(struct device *parent, struct device *self, void *aux)
 	printf("\n");
 
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, UHA_ISA_IOSIZE, 0, &ioh)) {
-		printf("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map i/o space\n");
 		return;
 	}
 
@@ -163,15 +154,14 @@ uha_isa_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ioh = ioh;
 	sc->sc_dmat = dmat;
 	if (!u14_find(iot, ioh, &upd)) {
-		printf("%s: u14_find failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "u14_find failed\n");
 		return;
 	}
 
 	if (upd.sc_drq != -1) {
 		sc->sc_dmaflags = 0;
 		if ((error = isa_dmacascade(ic, upd.sc_drq)) != 0) {
-			printf("%s: unable to cascade DRQ, error = %d\n",
-			    sc->sc_dev.dv_xname, error);
+			aprint_error_dev(&sc->sc_dev, "unable to cascade DRQ, error = %d\n", error);
 			return;
 		}
 	} else {
@@ -184,8 +174,7 @@ uha_isa_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = isa_intr_establish(ic, upd.sc_irq, IST_EDGE, IPL_BIO,
 	    u14_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt\n");
 		return;
 	}
 
@@ -201,10 +190,7 @@ uha_isa_attach(struct device *parent, struct device *self, void *aux)
  * Start the board, ready for normal operation
  */
 int
-u14_find(iot, ioh, sc)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	struct uha_probe_data *sc;
+u14_find(bus_space_tag_t iot, bus_space_handle_t ioh, struct uha_probe_data *sc)
 {
 	u_int16_t model, config;
 	int irq, drq;
@@ -290,9 +276,7 @@ u14_find(iot, ioh, sc)
  * Function to send a command out through a mailbox
  */
 void
-u14_start_mbox(sc, mscp)
-	struct uha_softc *sc;
-	struct uha_mscp *mscp;
+u14_start_mbox(struct uha_softc *sc, struct uha_mscp *mscp)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -304,8 +288,7 @@ u14_start_mbox(sc, mscp)
 		delay(100);
 	}
 	if (!spincount) {
-		printf("%s: uha_start_mbox, board not responding\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "uha_start_mbox, board not responding\n");
 		Debugger();
 	}
 
@@ -327,10 +310,7 @@ u14_start_mbox(sc, mscp)
  *	wait = timeout in msec
  */
 int
-u14_poll(sc, xs, count)
-	struct uha_softc *sc;
-	struct scsipi_xfer *xs;
-	int count;
+u14_poll(struct uha_softc *sc, struct scsipi_xfer *xs, int count)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
@@ -354,8 +334,7 @@ u14_poll(sc, xs, count)
  * Catch an interrupt from the adaptor
  */
 int
-u14_intr(arg)
-	void *arg;
+u14_intr(void *arg)
 {
 	struct uha_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -365,7 +344,7 @@ u14_intr(arg)
 	u_long mboxval;
 
 #ifdef	UHADEBUG
-	printf("%s: uhaintr ", sc->sc_dev.dv_xname);
+	printf("%s: uhaintr ", device_xname(&sc->sc_dev));
 #endif /*UHADEBUG */
 
 	if ((bus_space_read_1(iot, ioh, U14_SINT) & U14_SDIP) == 0)
@@ -391,7 +370,7 @@ u14_intr(arg)
 		mscp = uha_mscp_phys_kv(sc, mboxval);
 		if (!mscp) {
 			printf("%s: BAD MSCP RETURNED!\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(&sc->sc_dev));
 			continue;	/* whatever it was, it'll timeout */
 		}
 
@@ -404,8 +383,7 @@ u14_intr(arg)
 }
 
 void
-u14_init(sc)
-	struct uha_softc *sc;
+u14_init(struct uha_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;

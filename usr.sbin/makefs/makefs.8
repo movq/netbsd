@@ -1,4 +1,4 @@
-.\"	$NetBSD: makefs.8,v 1.29 2007/12/02 19:19:16 wiz Exp $
+.\"	$NetBSD: makefs.8,v 1.33 2011/05/22 21:51:39 christos Exp $
 .\"
 .\" Copyright (c) 2001-2003 Wasabi Systems, Inc.
 .\" All rights reserved.
@@ -33,7 +33,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 13, 2007
+.Dd May 22, 2011
 .Dt MAKEFS 8
 .Os
 .Sh NAME
@@ -277,6 +277,15 @@ version id.
 Allow multiple dots in a filename.
 .It Sy applicationid
 Application ID of the image.
+.It Sy archimedes
+Use the
+.Ql ARCHIMEDES
+extension to encode
+.Tn RISC OS
+metadata.
+.It Sy chrp-boot
+Write an MBR partition table to the image to allow older CHRP hardware to
+boot.
 .It Sy boot-load-segment
 Set load segment for the boot image.
 .It Sy bootimage
@@ -290,6 +299,8 @@ is one of
 .Ql macppc ,
 or
 .Ql powerpc .
+.It Sy generic-bootimage
+Load a generic boot image into the first 32K of the cd9660 image.
 .It Sy hard-disk-boot
 Boot image is a hard disk image.
 .It Sy keep-bad-images

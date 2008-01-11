@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.110 2007/12/31 15:32:02 ad Exp $
+# $NetBSD: GENERIC,v 1.123 2011/03/06 17:08:29 bouyer Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include 	"arch/next68k/conf/std.next68k"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.110 $"
+#ident 		"GENERIC-$Revision: 1.123 $"
 
 # Needs to be set per system.  i.e change these as you see fit
 maxusers	16
@@ -37,9 +37,7 @@ options 	SYSVSEM		# System V semaphores
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V shared memory
 options 	P1003_1B_SEMAPHORE	# POSIX semaphore support
-#options 	SHMMAXPGS=1024	# 1024 pages is the default
 
-options 	LKM		# loadable kernel modules
 options 	INSECURE	# disable kernel security level
 options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -82,7 +80,9 @@ options 	COMPAT_14	# NetBSD 1.4
 options 	COMPAT_15	# NetBSD 1.5
 options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_30	# NetBSD 3.0
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
 
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
@@ -107,17 +107,18 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system 	PORTAL		# portal filesystem (still experimental)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 options 	NFSSERVER	# nfs server support
-#options 	QUOTA		# FFS quotas
-#options 	SOFTDEP		# FFS soft updates support.
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
+options 	WAPBL		# File system journaling support - Experimental
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
@@ -140,6 +141,10 @@ options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
 options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
+options 	IPFILTER_LOG	# ipmon(8) log support
+options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
+#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
 #options 	ALTQ		# Manipulate network interfaces' output queues
@@ -228,7 +233,12 @@ uk*	at scsibus? target ? lun ?	# SCSI unknown
 
 
 # Memory-disk drivers
-pseudo-device	md		2
+pseudo-device	md		
+
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
 
 # Misc.
 pseudo-device	loop		1	# network loopback
@@ -264,12 +274,13 @@ pseudo-device	vnd			# paging to files
 # options	RF_INCLUDE_INTERDECLUSTER=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 pseudo-device	ccd		4	# concatenated disks
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device	putter			# for puffs and pud
 
 # Veriexec
 #

@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_fork.c,v 1.156 2008/01/07 23:51:06 elad Exp $	*/
+/*	$NetBSD: kern_fork.c,v 1.184 2011/05/14 18:50:07 rmind Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2001, 2004, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2001, 2004, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,16 +67,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.156 2008/01/07 23:51:06 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.184 2011/05/14 18:50:07 rmind Exp $");
 
 #include "opt_ktrace.h"
-#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/filedesc.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
@@ -99,8 +90,19 @@ __KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.156 2008/01/07 23:51:06 elad Exp $")
 #include <sys/kauth.h>
 #include <sys/atomic.h>
 #include <sys/syscallargs.h>
+#include <sys/uidinfo.h>
+#include <sys/sdt.h>
 
 #include <uvm/uvm_extern.h>
+
+/*
+ * DTrace SDT provider definitions
+ */
+SDT_PROBE_DEFINE(proc,,,create, 
+	    "struct proc *", NULL,	/* new process */
+	    "struct proc *", NULL,	/* parent process */
+	    "int", NULL,		/* flags */
+	    NULL, NULL, NULL, NULL);
 
 u_int	nprocs = 1;		/* process 0 */
 
@@ -215,15 +217,11 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	struct lwp	*l2;
 	int		count;
 	vaddr_t		uaddr;
-	bool		inmem;
-	int		tmp;
 	int		tnprocs;
 	int		error = 0;
 
 	p1 = l1->l_proc;
-	mutex_enter(&p1->p_mutex);
-	uid = kauth_cred_getuid(p1->p_cred);
-	mutex_exit(&p1->p_mutex);
+	uid = kauth_cred_getuid(l1->l_cred);
 	tnprocs = atomic_inc_uint_nv(&nprocs);
 
 	/*
@@ -233,7 +231,7 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	if (__predict_false(tnprocs >= maxproc))
 		error = -1;
 	else
-		error = kauth_authorize_process(p1->p_cred,
+		error = kauth_authorize_process(l1->l_cred,
 		    KAUTH_PROCESS_FORK, p1, KAUTH_ARG(tnprocs), NULL, NULL);
 
 	if (error) {
@@ -242,7 +240,7 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 		if (ratecheck(&lasttfm, &fork_tfmrate))
 			tablefull("proc", "increase kern.maxproc or NPROC");
 		if (forkfsleep)
-			(void)tsleep(&nprocs, PUSER, "forkmx", forkfsleep);
+			kpause("forkmx", false, forkfsleep, NULL);
 		return (EAGAIN);
 	}
 
@@ -250,22 +248,21 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	 * Enforce limits.
 	 */
 	count = chgproccnt(uid, 1);
-	if (__predict_false(count > p1->p_rlimit[RLIMIT_NPROC].rlim_cur)) {
+	if (kauth_authorize_generic(l1->l_cred, KAUTH_GENERIC_ISSUSER, NULL) !=
+	    0 && __predict_false(count > p1->p_rlimit[RLIMIT_NPROC].rlim_cur)) {
 		(void)chgproccnt(uid, -1);
 		atomic_dec_uint(&nprocs);
 		if (forkfsleep)
-			(void)tsleep(&nprocs, PUSER, "forkulim", forkfsleep);
+			kpause("forkulim", false, forkfsleep, NULL);
 		return (EAGAIN);
 	}
 
 	/*
 	 * Allocate virtual address space for the U-area now, while it
 	 * is still easy to abort the fork operation if we're out of
-	 * kernel virtual address space.  The actual U-area pages will
-	 * be allocated and wired in uvm_fork() if needed.
+	 * kernel virtual address space.
 	 */
-
-	inmem = uvm_uarea_alloc(&uaddr);
+	uaddr = uvm_uarea_alloc();
 	if (__predict_false(uaddr == 0)) {
 		(void)chgproccnt(uid, -1);
 		atomic_dec_uint(&nprocs);
@@ -298,12 +295,13 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	/*
 	 * Duplicate sub-structures as needed.
 	 * Increase reference counts on shared objects.
-	 * The p_stats and p_sigacts substructs are set in uvm_fork().
 	 * Inherit flags we want to keep.  The flags related to SIGCHLD
 	 * handling are important in order to keep a consistent behaviour
-	 * for the child after the fork.
+	 * for the child after the fork.  If we are a 32-bit process, the
+	 * child will be too.
 	 */
-	p2->p_flag = p1->p_flag & (PK_SUGID | PK_NOCLDWAIT | PK_CLDSIGIGN);
+	p2->p_flag =
+	    p1->p_flag & (PK_SUGID | PK_NOCLDWAIT | PK_CLDSIGIGN | PK_32);
 	p2->p_emul = p1->p_emul;
 	p2->p_execsw = p1->p_execsw;
 
@@ -316,14 +314,21 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 		p2->p_flag |= (PK_SYSTEM | PK_NOCLDWAIT);
 	}
 
-	/* XXX p_smutex can be IPL_VM except for audio drivers */
-	mutex_init(&p2->p_smutex, MUTEX_DEFAULT, IPL_SCHED);
 	mutex_init(&p2->p_stmutex, MUTEX_DEFAULT, IPL_HIGH);
 	mutex_init(&p2->p_auxlock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&p2->p_mutex, MUTEX_DEFAULT, IPL_NONE);
 	rw_init(&p2->p_reflock);
 	cv_init(&p2->p_waitcv, "wait");
 	cv_init(&p2->p_lwpcv, "lwpwait");
+
+	/*
+	 * Share a lock between the processes if they are to share signal
+	 * state: we must synchronize access to it.
+	 */
+	if (flags & FORK_SHARESIGS) {
+		p2->p_lock = p1->p_lock;
+		mutex_obj_hold(p1->p_lock);
+	} else
+		p2->p_lock = mutex_obj_alloc(MUTEX_DEFAULT, IPL_NONE);
 
 	kauth_proc_fork(p1, p2);
 
@@ -335,42 +340,41 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	/* bump references to the text vnode (for procfs) */
 	p2->p_textvp = p1->p_textvp;
 	if (p2->p_textvp)
-		VREF(p2->p_textvp);
+		vref(p2->p_textvp);
 
 	if (flags & FORK_SHAREFILES)
-		fdshare(p1, p2);
+		fd_share(p2);
 	else if (flags & FORK_CLEANFILES)
-		p2->p_fd = fdinit(p1);
+		p2->p_fd = fd_init(NULL);
 	else
-		p2->p_fd = fdcopy(p1);
+		p2->p_fd = fd_copy();
+
+	/* XXX racy */
+	p2->p_mqueue_cnt = p1->p_mqueue_cnt;
 
 	if (flags & FORK_SHARECWD)
-		cwdshare(p1, p2);
+		cwdshare(p2);
 	else
-		p2->p_cwdi = cwdinit(p1);
+		p2->p_cwdi = cwdinit();
 
 	/*
-	 * p_limit (rlimit stuff) is usually copy-on-write, so we just need
-	 * to bump pl_refcnt.
-	 * However in some cases (see compat irix, and plausibly from clone)
-	 * the parent and child share limits - in which case nothing else
-	 * must have a copy of the limits (PL_SHAREMOD is set).
+	 * Note: p_limit (rlimit stuff) is copy-on-write, so normally
+	 * we just need increase pl_refcnt.
 	 */
-	if (__predict_false(flags & FORK_SHARELIMIT))
-		lim_privatise(p1, 1);
 	p1_lim = p1->p_limit;
-	if (p1_lim->pl_flags & PL_WRITEABLE && !(flags & FORK_SHARELIMIT))
-		p2->p_limit = lim_copy(p1_lim);
-	else {
+	if (!p1_lim->pl_writeable) {
 		lim_addref(p1_lim);
 		p2->p_limit = p1_lim;
+	} else {
+		p2->p_limit = lim_copy(p1_lim);
 	}
 
-	p2->p_sflag = ((flags & FORK_PPWAIT) ? PS_PPWAIT : 0);
-	p2->p_lflag = 0;
+	p2->p_lflag = ((flags & FORK_PPWAIT) ? PL_PPWAIT : 0);
+	p2->p_sflag = 0;
 	p2->p_slflag = 0;
 	parent = (flags & FORK_NOWAIT) ? initproc : p1;
 	p2->p_pptr = parent;
+	p2->p_ppid = parent->p_pid;
 	LIST_INIT(&p2->p_children);
 
 	p2->p_aio = NULL;
@@ -393,11 +397,11 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	 * Create signal actions for the child process.
 	 */
 	p2->p_sigacts = sigactsinit(p1, flags & FORK_SHARESIGS);
-	mutex_enter(&p1->p_smutex);
+	mutex_enter(p1->p_lock);
 	p2->p_sflag |=
 	    (p1->p_sflag & (PS_STOPFORK | PS_STOPEXEC | PS_NOCLDSTOP));
 	sched_proc_fork(p1, p2);
-	mutex_exit(&p1->p_smutex);
+	mutex_exit(p1->p_lock);
 
 	p2->p_stflag = p1->p_stflag;
 
@@ -408,10 +412,24 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	p2->p_stats = pstatscopy(p1->p_stats);
 
 	/*
-	 * If emulation has process fork hook, call it now.
+	 * Set up the new process address space.
+	 */
+	uvm_proc_fork(p1, p2, (flags & FORK_SHAREVM) ? true : false);
+
+	/*
+	 * Finish creating the child process.
+	 * It will return through a different path later.
+	 */
+	lwp_create(l1, p2, uaddr, (flags & FORK_PPWAIT) ? LWP_VFORK : 0,
+	    stack, stacksize, (func != NULL) ? func : child_return, arg, &l2,
+	    l1->l_class);
+	lwp_setprivate(l2, l1->l_private);
+
+	/*
+	 * If emulation has a process fork hook, call it now.
 	 */
 	if (p2->p_emul->e_proc_fork)
-		(*p2->p_emul->e_proc_fork)(p2, p1, flags);
+		(*p2->p_emul->e_proc_fork)(p2, l1, flags);
 
 	/*
 	 * ...and finally, any other random fork hooks that subsystems
@@ -419,26 +437,13 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	 */
 	doforkhooks(p2, p1);
 
-	/*
-	 * This begins the section where we must prevent the parent
-	 * from being swapped.
-	 */
-	uvm_lwp_hold(l1);
-	uvm_proc_fork(p1, p2, (flags & FORK_SHAREVM) ? true : false);
-
-	/*
-	 * Finish creating the child process.
-	 * It will return through a different path later.
-	 */
-	lwp_create(l1, p2, uaddr, inmem, 0, stack, stacksize,
-	    (func != NULL) ? func : child_return, arg, &l2,
-	    l1->l_class);
+	SDT_PROBE(proc,,,create, p2, p1, flags, 0, 0);
 
 	/*
 	 * It's now safe for the scheduler and other processes to see the
 	 * child process.
 	 */
-	mutex_enter(&proclist_lock);
+	mutex_enter(proc_lock);
 
 	if (p1->p_session->s_ttyvp != NULL && p1->p_lflag & PL_CONTROLT)
 		p2->p_lflag |= PL_CONTROLT;
@@ -446,26 +451,13 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	LIST_INSERT_HEAD(&parent->p_children, p2, p_sibling);
 	p2->p_exitsig = exitsig;		/* signal for parent on exit */
 
-	mutex_enter(&proclist_mutex);
 	LIST_INSERT_AFTER(p1, p2, p_pglist);
-	mutex_exit(&proclist_mutex);
 	LIST_INSERT_HEAD(&allproc, p2, p_list);
 
-	mutex_exit(&proclist_lock);
-
+	p2->p_trace_enabled = trace_is_enabled(p2);
 #ifdef __HAVE_SYSCALL_INTERN
 	(*p2->p_emul->e_syscall_intern)(p2);
 #endif
-
-	/*
-	 * Now can be swapped.
-	 */
-	uvm_lwp_rele(l1);
-
-	/*
-	 * Notify any interested parties about the new process.
-	 */
-	KNOTE(&p1->p_klist, NOTE_FORK | p2->p_pid);
 
 	/*
 	 * Update stats now that we know the fork was successful.
@@ -486,35 +478,19 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 		p2->p_traceflag |= KTRFAC_TRC_EMUL;
 
 	/*
+	 * Notify any interested parties about the new process.
+	 */
+	if (!SLIST_EMPTY(&p1->p_klist)) {
+		mutex_exit(proc_lock);
+		KNOTE(&p1->p_klist, NOTE_FORK | p2->p_pid);
+		mutex_enter(proc_lock);
+	}
+
+	/*
 	 * Make child runnable, set start time, and add to run queue except
 	 * if the parent requested the child to start in SSTOP state.
 	 */
-	tmp = (p2->p_userret != NULL ? LW_WUSERRET : 0);
-	mutex_enter(&proclist_mutex);
-	mutex_enter(&p2->p_smutex);
-
-	getmicrotime(&p2->p_stats->p_start);
-	p2->p_acflag = AFORK;
-	if (p2->p_sflag & PS_STOPFORK) {
-		lwp_lock(l2);
-		p2->p_nrlwps = 0;
-		p2->p_stat = SSTOP;
-		p2->p_waited = 0;
-		p1->p_nstopchild++;
-		l2->l_stat = LSSTOP;
-		l2->l_flag |= tmp;
-		lwp_unlock(l2);
-	} else {
-		p2->p_nrlwps = 1;
-		p2->p_stat = SACTIVE;
-		lwp_lock(l2);
-		l2->l_stat = LSRUN;
-		l2->l_flag |= tmp;
-		sched_enqueue(l2, false);
-		lwp_unlock(l2);
-	}
-
-	mutex_exit(&proclist_mutex);
+	mutex_enter(p2->p_lock);
 
 	/*
 	 * Start profiling.
@@ -525,16 +501,37 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 		mutex_spin_exit(&p2->p_stmutex);
 	}
 
+	getmicrotime(&p2->p_stats->p_start);
+	p2->p_acflag = AFORK;
+	lwp_lock(l2);
+	KASSERT(p2->p_nrlwps == 1);
+	if (p2->p_sflag & PS_STOPFORK) {
+		struct schedstate_percpu *spc = &l2->l_cpu->ci_schedstate;
+		p2->p_nrlwps = 0;
+		p2->p_stat = SSTOP;
+		p2->p_waited = 0;
+		p1->p_nstopchild++;
+		l2->l_stat = LSSTOP;
+		KASSERT(l2->l_wchan == NULL);
+		lwp_unlock_to(l2, spc->spc_lwplock);
+	} else {
+		p2->p_nrlwps = 1;
+		p2->p_stat = SACTIVE;
+		l2->l_stat = LSRUN;
+		sched_enqueue(l2, false);
+		lwp_unlock(l2);
+	}
+	mutex_exit(p2->p_lock);
+
 	/*
 	 * Preserve synchronization semantics of vfork.  If waiting for
-	 * child to exec or exit, set PS_PPWAIT on child, and sleep on our
+	 * child to exec or exit, set PL_PPWAIT on child, and sleep on our
 	 * proc (in case of exit).
 	 */
-	if (flags & FORK_PPWAIT)
-		while (p2->p_sflag & PS_PPWAIT)
-			cv_wait(&p1->p_waitcv, &p2->p_smutex);
+	while (p2->p_lflag & PL_PPWAIT)
+		cv_wait(&p1->p_waitcv, proc_lock);
 
-	mutex_exit(&p2->p_smutex);
+	mutex_exit(proc_lock);
 
 	/*
 	 * Return child pid to parent process,

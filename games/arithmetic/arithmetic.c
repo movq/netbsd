@@ -1,4 +1,4 @@
-/*	$NetBSD: arithmetic.c,v 1.22 2007/12/15 19:44:38 perry Exp $	*/
+/*	$NetBSD: arithmetic.c,v 1.25 2009/08/27 00:21:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)arithmetic.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: arithmetic.c,v 1.22 2007/12/15 19:44:38 perry Exp $");
+__RCSID("$NetBSD: arithmetic.c,v 1.25 2009/08/27 00:21:45 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,22 +84,21 @@ __RCSID("$NetBSD: arithmetic.c,v 1.22 2007/12/15 19:44:38 perry Exp $");
 #include <time.h>
 #include <unistd.h>
 
-int	getrandom(int, int, int);
-void	intr(int) __dead;
-int	main(int, char *[]);
-int	opnum(int);
-void	penalise(int, int, int);
-int	problem(void);
-void	showstats(int);
-void	usage(void) __dead;
+static int	getrandom(int, int, int);
+static void	intr(int) __dead;
+static int	opnum(int);
+static void	penalise(int, int, int);
+static int	problem(void);
+static void	showstats(int);
+static void	usage(void) __dead;
 
-const char keylist[] = "+-x/";
-const char defaultkeys[] = "+-";
-const char *keys = defaultkeys;
-int nkeys = sizeof(defaultkeys) - 1;
-int rangemax = 10;
-int nright, nwrong;
-time_t qtime;
+static const char keylist[] = "+-x/";
+static const char defaultkeys[] = "+-";
+static const char *keys = defaultkeys;
+static int nkeys = sizeof(defaultkeys) - 1;
+static int rangemax = 10;
+static int nright, nwrong;
+static time_t qtime;
 #define	NQUESTS	20
 
 /*
@@ -110,9 +109,7 @@ time_t qtime;
  * so far are printed.
  */
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
 	int ch, cnt;
 
@@ -157,7 +154,7 @@ main(argc, argv)
 }
 
 /* Handle interrupt character.  Print score and exit. */
-void
+static void
 intr(dummy)
 	int dummy __unused;
 {
@@ -166,7 +163,7 @@ intr(dummy)
 }
 
 /* Print score.  Original `arithmetic' had a delay after printing it. */
-void
+static void
 showstats(bool_sigint)
 	int bool_sigint;
 {
@@ -192,7 +189,7 @@ showstats(bool_sigint)
  * answer causes the numbers in the problem to be penalised, so that they are
  * more likely to appear in subsequent problems.
  */
-int
+static int
 problem()
 {
 	char *p;
@@ -292,8 +289,8 @@ retry:
  * penalties themselves.
  */
 
-int penalty[sizeof(keylist) - 1][2];
-struct penalty {
+static int penalty[sizeof(keylist) - 1][2];
+static struct penalty {
 	int value, penalty;	/* Penalised value and its penalty. */
 	struct penalty *next;
 } *penlist[sizeof(keylist) - 1][2];
@@ -305,14 +302,14 @@ struct penalty {
  * operand number `operand' (0 or 1).  If we run out of memory, we just
  * forget about the penalty (how likely is this, anyway?).
  */
-void
+static void
 penalise(value, op, operand)
 	int value, op, operand;
 {
 	struct penalty *p;
 
 	op = opnum(op);
-	if ((p = (struct penalty *)malloc((u_int)sizeof(*p))) == NULL)
+	if ((p = malloc(sizeof(*p))) == NULL)
 		return;
 	p->next = penlist[op][operand];
 	penlist[op][operand] = p;
@@ -326,7 +323,7 @@ penalise(value, op, operand)
  * as a value, or represents a position in the penalty list.  If the latter,
  * we find the corresponding value and return that, decreasing its penalty.
  */
-int
+static int
 getrandom(maxval, op, operand)
 	int maxval, op, operand;
 {
@@ -371,7 +368,7 @@ getrandom(maxval, op, operand)
 }
 
 /* Return an index for the character op, which is one of [+-x/]. */
-int
+static int
 opnum(op)
 	int op;
 {
@@ -384,7 +381,7 @@ opnum(op)
 }
 
 /* Print usage message and quit. */
-void
+static void
 usage()
 {
 	(void)fprintf(stderr, "Usage: %s [-o +-x/] [-r range]\n",

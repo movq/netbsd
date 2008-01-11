@@ -1,4 +1,4 @@
-/* $NetBSD: apecs.c,v 1.45 2005/12/11 12:16:17 christos Exp $ */
+/* $NetBSD: apecs.c,v 1.52 2011/05/17 17:34:47 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,15 +63,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: apecs.c,v 1.45 2005/12/11 12:16:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apecs.c,v 1.52 2011/05/17 17:34:47 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
@@ -104,26 +95,22 @@ __KERNEL_RCSID(0, "$NetBSD: apecs.c,v 1.45 2005/12/11 12:16:17 christos Exp $");
 #include <alpha/pci/pci_1000.h>
 #endif
 
-int	apecsmatch __P((struct device *, struct cfdata *, void *));
-void	apecsattach __P((struct device *, struct device *, void *));
+static int apecsmatch(device_t, cfdata_t, void *);
+static void apecsattach(device_t, device_t, void *);
 
-CFATTACH_DECL(apecs, sizeof(struct apecs_softc),
-    apecsmatch, apecsattach, NULL, NULL);
+CFATTACH_DECL_NEW(apecs, 0, apecsmatch, apecsattach, NULL, NULL);
 
 extern struct cfdriver apecs_cd;
 
-int	apecs_bus_get_window __P((int, int,
-	    struct alpha_bus_space_translation *));
+static int apecs_bus_get_window(int, int,
+    struct alpha_bus_space_translation *);
 
 /* There can be only one. */
 int apecsfound;
 struct apecs_config apecs_configuration;
 
-int
-apecsmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+static int
+apecsmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -141,9 +128,7 @@ apecsmatch(parent, match, aux)
  * Set up the chipset's function pointers.
  */
 void
-apecs_init(acp, mallocsafe)
-	struct apecs_config *acp;
-	int mallocsafe;
+apecs_init(struct apecs_config *acp, int mallocsafe)
 {
 	acp->ac_comanche_pass2 =
 	    (REGVAL(COMANCHE_ED) & COMANCHE_ED_PASS2) != 0;
@@ -175,12 +160,9 @@ apecs_init(acp, mallocsafe)
 	acp->ac_initted = 1;
 }
 
-void
-apecsattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static void
+apecsattach(device_t parent, device_t self, void *aux)
 {
-	struct apecs_softc *sc = (struct apecs_softc *)self;
 	struct apecs_config *acp;
 	struct pcibus_attach_args pba;
 
@@ -191,7 +173,7 @@ apecsattach(parent, self, aux)
 	 * set up the chipset's info; done once at console init time
 	 * (maybe), but doesn't hurt to do twice.
 	 */
-	acp = sc->sc_acp = &apecs_configuration;
+	acp = &apecs_configuration;
 	apecs_init(acp, 1);
 
 	apecs_dma_init(acp);
@@ -246,15 +228,13 @@ apecsattach(parent, self, aux)
 	pba.pba_pc = &acp->ac_pc;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }
 
-int
-apecs_bus_get_window(type, window, abst)
-	int type, window;
-	struct alpha_bus_space_translation *abst;
+static int
+apecs_bus_get_window(int type, int window, struct alpha_bus_space_translation *abst)
 {
 	struct apecs_config *acp = &apecs_configuration;
 	bus_space_tag_t st;

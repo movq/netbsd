@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2001/12/12 01:50:01 tv Exp $
+#	$NetBSD: Makefile,v 1.7 2011/05/19 21:40:11 tsutsui Exp $
 
 PROG=tvctrl
 NOMAN=# defined

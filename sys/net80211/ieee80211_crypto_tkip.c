@@ -34,7 +34,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_crypto_tkip.c,v 1.10 2005/08/08 18:46:35 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_tkip.c,v 1.7 2006/11/16 01:33:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_tkip.c,v 1.11 2011/04/03 10:04:32 drochner Exp $");
 #endif
 
 /*
@@ -116,8 +116,7 @@ tkip_attach(struct ieee80211com *ic, struct ieee80211_key *k)
 {
 	struct tkip_ctx *ctx;
 
-	MALLOC(ctx, struct tkip_ctx *, sizeof(struct tkip_ctx),
-		M_DEVBUF, M_NOWAIT | M_ZERO);
+	ctx = malloc(sizeof(struct tkip_ctx), M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (ctx == NULL) {
 		ic->ic_stats.is_crypto_nomem++;
 		return NULL;
@@ -132,7 +131,7 @@ tkip_detach(struct ieee80211_key *k)
 {
 	struct tkip_ctx *ctx = k->wk_private;
 
-	FREE(ctx, M_DEVBUF);
+	free(ctx, M_DEVBUF);
 }
 
 static int
@@ -803,6 +802,8 @@ michael_mic(struct tkip_ctx *ctx, const u8 *key,
 	u32 l, r;
 	const uint8_t *data;
 	u_int space;
+	uint8_t spill[4];
+	int nspill = 0;
 
 	michael_mic_hdr(mtod(m, struct ieee80211_frame *), hdr);
 
@@ -825,75 +826,49 @@ michael_mic(struct tkip_ctx *ctx, const u8 *key,
 	for (;;) {
 		if (space > data_len)
 			space = data_len;
+		if (nspill) {
+			int n = min(4 - nspill, space);
+			memcpy(spill + nspill, data, n);
+			nspill += n;
+			data += n;
+			space -= n;
+			data_len -= n;
+			if (nspill == 4) {
+				l ^= get_le32(spill);
+				michael_block(l, r);
+				nspill = 0;
+			} else
+				goto next;
+		}
 		/* collect 32-bit blocks from current buffer */
 		while (space >= sizeof(uint32_t)) {
 			l ^= get_le32(data);
 			michael_block(l, r);
-			data += sizeof(uint32_t), space -= sizeof(uint32_t);
+			data += sizeof(uint32_t);
+			space -= sizeof(uint32_t);
 			data_len -= sizeof(uint32_t);
 		}
-		if (data_len < sizeof(uint32_t))
+		if (space) {
+			memcpy(spill, data, space);
+			nspill = space;
+			data_len -= space;
+		}
+next:
+		if (!data_len)
 			break;
 		m = m->m_next;
-		if (m == NULL) {
-			IASSERT(0, ("out of data, data_len %zu\n", data_len));
-			break;
-		}
-		if (space != 0) {
-			const uint8_t *data_next;
-			/*
-			 * Block straddles buffers, split references.
-			 */
-			data_next = mtod(m, const uint8_t *);
-			IASSERT(m->m_len >= sizeof(uint32_t) - space,
-				("not enough data in following buffer, "
-				"m_len %u need %zu\n", m->m_len,
-				sizeof(uint32_t) - space));
-			switch (space) {
-			case 1:
-				l ^= get_le32_split(data[0], data_next[0],
-					data_next[1], data_next[2]);
-				data = data_next + 3;
-				space = m->m_len - 3;
-				break;
-			case 2:
-				l ^= get_le32_split(data[0], data[1],
-					data_next[0], data_next[1]);
-				data = data_next + 2;
-				space = m->m_len - 2;
-				break;
-			case 3:
-				l ^= get_le32_split(data[0], data[1],
-					data[2], data_next[0]);
-				data = data_next + 1;
-				space = m->m_len - 1;
-				break;
-			}
-			michael_block(l, r);
-			data_len -= sizeof(uint32_t);
-		} else {
-			/*
-			 * Setup for next buffer.
-			 */
-			data = mtod(m, const uint8_t *);
-			space = m->m_len;
-		}
+		KASSERT(m);
+		/*
+		 * Setup for next buffer.
+		 */
+		data = mtod(m, const uint8_t *);
+		space = m->m_len;
 	}
 	/* Last block and padding (0x5a, 4..7 x 0) */
-	switch (data_len) {
-	case 0:
-		l ^= get_le32_split(0x5a, 0, 0, 0);
-		break;
-	case 1:
-		l ^= get_le32_split(data[0], 0x5a, 0, 0);
-		break;
-	case 2:
-		l ^= get_le32_split(data[0], data[1], 0x5a, 0);
-		break;
-	case 3:
-		l ^= get_le32_split(data[0], data[1], data[2], 0x5a);
-		break;
-	}
+	spill[nspill++] = 0x5a;
+	for (; nspill < 4; nspill++)
+		spill[nspill] = 0;
+	l ^= get_le32(spill);
 	michael_block(l, r);
 	/* l ^= 0; */
 	michael_block(l, r);

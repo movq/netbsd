@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.17 2006/06/07 09:35:03 jnemeth Exp $	*/
+/*	$NetBSD: main.c,v 1.20 2009/08/12 04:48:03 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -43,15 +43,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.17 2006/06/07 09:35:03 jnemeth Exp $");
+__RCSID("$NetBSD: main.c,v 1.20 2009/08/12 04:48:03 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,10 +60,15 @@ __RCSID("$NetBSD: main.c,v 1.17 2006/06/07 09:35:03 jnemeth Exp $");
 
 extern FILE	*yyin;
 
+static int read_file(const char *);
+static const char *default_game(void);
+static const char *okay_game(const char *);
+static int list_games(void);
+
 int
 main(int argc, char *argv[])
 {
-	int			seed;
+	unsigned long		seed;
 	int			f_usage = 0, f_list = 0, f_showscore = 0;
 	int			f_printpath = 0;
 	const char		*file = NULL;
@@ -77,7 +82,8 @@ main(int argc, char *argv[])
 	open_score_file();
 	(void)setgid(getgid());
 
-	start_time = seed = time(NULL);
+	start_time = time(NULL);
+	seed = start_time;
 
 	while ((ch = getopt(argc, argv, ":u?lstpg:f:r:")) != -1) {
 		switch (ch) {
@@ -107,7 +113,7 @@ main(int argc, char *argv[])
 	}
 	if (optind < argc)
 		f_usage++;
-	srandom((unsigned long)seed);
+	srandom(seed);
 
 	if (f_usage)
 		(void)fprintf(stderr, 
@@ -203,7 +209,7 @@ main(int argc, char *argv[])
 	}
 }
 
-int
+static int
 read_file(const char *s)
 {
 	int		retval;
@@ -223,7 +229,7 @@ read_file(const char *s)
 		return (0);
 }
 
-const char *
+static const char *
 default_game(void)
 {
 	FILE		*fp;
@@ -249,7 +255,7 @@ default_game(void)
 	return (file);
 }
 
-const char *
+static const char *
 okay_game(const char *s)
 {
 	FILE		*fp;
@@ -284,7 +290,7 @@ okay_game(const char *s)
 	return (ret);
 }
 
-int
+static int
 list_games(void)
 {
 	FILE		*fp;

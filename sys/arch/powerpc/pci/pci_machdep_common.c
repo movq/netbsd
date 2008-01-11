@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep_common.c,v 1.6 2007/12/25 17:55:10 macallan Exp $ */
+/* $NetBSD: pci_machdep_common.c,v 1.10 2011/04/04 20:37:53 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep_common.c,v 1.6 2007/12/25 17:55:10 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep_common.c,v 1.10 2011/04/04 20:37:53 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -89,7 +82,7 @@ struct powerpc_bus_dma_tag pci_bus_dma_tag = {
 };
 
 int
-genppc_pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
+genppc_pci_bus_maxdevs(void *v, int busno)
 {
 	return 32;
 }
@@ -157,12 +150,12 @@ genppc_pci_conf_hook(pci_chipset_tag_t pct, int bus, int dev, int func,
 }
 
 int
-genppc_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+genppc_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int pin = pa->pa_intrpin;
 	int line = pa->pa_intrline;
 	
-#if DEBUG
+#ifdef DEBUG
 	printf("%s: pin: %d, line: %d\n", __func__, pin, line);
 #endif
 

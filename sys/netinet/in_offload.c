@@ -1,4 +1,4 @@
-/*	$NetBSD: in_offload.c,v 1.2 2007/04/24 23:43:50 dyoung Exp $	*/
+/*	$NetBSD: in_offload.c,v 1.5 2011/04/25 22:11:31 yamt Exp $	*/
 
 /*-
  * Copyright (c)2005, 2006 YAMAMOTO Takashi,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_offload.c,v 1.2 2007/04/24 23:43:50 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_offload.c,v 1.5 2011/04/25 22:11:31 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -53,8 +53,12 @@ ip_tso_output_callback(void *vp, struct mbuf *m)
 {
 	struct ip_tso_output_args *args = vp;
 	struct ifnet *ifp = args->ifp;
+	int error;
 
-	return (*ifp->if_output)(ifp, m, args->sa, args->rt);
+	KERNEL_LOCK(1, NULL);
+	error = (*ifp->if_output)(ifp, m, args->sa, args->rt);
+	KERNEL_UNLOCK_ONE(NULL);
+	return error;
 }
 
 int
@@ -194,4 +198,60 @@ quit:
 	}
 
 	return error;
+}
+
+void
+ip_undefer_csum(struct mbuf *m, size_t hdrlen, int csum_flags)
+{
+	const size_t iphdrlen = M_CSUM_DATA_IPv4_IPHL(m->m_pkthdr.csum_data);
+	uint16_t csum;
+	uint16_t ip_len;
+	uint16_t *csump;
+
+	KASSERT(m->m_flags & M_PKTHDR);
+	KASSERT((m->m_pkthdr.csum_flags & csum_flags) == csum_flags);
+
+	if (__predict_true(hdrlen + sizeof(struct ip) <= m->m_len)) {
+		struct ip *ip = (struct ip *)(mtod(m, uint8_t *) + hdrlen);
+
+		ip_len = ip->ip_len;
+		csump = &ip->ip_sum;
+	} else {
+		const size_t ip_len_offset =
+		    hdrlen + offsetof(struct ip, ip_len);
+
+		m_copydata(m, ip_len_offset, sizeof(ip_len), &ip_len);
+		csump = NULL;
+	}
+	ip_len = ntohs(ip_len);
+
+	if (csum_flags & M_CSUM_IPv4) {
+		csum = in4_cksum(m, 0, hdrlen, iphdrlen);
+		if (csump != NULL) {
+			*csump = csum;
+		} else {
+			const size_t offset = hdrlen +
+			    offsetof(struct ip, ip_sum);
+
+			m_copyback(m, offset, sizeof(uint16_t), &csum);
+		}
+	}
+
+	if (csum_flags & (M_CSUM_UDPv4|M_CSUM_TCPv4)) {
+		size_t l4offset = hdrlen + iphdrlen;
+
+		csum = in4_cksum(m, 0, l4offset, ip_len - l4offset - hdrlen);
+		if (csum == 0 && (csum_flags & M_CSUM_UDPv4) != 0)
+			csum = 0xffff;
+
+		l4offset += M_CSUM_DATA_IPv4_OFFSET(m->m_pkthdr.csum_data);
+
+		if (__predict_true(l4offset + sizeof(uint16_t) <= m->m_len)) {
+			*(uint16_t *)(mtod(m, char *) + l4offset) = csum;
+		} else {
+			m_copyback(m, l4offset, sizeof(csum), (void *) &csum);
+		}
+	}
+
+	m->m_pkthdr.csum_flags ^= csum_flags;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_x86_64.c,v 1.5 2005/08/04 19:26:02 fvdl Exp $	*/
+/*	$NetBSD: kvm_x86_64.c,v 1.8 2010/09/20 23:23:16 jym Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_hp300.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_x86_64.c,v 1.5 2005/08/04 19:26:02 fvdl Exp $");
+__RCSID("$NetBSD: kvm_x86_64.c,v 1.8 2010/09/20 23:23:16 jym Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,7 +51,8 @@ __RCSID("$NetBSD: kvm_x86_64.c,v 1.5 2005/08/04 19:26:02 fvdl Exp $");
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/kcore.h>
-#include <machine/kcore.h>
+#include <sys/types.h>
+
 #include <stdlib.h>
 #include <unistd.h>
 #include <nlist.h>
@@ -64,13 +65,13 @@ __RCSID("$NetBSD: kvm_x86_64.c,v 1.5 2005/08/04 19:26:02 fvdl Exp $");
 
 #include "kvm_private.h"
 
+#include <machine/kcore.h>
 #include <machine/pmap.h>
 #include <machine/pte.h>
 #include <machine/vmparam.h>
 
 void
-_kvm_freevtop(kd)
-	kvm_t *kd;
+_kvm_freevtop(kvm_t *kd)
 {
 
 	/* Not actually used for anything right now, but safe. */
@@ -80,8 +81,7 @@ _kvm_freevtop(kd)
 
 /*ARGSUSED*/
 int
-_kvm_initvtop(kd)
-	kvm_t *kd;
+_kvm_initvtop(kvm_t *kd)
 {
 
 	return (0);
@@ -91,10 +91,7 @@ _kvm_initvtop(kd)
  * Translate a kernel virtual address to a physical address.
  */
 int
-_kvm_kvatop(kd, va, pa)
-	kvm_t *kd;
-	u_long va;
-	u_long *pa;
+_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 {
 	cpu_kcore_hdr_t *cpu_kh;
 	u_long page_off;
@@ -118,7 +115,7 @@ _kvm_kvatop(kd, va, pa)
 	 * Level 4.
 	 */
 	pde_pa = cpu_kh->ptdpaddr + (pl4_pi(va) * sizeof(pd_entry_t));
-	if (pread(kd->pmfd, (void *)&pde, sizeof(pde),
+	if (_kvm_pread(kd, kd->pmfd, (void *)&pde, sizeof(pde),
 	    _kvm_pa2off(kd, pde_pa)) != sizeof(pde)) {
 		_kvm_syserr(kd, 0, "could not read PT level 4 entry");
 		goto lose;
@@ -132,7 +129,7 @@ _kvm_kvatop(kd, va, pa)
 	 * Level 3.
 	 */
 	pde_pa = (pde & PG_FRAME) + (pl3_pi(va) * sizeof(pd_entry_t));
-	if (pread(kd->pmfd, (void *)&pde, sizeof(pde),
+	if (_kvm_pread(kd, kd->pmfd, (void *)&pde, sizeof(pde),
 	    _kvm_pa2off(kd, pde_pa)) != sizeof(pde)) {
 		_kvm_syserr(kd, 0, "could not read PT level 3 entry");
 		goto lose;
@@ -146,7 +143,7 @@ _kvm_kvatop(kd, va, pa)
 	 * Level 2.
 	 */
 	pde_pa = (pde & PG_FRAME) + (pl2_pi(va) * sizeof(pd_entry_t));
-	if (pread(kd->pmfd, (void *)&pde, sizeof(pde),
+	if (_kvm_pread(kd, kd->pmfd, (void *)&pde, sizeof(pde),
 	    _kvm_pa2off(kd, pde_pa)) != sizeof(pde)) {
 		_kvm_syserr(kd, 0, "could not read PT level 2 entry");
 		goto lose;
@@ -161,7 +158,7 @@ _kvm_kvatop(kd, va, pa)
 	 * Level 1.
 	 */
 	pte_pa = (pde & PG_FRAME) + (pl1_pi(va) * sizeof(pt_entry_t));
-	if (pread(kd->pmfd, (void *) &pte, sizeof(pte),
+	if (_kvm_pread(kd, kd->pmfd, (void *) &pte, sizeof(pte),
 	    _kvm_pa2off(kd, pte_pa)) != sizeof(pte)) {
 		_kvm_syserr(kd, 0, "could not read PTE");
 		goto lose;
@@ -185,9 +182,7 @@ _kvm_kvatop(kd, va, pa)
  * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
-_kvm_pa2off(kd, pa)
-	kvm_t *kd;
-	u_long pa;
+_kvm_pa2off(kvm_t *kd, paddr_t pa)
 {
 	cpu_kcore_hdr_t *cpu_kh;
 	phys_ram_seg_t *ramsegs;
@@ -216,8 +211,7 @@ _kvm_pa2off(kd, pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kd)
-	kvm_t	*kd;
+_kvm_mdopen(kvm_t *kd)
 {
 
 	kd->usrstack = USRSTACK;

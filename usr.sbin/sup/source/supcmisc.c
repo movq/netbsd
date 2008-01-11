@@ -1,4 +1,4 @@
-/*	$NetBSD: supcmisc.c,v 1.16 2007/04/29 20:23:37 msaitoh Exp $	*/
+/*	$NetBSD: supcmisc.c,v 1.21 2010/10/20 17:05:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -67,6 +67,7 @@ static LIST *uidL[LISTSIZE];	/* uid and gid lists */
 static LIST *gidL[LISTSIZE];
 
 extern COLLECTION *thisC;	/* collection list pointer */
+extern int silent;
 
 static int Lhash(char *);
 static void Linsert(LIST **, char *, int);
@@ -108,15 +109,26 @@ establishdir(char *fname)
 int 
 makedir(char *fname, unsigned int mode, struct stat * statp)
 {
+	int en, rv;
+
 	if (lstat(fname, statp) != -1 && !S_ISDIR(statp->st_mode)) {
 		if (unlink(fname) == -1) {
-			notify("SUP: Can't delete %s\n", fname);
+			notify("SUP: Can't delete %s (%s)\n", fname,
+			    strerror(errno));
 			return -1;
 		}
 	}
-	(void) mkdir(fname, mode);
+	if (mkdir(fname, mode) == -1)
+		en = errno;
+	else
+		en = -1;
 
-	return stat(fname, statp);
+	rv = stat(fname, statp);
+
+	if (en != -1)
+		errno = en;
+
+	return rv;
 }
 
 int 
@@ -130,14 +142,19 @@ estabd(char *fname, char *dname)
 		return (FALSE);	/* exists */
 	path(dname, dpart, fpart);
 	if (strcmp(fpart, ".") == 0) {	/* dname is / or . */
-		notify("SUP: Can't create directory %s for %s\n", dname, fname);
+		notify("SUP: Can't create directory %s for %s (Invalid name)\n",
+		    dname, fname);
+		errno = EINVAL;
 		return (TRUE);
 	}
 	x = estabd(fname, dpart);
 	if (x)
 		return (TRUE);
 	if (makedir(dname, 0755, &sbuf) < 0) {
-		vnotify("SUP: Can't create directory %s for %s\n", dname, fname);
+		int oerrno = errno;
+		notify("SUP: Can't create directory %s for %s (%s)\n", dname,
+		    fname, strerror(errno));
+		errno = oerrno;
 		return TRUE;
 	}
 	vnotify("SUP Created directory %s for %s\n", dname, fname);
@@ -250,37 +267,68 @@ ugconvert(char *uname, char *gname, int *uid, int *gid, int *mode)
  *********************************************/
 
 void
-notify(char *fmt, ...)
+notify(const char *fmt, ...)
 {				/* record error message */
 	char buf[STRINGLENGTH];
 	char collrelname[STRINGLENGTH];
+	char hostname[STRINGLENGTH];
 	time_t tloc;
 	static FILE *noteF = NULL;	/* mail program on pipe */
 	va_list ap;
+	int shouldMail = (thisC->Cflags & CFMAIL) && thisC->Cnotify;
+	int needFile = shouldMail || silent;
 
 	va_start(ap, fmt);
-	if (fmt == NULL) {
-		if (noteF && noteF != stdout)
-			(void) pclose(noteF);
-		noteF = NULL;
-		va_end(ap);
-		return;
-	}
+
 	if ((thisC->Cflags & CFURELSUF) && thisC->Crelease)
 		(void) sprintf(collrelname, "%s-%s", collname, thisC->Crelease);
 	else
 		(void) strcpy(collrelname, collname);
 
+	if (fmt == NULL) {
+		if (noteF && noteF != stdout && (!silent || thisC->Cnogood)) {
+			int nr;
+			FILE *outF;
+
+			if (shouldMail) {
+				(void)gethostname(hostname, sizeof(hostname));
+				(void) snprintf(buf, sizeof(buf),
+				    "mail -s \"SUP Upgrade of %s on %s\" %s >"
+				    " /dev/null", collrelname, hostname,
+				    thisC->Cnotify);
+				outF = popen(buf, "w");
+				if (outF == NULL) {
+					logerr("Can't send mail to %s for %s",
+					    thisC->Cnotify, collrelname);
+					outF = stdout;
+				}
+			} else
+				outF = stdout;
+
+			(void)rewind(noteF);
+			while ((nr = fread(buf, 1, sizeof(buf), noteF)) > 0)
+				(void)fwrite(buf, 1, nr, outF);
+			(void)fflush(outF);
+			if (outF != stdout)
+				(void)pclose(outF);
+			(void)fclose(noteF);
+		}
+		noteF = NULL;
+		va_end(ap);
+		return;
+	}
+
 	if (noteF == NULL) {
-		if ((thisC->Cflags & CFMAIL) && thisC->Cnotify) {
-			(void) sprintf(buf, "mail -s \"SUP Upgrade of %s\" %s >/dev/null",
-			    collrelname, thisC->Cnotify);
-			noteF = popen(buf, "w");
-			if (noteF == NULL) {
-				logerr("Can't send mail to %s for %s",
-				    thisC->Cnotify, collrelname);
+		if (needFile) {
+			char template[] = "/tmp/sup.XXXXXX";
+			int fd = mkstemp(template);
+			if (fd == -1 || (noteF = fdopen(fd, "r+")) == NULL) {
+				logerr("Can't open temporary file for %s",
+				    collrelname);
+				silent = 0;
 				noteF = stdout;
 			}
+			(void)unlink(template);
 		} else
 			noteF = stdout;
 		tloc = time((time_t *) NULL);
@@ -319,7 +367,6 @@ fmttime(time_t time)
 
 	(void) strcpy(buf, ctime(&time));
 	len = strlen(buf + 4) - 6;
-	(void) strncpy(buf, buf + 4, len);
 	buf[len] = '\0';
-	return (buf);
+	return buf + 4;
 }

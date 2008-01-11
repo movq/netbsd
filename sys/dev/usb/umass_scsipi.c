@@ -1,4 +1,4 @@
-/*	$NetBSD: umass_scsipi.c,v 1.30 2007/03/04 06:02:49 christos Exp $	*/
+/*	$NetBSD: umass_scsipi.c,v 1.36 2010/11/03 22:34:24 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2001, 2003 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umass_scsipi.c,v 1.30 2007/03/04 06:02:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umass_scsipi.c,v 1.36 2010/11/03 22:34:24 dyoung Exp $");
 
 #include "atapibus.h"
 #include "scsibus.h"
@@ -97,7 +90,7 @@ Static void umass_scsipi_request(struct scsipi_channel *,
 				 scsipi_adapter_req_t, void *);
 Static void umass_scsipi_minphys(struct buf *bp);
 Static int umass_scsipi_ioctl(struct scsipi_channel *, u_long,
-			      void *, int, usb_proc_ptr );
+			      void *, int, proc_t *);
 Static int umass_scsipi_getgeom(struct scsipi_periph *periph,
 				struct disk_parms *, u_long sectors);
 
@@ -134,14 +127,14 @@ umass_scsi_attach(struct umass_softc *sc)
 	scbus->sc_channel.chan_nluns = sc->maxlun + 1;
 	scbus->sc_channel.chan_id = scbus->sc_channel.chan_ntargets - 1;
 	DPRINTF(UDMASS_USB, ("%s: umass_attach_bus: SCSI\n",
-			     USBDEVNAME(sc->sc_dev)));
+			     device_xname(sc->sc_dev)));
 
 	sc->sc_refcnt++;
 	scbus->base.sc_child =
-	    config_found_ia(&sc->sc_dev, "scsi", &scbus->sc_channel,
+	    config_found_ia(sc->sc_dev, "scsi", &scbus->sc_channel,
 		scsiprint);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeup(USBDEV(sc->sc_dev));
+		usb_detach_wakeup(sc->sc_dev);
 
 	return (0);
 }
@@ -162,14 +155,14 @@ umass_atapi_attach(struct umass_softc *sc)
 
 	scbus->sc_channel.chan_defquirks |= sc->sc_busquirks;
 	DPRINTF(UDMASS_USB, ("%s: umass_attach_bus: ATAPI\n",
-			     USBDEVNAME(sc->sc_dev)));
+			     device_xname(sc->sc_dev)));
 
 	sc->sc_refcnt++;
 	scbus->base.sc_child =
-	    config_found_ia(&sc->sc_dev, "atapi", &scbus->sc_channel,
+	    config_found_ia(sc->sc_dev, "atapi", &scbus->sc_channel,
 		atapiprint);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeup(USBDEV(sc->sc_dev));
+		usb_detach_wakeup(sc->sc_dev);
 
 	return (0);
 }
@@ -188,7 +181,7 @@ umass_scsipi_setup(struct umass_softc *sc)
 
 	/* Fill in the adapter. */
 	memset(&scbus->sc_adapter, 0, sizeof(scbus->sc_adapter));
-	scbus->sc_adapter.adapt_dev = &sc->sc_dev;
+	scbus->sc_adapter.adapt_dev = sc->sc_dev;
 	scbus->sc_adapter.adapt_nchannels = 1;
 	scbus->sc_adapter.adapt_request = umass_scsipi_request;
 	scbus->sc_adapter.adapt_minphys = umass_scsipi_minphys;
@@ -214,7 +207,7 @@ umass_scsipi_request(struct scsipi_channel *chan,
 	struct scsipi_adapter *adapt = chan->chan_adapter;
 	struct scsipi_periph *periph;
 	struct scsipi_xfer *xs;
-	struct umass_softc *sc = (void *)adapt->adapt_dev;
+	struct umass_softc *sc = device_private(adapt->adapt_dev);
 	struct umass_scsipi_softc *scbus = (struct umass_scsipi_softc *)sc->bus;
 	struct scsipi_generic *cmd;
 	int cmdlen;
@@ -228,9 +221,9 @@ umass_scsipi_request(struct scsipi_channel *chan,
 		periph = xs->xs_periph;
 		DIF(UDMASS_UPPER, periph->periph_dbflags |= SCSIPI_DEBUG_FLAGS);
 
-		DPRINTF(UDMASS_CMD, ("%s: umass_scsi_cmd: at %lu.%06lu: %d:%d "
+		DPRINTF(UDMASS_CMD, ("%s: umass_scsi_cmd: at %"PRIu64".%06"PRIu64": %d:%d "
 		    "xs=%p cmd=0x%02x datalen=%d (quirks=0x%x, poll=%d)\n",
-		    USBDEVNAME(sc->sc_dev), sc->tv.tv_sec, sc->tv.tv_usec,
+		    device_xname(sc->sc_dev), sc->tv.tv_sec, (uint64_t)sc->tv.tv_usec,
 		    periph->periph_target, periph->periph_lun,
 		    xs, xs->cmd->opcode, xs->datalen,
 		    periph->periph_quirks, xs->xs_control & XS_CTL_POLL));
@@ -251,7 +244,7 @@ umass_scsipi_request(struct scsipi_channel *chan,
 		    periph->periph_target != UMASS_ATAPI_DRIVE :
 		    periph->periph_target == chan->chan_id) {
 			DPRINTF(UDMASS_SCSI, ("%s: wrong SCSI ID %d\n",
-			    USBDEVNAME(sc->sc_dev),
+			    device_xname(sc->sc_dev),
 			    periph->periph_target));
 			xs->error = XS_DRIVER_STUFFUP;
 			goto done;
@@ -345,7 +338,7 @@ umass_scsipi_minphys(struct buf *bp)
 
 int
 umass_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd,
-    void *arg, int flag, usb_proc_ptr p)
+    void *arg, int flag, proc_t *p)
 {
 	/*struct umass_softc *sc = link->adapter_softc;*/
 	/*struct umass_scsipi_softc *scbus = sc->bus;*/
@@ -367,7 +360,7 @@ umass_scsipi_getgeom(struct scsipi_periph *periph, struct disk_parms *dp,
 		     u_long sectors)
 {
 	struct umass_softc *sc =
-	    (void *)periph->periph_channel->chan_adapter->adapt_dev;
+	    device_private(periph->periph_channel->chan_adapter->adapt_dev);
 
 	/* If it's not a floppy, we don't know what to do. */
 	if (sc->sc_cmd != UMASS_CPROTO_UFI)
@@ -406,8 +399,8 @@ umass_scsipi_cb(struct umass_softc *sc, void *priv, int residue, int status)
 	delta = (tv.tv_sec - sc->tv.tv_sec) * 1000000 + tv.tv_usec - sc->tv.tv_usec;
 #endif
 
-	DPRINTF(UDMASS_CMD,("umass_scsipi_cb: at %lu.%06lu, delta=%u: xs=%p residue=%d"
-	    " status=%d\n", tv.tv_sec, tv.tv_usec, delta, xs, residue, status));
+	DPRINTF(UDMASS_CMD,("umass_scsipi_cb: at %"PRIu64".%06"PRIu64", delta=%u: xs=%p residue=%d"
+	    " status=%d\n", tv.tv_sec, (uint64_t)tv.tv_usec, delta, xs, residue, status));
 
 	xs->resid = residue;
 
@@ -445,12 +438,12 @@ umass_scsipi_cb(struct umass_softc *sc, void *priv, int residue, int status)
 
 	default:
 		panic("%s: Unknown status %d in umass_scsipi_cb",
-			USBDEVNAME(sc->sc_dev), status);
+			device_xname(sc->sc_dev), status);
 	}
 
-	DPRINTF(UDMASS_CMD,("umass_scsipi_cb: at %lu.%06lu: return xs->error="
+	DPRINTF(UDMASS_CMD,("umass_scsipi_cb: at %"PRIu64".%06"PRIu64": return xs->error="
             "%d, xs->xs_status=0x%x xs->resid=%d\n",
-	     tv.tv_sec, tv.tv_usec,
+	     tv.tv_sec, (uint64_t)tv.tv_usec,
 	     xs->error, xs->xs_status, xs->resid));
 
 	s = splbio();
@@ -483,7 +476,7 @@ umass_scsipi_sense_cb(struct umass_softc *sc, void *priv, int residue,
 		break;
 	default:
 		DPRINTF(UDMASS_SCSI, ("%s: Autosense failed, status %d\n",
-			USBDEVNAME(sc->sc_dev), status));
+			device_xname(sc->sc_dev), status));
 		xs->error = XS_DRIVER_STUFFUP;
 		break;
 	}
@@ -519,8 +512,8 @@ umass_atapi_probe_device(struct atapibus_softc *atapi, int target)
 
 	periph = scsipi_alloc_periph(M_NOWAIT);
 	if (periph == NULL) {
-		printf("%s: can't allocate link for drive %d\n",
-		       atapi->sc_dev.dv_xname, target);
+		aprint_error_dev(atapi->sc_dev,
+		    "can't allocate link for drive %d\n", target);
 		return;
 	}
 
@@ -533,8 +526,7 @@ umass_atapi_probe_device(struct atapibus_softc *atapi, int target)
 	DPRINTF(UDMASS_SCSI, ("umass_atapi_probe_device: doing inquiry\n"));
 	/* Now go ask the device all about itself. */
 	memset(&inqbuf, 0, sizeof(inqbuf));
-	if (scsipi_inquire(periph, &inqbuf,
-	    XS_CTL_DISCOVERY | XS_CTL_DATA_ONSTACK) != 0) {
+	if (scsipi_inquire(periph, &inqbuf, XS_CTL_DISCOVERY) != 0) {
 		DPRINTF(UDMASS_SCSI, ("umass_atapi_probe_device: "
 		    "scsipi_inquire failed\n"));
 		free(periph, M_DEVBUF);

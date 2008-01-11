@@ -1,4 +1,4 @@
-/*	$NetBSD: bwtwo_sbus.c,v 1.19 2007/03/04 06:02:40 christos Exp $ */
+/*	$NetBSD: bwtwo_sbus.c,v 1.29 2009/09/19 04:52:44 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bwtwo_sbus.c,v 1.19 2007/03/04 06:02:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bwtwo_sbus.c,v 1.29 2009/09/19 04:52:44 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -110,16 +103,10 @@ __KERNEL_RCSID(0, "$NetBSD: bwtwo_sbus.c,v 1.19 2007/03/04 06:02:40 christos Exp
 #include <dev/sun/pfourreg.h>
 
 /* autoconfiguration driver */
-static void	bwtwoattach_sbus (struct device *, struct device *, void *);
-static int	bwtwomatch_sbus (struct device *, struct cfdata *, void *);
+static void	bwtwoattach_sbus (device_t, device_t, void *);
+static int	bwtwomatch_sbus (device_t, cfdata_t, void *);
 
-/* Allocate an `sbusdev' in addition to the bwtwo softc */
-struct bwtwo_sbus_softc {
-	struct bwtwo_softc bss_softc;
-	struct sbusdev bss_sd;
-};
-
-CFATTACH_DECL(bwtwo_sbus, sizeof(struct bwtwo_sbus_softc),
+CFATTACH_DECL_NEW(bwtwo_sbus, sizeof(struct bwtwo_softc),
     bwtwomatch_sbus, bwtwoattach_sbus, NULL, NULL);
 
 static int	bwtwo_get_video (struct bwtwo_softc *);
@@ -129,14 +116,14 @@ static void	bwtwo_set_video (struct bwtwo_softc *, int);
  * Match a bwtwo.
  */
 static int
-bwtwomatch_sbus(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+bwtwomatch_sbus(device_t parent, cfdata_t cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
-	return (strcmp(cf->cf_name, sa->sa_name) == 0);
+	if (strcmp(cf->cf_name, sa->sa_name) == 0)
+		return 100;	/* beat genfb(4) */
+
+	return 0;
 }
 
 
@@ -144,25 +131,23 @@ bwtwomatch_sbus(parent, cf, aux)
  * Attach a display.  We need to notice if it is the console, too.
  */
 void
-bwtwoattach_sbus(parent, self, args)
-	struct device *parent, *self;
-	void *args;
+bwtwoattach_sbus(device_t parent, device_t self, void *args)
 {
-	struct bwtwo_softc *sc = (struct bwtwo_softc *)self;
-	struct sbusdev *sd = &((struct bwtwo_sbus_softc *)self)->bss_sd;
+	struct bwtwo_softc *sc = device_private(self);
 	struct sbus_attach_args *sa = args;
 	struct fbdevice *fb = &sc->sc_fb;
 	bus_space_handle_t bh;
 	int isconsole, node;
 	const char *name;
 
+	sc->sc_dev = self;
 	node = sa->sa_node;
 
 	/* Remember cookies for bwtwo_mmap() */
 	sc->sc_bustag = sa->sa_bustag;
 	sc->sc_paddr = sbus_bus_addr(sa->sa_bustag, sa->sa_slot, sa->sa_offset);
 
-	fb->fb_flags = device_cfdata(&sc->sc_dev)->cf_flags;
+	fb->fb_flags = device_cfdata(self)->cf_flags;
 	fb->fb_type.fb_depth = 1;
 	fb_setsize_obp(fb, fb->fb_type.fb_depth, 1152, 900, node);
 
@@ -177,7 +162,7 @@ bwtwoattach_sbus(parent, self, args)
 			 sa->sa_offset + BWREG_REG,
 			 sizeof(struct fbcontrol),
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: cannot map control registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map control registers\n");
 		return;
 	}
 	sc->sc_reg = (struct fbcontrol *)bus_space_vaddr(sa->sa_bustag, bh);
@@ -200,20 +185,17 @@ bwtwoattach_sbus(parent, self, args)
 				 sa->sa_offset + sc->sc_pixeloffset,
 				 ramsize,
 				 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-			printf("%s: cannot map pixels\n", self->dv_xname);
+			aprint_error_dev(self, "cannot map pixels\n");
 			return;
 		}
 		sc->sc_fb.fb_pixels = (char *)bus_space_vaddr(sa->sa_bustag, bh);
 	}
 
-	sbus_establish(sd, &sc->sc_dev);
 	bwtwoattach(sc, name, isconsole);
 }
 
 static void
-bwtwo_set_video(sc, enable)
-	struct bwtwo_softc *sc;
-	int enable;
+bwtwo_set_video(struct bwtwo_softc *sc, int enable)
 {
 
 	if (enable)
@@ -230,8 +212,7 @@ bwtwo_set_video(sc, enable)
 }
 
 static int
-bwtwo_get_video(sc)
-	struct bwtwo_softc *sc;
+bwtwo_get_video(struct bwtwo_softc *sc)
 {
 
 	return ((sc->sc_reg->fbc_ctrl & FBC_VENAB) != 0);

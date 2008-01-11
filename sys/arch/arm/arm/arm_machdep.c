@@ -1,4 +1,4 @@
-/*	$NetBSD: arm_machdep.c,v 1.17 2007/12/16 07:31:47 mrg Exp $	*/
+/*	$NetBSD: arm_machdep.c,v 1.30 2011/03/04 22:25:25 joerg Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -71,27 +71,45 @@
  * SUCH DAMAGE.
  */
 
-#include "opt_compat_netbsd.h"
 #include "opt_execfmt.h"
+#include "opt_cpuoptions.h"
+#include "opt_cputypes.h"
 #include "opt_arm_debug.h"
+#include "opt_sa.h"
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: arm_machdep.c,v 1.17 2007/12/16 07:31:47 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm_machdep.c,v 1.30 2011/03/04 22:25:25 joerg Exp $");
 
 #include <sys/exec.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
-#include <sys/user.h>
-#include <sys/pool.h>
+#include <sys/kmem.h>
 #include <sys/ucontext.h>
 #include <sys/evcnt.h>
 #include <sys/cpu.h>
+#include <sys/savar.h>
+
+#ifdef EXEC_AOUT
+#include <sys/exec_aout.h>
+#endif
 
 #include <arm/cpufunc.h>
 
 #include <machine/pcb.h>
 #include <machine/vmparam.h>
+
+/* the following is used externally (sysctl_hw) */
+char	machine[] = MACHINE;		/* from <machine/param.h> */
+char	machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
+
+/* Our exported CPU info; we can have only one. */
+struct cpu_info cpu_info_store = {
+	.ci_cpl = IPL_HIGH,
+#ifndef PROCESS_ID_IS_CURLWP
+	.ci_curlwp = &lwp0,
+#endif
+};
 
 /*
  * The ARM architecture places the vector page at address 0.
@@ -128,17 +146,17 @@ EVCNT_ATTACH_STATIC(_lock_cas_fail);
  */
 
 void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
+setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
+	struct pcb *pcb;
 	struct trapframe *tf;
 
-	tf = l->l_addr->u_pcb.pcb_tf;
+	pcb = lwp_getpcb(l);
+	tf = pcb->pcb_tf;
 
 	memset(tf, 0, sizeof(*tf));
-	tf->tf_r0 = (u_int)l->l_proc->p_psstr;
-#ifdef COMPAT_13
+	tf->tf_r0 = l->l_proc->p_psstrp;
 	tf->tf_r12 = stack;			/* needed by pre 1.4 crt0.c */
-#endif
 	tf->tf_usr_sp = stack;
 	tf->tf_usr_lr = pack->ep_entry;
 	tf->tf_svc_lr = 0x77777777;		/* Something we can see */
@@ -153,10 +171,15 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 
 #ifdef EXEC_AOUT
 	if (pack->ep_esch->es_makecmds == exec_aout_makecmds)
-		l->l_addr->u_pcb.pcb_flags = PCB_NOALIGNFLT;
+		pcb->pcb_flags = PCB_NOALIGNFLT;
 	else
 #endif
-	l->l_addr->u_pcb.pcb_flags = 0;
+	pcb->pcb_flags = 0;
+#ifdef FPU_VFP
+	l->l_md.md_flags &= ~MDP_VFPUSED;
+	if (pcb->pcb_vfpcpu != NULL)
+		vfp_saveregs_lwp(l, 0);
+#endif
 }
 
 /*
@@ -167,16 +190,102 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 void
 startlwp(void *arg)
 {
-	int err;
 	ucontext_t *uc = arg; 
-	struct lwp *l = curlwp;
+	lwp_t *l = curlwp;
+	int error;
 
-	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-#ifdef DIAGNOSTIC
-	if (err)
-		printf("Error %d from cpu_setmcontext.", err);
-#endif
-	pool_put(&lwp_uc_pool, uc);
+	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+	KASSERT(error == 0);
+
+	kmem_free(uc, sizeof(ucontext_t));
+	userret(l);
+}
+
+#ifdef KERN_SA
+/*
+ * XXX This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
 
 	userret(l);
+}
+
+/*
+ * cpu_upcall:
+ *
+ *	Send an an upcall to userland.
+ */
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas,
+    void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf;
+	struct saframe *sf, frame;
+
+	tf = process_frame(l);
+
+	/* Finally, copy out the rest of the frame. */
+#if 0 /* First 4 args in regs (see below). */
+	frame.sa_type = type;
+	frame.sa_sas = sas;
+	frame.sa_events = nevents;
+	frame.sa_interrupted = ninterrupted;
+#endif
+	frame.sa_arg = ap;
+
+	sf = (struct saframe *)sp - 1;
+	if (copyout(&frame, sf, sizeof(frame)) != 0) {
+		/* Copying onto the stack didn't work. Die. */
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	tf->tf_r0 = type;
+	tf->tf_r1 = (int) sas;
+	tf->tf_r2 = nevents;
+	tf->tf_r3 = ninterrupted;
+	tf->tf_pc = (int) upcall;
+#ifdef THUMB_CODE
+	if (((int) upcall) & 1)
+		tf->tf_spsr |= PSR_T_bit;
+	else
+		tf->tf_spsr &= ~PSR_T_bit;
+#endif
+	tf->tf_usr_sp = (int) sf;
+	tf->tf_usr_lr = 0;		/* no return */
+}
+
+#endif /* KERN_SA */
+
+void
+cpu_need_resched(struct cpu_info *ci, int flags)
+{
+	bool immed = (flags & RESCHED_IMMED) != 0;
+
+	if (ci->ci_want_resched && !immed)
+		return;
+
+	ci->ci_want_resched = 1;
+	if (curlwp != ci->ci_data.cpu_idlelwp)
+		setsoftast();
+}
+
+bool
+cpu_intr_p(void)
+{
+	return curcpu()->ci_intr_depth != 0;
+}
+
+void
+ucas_ras_check(trapframe_t *tf)
+{
+	extern char ucas_32_ras_start[];
+	extern char ucas_32_ras_end[];
+
+	if (tf->tf_pc > (vaddr_t)ucas_32_ras_start &&
+	    tf->tf_pc < (vaddr_t)ucas_32_ras_end) {
+		tf->tf_pc = (vaddr_t)ucas_32_ras_start;
+	}
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: simple_busfuncs.c,v 1.4 2002/01/28 09:56:48 aymeric Exp $ */
+/* $NetBSD: simple_busfuncs.c,v 1.6 2010/02/03 13:56:53 phx Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: simple_busfuncs.c,v 1.4 2002/01/28 09:56:48 aymeric Exp $");
+__KERNEL_RCSID(0, "$NetBSD: simple_busfuncs.c,v 1.6 2010/02/03 13:56:53 phx Exp $");
 
 /*
  * Do NOT use this standalone.
@@ -117,9 +110,12 @@ oabs(bsr1_) (handle, offset)
 	bus_size_t offset;
 {
 	u_int8_t *p;
+	u_int8_t x;
 
 	p = (u_int8_t *)(handle + offset * AMIGA_SIMPLE_BUS_STRIDE);
-	return (*p);
+	x = *p;
+	amiga_bus_reorder_protect();
+	return x;
 }
 
 void
@@ -132,6 +128,7 @@ oabs(bsw1_)(handle, offset, value)
 
 	p = (u_int8_t *)(handle + offset * AMIGA_SIMPLE_BUS_STRIDE);
 	*p = (u_int8_t)value;
+	amiga_bus_reorder_protect();
 }
 
 void
@@ -147,6 +144,7 @@ oabs(bsrm1_)(handle, offset, pointer, count)
 
 	while (count > 0) {
 		*pointer++ = *p;
+		amiga_bus_reorder_protect();
 		--count;
 	}
 }
@@ -164,6 +162,7 @@ oabs(bswm1_)(handle, offset, pointer, count)
 
 	while (count > 0) {
 		*p = *pointer++;
+		amiga_bus_reorder_protect();
 		--count;
 	}
 }
@@ -181,6 +180,7 @@ oabs(bsrr1_)(handle, offset, pointer, count)
 
 	while (count > 0) {
 		*pointer++ = *p;
+		amiga_bus_reorder_protect();
 		p += AMIGA_SIMPLE_BUS_STRIDE;
 		--count;
 	}
@@ -199,6 +199,7 @@ oabs(bswr1_)(handle, offset, pointer, count)
 
 	while (count > 0) {
 		*p = *pointer++;
+		amiga_bus_reorder_protect();
 		p += AMIGA_SIMPLE_BUS_STRIDE;
 		--count;
 	}
@@ -217,6 +218,7 @@ oabs(bssr1_)(handle, offset, value, count)
 
 	while (count > 0) {
 		*p = value;
+		amiga_bus_reorder_protect();
 		p += AMIGA_SIMPLE_BUS_STRIDE;
 		--count;
 	}
@@ -235,6 +237,7 @@ oabs(bscr1_)(handlefrom, from, handleto, to, count)
 
 	while (count > 0) {
 		*q = *p;
+		amiga_bus_reorder_protect();
 		p += AMIGA_SIMPLE_BUS_STRIDE;
 		q += AMIGA_SIMPLE_BUS_STRIDE;
 		--count;
@@ -256,14 +259,17 @@ bssr(oabs(bssr2_), u_int16_t);
 bscr(oabs(bscr2_), u_int16_t);
 
 u_int16_t
-oabs(bsr2_) (handle, offset)
+oabs(bsr2_)(handle, offset)
 	bus_space_handle_t handle;
 	bus_size_t offset;
 {
 	u_int16_t *p;
+	u_int16_t x;
 
 	p = (u_int16_t *)(handle + offset * AMIGA_SIMPLE_BUS_STRIDE);
-	return (*p);
+	x = *p;
+	amiga_bus_reorder_protect();
+	return x;
 }
 
 void
@@ -276,6 +282,7 @@ oabs(bsw2_)(handle, offset, value)
 
 	p = (u_int16_t *)(handle + offset * AMIGA_SIMPLE_BUS_STRIDE);
 	*p = (u_int16_t)value;
+	amiga_bus_reorder_protect();
 }
 
 void
@@ -291,6 +298,7 @@ oabs(bsrm2_)(handle, offset, pointer, count)
 
 	while (count > 0) {
 		*pointer++ = *p;
+		amiga_bus_reorder_protect();
 		--count;
 	}
 }
@@ -308,6 +316,7 @@ oabs(bswm2_)(handle, offset, pointer, count)
 
 	while (count > 0) {
 		*p = *pointer++;
+		amiga_bus_reorder_protect();
 		--count;
 	}
 }
@@ -325,6 +334,7 @@ oabs(bsrr2_)(handle, offset, pointer, count)
 
 	while (count > 0) {
 		*pointer++ = *(volatile u_int16_t *)p;
+		amiga_bus_reorder_protect();
 		p += AMIGA_SIMPLE_BUS_STRIDE * sizeof(u_int16_t);
 		--count;
 	}
@@ -343,6 +353,7 @@ oabs(bswr2_)(handle, offset, pointer, count)
 
 	while (count > 0) {
 		*(volatile u_int16_t *)p = *pointer++;
+		amiga_bus_reorder_protect();
 		p += AMIGA_SIMPLE_BUS_STRIDE * sizeof(u_int16_t);
 		--count;
 	}
@@ -361,6 +372,7 @@ oabs(bssr2_)(handle, offset, value, count)
 
 	while (count > 0) {
 		*(volatile u_int16_t *)p = (unsigned)value;
+		amiga_bus_reorder_protect();
 		p += AMIGA_SIMPLE_BUS_STRIDE * sizeof(u_int16_t);
 		--count;
 	}
@@ -379,6 +391,7 @@ oabs(bscr2_)(handlefrom, from, handleto, to, count)
 
 	while (count > 0) {
 		*(volatile u_int16_t *)q = *(volatile u_int16_t *)p;
+		amiga_bus_reorder_protect();
 		p += AMIGA_SIMPLE_BUS_STRIDE * sizeof(u_int16_t);
 		q += AMIGA_SIMPLE_BUS_STRIDE * sizeof(u_int16_t);
 		--count;

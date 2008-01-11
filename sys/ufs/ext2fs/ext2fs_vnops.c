@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_vnops.c,v 1.79 2008/01/09 16:15:23 ad Exp $	*/
+/*	$NetBSD: ext2fs_vnops.c,v 1.99 2011/04/26 11:32:40 hannken Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -48,11 +48,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -70,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_vnops.c,v 1.79 2008/01/09 16:15:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_vnops.c,v 1.99 2011/04/26 11:32:40 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -189,7 +184,7 @@ ext2fs_mknod(void *v)
 	 * checked to see if it is an alias of an existing entry in
 	 * the inode cache.
 	 */
-	VOP_UNLOCK(*vpp, 0);
+	VOP_UNLOCK(*vpp);
 	(*vpp)->v_type = VNON;
 	vgone(*vpp);
 	error = VFS_VGET(mp, ino, vpp);
@@ -224,17 +219,9 @@ ext2fs_open(void *v)
 	return (0);
 }
 
-int
-ext2fs_access(void *v)
+static int
+ext2fs_check_possible(struct vnode *vp, struct inode *ip, mode_t mode)
 {
-	struct vop_access_args /* {
-		struct vnode *a_vp;
-		int  a_mode;
-		kauth_cred_t a_cred;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
-	struct inode *ip = VTOI(vp);
-	mode_t mode = ap->a_mode;
 
 	/*
 	 * Disallow write attempts on read-only file systems;
@@ -258,8 +245,38 @@ ext2fs_access(void *v)
 	if ((mode & VWRITE) && (ip->i_e2fs_flags & EXT2_IMMUTABLE))
 		return (EPERM);
 
-	return (vaccess(vp->v_type, ip->i_e2fs_mode & ALLPERMS,
-			ip->i_e2fs_uid, ip->i_e2fs_gid, mode, ap->a_cred));
+	return 0;
+}
+
+static int
+ext2fs_check_permitted(struct vnode *vp, struct inode *ip, mode_t mode,
+    kauth_cred_t cred)
+{
+
+	return genfs_can_access(vp->v_type, ip->i_e2fs_mode & ALLPERMS,
+	    ip->i_uid, ip->i_gid, mode, cred);
+}
+
+int
+ext2fs_access(void *v)
+{
+	struct vop_access_args /* {
+		struct vnode *a_vp;
+		int  a_mode;
+		kauth_cred_t a_cred;
+	} */ *ap = v;
+	struct vnode *vp = ap->a_vp;
+	struct inode *ip = VTOI(vp);
+	mode_t mode = ap->a_mode;
+	int error;
+
+	error = ext2fs_check_possible(vp, ip, mode);
+	if (error)
+		return error;
+
+	error = ext2fs_check_permitted(vp, ip, mode, ap->a_cred);
+
+	return error;
 }
 
 /* ARGSUSED */
@@ -283,8 +300,8 @@ ext2fs_getattr(void *v)
 	vap->va_fileid = ip->i_number;
 	vap->va_mode = ip->i_e2fs_mode & ALLPERMS;
 	vap->va_nlink = ip->i_e2fs_nlink;
-	vap->va_uid = ip->i_e2fs_uid;
-	vap->va_gid = ip->i_e2fs_gid;
+	vap->va_uid = ip->i_uid;
+	vap->va_gid = ip->i_gid;
 	vap->va_rdev = (dev_t)fs2h32(ip->i_din.e2fs_din->e2di_rdev);
 	vap->va_size = vp->v_size;
 	vap->va_atime.tv_sec = ip->i_e2fs_atime;
@@ -344,7 +361,7 @@ ext2fs_setattr(void *v)
 	if (vap->va_flags != VNOVAL) {
 		if (vp->v_mount->mnt_flag & MNT_RDONLY)
 			return (EROFS);
-		if (kauth_cred_geteuid(cred) != ip->i_e2fs_uid &&
+		if (kauth_cred_geteuid(cred) != ip->i_uid &&
 		    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
 		    NULL)))
 			return (error);
@@ -408,11 +425,8 @@ ext2fs_setattr(void *v)
 	if (vap->va_atime.tv_sec != VNOVAL || vap->va_mtime.tv_sec != VNOVAL) {
 		if (vp->v_mount->mnt_flag & MNT_RDONLY)
 			return (EROFS);
-		if (kauth_cred_geteuid(cred) != ip->i_e2fs_uid &&
-			(error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, 
-			NULL)) &&
-			((vap->va_vaflags & VA_UTIMES_NULL) == 0 ||
-			(error = VOP_ACCESS(vp, VWRITE, cred))))
+		error = genfs_can_chtimes(vp, vap->va_vaflags, ip->i_uid, cred);
+		if (error)
 			return (error);
 		if (vap->va_atime.tv_sec != VNOVAL)
 			if (!(vp->v_mount->mnt_flag & MNT_NOATIME))
@@ -442,19 +456,12 @@ static int
 ext2fs_chmod(struct vnode *vp, int mode, kauth_cred_t cred, struct lwp *l)
 {
 	struct inode *ip = VTOI(vp);
-	int error, ismember = 0;
+	int error;
 
-	if (kauth_cred_geteuid(cred) != ip->i_e2fs_uid &&
-	    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-	    NULL)))
+	error = genfs_can_chmod(vp, cred, ip->i_uid, ip->i_gid, mode);
+	if (error)
 		return (error);
-	if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL)) {
-		if (vp->v_type != VDIR && (mode & S_ISTXT))
-			return (EFTYPE);
-		if ((kauth_cred_ismember_gid(cred, ip->i_e2fs_gid, &ismember) != 0 ||
-		    !ismember) && (mode & ISGID))
-			return (EPERM);
-	}
+
 	ip->i_e2fs_mode &= ~ALLPERMS;
 	ip->i_e2fs_mode |= (mode & ALLPERMS);
 	ip->i_flag |= IN_CHANGE;
@@ -472,30 +479,33 @@ ext2fs_chown(struct vnode *vp, uid_t uid, gid_t gid, kauth_cred_t cred,
 	struct inode *ip = VTOI(vp);
 	uid_t ouid;
 	gid_t ogid;
-	int error = 0, ismember = 0;
+	int error;
 
 	if (uid == (uid_t)VNOVAL)
-		uid = ip->i_e2fs_uid;
+		uid = ip->i_uid;
 	if (gid == (gid_t)VNOVAL)
-		gid = ip->i_e2fs_gid;
-	/*
-	 * If we don't own the file, are trying to change the owner
-	 * of the file, or are not a member of the target group,
-	 * the caller must be superuser or the call fails.
-	 */
-	if ((kauth_cred_geteuid(cred) != ip->i_e2fs_uid || uid != ip->i_e2fs_uid ||
- 	    (gid != ip->i_e2fs_gid &&
-	    !(kauth_cred_getegid(cred) == gid ||
-	    (kauth_cred_ismember_gid(cred, gid, &ismember) == 0 && ismember)))) &&
-	    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL)))
-		return (error);
-	ogid = ip->i_e2fs_gid;
-	ouid = ip->i_e2fs_uid;
+		gid = ip->i_gid;
 
-	ip->i_e2fs_gid = gid;
-	ip->i_e2fs_uid = uid;
-	if (ouid != uid || ogid != gid)
+	error = genfs_can_chown(vp, cred, ip->i_uid, ip->i_gid, uid, gid);
+	if (error)
+		return (error);
+
+	ogid = ip->i_gid;
+	ouid = ip->i_uid;
+
+	ip->i_e2fs_gid = gid & 0xffff;
+	ip->i_e2fs_uid = uid & 0xffff;
+	if (ip->i_e2fs->e2fs.e2fs_rev > E2FS_REV0) {
+		ip->i_e2fs_gid_high = (gid >> 16) & 0xffff;
+		ip->i_e2fs_uid_high = (uid >> 16) & 0xffff;
+	} else {
+		ip->i_e2fs_gid_high = 0;
+		ip->i_e2fs_uid_high = 0;
+	}
+	if (ouid != uid || ogid != gid) {
+		ext2fs_set_inode_guid(ip);
 		ip->i_flag |= IN_CHANGE;
+	}
 	if (ouid != uid && kauth_authorize_generic(cred,
 	    KAUTH_GENERIC_ISSUSER, NULL) != 0)
 		ip->i_e2fs_mode &= ~ISUID;
@@ -542,7 +552,7 @@ ext2fs_remove(void *v)
 }
 
 /*
- * link vnode call
+ * ext2fs_link: create hard link.
  */
 int
 ext2fs_link(void *v)
@@ -558,21 +568,12 @@ ext2fs_link(void *v)
 	struct inode *ip;
 	int error;
 
-#ifdef DIAGNOSTIC
-	if ((cnp->cn_flags & HASBUF) == 0)
-		panic("ext2fs_link: no name");
-#endif
-	if (vp->v_type == VDIR) {
-		VOP_ABORTOP(dvp, cnp);
-		error = EISDIR;
-		goto out2;
-	}
-	if (dvp->v_mount != vp->v_mount) {
-		VOP_ABORTOP(dvp, cnp);
-		error = EXDEV;
-		goto out2;
-	}
-	if (dvp != vp && (error = vn_lock(vp, LK_EXCLUSIVE))) {
+	KASSERT(dvp != vp);
+	KASSERT(vp->v_type != VDIR);
+	KASSERT(dvp->v_mount == vp->v_mount);
+
+	error = vn_lock(vp, LK_EXCLUSIVE);
+	if (error) {
 		VOP_ABORTOP(dvp, cnp);
 		goto out2;
 	}
@@ -596,10 +597,8 @@ ext2fs_link(void *v)
 		ip->i_e2fs_nlink--;
 		ip->i_flag |= IN_CHANGE;
 	}
-	PNBUF_PUT(cnp->cn_pnbuf);
 out1:
-	if (dvp != vp)
-		VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 out2:
 	VN_KNOTE(vp, NOTE_LINK);
 	VN_KNOTE(dvp, NOTE_WRITE);
@@ -609,7 +608,7 @@ out2:
 
 /*
  * Rename system call.
- * 	rename("foo", "bar");
+ *	rename("foo", "bar");
  * is essentially
  *	unlink("bar");
  *	link("foo", "bar");
@@ -654,11 +653,6 @@ ext2fs_rename(void *v)
 	int error = 0;
 	u_char namlen;
 
-#ifdef DIAGNOSTIC
-	if ((tcnp->cn_flags & HASBUF) == 0 ||
-	    (fcnp->cn_flags & HASBUF) == 0)
-		panic("ext2fs_rename: no name");
-#endif
 	/*
 	 * Check for cross-device rename.
 	 */
@@ -700,11 +694,11 @@ abortit:
 
 		/* Delete source. */
 		vrele(fvp);
-		fcnp->cn_flags &= ~(MODMASK | SAVESTART);
+		fcnp->cn_flags &= ~(MODMASK);
 		fcnp->cn_flags |= LOCKPARENT | LOCKLEAF;
 		fcnp->cn_nameiop = DELETE;
 		vn_lock(fdvp, LK_EXCLUSIVE | LK_RETRY);
-		if ((error = relookup(fdvp, &fvp, fcnp))) {
+		if ((error = relookup(fdvp, &fvp, fcnp, 0))) {
 			vput(fdvp);
 			return (error);
 		}
@@ -715,25 +709,25 @@ abortit:
 	dp = VTOI(fdvp);
 	ip = VTOI(fvp);
 	if ((nlink_t) ip->i_e2fs_nlink >= LINK_MAX) {
-		VOP_UNLOCK(fvp, 0);
+		VOP_UNLOCK(fvp);
 		error = EMLINK;
 		goto abortit;
 	}
 	if ((ip->i_e2fs_flags & (EXT2_IMMUTABLE | EXT2_APPEND)) ||
 		(dp->i_e2fs_flags & EXT2_APPEND)) {
-		VOP_UNLOCK(fvp, 0);
+		VOP_UNLOCK(fvp);
 		error = EPERM;
 		goto abortit;
 	}
 	if ((ip->i_e2fs_mode & IFMT) == IFDIR) {
-        	error = VOP_ACCESS(fvp, VWRITE, tcnp->cn_cred);
-        	if (!error && tvp)
-                	error = VOP_ACCESS(tvp, VWRITE, tcnp->cn_cred);
-        	if (error) {
-                	VOP_UNLOCK(fvp, 0);
-                	error = EACCES;
-                	goto abortit;
-        	}
+		error = VOP_ACCESS(fvp, VWRITE, tcnp->cn_cred);
+		if (!error && tvp)
+			error = VOP_ACCESS(tvp, VWRITE, tcnp->cn_cred);
+		if (error) {
+			VOP_UNLOCK(fvp);
+			error = EACCES;
+			goto abortit;
+		}
 		/*
 		 * Avoid ".", "..", and aliases of "." for obvious reasons.
 		 */
@@ -742,7 +736,7 @@ abortit:
 		    (fcnp->cn_flags & ISDOTDOT) ||
 		    (tcnp->cn_flags & ISDOTDOT) ||
 		    (ip->i_flag & IN_RENAME)) {
-			VOP_UNLOCK(fvp, 0);
+			VOP_UNLOCK(fvp);
 			error = EINVAL;
 			goto abortit;
 		}
@@ -770,7 +764,7 @@ abortit:
 	ip->i_e2fs_nlink++;
 	ip->i_flag |= IN_CHANGE;
 	if ((error = ext2fs_update(fvp, NULL, NULL, UPDATE_WAIT)) != 0) {
-		VOP_UNLOCK(fvp, 0);
+		VOP_UNLOCK(fvp);
 		goto bad;
 	}
 
@@ -785,7 +779,7 @@ abortit:
 	 * call to checkpath().
 	 */
 	error = VOP_ACCESS(fvp, VWRITE, tcnp->cn_cred);
-	VOP_UNLOCK(fvp, 0);
+	VOP_UNLOCK(fvp);
 	if (oldparent != dp->i_number)
 		newparent = dp->i_number;
 	if (doingdirectory && newparent) {
@@ -799,9 +793,8 @@ abortit:
 			vrele(tdvp);
 			goto out;
 		}
-		tcnp->cn_flags &= ~SAVESTART;
 		vn_lock(tdvp, LK_EXCLUSIVE | LK_RETRY);
-		if ((error = relookup(tdvp, &tvp, tcnp)) != 0) {
+		if ((error = relookup(tdvp, &tvp, tcnp, 0)) != 0) {
 			vput(tdvp);
 			goto out;
 		}
@@ -865,8 +858,8 @@ abortit:
 		if ((dp->i_e2fs_mode & S_ISTXT) &&
 		    kauth_authorize_generic(tcnp->cn_cred,
 		     KAUTH_GENERIC_ISSUSER, NULL) != 0 &&
-		    kauth_cred_geteuid(tcnp->cn_cred) != dp->i_e2fs_uid &&
-		    xp->i_e2fs_uid != kauth_cred_geteuid(tcnp->cn_cred)) {
+		    kauth_cred_geteuid(tcnp->cn_cred) != dp->i_uid &&
+		    xp->i_uid != kauth_cred_geteuid(tcnp->cn_cred)) {
 			error = EPERM;
 			goto bad;
 		}
@@ -931,10 +924,10 @@ abortit:
 	/*
 	 * 3) Unlink the source.
 	 */
-	fcnp->cn_flags &= ~(MODMASK | SAVESTART);
+	fcnp->cn_flags &= ~(MODMASK);
 	fcnp->cn_flags |= LOCKPARENT | LOCKLEAF;
 	vn_lock(fdvp, LK_EXCLUSIVE | LK_RETRY);
-	if ((error = relookup(fdvp, &fvp, fcnp))) {
+	if ((error = relookup(fdvp, &fvp, fcnp, 0))) {
 		vput(fdvp);
 		vrele(ap->a_fvp);
 		return (error);
@@ -1051,10 +1044,6 @@ ext2fs_mkdir(void *v)
 	struct ext2fs_dirtemplate dirtemplate;
 	int			error, dmode;
 
-#ifdef DIAGNOSTIC
-	if ((cnp->cn_flags & HASBUF) == 0)
-		panic("ext2fs_mkdir: no name");
-#endif
 	if ((nlink_t)dp->i_e2fs_nlink >= LINK_MAX) {
 		error = EMLINK;
 		goto out;
@@ -1069,8 +1058,17 @@ ext2fs_mkdir(void *v)
 	if ((error = ext2fs_valloc(dvp, dmode, cnp->cn_cred, &tvp)) != 0)
 		goto out;
 	ip = VTOI(tvp);
-	ip->i_e2fs_uid = kauth_cred_geteuid(cnp->cn_cred);
+	ip->i_uid = kauth_cred_geteuid(cnp->cn_cred);
+	ip->i_e2fs_uid = ip->i_uid & 0xffff;
 	ip->i_e2fs_gid = dp->i_e2fs_gid;
+	if (ip->i_e2fs->e2fs.e2fs_rev > E2FS_REV0) {
+		ip->i_e2fs_uid_high = (ip->i_uid >> 16) & 0xffff;
+		ip->i_e2fs_gid_high = dp->i_e2fs_gid_high;
+	} else {
+		ip->i_e2fs_uid_high = 0;
+		ip->i_e2fs_gid_high = 0;
+	}
+	ip->i_gid = ip->i_e2fs_gid | (ip->i_e2fs_gid_high << 16);
 	ip->i_flag |= IN_ACCESS | IN_CHANGE | IN_UPDATE;
 	ip->i_e2fs_mode = dmode;
 	tvp->v_type = VDIR;	/* Rest init'd in getnewvnode(). */
@@ -1146,7 +1144,6 @@ bad:
 		*ap->a_vpp = tvp;
 	}
 out:
-	PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	return (error);
 }
@@ -1334,10 +1331,12 @@ ext2fs_fsync(void *v)
 	int error;
 
 	wait = (ap->a_flags & FSYNC_WAIT) != 0;
-	vflushbuf(vp, wait);
-	if ((ap->a_flags & FSYNC_DATAONLY) != 0)
-		error = 0;
+
+	if (vp->v_type == VBLK)
+		error = spec_fsync(v);
 	else
+		error = vflushbuf(vp, wait);
+	if (error == 0 && (ap->a_flags & FSYNC_DATAONLY) == 0)
 		error = ext2fs_update(vp, NULL, NULL, wait ? UPDATE_WAIT : 0);
 
 	if (error == 0 && ap->a_flags & FSYNC_CACHE) {
@@ -1359,7 +1358,7 @@ ext2fs_vinit(struct mount *mntp, int (**specops)(void *),
 {
 	struct timeval tv;
 	struct inode *ip;
-	struct vnode *vp, *nvp;
+	struct vnode *vp;
 
 	vp = *vpp;
 	ip = VTOI(vp);
@@ -1367,24 +1366,7 @@ ext2fs_vinit(struct mount *mntp, int (**specops)(void *),
 	case VCHR:
 	case VBLK:
 		vp->v_op = specops;
-		if ((nvp = checkalias(vp,
-		    fs2h32(ip->i_din.e2fs_din->e2di_rdev), mntp)) != NULL) {
-			/*
-			 * Discard unneeded vnode, but save its inode.
-			 */
-			nvp->v_data = vp->v_data;
-			vp->v_data = NULL;
-			vp->v_vflag &= ~VV_LOCKSWORK;
-			VOP_UNLOCK(vp, 0);
-			vp->v_op = spec_vnodeop_p;
-			vgone(vp);
-			lockmgr(&nvp->v_lock, LK_EXCLUSIVE, &nvp->v_interlock);
-			/*
-			 * Reinitialize aliased inode.
-			 */
-			vp = nvp;
-			ip->i_vnode = vp;
-		}
+		spec_node_init(vp, fs2h32(ip->i_din.e2fs_din->e2di_rdev));
 		break;
 	case VFIFO:
 		vp->v_op = fifoops;
@@ -1421,28 +1403,32 @@ ext2fs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 	int error, ismember = 0;
 
 	pdir = VTOI(dvp);
-#ifdef DIAGNOSTIC
-	if ((cnp->cn_flags & HASBUF) == 0)
-		panic("ext2fs_makeinode: no name");
-#endif
 	*vpp = NULL;
 	if ((mode & IFMT) == 0)
 		mode |= IFREG;
 
 	if ((error = ext2fs_valloc(dvp, mode, cnp->cn_cred, &tvp)) != 0) {
-		PNBUF_PUT(cnp->cn_pnbuf);
 		vput(dvp);
 		return (error);
 	}
 	ip = VTOI(tvp);
+	ip->i_uid = kauth_cred_geteuid(cnp->cn_cred);
+	ip->i_e2fs_uid = ip->i_uid & 0xffff;
 	ip->i_e2fs_gid = pdir->i_e2fs_gid;
-	ip->i_e2fs_uid = kauth_cred_geteuid(cnp->cn_cred);
+	if (ip->i_e2fs->e2fs.e2fs_rev > E2FS_REV0) {
+		ip->i_e2fs_uid_high = (ip->i_uid >> 16) & 0xffff;
+		ip->i_e2fs_gid_high = pdir->i_e2fs_gid_high;
+	} else {
+		ip->i_e2fs_uid_high = 0;
+		ip->i_e2fs_gid_high = 0;
+	}
+	ip->i_gid = ip->i_e2fs_gid | (ip->i_e2fs_gid_high << 16);
 	ip->i_flag |= IN_ACCESS | IN_CHANGE | IN_UPDATE;
 	ip->i_e2fs_mode = mode;
 	tvp->v_type = IFTOVT(mode);	/* Rest init'd in getnewvnode(). */
 	ip->i_e2fs_nlink = 1;
 	if ((ip->i_e2fs_mode & ISGID) && (kauth_cred_ismember_gid(cnp->cn_cred,
-	    ip->i_e2fs_gid, &ismember) != 0 || !ismember) &&
+	    ip->i_gid, &ismember) != 0 || !ismember) &&
 	    kauth_authorize_generic(cnp->cn_cred, KAUTH_GENERIC_ISSUSER, NULL))
 		ip->i_e2fs_mode &= ~ISGID;
 
@@ -1454,8 +1440,6 @@ ext2fs_makeinode(int mode, struct vnode *dvp, struct vnode **vpp,
 	error = ext2fs_direnter(ip, dvp, cnp);
 	if (error != 0)
 		goto bad;
-	if ((cnp->cn_flags & SAVESTART) == 0)
-		PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	*vpp = tvp;
 	return (0);
@@ -1469,7 +1453,6 @@ bad:
 	ip->i_e2fs_nlink = 0;
 	ip->i_flag |= IN_CHANGE;
 	vput(tvp);
-	PNBUF_PUT(cnp->cn_pnbuf);
 	vput(dvp);
 	return (error);
 }
@@ -1487,6 +1470,13 @@ ext2fs_reclaim(void *v)
 	struct inode *ip = VTOI(vp);
 	int error;
 
+	/*
+	 * The inode must be freed and updated before being removed
+	 * from its hash chain.  Other threads trying to gain a hold
+	 * on the inode will be stalled because it is locked (VI_XLOCK).
+	 */
+	if (ip->i_omode == 1 && (vp->v_mount->mnt_flag & MNT_RDONLY) == 0)
+		ext2fs_vfree(vp, ip->i_number, ip->i_e2fs_mode);
 	if ((error = ufs_reclaim(vp)) != 0)
 		return (error);
 	if (ip->i_din.e2fs_din != NULL)
@@ -1511,7 +1501,6 @@ const struct vnodeopv_entry_desc ext2fs_vnodeop_entries[] = {
 	{ &vop_setattr_desc, ext2fs_setattr },		/* setattr */
 	{ &vop_read_desc, ext2fs_read },		/* read */
 	{ &vop_write_desc, ext2fs_write },		/* write */
-	{ &vop_lease_desc, ufs_lease_check },		/* lease */
 	{ &vop_ioctl_desc, ufs_ioctl },			/* ioctl */
 	{ &vop_fcntl_desc, ufs_fcntl },			/* fcntl */
 	{ &vop_poll_desc, ufs_poll },			/* poll */
@@ -1560,7 +1549,6 @@ const struct vnodeopv_entry_desc ext2fs_specop_entries[] = {
 	{ &vop_setattr_desc, ext2fs_setattr },		/* setattr */
 	{ &vop_read_desc, ufsspec_read },		/* read */
 	{ &vop_write_desc, ufsspec_write },		/* write */
-	{ &vop_lease_desc, spec_lease_check },		/* lease */
 	{ &vop_ioctl_desc, spec_ioctl },		/* ioctl */
 	{ &vop_fcntl_desc, ufs_fcntl },			/* fcntl */
 	{ &vop_poll_desc, spec_poll },			/* poll */
@@ -1599,46 +1587,45 @@ const struct vnodeopv_desc ext2fs_specop_opv_desc =
 int (**ext2fs_fifoop_p)(void *);
 const struct vnodeopv_entry_desc ext2fs_fifoop_entries[] = {
 	{ &vop_default_desc, vn_default_error },
-	{ &vop_lookup_desc, fifo_lookup },		/* lookup */
-	{ &vop_create_desc, fifo_create },		/* create */
-	{ &vop_mknod_desc, fifo_mknod },		/* mknod */
-	{ &vop_open_desc, fifo_open },			/* open */
+	{ &vop_lookup_desc, vn_fifo_bypass },		/* lookup */
+	{ &vop_create_desc, vn_fifo_bypass },		/* create */
+	{ &vop_mknod_desc, vn_fifo_bypass },		/* mknod */
+	{ &vop_open_desc, vn_fifo_bypass },		/* open */
 	{ &vop_close_desc, ufsfifo_close },		/* close */
 	{ &vop_access_desc, ext2fs_access },		/* access */
 	{ &vop_getattr_desc, ext2fs_getattr },		/* getattr */
 	{ &vop_setattr_desc, ext2fs_setattr },		/* setattr */
 	{ &vop_read_desc, ufsfifo_read },		/* read */
 	{ &vop_write_desc, ufsfifo_write },		/* write */
-	{ &vop_lease_desc, fifo_lease_check },		/* lease */
-	{ &vop_ioctl_desc, fifo_ioctl },		/* ioctl */
+	{ &vop_ioctl_desc, vn_fifo_bypass },		/* ioctl */
 	{ &vop_fcntl_desc, ufs_fcntl },			/* fcntl */
-	{ &vop_poll_desc, fifo_poll },			/* poll */
-	{ &vop_kqfilter_desc, fifo_kqfilter },		/* kqfilter */
-	{ &vop_revoke_desc, fifo_revoke },		/* revoke */
-	{ &vop_mmap_desc, fifo_mmap },			/* mmap */
+	{ &vop_poll_desc, vn_fifo_bypass },		/* poll */
+	{ &vop_kqfilter_desc, vn_fifo_bypass },		/* kqfilter */
+	{ &vop_revoke_desc, vn_fifo_bypass },		/* revoke */
+	{ &vop_mmap_desc, vn_fifo_bypass },		/* mmap */
 	{ &vop_fsync_desc, ext2fs_fsync },		/* fsync */
-	{ &vop_seek_desc, fifo_seek },			/* seek */
-	{ &vop_remove_desc, fifo_remove },		/* remove */
-	{ &vop_link_desc, fifo_link },			/* link */
-	{ &vop_rename_desc, fifo_rename },		/* rename */
-	{ &vop_mkdir_desc, fifo_mkdir },		/* mkdir */
-	{ &vop_rmdir_desc, fifo_rmdir },		/* rmdir */
-	{ &vop_symlink_desc, fifo_symlink },		/* symlink */
-	{ &vop_readdir_desc, fifo_readdir },		/* readdir */
-	{ &vop_readlink_desc, fifo_readlink },		/* readlink */
-	{ &vop_abortop_desc, fifo_abortop },		/* abortop */
+	{ &vop_seek_desc, vn_fifo_bypass },		/* seek */
+	{ &vop_remove_desc, vn_fifo_bypass },		/* remove */
+	{ &vop_link_desc, vn_fifo_bypass },		/* link */
+	{ &vop_rename_desc, vn_fifo_bypass },		/* rename */
+	{ &vop_mkdir_desc, vn_fifo_bypass },		/* mkdir */
+	{ &vop_rmdir_desc, vn_fifo_bypass },		/* rmdir */
+	{ &vop_symlink_desc, vn_fifo_bypass },		/* symlink */
+	{ &vop_readdir_desc, vn_fifo_bypass },		/* readdir */
+	{ &vop_readlink_desc, vn_fifo_bypass },		/* readlink */
+	{ &vop_abortop_desc, vn_fifo_bypass },		/* abortop */
 	{ &vop_inactive_desc, ext2fs_inactive },	/* inactive */
 	{ &vop_reclaim_desc, ext2fs_reclaim },		/* reclaim */
 	{ &vop_lock_desc, ufs_lock },			/* lock */
 	{ &vop_unlock_desc, ufs_unlock },		/* unlock */
-	{ &vop_bmap_desc, fifo_bmap },			/* bmap */
-	{ &vop_strategy_desc, fifo_strategy },		/* strategy */
+	{ &vop_bmap_desc, vn_fifo_bypass },		/* bmap */
+	{ &vop_strategy_desc, vn_fifo_bypass },		/* strategy */
 	{ &vop_print_desc, ufs_print },			/* print */
 	{ &vop_islocked_desc, ufs_islocked },		/* islocked */
-	{ &vop_pathconf_desc, fifo_pathconf },		/* pathconf */
-	{ &vop_advlock_desc, fifo_advlock },		/* advlock */
+	{ &vop_pathconf_desc, vn_fifo_bypass },		/* pathconf */
+	{ &vop_advlock_desc, vn_fifo_bypass },		/* advlock */
 	{ &vop_bwrite_desc, vn_bwrite },		/* bwrite */
-	{ &vop_putpages_desc, fifo_putpages }, 		/* putpages */
+	{ &vop_putpages_desc, vn_fifo_bypass },		/* putpages */
 	{ NULL, NULL }
 };
 const struct vnodeopv_desc ext2fs_fifoop_opv_desc =

@@ -1,4 +1,4 @@
-/*	$NetBSD: biosmemps2.S,v 1.2 2003/02/05 21:50:25 dsl Exp $	*/
+/*	$NetBSD: biosmemps2.S,v 1.5 2011/02/20 05:45:48 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -63,7 +56,7 @@ ENTRY(getextmemps2)
 	# do int15, function 0xc0 call to discover if C7h is supported
 	movb	$0xc0, %ah
 	int	$0x15
-	setc	%bl
+	setc	%cl
 	jc	out		# 0xc0 not supported if carry set
 
 	# check feature byte 2, bit 4 to see if return memory map is supported
@@ -71,12 +64,13 @@ ENTRY(getextmemps2)
 	andb	$0x10, %al
 	jnz	getmem		# 0xc7 supported
 	
-	# set %bl to indicate failure, and exit
-	movb	$2, %bl
+	# set %cl to indicate failure, and exit
+	movb	$2, %cl
 	jmp	out
 
 getmem:
 	# move the parameter to right register
+	push	%ds
 	movl	%edx, %esi
 	andl	$0xf, %esi
 	shrl	$4, %edx
@@ -87,14 +81,14 @@ getmem:
 	# actually call int15, function 0xc7 now
 	movb	$0xc7, %ah
 	int	$0x15
-	setc	%bl		# save carry
+	setc	%cl		# save carry
+	pop	%ds
 
 out:
 	calll	_C_LABEL(real_to_prot)
 	.code32
 
-	xorl	%eax, %eax
-	movb	%bl, %al	# return value in %ax
+	movzbl	%cl, %eax	# return value in %eax
 
 	pop	%edi
 	pop	%esi

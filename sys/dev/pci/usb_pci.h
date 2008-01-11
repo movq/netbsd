@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_pci.h,v 1.3 2002/02/14 21:58:30 augustss Exp $	*/
+/*	$NetBSD: usb_pci.h,v 1.6 2010/12/11 17:58:41 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,11 +40,12 @@ struct usb_pci {
 	u_int		bus;
 	u_int		device;
 	u_int		function;
-	struct usbd_bus *usb;
+	device_t	usb;
+	bool		claimed;
 };
 
 TAILQ_HEAD(usb_pci_alldevs, usb_pci);
 extern struct usb_pci_alldevs ehci_pci_alldevs;
 
-void usb_pci_add(struct usb_pci *, struct pci_attach_args *, struct usbd_bus *);
+void usb_pci_add(struct usb_pci *, struct pci_attach_args *, device_t);
 void usb_pci_rem(struct usb_pci *);

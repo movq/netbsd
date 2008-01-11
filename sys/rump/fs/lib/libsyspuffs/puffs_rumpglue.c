@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_rumpglue.c,v 1.1 2008/01/02 18:15:13 pooka Exp $	*/
+/*	$NetBSD: puffs_rumpglue.c,v 1.11 2009/10/14 18:18:53 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_rumpglue.c,v 1.1 2008/01/02 18:15:13 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_rumpglue.c,v 1.11 2009/10/14 18:18:53 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -38,20 +38,13 @@ __KERNEL_RCSID(0, "$NetBSD: puffs_rumpglue.c,v 1.1 2008/01/02 18:15:13 pooka Exp
 #include <sys/kthread.h>
 #include <sys/mount.h>
 
+#include <dev/putter/putter.h>
 #include <dev/putter/putter_sys.h>
 
-#include "rump.h"
-#include "rumpuser.h"
+#include <rump/rump.h>
+#include <rump/rumpuser.h>
 
-#include "puffs_rumpglue.h"
-
-int
-dounmount(struct mount *mp, int flags, struct lwp *l)
-{
-
-	VFS_UNMOUNT(mp, MNT_FORCE);
-	panic("control fd is dead");
-}
+#include "rump_vfs_private.h"
 
 void putterattach(void); /* XXX: from autoconf */
 dev_type_open(puttercdopen);
@@ -91,15 +84,14 @@ readthread(void *arg)
 		ssize_t n;
 
 		off = 0;
-		fp = fd_getfile(pap->fdp, pap->fpfd);
-		FILE_USE(fp);
+		fp = fd_getfile(pap->fpfd);
 		error = dofileread(pap->fpfd, fp, buf, BUFSIZE,
 		    &off, 0, &rv);
 		if (error) {
 			if (error == ENOENT && inited == 0)
 				goto retry;
 			if (error == ENXIO)
-				kthread_exit(0);
+				break;
 			panic("fileread failed: %d", error);
 		}
 		inited = 1;
@@ -113,6 +105,8 @@ readthread(void *arg)
 			rv -= n;
 		}
 	}
+
+	kthread_exit(0);
 }
 
 /* Read requests from comfd and proxy them to /dev/puffs */
@@ -121,38 +115,62 @@ writethread(void *arg)
 {
 	struct ptargs *pap = arg;
 	struct file *fp;
+	struct putter_hdr *phdr;
 	register_t rv;
 	char *buf;
 	off_t off;
+	size_t toread;
 	int error;
 
 	buf = kmem_alloc(BUFSIZE, KM_SLEEP);
+	phdr = (struct putter_hdr *)buf;
 
 	for (;;) {
 		ssize_t n;
 
-		n = rumpuser_read(pap->comfd, buf, BUFSIZE, &error);
-		if (n <= 0)
-			panic("rumpuser_read %zd %d", n, error);
+		/*
+		 * Need to write everything to the "kernel" in one chunk,
+		 * so make sure we have it here.
+		 */
+		off = 0;
+		toread = sizeof(struct putter_hdr);
+		do {
+			n = rumpuser_read(pap->comfd, buf+off, toread, &error);
+			if (n <= 0) {
+				if (n == 0)
+					goto out;
+				panic("rumpuser_read %zd %d", n, error);
+			}
+			off += n;
+			if (off >= sizeof(struct putter_hdr))
+				toread = phdr->pth_framelen - off;
+			else
+				toread = off - sizeof(struct putter_hdr);
+		} while (toread);
 
 		off = 0;
-		fp = fd_getfile(pap->fdp, pap->fpfd);
-		FILE_USE(fp);
-		error = dofilewrite(pap->fpfd, fp, buf, n,
+		rv = 0;
+		fp = fd_getfile(pap->fpfd);
+		error = dofilewrite(pap->fpfd, fp, buf, phdr->pth_framelen,
 		    &off, 0, &rv);
 		if (error == ENXIO)
-			kthread_exit(0);
-		KASSERT(rv == n);
+			goto out;
+		KASSERT(rv == phdr->pth_framelen);
 	}
+ out:
+
+	kthread_exit(0);
 }
 
 int
-puffs_rumpglue_init(int fd, int *newfd)
+rump_syspuffs_glueinit(int fd, int *newfd)
 {
 	struct ptargs *pap;
 	int rv;
 
-	rump_init();
+	if ((rv = rump_init()) != 0)
+		return rv;
+
 	putterattach();
 	rv = puttercdopen(makedev(178, 0), 0, 0, curlwp);
 	if (rv && rv != EMOVEFD)

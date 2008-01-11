@@ -1,4 +1,4 @@
-/* $NetBSD: intr.h,v 1.10 2007/12/03 15:33:49 ad Exp $ */
+/* $NetBSD: intr.h,v 1.13 2008/07/10 16:14:16 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,8 +40,8 @@
 #include <machine/psl.h>
 
 #define splnone()	spl0()
-#define splsoftbio()	splraise1()
 #define splsoftclock()	splraise1()
+#define splsoftbio()	splraise1()
 #define splsoftnet()	splraise1()
 #define splsoftserial()	splraise1()
 #define splvm()		spl7()
@@ -58,7 +51,7 @@
 /* watch out for side effects */
 #define splx(s)         ((s) & PSL_IPL ? _spl(s) : spl0())
 
-int spl0 __P((void));
+int spl0(void);
 
 #define	IPL_NONE	0
 #define	IPL_SOFTCLOCK	1
@@ -70,25 +63,25 @@ int spl0 __P((void));
 #define	IPL_HIGH	7
 #define	NIPL		8
 
-extern const int ipl2spl_table[NIPL];
+extern const uint16_t ipl2psl_table[NIPL];
 
 typedef int ipl_t;
 typedef struct {
-	uint16_t _spl;
+	uint16_t _psl;
 } ipl_cookie_t;
 
 static inline ipl_cookie_t
 makeiplcookie(ipl_t ipl)
 {
 
-	return (ipl_cookie_t){._spl = ipl2spl_table[ipl]};
+	return (ipl_cookie_t){._psl = ipl2psl_table[ipl]};
 }
 
 static inline int
 splraiseipl(ipl_cookie_t icookie)
 {
 
-	return _splraise(icookie._spl);
+	return _splraise(icookie._psl);
 }
 
 #endif /* _KERNEL */

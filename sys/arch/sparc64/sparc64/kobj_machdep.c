@@ -1,4 +1,4 @@
-/*	$NetBSD: kobj_machdep.c,v 1.1 2008/01/04 16:34:41 ad Exp $	*/
+/*	$NetBSD: kobj_machdep.c,v 1.4 2010/05/02 11:43:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 Jake Burkholder.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.1 2008/01/04 16:34:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.4 2010/05/02 11:43:30 martin Exp $");
 
 #define	ELFSIZE		ARCH_ELFSIZE
 
@@ -171,7 +164,7 @@ static const long reloc_target_bitmask[] = {
 	_BM(22), _BM(10),		/* _HIPLT22, LOPLT10 */
 	_BM(32), _BM(22), _BM(10),	/* _PCPLT32, _PCPLT22, _PCPLT10 */
 	_BM(10), _BM(11), -1,		/* _10, _11, _64 */
-	_BM(13), _BM(22),		/* _OLO10, _HH22 */
+	_BM(10), _BM(22),		/* _OLO10, _HH22 */
 	_BM(10), _BM(22),		/* _HM10, _LM22 */
 	_BM(22), _BM(10), _BM(22),	/* _PC_HH22, _PC_HM10, _PC_LM22 */
 	_BM(16), _BM(19),		/* _WDISP16, _WDISP19 */
@@ -210,8 +203,11 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 	if (rtype == R_SPARC_NONE)
 		return 0;
 
+	if ((rtype & 0x00ff) == R_SPARC_OLO10)
+		rtype = R_SPARC_OLO10;
+
 	if (rtype == R_SPARC_RELATIVE) {
-		kobj_stat(ko, &base, NULL, NULL);
+		kobj_stat(ko, &base, NULL);
 		value = rela->r_addend + (Elf_Addr)base;
 		where = (Elf_Addr *)((Elf_Addr)base + rela->r_offset);
 		*where = value;
@@ -219,8 +215,7 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 	}
 
 	if (rtype == R_SPARC_JMP_SLOT || rtype == R_SPARC_COPY ||
-	    rtype >= sizeof(reloc_target_bitmask) /
-	    sizeof(*reloc_target_bitmask))
+	    rtype >= __arraycount(reloc_target_bitmask))
 		return -1;
 
 	if (RELOC_UNALIGNED(rtype))

@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_extern.h,v 1.27 2007/08/02 12:53:30 pooka Exp $	*/
+/*	$NetBSD: mfs_extern.h,v 1.31 2010/03/02 17:20:02 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,6 @@
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/mallocvar.h>
-MALLOC_DECLARE(M_MFSNODE);
 
 struct buf;
 struct mount;
@@ -63,10 +62,17 @@ int	mfs_close(void *);
 int	mfs_inactive(void *);
 int	mfs_reclaim(void *);
 int	mfs_print(void *);
+int	mfs_fsync(void *);
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_mfs_setup);
-#endif /* SYSCTL_SETUP_PROTO */
+#ifdef _KERNEL
+
+#include <sys/mutex.h>
+
+extern kmutex_t	mfs_lock;
+extern void *mfs_rootbase;
+extern u_long mfs_rootsize;
+
+#endif
 
 __END_DECLS
 

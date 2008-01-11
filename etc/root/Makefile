@@ -1,6 +1,7 @@
-#	$NetBSD: Makefile,v 1.1 2004/05/16 09:53:10 lukem Exp $
+#	$NetBSD: Makefile,v 1.3 2010/02/05 09:44:23 roy Exp $
 
 CONFIGFILES=		dot.cshrc dot.klogin dot.login dot.profile dot.shrc
+
 FILESDIR=		/root
 FILESMODE=		644
 FILESMODE_dot.klogin=	600

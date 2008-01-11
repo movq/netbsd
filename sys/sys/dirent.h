@@ -1,4 +1,4 @@
-/*	$NetBSD: dirent.h,v 1.23 2005/12/26 18:41:36 perry Exp $	*/
+/*	$NetBSD: dirent.h,v 1.25 2011/05/23 21:59:23 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -42,9 +42,9 @@
  *
  * A directory entry has a struct dirent at the front of it, containing its
  * inode number, the length of the entry, and the length of the name
- * contained in the entry.  These are followed by the name padded to a 4
- * byte boundary with null bytes.  All names are guaranteed null terminated.
- * The maximum length of a name in a directory is MAXNAMLEN.
+ * contained in the entry.  These are followed by the name padded to 
+ * _DIRENT_ALIGN() byte boundary with null bytes.  All names are guaranteed
+ * NUL terminated.  The maximum length of a name in a directory is MAXNAMLEN.
  */
 struct dirent {
 	ino_t d_fileno;			/* file number of entry */
@@ -83,8 +83,12 @@ struct dirent {
  * The _DIRENT_NAMEOFF macro returns the offset of the d_name field in 
  * struct dirent
  */
+#if __GNUC_PREREQ__(4, 0)
+#define	_DIRENT_NAMEOFF(dp)	__builtin_offsetof(struct dirent, d_name)
+#else
 #define _DIRENT_NAMEOFF(dp) \
     ((char *)(void *)&(dp)->d_name - (char *)(void *)dp)
+#endif
 /*
  * The _DIRENT_RECLEN macro gives the minimum record length which will hold
  * a name of size "namlen".  This requires the amount of space in struct dirent

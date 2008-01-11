@@ -1,4 +1,4 @@
-/* $NetBSD: coda.h,v 1.14 2007/03/04 06:01:11 christos Exp $ */
+/* $NetBSD: coda.h,v 1.17 2010/08/07 20:39:33 christos Exp $ */
 
 /*
 
@@ -272,7 +272,7 @@ struct coda_vattr {
 	short		va_nlink;	/* number of references to file */
 	uid_t		va_uid;		/* owner user id */
 	gid_t		va_gid;		/* owner group id */
-	long		va_fileid;	/* file id */
+	u_long		va_fileid;	/* file id */
 	u_quad_t	va_size;	/* file size in bytes */
 	long		va_blocksize;	/* blocksize preferred for i/o */
 	struct timespec	va_atime;	/* time of last access */
@@ -793,8 +793,8 @@ union coda_downcalls {
 #define PIOCPARM_MASK 0x0000ffff
 struct ViceIoctl {
         void *in, *out;		/* Data to be transferred in, or out */
-        short in_size;          /* Size of input buffer <= 2K */
-        short out_size;         /* Maximum size of output buffer, <= 2K */
+        unsigned short in_size; /* Size of input buffer <= 8K */
+        unsigned short out_size;/* Maximum size of output buffer, <= 8K */
 };
 
 struct PioctlData {

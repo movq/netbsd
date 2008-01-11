@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.S,v 1.8 2005/12/11 12:17:48 christos Exp $	*/
+/*	$NetBSD: bootxx.S,v 1.10 2011/01/06 01:08:48 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  *
  * On entry:
  * 	%dl			BIOS drive number
- *	%esi			Sector number of netbsd partition
+ *	%edi:%esi		Sector number of NetBSD partition
  *	%cs, %ds, %es, %ss	All zero
  *	%sp			near 0xfffc
  */
@@ -67,6 +60,7 @@ boot_params:				/* space for patchable variables */
 	calll	real_to_prot
 	.code32
 
+	push	%edi
 	movl	$_end, %ecx		/* zero bss */
 	movl	$__bss_start, %edi
 	subl	%edi, %ecx
@@ -74,9 +68,11 @@ boot_params:				/* space for patchable variables */
 	xor	%eax, %eax
 	rep
 	stosl
+	pop	%edi
 
-	and	$0xff, %edx
-	push	%esi			/* save args for secondary bootstrap */
+	movzbl	%dl, %edx
+	push	%edi			/* save args for secondary bootstrap */
+	push	%esi
 	movl	%esp, %esi		/* address of sector number */
 	push	%edx
 	push	%esi			/* args for boot1 */
@@ -91,7 +87,9 @@ boot_params:				/* space for patchable variables */
 
 	pop	%edx			/* bios disk number */
 	pop	%ebx			/* expected partition start sector */
+	pop	%ecx
 	movl	$boot_params, %esi
+	orb	$X86_BP_FLAGS_LBA64VALID, 4(%esi)
 	lcall	$SECONDARY_LOAD_ADDRESS/16, $0
 
 boot_fail:

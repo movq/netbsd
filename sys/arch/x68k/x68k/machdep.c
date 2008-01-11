@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.146 2007/12/03 15:34:26 ad Exp $	*/
+/*	$NetBSD: machdep.c,v 1.177 2011/05/16 13:22:55 tsutsui Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,57 +37,19 @@
  *
  *	@(#)machdep.c	8.10 (Berkeley) 4/20/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: machdep.c 1.74 92/12/20$
- *
- *	@(#)machdep.c	8.10 (Berkeley) 4/20/94
- */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.146 2007/12/03 15:34:26 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.177 2011/05/16 13:22:55 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_compat_netbsd.h"
-#include "opt_m680x0.h"
 #include "opt_fpu_emulate.h"
 #include "opt_m060sp.h"
+#include "opt_modular.h"
 #include "opt_panicbutton.h"
 #include "opt_extmem.h"
+#include "opt_m68k_arch.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,18 +67,21 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.146 2007/12/03 15:34:26 ad Exp $");
 #include <sys/ioctl.h>
 #include <sys/tty.h>
 #include <sys/mount.h>
-#include <sys/user.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/vnode.h>
 #include <sys/syscallargs.h>
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 #include <sys/cpu.h>
+#include <sys/sysctl.h>
+#include <sys/device.h>
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 #include <sys/exec_elf.h>
 #endif
 
@@ -125,6 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.146 2007/12/03 15:34:26 ad Exp $");
 
 #include <m68k/cacheops.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 #include <machine/kcore.h>
@@ -132,13 +99,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.146 2007/12/03 15:34:26 ad Exp $");
 #include <dev/cons.h>
 
 #define	MAXMEM	64*1024	/* XXX - from cmap.h */
-#include <uvm/uvm_extern.h>
-
-#include <sys/sysctl.h>
-
-#include <sys/device.h>
+#include <uvm/uvm.h>
 
 #include <machine/bus.h>
+#include <machine/autoconf.h>
 #include <arch/x68k/dev/intiovar.h>
 
 void initcpu(void);
@@ -151,15 +115,11 @@ char	machine[] = MACHINE;	/* from <machine/param.h> */
 /* Our exported CPU info; we can have only one. */
 struct cpu_info cpu_info_store;
 
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 extern paddr_t avail_start, avail_end;
-extern vaddr_t virtual_avail;
 extern u_int lowram;
 extern int end, *esym;
-extern psize_t mem_size;
 
 int	maxmem;			/* max memory per process */
 int	physmem = MAXMEM;	/* max supported memory, changes to actual */
@@ -171,8 +131,8 @@ int	physmem = MAXMEM;	/* max supported memory, changes to actual */
 int	safepri = PSL_LOWIPL;
 
 /* prototypes for local functions */
-void    identifycpu(void);
-void    initcpu(void);
+void	identifycpu(void);
+void	initcpu(void);
 int	cpu_dumpsize(void);
 int	cpu_dump(int (*)(dev_t, daddr_t, void *, size_t), daddr_t *);
 void	cpu_init_kcore_hdr(void);
@@ -182,8 +142,9 @@ static void setmemrange(void);
 #endif
 
 /* functions called from locore.s */
+void	x68k_init(void);
 void	dumpsys(void);
-void    straytrap(int, u_short);
+void	straytrap(int, u_short);
 void	nmihand(struct frame);
 void	intrhand(int);
 
@@ -207,6 +168,32 @@ cpu_kcore_hdr_t cpu_kcore_hdr;
 
 static callout_t candbtimer_ch;
 
+void
+x68k_init(void)
+{
+	u_int i;
+
+	/*
+	 * Tell the VM system about available physical memory.
+	 */
+	uvm_page_physload(atop(avail_start), atop(avail_end),
+	    atop(avail_start), atop(avail_end),
+	    VM_FREELIST_DEFAULT);
+#ifdef EXTENDED_MEMORY
+	setmemrange();
+#endif
+
+	/*
+	 * Initialize error message buffer (at end of core).
+	 * avail_end was pre-decremented in pmap_bootstrap to compensate.
+	 */
+	for (i = 0; i < btoc(MSGBUFSIZE); i++)
+		pmap_kenter_pa((vaddr_t)msgbufaddr + i * PAGE_SIZE,
+		    avail_end + i * PAGE_SIZE, VM_PROT_READ|VM_PROT_WRITE, 0);
+	pmap_update(pmap_kernel());
+	initmsgbuf(msgbufaddr, m68k_round_page(MSGBUFSIZE));
+}
+
 /*
  * Console initialization: called early on from main,
  * before vm init or startup.  Do enough configuration
@@ -215,6 +202,7 @@ static callout_t candbtimer_ch;
 void
 consinit(void)
 {
+
 	/*
 	 * bring graphics layer up.
 	 */
@@ -228,23 +216,13 @@ consinit(void)
 #ifdef KGDB
 	zs_kgdb_init();			/* XXX */
 #endif
-#if NKSYMS || defined(DDB) || defined(LKM)
-	ksyms_init((int)esym - (int)&end - sizeof(Elf32_Ehdr),
-		 (void *)&end, esym);
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	ksyms_addsyms_elf((int)esym - (int)&end - sizeof(Elf32_Ehdr),
+	    (void *)&end, esym);
 #endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
 		Debugger();
-#endif
-
-	/*
-	 * Tell the VM system about available physical memory.
-	 */
-	uvm_page_physload(atop(avail_start), atop(avail_end),
-			atop(avail_start), atop(avail_end),
-			VM_FREELIST_DEFAULT);
-#ifdef EXTENDED_MEMORY
-	setmemrange();
 #endif
 }
 
@@ -257,30 +235,15 @@ cpu_startup(void)
 {
 	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
-	u_int i;
 #ifdef DEBUG
 	extern int pmapdebug;
 	int opmapdebug = pmapdebug;
 
 	pmapdebug = 0;
 #endif
-#if 0
-	rtclockinit(); /* XXX */
-#endif
 
 	if (fputype != FPU_NONE)
 		m68k_make_fpu_idle_frame();
-
-	/*
-	 * Initialize error message buffer (at end of core).
-	 * avail_end was pre-decremented in pmap_bootstrap to compensate.
-	 */
-	for (i = 0; i < btoc(MSGBUFSIZE); i++)
-		pmap_enter(pmap_kernel(), (vaddr_t)msgbufaddr + i * PAGE_SIZE,
-		    avail_end + i * PAGE_SIZE, VM_PROT_READ|VM_PROT_WRITE,
-		    VM_PROT_READ|VM_PROT_WRITE|PMAP_WIRED);
-	pmap_update(pmap_kernel());
-	initmsgbuf(msgbufaddr, m68k_round_page(MSGBUFSIZE));
 
 	/*
 	 * Initialize the kernel crash dump header.
@@ -296,25 +259,12 @@ cpu_startup(void)
 	printf("total memory = %s\n", pbuf);
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
+	    VM_PHYS_SIZE, 0, false, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
@@ -331,45 +281,12 @@ cpu_startup(void)
 }
 
 /*
- * Set registers on exec.
- */
-void
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
-}
-
-/*
  * Info for CTL_HW
  */
 char	cpu_model[96];		/* max 85 chars */
 static const char *fpu_descr[] = {
 #ifdef	FPU_EMULATE
-	", emulator FPU", 	/* 0 */
+	", emulator FPU",	/* 0 */
 #else
 	", no math support",	/* 0 */
 #endif
@@ -449,7 +366,7 @@ identifycpu(void)
 	else
 		fpu = ", unknown FPU";
 	sprintf(cpu_model, "X68%s (%s CPU%s%s, %s clock)",
-		mach, cpu_type, mmu, fpu, clock);
+	    mach, cpu_type, mmu, fpu, clock);
 	printf("%s\n", cpu_model);
 }
 
@@ -460,16 +377,16 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 {
 
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "machdep", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_MACHDEP, CTL_EOL);
+	    CTLFLAG_PERMANENT,
+	    CTLTYPE_NODE, "machdep", NULL,
+	    NULL, 0, NULL, 0,
+	    CTL_MACHDEP, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRUCT, "console_device", NULL,
-		       sysctl_consdev, 0, NULL, sizeof(dev_t),
-		       CTL_MACHDEP, CPU_CONSDEV, CTL_EOL);
+	    CTLFLAG_PERMANENT,
+	    CTLTYPE_STRUCT, "console_device", NULL,
+	    sysctl_consdev, 0, NULL, sizeof(dev_t),
+	    CTL_MACHDEP, CPU_CONSDEV, CTL_EOL);
 }
 
 int	waittime = -1;
@@ -478,9 +395,11 @@ int	power_switch_is_off = 0;
 void
 cpu_reboot(int howto, char *bootstr)
 {
+	struct pcb *pcb = lwp_getpcb(curlwp);
+
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	boothowto = howto;
 	if ((howto & RB_NOSYNC) == 0 && waittime < 0) {
@@ -501,6 +420,8 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* Run any shutdown hooks. */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 #if defined(PANICWAIT) && !defined(DDB)
 	if ((howto & RB_HALT) == 0 && panicstr) {
@@ -533,7 +454,7 @@ cpu_reboot(int howto, char *bootstr)
 	printf("rebooting...\n");
 	DELAY(1000000);
 	doboot();
-	/*NOTREACHED*/
+	/* NOTREACHED */
 }
 
 /*
@@ -576,7 +497,7 @@ cpu_init_kcore_hdr(void)
 	/*
 	 * Initialize pointer to kernel segment table.
 	 */
-	m->sysseg_pa = (u_int32_t)(pmap_kernel()->pm_stpa);
+	m->sysseg_pa = (uint32_t)(pmap_kernel()->pm_stpa);
 
 	/*
 	 * Initialize relocation value such that:
@@ -588,7 +509,7 @@ cpu_init_kcore_hdr(void)
 	/*
 	 * Define the end of the relocatable range.
 	 */
-	m->relocend = (u_int32_t)&end;
+	m->relocend = (uint32_t)&end;
 
 	/*
 	 * X68k has multiple RAM segments on some models.
@@ -596,9 +517,10 @@ cpu_init_kcore_hdr(void)
 	m->ram_segs[0].start = lowram;
 	m->ram_segs[0].size = mem_size - lowram;
 	for (i = 1; i < vm_nphysseg; i++) {
-		m->ram_segs[i].start = ctob(vm_physmem[i].start);
-		m->ram_segs[i].size  = ctob(vm_physmem[i].end
-					    - vm_physmem[i].start);
+		m->ram_segs[i].start =
+		    ctob(VM_PHYSMEM_PTR(i)->start);
+		m->ram_segs[i].size  =
+		    ctob(VM_PHYSMEM_PTR(i)->end - VM_PHYSMEM_PTR(i)->start);
 	}
 }
 
@@ -645,7 +567,7 @@ cpu_dump(int (*dump)(dev_t, daddr_t, void *, size_t), daddr_t *blknop)
 /*
  * These variables are needed by /sbin/savecore
  */
-u_int32_t dumpmag = 0x8fca0101;	/* magic number */
+uint32_t dumpmag = 0x8fca0101;	/* magic number */
 int	dumpsize = 0;		/* pages */
 long	dumplo = 0;		/* blocks */
 
@@ -728,15 +650,15 @@ dumpsys(void)
 			return;
 	}
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
-		    minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n",
+		    major(dumpdev), minor(dumpdev));
 		return;
 	}
 	dump = bdev->d_dump;
 	blkno = dumplo;
 
-	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
-	    minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n",
+	    major(dumpdev), minor(dumpdev), dumplo);
 
 	printf("dump ");
 
@@ -749,7 +671,7 @@ dumpsys(void)
 #define NPGMB	(1024*1024/PAGE_SIZE)
 		/* print out how many MBs we have dumped */
 		if (pg && (pg % NPGMB) == 0)
-			printf("%d ", pg / NPGMB);
+			printf_nolog("%d ", pg / NPGMB);
 #undef NPGMB
 		if (maddr == 0) {
 			/* Skip first page */
@@ -813,12 +735,12 @@ initcpu(void)
 #if defined(M68060)
 	extern void *vectab[256];
 #if defined(M060SP)
-	extern u_int8_t I_CALL_TOP[];
-	extern u_int8_t FP_CALL_TOP[];
+	extern uint8_t I_CALL_TOP[];
+	extern uint8_t FP_CALL_TOP[];
 #else
-	extern u_int8_t illinst;
+	extern uint8_t illinst;
 #endif
-	extern u_int8_t fpfault;
+	extern uint8_t fpfault;
 #endif
 
 #ifdef MAPPEDCOPY
@@ -828,7 +750,7 @@ initcpu(void)
 	 * page mapping (if not already set).  We don't do this on
 	 * VAC machines as it loses big time.
 	 */
-	if ((int) mappedcopysize == -1) {
+	if ((int)mappedcopysize == -1) {
 		mappedcopysize = PAGE_SIZE;
 	}
 #endif
@@ -862,8 +784,9 @@ initcpu(void)
 void
 straytrap(int pc, u_short evec)
 {
+
 	printf("unexpected trap (vector offset %x) from %x\n",
-	       evec & 0xFFF, pc);
+	    evec & 0xFFF, pc);
 #if defined(DDB)
 	Debugger();
 #endif
@@ -877,14 +800,14 @@ badaddr(volatile void* addr)
 	int i;
 	label_t	faultbuf;
 
-	nofault = (int *) &faultbuf;
+	nofault = (int *)&faultbuf;
 	if (setjmp((label_t *)nofault)) {
 		nofault = NULL;
-		return(1);
+		return 1;
 	}
 	i = *(volatile short *)addr;
 	nofault = NULL;
-	return(0);
+	return 0;
 }
 
 int
@@ -893,38 +816,33 @@ badbaddr(volatile void *addr)
 	int i;
 	label_t	faultbuf;
 
-	nofault = (int *) &faultbuf;
+	nofault = (int *)&faultbuf;
 	if (setjmp((label_t *)nofault)) {
 		nofault = NULL;
-		return(1);
+		return 1;
 	}
 	i = *(volatile char *)addr;
 	nofault = NULL;
-	return(0);
+	return 0;
 }
 
 void
 intrhand(int sr)
 {
+
 	printf("intrhand: unexpected sr 0x%x\n", sr);
 }
 
-static const int ipl2psl_table[] = {
-	[IPL_NONE]       = PSL_IPL0,
-	[IPL_SOFTBIO]    = PSL_IPL1,
-	[IPL_SOFTCLOCK]  = PSL_IPL1,
-	[IPL_SOFTNET]    = PSL_IPL1,
-	[IPL_SOFTSERIAL] = PSL_IPL1,
-	[IPL_VM]         = PSL_IPL4,
-	[IPL_SCHED]      = PSL_IPL6,
+const uint16_t ipl2psl_table[NIPL] = {
+	[IPL_NONE]       = PSL_S | PSL_IPL0,
+	[IPL_SOFTCLOCK]  = PSL_S | PSL_IPL1,
+	[IPL_SOFTBIO]    = PSL_S | PSL_IPL1,
+	[IPL_SOFTNET]    = PSL_S | PSL_IPL1,
+	[IPL_SOFTSERIAL] = PSL_S | PSL_IPL1,
+	[IPL_VM]         = PSL_S | PSL_IPL5,
+	[IPL_SCHED]      = PSL_S | PSL_IPL7,
+	[IPL_HIGH]       = PSL_S | PSL_IPL7,
 };
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._psl = ipl2psl_table[ipl] | PSL_S};
-}
 
 #if (defined(DDB) || defined(DEBUG)) && !defined(PANICBUTTON)
 #define PANICBUTTON
@@ -950,6 +868,7 @@ candbtimer(void *arg)
 void
 nmihand(struct frame frame)
 {
+
 	intio_set_sysport_keyctrl(intio_get_sysport_keyctrl() | 0x04);
 
 	if (1) {
@@ -972,7 +891,7 @@ nmihand(struct frame frame)
 			if (crashandburn) {
 				crashandburn = 0;
 				panic(panicstr ?
-				      "forced crash, nosync" : "forced crash");
+				    "forced crash, nosync" : "forced crash");
 			}
 			crashandburn++;
 			callout_reset(&candbtimer_ch, candbdelay,
@@ -1034,6 +953,16 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 #endif
 }
 
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif
+
 #ifdef EXTENDED_MEMORY
 #ifdef EM_DEBUG
 static int em_debug = 0;
@@ -1069,49 +998,49 @@ mem_exists(void *mem, u_long basemax)
 	void *begin_check, *end_check;
 	label_t	faultbuf;
 
-	DPRINTF (("Enter mem_exists(%p, %x)\n", mem, basemax));
-	DPRINTF ((" pmap_enter(%p, %p) for target... ", mem_v, mem));
+	DPRINTF(("Enter mem_exists(%p, %x)\n", mem, basemax));
+	DPRINTF((" pmap_enter(%p, %p) for target... ", mem_v, mem));
 	pmap_enter(pmap_kernel(), mem_v, (paddr_t)mem,
-		   VM_PROT_READ|VM_PROT_WRITE, VM_PROT_READ|PMAP_WIRED);
+	    VM_PROT_READ|VM_PROT_WRITE, VM_PROT_READ|PMAP_WIRED);
 	pmap_update(pmap_kernel());
-	DPRINTF ((" done.\n"));
+	DPRINTF((" done.\n"));
 
 	/* only 24bits are significant on normal X680x0 systems */
 	base = (void *)((u_long)mem & 0x00FFFFFF);
-	DPRINTF ((" pmap_enter(%p, %p) for shadow... ", base_v, base));
+	DPRINTF((" pmap_enter(%p, %p) for shadow... ", base_v, base));
 	pmap_enter(pmap_kernel(), base_v, (paddr_t)base,
-		   VM_PROT_READ|VM_PROT_WRITE, VM_PROT_READ|PMAP_WIRED);
+	    VM_PROT_READ|VM_PROT_WRITE, VM_PROT_READ|PMAP_WIRED);
 	pmap_update(pmap_kernel());
-	DPRINTF ((" done.\n"));
+	DPRINTF((" done.\n"));
 
-	m = (void*)mem_v;
-	b = (void*)base_v;
+	m = (void *)mem_v;
+	b = (void *)base_v;
 
 	/* This is somewhat paranoid -- avoid overwriting myself */
 	__asm("lea %%pc@(begin_check_mem),%0" : "=a"(begin_check));
 	__asm("lea %%pc@(end_check_mem),%0" : "=a"(end_check));
 	if (base >= begin_check && base < end_check) {
-		size_t off = (char*)end_check - (char*)begin_check;
+		size_t off = (char *)end_check - (char *)begin_check;
 
-		DPRINTF ((" Adjusting the testing area.\n"));
+		DPRINTF((" Adjusting the testing area.\n"));
 		m -= off;
 		b -= off;
 	}
 
-	nofault = (int *) &faultbuf;
-	if (setjmp ((label_t *)nofault)) {
-		nofault = (int *) 0;
+	nofault = (int *)&faultbuf;
+	if (setjmp((label_t *)nofault)) {
+		nofault = (int *)0;
 		pmap_remove(pmap_kernel(), mem_v, mem_v+PAGE_SIZE);
 		pmap_remove(pmap_kernel(), base_v, base_v+PAGE_SIZE);
 		pmap_update(pmap_kernel());
-		DPRINTF (("Fault!!! Returning 0.\n"));
+		DPRINTF(("Fault!!! Returning 0.\n"));
 		return 0;
 	}
 
-	DPRINTF ((" Let's begin. mem=%p, base=%p, m=%p, b=%p\n",
-		  mem, base, m, b));
+	DPRINTF((" Let's begin. mem=%p, base=%p, m=%p, b=%p\n",
+	    mem, base, m, b));
 
-	(void) *m;
+	(void)*m;
 	/*
 	 * Can't check by writing if the corresponding
 	 * base address isn't memory.
@@ -1159,9 +1088,9 @@ __asm("end_check_mem:");
 	pmap_remove(pmap_kernel(), base_v, base_v+PAGE_SIZE);
 	pmap_update(pmap_kernel());
 
-	DPRINTF ((" End.\n"));
+	DPRINTF((" End.\n"));
 
-	DPRINTF (("Returning from mem_exists. result = %d\n", exists));
+	DPRINTF(("Returning from mem_exists. result = %d\n", exists));
 
 	return exists;
 }
@@ -1220,11 +1149,10 @@ setmemrange(void)
 		}
 		if ((u_long)mlist[i].base < h) {
 			uvm_page_physload(atop(mlist[i].base), atop(h),
-					  atop(mlist[i].base), atop(h),
-					  VM_FREELIST_DEFAULT);
+			    atop(mlist[i].base), atop(h),
+			    VM_FREELIST_DEFAULT);
 			mem_size += h - (u_long) mlist[i].base;
 		}
-			
 	}
 
 	{	/* Re-enable the processor cache. */

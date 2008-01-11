@@ -1,4 +1,4 @@
-/*	$NetBSD: keysock.c,v 1.14 2007/07/07 18:38:23 degroote Exp $	*/
+/*	$NetBSD: keysock.c,v 1.20 2011/05/16 10:04:02 drochner Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/keysock.c,v 1.3.2.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$KAME: keysock.c,v 1.25 2001/08/13 20:07:41 itojun Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.14 2007/07/07 18:38:23 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.20 2011/05/16 10:04:02 drochner Exp $");
 
 #include "opt_ipsec.h"
 
@@ -61,6 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.14 2007/07/07 18:38:23 degroote Exp $"
 #include <netipsec/key_debug.h>
 
 #include <netipsec/ipsec_osdep.h>
+#include <netipsec/ipsec_private.h>
 
 #include <machine/stdarg.h>
 
@@ -82,11 +83,9 @@ static struct sockaddr key_src = {
 };
 
 
-static int key_sendup0 __P((struct rawcb *, struct mbuf *, int, int));
+static int key_sendup0(struct rawcb *, struct mbuf *, int, int);
 
-struct pfkeystat pfkeystat;
-
-int key_registered_sb_max = (NMBCLUSTERS * MHLEN); /* XXX arbitrary */
+int key_registered_sb_max = (2048 * MHLEN); /* XXX arbitrary */
 
 /* XXX sysctl */
 #ifdef __FreeBSD__
@@ -113,19 +112,23 @@ key_output(struct mbuf *m, ...)
 	if (m == 0)
 		panic("key_output: NULL pointer was passed");
 
-	pfkeystat.out_total++;
-	pfkeystat.out_bytes += m->m_pkthdr.len;
+	{
+		uint64_t *ps = PFKEY_STAT_GETREF();
+		ps[PFKEY_STAT_OUT_TOTAL]++;
+		ps[PFKEY_STAT_OUT_BYTES] += m->m_pkthdr.len;
+		PFKEY_STAT_PUTREF();
+	}
 
 	len = m->m_pkthdr.len;
 	if (len < sizeof(struct sadb_msg)) {
-		pfkeystat.out_tooshort++;
+		PFKEY_STATINC(PFKEY_STAT_OUT_TOOSHORT);
 		error = EINVAL;
 		goto end;
 	}
 
 	if (m->m_len < sizeof(struct sadb_msg)) {
 		if ((m = m_pullup(m, sizeof(struct sadb_msg))) == 0) {
-			pfkeystat.out_nomem++;
+			PFKEY_STATINC(PFKEY_STAT_OUT_NOMEM);
 			error = ENOBUFS;
 			goto end;
 		}
@@ -137,9 +140,9 @@ key_output(struct mbuf *m, ...)
 	KEYDEBUG(KEYDEBUG_KEY_DUMP, kdebug_mbuf(m));
 
 	msg = mtod(m, struct sadb_msg *);
-	pfkeystat.out_msgtype[msg->sadb_msg_type]++;
+	PFKEY_STATINC(PFKEY_STAT_OUT_MSGTYPE + msg->sadb_msg_type);
 	if (len != PFKEY_UNUNIT64(msg->sadb_msg_len)) {
-		pfkeystat.out_invlen++;
+		PFKEY_STATINC(PFKEY_STAT_OUT_INVLEN);
 		error = EINVAL;
 		goto end;
 	}
@@ -176,20 +179,19 @@ key_sendup0(
 		if (m && m->m_len < sizeof(struct sadb_msg))
 			m = m_pullup(m, sizeof(struct sadb_msg));
 		if (!m) {
-			pfkeystat.in_nomem++;
-			m_freem(m);
+			PFKEY_STATINC(PFKEY_STAT_IN_NOMEM);
 			return ENOBUFS;
 		}
 		m->m_pkthdr.len += sizeof(*pmsg);
 
 		pmsg = mtod(m, struct sadb_msg *);
-		bzero(pmsg, sizeof(*pmsg));
+		memset(pmsg, 0, sizeof(*pmsg));
 		pmsg->sadb_msg_version = PF_KEY_V2;
 		pmsg->sadb_msg_type = SADB_X_PROMISC;
 		pmsg->sadb_msg_len = PFKEY_UNIT64(m->m_pkthdr.len);
 		/* pid and seq? */
 
-		pfkeystat.in_msgtype[pmsg->sadb_msg_type]++;
+		PFKEY_STATINC(PFKEY_STAT_IN_MSGTYPE + pmsg->sadb_msg_type);
 	}
 
 	if (sbprio == 0)
@@ -200,7 +202,7 @@ key_sendup0(
 			       (struct sockaddr *)&key_src, m, sbprio);
 
 	  if (!ok) {
-		pfkeystat.in_nomem++;
+		PFKEY_STATINC(PFKEY_STAT_IN_NOMEM);
 		m_freem(m);
 		error = ENOBUFS;
 	} else
@@ -229,9 +231,13 @@ key_sendup(struct socket *so, struct sadb_msg *msg, u_int len,
 	 * we increment statistics here, just in case we have ENOBUFS
 	 * in this function.
 	 */
-	pfkeystat.in_total++;
-	pfkeystat.in_bytes += len;
-	pfkeystat.in_msgtype[msg->sadb_msg_type]++;
+	{
+		uint64_t *ps = PFKEY_STAT_GETREF();
+		ps[PFKEY_STAT_IN_TOTAL]++;
+		ps[PFKEY_STAT_IN_BYTES] += len;
+		ps[PFKEY_STAT_IN_MSGTYPE + msg->sadb_msg_type]++;
+		PFKEY_STAT_PUTREF();
+	}
 
 	/*
 	 * Get mbuf chain whenever possible (not clusters),
@@ -253,7 +259,7 @@ key_sendup(struct socket *so, struct sadb_msg *msg, u_int len,
 			n->m_len = MLEN;
 		}
 		if (!n) {
-			pfkeystat.in_nomem++;
+			PFKEY_STATINC(PFKEY_STAT_IN_NOMEM);
 			return ENOBUFS;
 		}
 		if (tlen >= MCLBYTES) {	/*XXX better threshold? */
@@ -261,7 +267,7 @@ key_sendup(struct socket *so, struct sadb_msg *msg, u_int len,
 			if ((n->m_flags & M_EXT) == 0) {
 				m_free(n);
 				m_freem(m);
-				pfkeystat.in_nomem++;
+				PFKEY_STATINC(PFKEY_STAT_IN_NOMEM);
 				return ENOBUFS;
 			}
 			n->m_len = MCLBYTES;
@@ -284,9 +290,13 @@ key_sendup(struct socket *so, struct sadb_msg *msg, u_int len,
 	m_copyback(m, 0, len, msg);
 
 	/* avoid duplicated statistics */
-	pfkeystat.in_total--;
-	pfkeystat.in_bytes -= len;
-	pfkeystat.in_msgtype[msg->sadb_msg_type]--;
+	{
+		uint64_t *ps = PFKEY_STAT_GETREF();
+		ps[PFKEY_STAT_IN_TOTAL]--;
+		ps[PFKEY_STAT_IN_BYTES] -= len;
+		ps[PFKEY_STAT_IN_MSGTYPE + msg->sadb_msg_type]--;
+		PFKEY_STAT_PUTREF();
+	}
 
 	return key_sendup_mbuf(so, m, target);
 }
@@ -323,13 +333,17 @@ key_sendup_mbuf(struct socket *so, struct mbuf *m,
 		sbprio = SB_PRIO_BESTEFFORT;
 	}
 
-	pfkeystat.in_total++;
-	pfkeystat.in_bytes += m->m_pkthdr.len;
+	{
+		uint64_t *ps = PFKEY_STAT_GETREF();
+		ps[PFKEY_STAT_IN_TOTAL]++;
+		ps[PFKEY_STAT_IN_BYTES] += m->m_pkthdr.len;
+		PFKEY_STAT_PUTREF();
+	}
 	if (m->m_len < sizeof(struct sadb_msg)) {
 #if 1
 		m = m_pullup(m, sizeof(struct sadb_msg));
 		if (m == NULL) {
-			pfkeystat.in_nomem++;
+			PFKEY_STATINC(PFKEY_STAT_IN_NOMEM);
 			return ENOBUFS;
 		}
 #else
@@ -339,7 +353,7 @@ key_sendup_mbuf(struct socket *so, struct mbuf *m,
 	if (m->m_len >= sizeof(struct sadb_msg)) {
 		struct sadb_msg *msg;
 		msg = mtod(m, struct sadb_msg *);
-		pfkeystat.in_msgtype[msg->sadb_msg_type]++;
+		PFKEY_STATINC(PFKEY_STAT_IN_MSGTYPE + msg->sadb_msg_type);
 	}
 
 	LIST_FOREACH(rp, &rawcb_list, rcb_list)
@@ -393,14 +407,14 @@ key_sendup_mbuf(struct socket *so, struct mbuf *m,
 			}
 			break;
 		}
-		pfkeystat.in_msgtarget[target]++;
+		PFKEY_STATINC(PFKEY_STAT_IN_MSGTARGET + target);
 
 		if (!sendup)
 			continue;
 
 		if ((n = m_copy(m, 0, (int)M_COPYALL)) == NULL) {
 			m_freem(m);
-			pfkeystat.in_nomem++;
+			PFKEY_STATINC(PFKEY_STAT_IN_NOMEM);
 			return ENOBUFS;
 		}
 
@@ -626,9 +640,10 @@ key_usrreq(struct socket *so, int req,struct mbuf *m, struct mbuf *nam,
 	s = splsoftnet();
 	if (req == PRU_ATTACH) {
 		kp = (struct keycb *)malloc(sizeof(*kp), M_PCB, M_WAITOK);
+		sosetlock(so);
 		so->so_pcb = kp;
 		if (so->so_pcb)
-			bzero(so->so_pcb, sizeof(*kp));
+			memset(so->so_pcb, 0, sizeof(*kp));
 	}
 	if (req == PRU_DETACH && kp) {
 		int af = kp->kp_raw.rcb_proto.sp_protocol;
@@ -645,7 +660,7 @@ key_usrreq(struct socket *so, int req,struct mbuf *m, struct mbuf *nam,
 	if (req == PRU_ATTACH && kp) {
 		int af = kp->kp_raw.rcb_proto.sp_protocol;
 		if (error) {
-			pfkeystat.sockerr++;
+			PFKEY_STATINC(PFKEY_STAT_SOCKERR);
 			free(kp, M_PCB);
 			so->so_pcb = NULL;
 			splx(s);
@@ -701,7 +716,7 @@ struct protosw keysw[] = {
 static void
 key_init0(void)
 {
-	bzero(&key_cb, sizeof(key_cb));
+	memset(&key_cb, 0, sizeof(key_cb));
 	key_init();
 }
 

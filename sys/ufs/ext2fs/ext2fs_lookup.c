@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_lookup.c,v 1.55 2007/12/08 19:29:53 pooka Exp $	*/
+/*	$NetBSD: ext2fs_lookup.c,v 1.63 2010/11/30 10:43:06 dholland Exp $	*/
 
 /*
  * Modified for NetBSD 1.2E
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.55 2007/12/08 19:29:53 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.63 2010/11/30 10:43:06 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -209,8 +209,8 @@ ext2fs_readdir(void *v)
 		/* we need to correct uio_offset */
 		uio->uio_offset = off;
 	}
-	FREE(dirbuf, M_TEMP);
-	FREE(dstd, M_TEMP);
+	free(dirbuf, M_TEMP);
+	free(dstd, M_TEMP);
 	*ap->a_eofflag = ext2fs_size(VTOI(ap->a_vp)) <= uio->uio_offset;
 	if (ap->a_ncookies) {
 		if (error) {
@@ -267,7 +267,7 @@ ext2fs_lookup(void *v)
 	struct vnode *vdp = ap->a_dvp;	/* vnode for directory being searched */
 	struct inode *dp = VTOI(vdp);	/* inode for directory being searched */
 	struct buf *bp;			/* a buffer of directory entries */
-	struct ext2fs_direct *ep; 	/* the current directory entry */
+	struct ext2fs_direct *ep;	/* the current directory entry */
 	int entryoffsetinblock;		/* offset of ep in bp's buffer */
 	enum {NONE, COMPACT, FOUND} slotstatus;
 	doff_t slotoffset;		/* offset of area with free space */
@@ -518,13 +518,10 @@ searchloop:
 		 * We return ni_vp == NULL to indicate that the entry
 		 * does not currently exist; we leave a pointer to
 		 * the (locked) directory inode in ndp->ni_dvp.
-		 * The pathname buffer is saved so that the name
-		 * can be obtained later.
 		 *
 		 * NB - if the directory is unlocked, then this
 		 * information cannot be used.
 		 */
-		cnp->cn_flags |= SAVENAME;
 		return (EJUSTRETURN);
 	}
 	/*
@@ -584,12 +581,12 @@ found:
 		else
 			dp->i_count = dp->i_offset - prevoff;
 		if (dp->i_number == foundino) {
-			VREF(vdp);
+			vref(vdp);
 			*vpp = vdp;
 			return (0);
 		}
 		if (flags & ISDOTDOT)
-			VOP_UNLOCK(vdp, 0); /* race to get the inode */
+			VOP_UNLOCK(vdp); /* race to get the inode */
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
 		if (flags & ISDOTDOT)
 			vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
@@ -603,8 +600,8 @@ found:
 		 */
 		if ((dp->i_e2fs_mode & ISVTX) &&
 		    kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) &&
-		    kauth_cred_geteuid(cred) != dp->i_e2fs_uid &&
-		    VTOI(tdp)->i_e2fs_uid != kauth_cred_geteuid(cred)) {
+		    kauth_cred_geteuid(cred) != dp->i_uid &&
+		    VTOI(tdp)->i_uid != kauth_cred_geteuid(cred)) {
 			vput(tdp);
 			return (EPERM);
 		}
@@ -629,14 +626,13 @@ found:
 		if (dp->i_number == foundino)
 			return (EISDIR);
 		if (flags & ISDOTDOT)
-			VOP_UNLOCK(vdp, 0); /* race to get the inode */
+			VOP_UNLOCK(vdp); /* race to get the inode */
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
 		if (flags & ISDOTDOT)
 			vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error)
 			return (error);
 		*vpp = tdp;
-		cnp->cn_flags |= SAVENAME;
 		return (0);
 	}
 
@@ -661,7 +657,7 @@ found:
 	 */
 	pdp = vdp;
 	if (flags & ISDOTDOT) {
-		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
+		VOP_UNLOCK(pdp);	/* race to get the inode */
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
 		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
@@ -669,7 +665,7 @@ found:
 		}
 		*vpp = tdp;
 	} else if (dp->i_number == foundino) {
-		VREF(vdp);	/* we want ourself, ie "." */
+		vref(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
@@ -756,10 +752,6 @@ ext2fs_direnter(struct inode *ip, struct vnode *dvp, struct componentname *cnp)
 	struct ufsmount *ump = VFSTOUFS(dvp->v_mount);
 	int dirblksiz = ump->um_dirblksiz;
 
-#ifdef DIAGNOSTIC
-	if ((cnp->cn_flags & SAVENAME) == 0)
-		panic("direnter: missing name");
-#endif
 	dp = VTOI(dvp);
 	newdir.e2d_ino = h2fs32(ip->i_number);
 	newdir.e2d_namlen = cnp->cn_namelen;
@@ -768,7 +760,7 @@ ext2fs_direnter(struct inode *ip, struct vnode *dvp, struct componentname *cnp)
 		newdir.e2d_type = inot2ext2dt(IFTODT(ip->i_e2fs_mode));
 	} else {
 		newdir.e2d_type = 0;
-	};
+	}
 	memcpy(newdir.e2d_name, cnp->cn_nameptr, (unsigned)cnp->cn_namelen + 1);
 	newentrysize = EXT2FS_DIRSIZ(cnp->cn_namelen);
 	if (dp->i_count == 0) {
@@ -1017,7 +1009,7 @@ ext2fs_checkpath(struct inode *source, struct inode *target,
 	struct vnode *vp;
 	int error, rootino, namlen;
 	struct ext2fs_dirtemplate dirbuf;
-	u_int32_t ino;
+	uint32_t ino;
 
 	vp = ITOV(target);
 	if (target->i_number == source->i_number) {

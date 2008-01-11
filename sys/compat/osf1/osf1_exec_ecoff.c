@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_exec_ecoff.c,v 1.20 2007/12/09 13:34:24 dogcow Exp $ */
+/* $NetBSD: osf1_exec_ecoff.c,v 1.23 2010/06/24 13:03:07 hannken Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_exec_ecoff.c,v 1.20 2007/12/09 13:34:24 dogcow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_exec_ecoff.c,v 1.23 2010/06/24 13:03:07 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,16 +73,8 @@ osf1_exec_ecoff_probe(struct lwp *l, struct exec_package *epp)
 	epp->ep_emul_arg = emul_arg;
 
 	emul_arg->flags = 0;
-	if (epp->ep_ndp->ni_segflg == UIO_SYSSPACE)
-		error = copystr(epp->ep_ndp->ni_dirp, emul_arg->exec_name,
-		    MAXPATHLEN + 1, NULL);
-	else
-		error = copyinstr(epp->ep_ndp->ni_dirp, emul_arg->exec_name,
-		    MAXPATHLEN + 1, NULL);
-#ifdef DIAGNOSTIC
-	if (error != 0)
-		panic("osf1_exec_ecoff_probe: copyinstr failed");
-#endif
+	/* this cannot overflow because both are size PATH_MAX */
+	strcpy(emul_arg->exec_name, epp->ep_kname);
 
 	/* do any special object file handling */
 	switch (execp->f.f_flags & ECOFF_FLAG_OBJECT_TYPE_MASK) {
@@ -184,7 +176,6 @@ osf1_exec_ecoff_dynamic(struct lwp *l, struct exec_package *epp)
 {
 	struct osf1_exec_emul_arg *emul_arg = epp->ep_emul_arg;
 	struct ecoff_exechdr ldr_exechdr;
-	struct nameidata nd;
 	struct vnode *ldr_vp;
         size_t resid;
 	int error;
@@ -212,11 +203,9 @@ osf1_exec_ecoff_dynamic(struct lwp *l, struct exec_package *epp)
 	 * make sure the object type is amenable, then arrange to
 	 * load it up.
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, UIO_SYSSPACE,
-	    emul_arg->loader_name);
-	if ((error = namei(&nd)) != 0)
-		goto bad_no_vp;
-	ldr_vp = nd.ni_vp;
+	ldr_vp = epp->ep_interp;
+	epp->ep_interp = NULL;
+	vn_lock(ldr_vp, LK_EXCLUSIVE | LK_RETRY);
 
 	/*
 	 * Basic access checks.  Reject if:
@@ -244,7 +233,7 @@ osf1_exec_ecoff_dynamic(struct lwp *l, struct exec_package *epp)
         if (ldr_vp->v_mount->mnt_flag & MNT_NOSUID)
                 epp->ep_vap->va_mode &= ~(S_ISUID | S_ISGID);
 
-	VOP_UNLOCK(ldr_vp, 0);
+	VOP_UNLOCK(ldr_vp);
 
 	/*
 	 * read the header, and make sure we got all of it.
@@ -300,9 +289,8 @@ osf1_exec_ecoff_dynamic(struct lwp *l, struct exec_package *epp)
 	return (0);
 
 badunlock:
-	VOP_UNLOCK(ldr_vp, 0);
+	VOP_UNLOCK(ldr_vp);
 bad:
 	vrele(ldr_vp);
-bad_no_vp:
 	return (error);
 }

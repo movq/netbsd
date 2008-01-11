@@ -1,4 +1,4 @@
-/*	$NetBSD: rlogind.c,v 1.37 2006/05/09 20:18:06 mrg Exp $	*/
+/*	$NetBSD: rlogind.c,v 1.39 2009/03/16 02:18:39 lukem Exp $	*/
 
 /*
  * Copyright (C) 1998 WIDE Project.
@@ -64,12 +64,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)rlogind.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: rlogind.c,v 1.37 2006/05/09 20:18:06 mrg Exp $");
+__RCSID("$NetBSD: rlogind.c,v 1.39 2009/03/16 02:18:39 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -437,7 +437,7 @@ control(pty, cp, n)
 {
 	struct winsize w;
 
-	if (n < 4+sizeof (w) || cp[2] != 's' || cp[3] != 's')
+	if (n < (int)(4+sizeof (w)) || cp[2] != 's' || cp[3] != 's')
 		return (0);
 	oobdata[0] &= ~TIOCPKT_WINDOW;	/* we know he heard */
 	memmove(&w, cp+4, sizeof(w));

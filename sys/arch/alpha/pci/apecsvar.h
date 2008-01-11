@@ -1,4 +1,4 @@
-/* $NetBSD: apecsvar.h,v 1.8 1997/09/02 12:40:18 thorpej Exp $ */
+/* $NetBSD: apecsvar.h,v 1.10 2010/04/15 13:02:13 jakllsch Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -58,15 +58,9 @@ struct apecs_config {
 	int	ac_mallocsafe;
 };
 
-struct apecs_softc {
-	struct	device sc_dev;
+void	apecs_init(struct apecs_config *, int);
+void	apecs_pci_init(pci_chipset_tag_t, void *);
+void	apecs_dma_init(struct apecs_config *);
 
-	struct	apecs_config *sc_acp;
-};
-
-void	apecs_init __P((struct apecs_config *, int));
-void	apecs_pci_init __P((pci_chipset_tag_t, void *));
-void	apecs_dma_init __P((struct apecs_config *));
-
-void	apecs_bus_io_init __P((bus_space_tag_t, void *));
-void	apecs_bus_mem_init __P((bus_space_tag_t, void *));
+void	apecs_bus_io_init(bus_space_tag_t, void *);
+void	apecs_bus_mem_init(bus_space_tag_t, void *);

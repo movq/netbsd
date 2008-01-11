@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_ioctl.c,v 1.47 2007/11/28 23:23:11 degroote Exp $	*/
+/*	$NetBSD: ieee80211_ioctl.c,v 1.55 2011/04/02 08:11:32 mbalmer Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -36,7 +36,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_ioctl.c,v 1.35 2005/08/30 14:27:47 avatar Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_ioctl.c,v 1.47 2007/11/28 23:23:11 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_ioctl.c,v 1.55 2011/04/02 08:11:32 mbalmer Exp $");
 #endif
 
 /*
@@ -1237,7 +1237,7 @@ ieee80211_ioctl_getstainfo(struct ieee80211com *ic, struct ieee80211req *ireq)
 		ieee80211_iterate_nodes(&ic->ic_sta, get_sta_info, &req);
 		ireq->i_len = space - req.space;
 		error = copyout(p, ireq->i_data, ireq->i_len);
-		FREE(p, M_TEMP);
+		free(p, M_TEMP);
 	} else
 		ireq->i_len = 0;
 
@@ -1364,9 +1364,9 @@ ieee80211_ioctl_get80211_fbsd(struct ieee80211com *ic, u_long cmd,
 		    KAUTH_NETWORK_INTERFACE,
 		    KAUTH_REQ_NETWORK_INTERFACE_GETPRIV, ifp, NULL,
 		    NULL) == 0) {
-			bcopy(ic->ic_nw_keys[kid].wk_key, tmpkey, len);
+			memcpy(tmpkey, ic->ic_nw_keys[kid].wk_key, len);
 		} else {
-			bzero(tmpkey, len);
+			memset(tmpkey, 0, len);
 		}
 		ireq->i_len = len;
 		error = copyout(tmpkey, ireq->i_data, len);
@@ -1611,7 +1611,7 @@ ieee80211_ioctl_setoptie(struct ieee80211com *ic, struct ieee80211req *ireq)
 	error = copyin(ireq->i_data, ie, ireq->i_len);
 	/* XXX sanity check data? */
 	if (ic->ic_opt_ie != NULL)
-		FREE(ic->ic_opt_ie, M_DEVBUF);
+		free(ic->ic_opt_ie, M_DEVBUF);
 	ic->ic_opt_ie = ie;
 	ic->ic_opt_ie_len = ireq->i_len;
 	return 0;
@@ -2548,51 +2548,6 @@ ieee80211_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 		else
 			ifp->if_mtu = ifr->ifr_mtu;
 		break;
-	case SIOCSIFADDR:
-		/*
-		 * XXX Handle this directly so we can supress if_init calls.
-		 * XXX This should be done in ether_ioctl but for the moment
-		 * XXX there are too many other parts of the system that
-		 * XXX set IFF_UP and so supress if_init being called when
-		 * XXX it should be.
-		 */
-		ifa = (struct ifaddr *) data;
-		switch (ifa->ifa_addr->sa_family) {
-#ifdef INET
-		case AF_INET:
-			if ((ifp->if_flags & IFF_UP) == 0) {
-				ifp->if_flags |= IFF_UP;
-				ifp->if_init(ifp->if_softc);
-			}
-			arp_ifinit(ifp, ifa);
-			break;
-#endif
-#ifdef IPX
-		/*
-		 * XXX - This code is probably wrong,
-		 *	 but has been copied many times.
-		 */
-		case AF_IPX: {
-			struct ipx_addr *ina = &(IA_SIPX(ifa)->sipx_addr);
-
-			if (ipx_nullhost(*ina))
-				ina->x_host = *(union ipx_host *)
-				    IFP2ENADDR(ifp);
-			else
-				bcopy((void *) ina->x_host.c_host,
-				      (void *) IFP2ENADDR(ifp),
-				      ETHER_ADDR_LEN);
-			/* fall thru... */
-		}
-#endif
-		default:
-			if ((ifp->if_flags & IFF_UP) == 0) {
-				ifp->if_flags |= IFF_UP;
-				ifp->if_init(ifp->if_softc);
-			}
-			break;
-		}
-		break;
 	default:
 		error = ether_ioctl(ifp, cmd, data);
 		break;
@@ -2660,7 +2615,7 @@ ieee80211_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 		if ((error = kauth_authorize_network(curlwp->l_cred,
 		    KAUTH_NETWORK_INTERFACE,
 		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, (void *)cmd,
-		    NULL) != 0))
+		    NULL)) != 0)
 			break;
 		error = ieee80211_ioctl_set80211(ic, cmd,
 				(struct ieee80211req *) data);
@@ -2943,8 +2898,8 @@ ieee80211_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 		if (!(IEEE80211_MTU_MIN <= ifr->ifr_mtu &&
 		    ifr->ifr_mtu <= IEEE80211_MTU_MAX))
 			error = EINVAL;
-		else
-			ifp->if_mtu = ifr->ifr_mtu;
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+			error = 0;
 		break;
 	default:
 		error = ether_ioctl(ifp, cmd, data);

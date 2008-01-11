@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.3 2007/12/11 16:51:14 ad Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.5 2009/11/05 18:15:17 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.3 2007/12/11 16:51:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.5 2009/11/05 18:15:17 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,7 +60,7 @@ cpu_configure(void)
 }
 
 static int
-is_valid_disk(struct device *dv)
+is_valid_disk(device_t dv)
 {
 	const char *name;
 
@@ -85,7 +78,7 @@ is_valid_disk(struct device *dv)
  * Return non-zero if disk device matches bootinfo.
  */
 static int
-match_bootdisk(struct device *dv, struct btinfo_bootdisk *bid)
+match_bootdisk(device_t dv, struct btinfo_bootdisk *bid)
 {
 	struct vnode *tmpvn;
 	int error;
@@ -160,7 +153,8 @@ static void
 findroot(void)
 {
 	struct btinfo_bootdisk *bid;
-	struct device *dv;
+	device_t dv;
+	deviter_t di;
 
 	if (booted_device)
 		return;
@@ -173,8 +167,9 @@ findroot(void)
 		 * because lower device numbers are more likely to be the
 		 * boot device.
 		 */
-		for (dv = TAILQ_FIRST(&alldevs); dv != NULL;
-		     dv = TAILQ_NEXT(dv, dv_list)) {
+		for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
+		     dv != NULL;
+		     dv = deviter_next(&di)) {
 			if (dv->dv_class != DV_DISK)
 				continue;
 
@@ -195,6 +190,7 @@ bootdisk_found:
 			booted_device = dv;
 			booted_partition = bid->partition;
 		}
+		deviter_release(&di);
 
 		if (booted_device)
 			return;

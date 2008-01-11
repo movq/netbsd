@@ -1,11 +1,8 @@
-/*	$NetBSD: freebsd_sysctl.c,v 1.12 2008/01/07 16:12:53 ad Exp $	*/
+/*	$NetBSD: freebsd_sysctl.c,v 1.15 2008/11/19 18:36:02 ad Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
  * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_sysctl.c,v 1.12 2008/01/07 16:12:53 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: freebsd_sysctl.c,v 1.15 2008/11/19 18:36:02 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,23 +52,34 @@ __KERNEL_RCSID(0, "$NetBSD: freebsd_sysctl.c,v 1.12 2008/01/07 16:12:53 ad Exp $
 #include <compat/freebsd/freebsd_timex.h>
 #include <compat/freebsd/freebsd_signal.h>
 #include <compat/freebsd/freebsd_mman.h>
+#include <compat/freebsd/freebsd_sysctl.h>
 
 static int freebsd_sysctl_name2oid(char *, int *, int *);
 
-SYSCTL_SETUP_PROTO(freebsd_sysctl_setup);
-SYSCTL_SETUP(freebsd_sysctl_setup, "freebsd emulated sysctl setup")
+static struct sysctllog *freebsd_clog;
+
+void
+freebsd_sysctl_init(void)
 {
-	sysctl_createv(clog, 0, NULL, NULL,
+
+	sysctl_createv(&freebsd_clog, 0, NULL, NULL,
 			CTLFLAG_PERMANENT,
 			CTLTYPE_NODE, "kern", NULL,
 			NULL, 0, NULL, 0,
 			CTL_KERN, CTL_EOL);
-        sysctl_createv(clog, 0, NULL, NULL,
+        sysctl_createv(&freebsd_clog, 0, NULL, NULL,
 			CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
 			CTLTYPE_INT, "osreldate",
 			SYSCTL_DESCR("Operating system revision"),
 			NULL, __NetBSD_Version__, NULL, 0,
 			CTL_KERN, CTL_CREATE, CTL_EOL);
+}
+
+void
+freebsd_sysctl_fini(void)
+{
+
+	sysctl_teardown(&freebsd_clog);
 }
 
 int

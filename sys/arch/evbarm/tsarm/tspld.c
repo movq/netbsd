@@ -1,4 +1,4 @@
-/*	$NetBSD: tspld.c,v 1.13 2007/10/17 19:54:13 garbled Exp $	*/
+/*	$NetBSD: tspld.c,v 1.20 2009/10/23 00:39:31 snj Exp $	*/
 
 /*-
  * Copyright (c) 2004 Jesse Off
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tspld.c,v 1.13 2007/10/17 19:54:13 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tspld.c,v 1.20 2009/10/23 00:39:31 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -96,7 +89,7 @@ struct tspld_softc {
 CFATTACH_DECL(tspld, sizeof(struct tspld_softc),
     tspldmatch, tspldattach, NULL, NULL);
 
-void	tspld_callback __P((struct device *));
+void	tspld_callback(struct device *);
 
 #define GPIO_GET(x)	bus_space_read_4(sc->sc_iot, sc->sc_gpioh, \
 	(EP93XX_GPIO_ ## x))
@@ -123,18 +116,14 @@ void	tspld_callback __P((struct device *));
 	(EP93XX_SSP_ ## x), SSP_GET(x) & (~(y)))
 
 int
-tspldmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+tspldmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 
 	return 1;
 }
 
 void
-boardtemp_poll(arg)
-	void *arg;
+boardtemp_poll(void *arg)
 {
 	struct tspld_softc *sc = arg;
 	u_int16_t val;
@@ -157,9 +146,7 @@ boardtemp_poll(arg)
 }
 
 void
-tspldattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+tspldattach(struct device *parent, struct device *self, void *aux)
 {
 	int	i, rev, features, jp, model;
 	struct tspld_softc *sc = (struct tspld_softc *)self;
@@ -457,11 +444,7 @@ tspldattach(parent, self, aux)
 }
 
 int
-tspld_search(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+tspld_search(struct device *parent, struct cfdata *cf, const int *ldesc, void *aux)
 {
 	struct tspld_softc *sc = (struct tspld_softc *)parent;
 	struct tspld_attach_args sa;
@@ -475,17 +458,14 @@ tspld_search(parent, cf, ldesc, aux)
 }
 
 int
-tspld_print(aux, name)
-	void *aux;
-	const char *name;
+tspld_print(void *aux, const char *name)
 {
 
 	return (UNCONF);
 }
 
 void
-tspld_callback(self)
-	struct device *self;
+tspld_callback(struct device *self)
 {
 #if NISA > 0
 	extern void isa_bs_mallocok(void);
@@ -508,8 +488,7 @@ tspld_callback(self)
 }
 
 static int
-tspld_wdog_tickle(smw)
-	struct sysmon_wdog *smw;
+tspld_wdog_tickle(struct sysmon_wdog *smw)
 {
 	struct tspld_softc *sc = (struct tspld_softc *)smw->smw_cookie;
 
@@ -518,8 +497,7 @@ tspld_wdog_tickle(smw)
 }
 
 static int
-tspld_wdog_setmode(smw)
-	struct sysmon_wdog *smw;
+tspld_wdog_setmode(struct sysmon_wdog *smw)
 {
 	int i, ret = 0;
 	struct tspld_softc *sc = (struct tspld_softc *)smw->smw_cookie;
@@ -529,6 +507,10 @@ tspld_wdog_setmode(smw)
 		bus_space_write_2(sc->sc_iot, sc->sc_wdogfeed_ioh, 0, 0x5);
 		bus_space_write_2(sc->sc_iot, sc->sc_wdogctrl_ioh, 0, 0);
 	} else {
+		if (smw->smw_period == WDOG_PERIOD_DEFAULT) {
+			smw->smw_period = 8;
+		}
+
 		bus_space_write_2(sc->sc_iot, sc->sc_wdogfeed_ioh, 0, 0x5);
 		switch (smw->smw_period) {
 		case 1:

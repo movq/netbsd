@@ -1,19 +1,23 @@
-# $NetBSD: Makefile.boot,v 1.31 2007/10/17 19:54:59 garbled Exp $
+# $NetBSD: Makefile.boot,v 1.51 2011/05/20 22:29:55 joerg Exp $
 
-S=	${.CURDIR}/../../../../../
+S=	${.CURDIR}/../../../../..
 
 NOMAN=
-BINDIR= /usr/mdec
-BINMODE= 0444
 PROG?= boot
 NEWVERSWHAT?= "BIOS Boot"
 VERSIONFILE?= ${.CURDIR}/../version
+
+AFLAGS.biosboot.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
 
 SOURCES?= biosboot.S boot2.c conf.c devopen.c exec.c
 SRCS= ${SOURCES}
 .if !make(depend)
 SRCS+= vers.c
 .endif
+
+PIE_CFLAGS=
+PIE_AFLAGS=
+PIE_LDFLAGS=
 
 .include <bsd.own.mk>
 
@@ -30,15 +34,15 @@ BINMODE=444
 .PATH:	${.CURDIR}/.. ${.CURDIR}/../../lib
 
 LDFLAGS+= -nostdlib -Wl,-N -Wl,-e,boot_start
-# CPPFLAGS+= -D__daddr_t=int32_t
 CPPFLAGS+= -I ${.CURDIR}/..  -I ${.CURDIR}/../../lib -I ${S}/lib/libsa
 CPPFLAGS+= -I ${.OBJDIR}
 #CPPFLAGS+= -DDEBUG_MEMSIZE
-
+#CPPFLAGS+= -DBOOT_MSG_COM0
 # Make sure we override any optimization options specified by the user
 COPTS=  -Os
 
-.if ${MACHINE} == "amd64"
+.if defined(HAVE_GCC)
+.if ${MACHINE_ARCH} == "x86_64"
 LDFLAGS+=  -Wl,-m,elf_i386
 AFLAGS+=   -m32
 CPUFLAGS=  -m32
@@ -49,6 +53,7 @@ KERNMISCMAKEFLAGS="LIBKERN_ARCH=i386"
 CPUFLAGS=  -mcpu=i386
 .else
 CPUFLAGS=  -march=i386 -mtune=i386
+.endif
 .endif
 .endif
 
@@ -68,6 +73,7 @@ CPPFLAGS+= -DCONSOLE_KEYMAP=boot_params.bp_keymap
 CPPFLAGS+= -DSUPPORT_CD9660
 CPPFLAGS+= -DSUPPORT_USTARFS
 CPPFLAGS+= -DSUPPORT_DOSFS
+CPPFLAGS+= -DSUPPORT_EXT2FS
 CPPFLAGS+= -DPASS_BIOSGEOM
 CPPFLAGS+= -DPASS_MEMMAP
 #CPPFLAGS+= -DBOOTPASSWD
@@ -76,11 +82,12 @@ CPPFLAGS+= -DEPIA_HACK
 # The biosboot code is linked to 'virtual' address of zero and is
 # loaded at physical address 0x10000.
 # XXX The heap values should be determined from _end.
-SAMISCCPPFLAGS+= -DHEAP_START=0x20000 -DHEAP_LIMIT=0x50000
+SAMISCCPPFLAGS+= -DHEAP_START=0x40000 -DHEAP_LIMIT=0x70000
+SAMISCCPPFLAGS+= -DLIBSA_PRINTF_LONGLONG_SUPPORT
 SAMISCMAKEFLAGS+= SA_USE_CREAD=yes	# Read compressed kernels
 SAMISCMAKEFLAGS+= SA_INCLUDE_NET=no	# Netboot via TFTP, NFS
 
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 CPPFLAGS+=	-Wno-pointer-sign
 .endif
 
@@ -122,7 +129,7 @@ Z_AS= library
 LIBZ= ${ZLIB}
 
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
@@ -130,17 +137,17 @@ cleanlibdir:
 LIBLIST= ${LIBI386} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBI386} ${LIBSA}
 # LIBLIST= ${LIBSA} ${LIBKERN} ${LIBI386} ${LIBSA} ${LIBZ} ${LIBKERN}
 
-CLEANFILES+= ${PROG}.tmp ${PROG}.map vers.c
+CLEANFILES+= ${PROG}.tmp ${PROG}.map ${PROG}.syms vers.c
 
 vers.c: ${VERSIONFILE} ${SOURCES} ${LIBLIST} ${.CURDIR}/../Makefile.boot
-	${HOST_SH} ${S}conf/newvers_stand.sh ${VERSIONFILE} x86 ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${VERSIONFILE} x86 ${NEWVERSWHAT}
 
 # Anything that calls 'real_to_prot' must have a %pc < 0x10000.
 # We link the program, find the callers (all in libi386), then
-# explicitely pull in the required objects before any other library code.
+# explicitly pull in the required objects before any other library code.
 ${PROG}: ${OBJS} ${LIBLIST} ${.CURDIR}/../Makefile.boot
 	${_MKTARGET_LINK}
-	bb="$$( ${CC} -o ${PROG}.tmp ${LDFLAGS} -Wl,-Ttext,0 -Wl,-cref \
+	bb="$$( ${CC} -o ${PROG}.syms ${LDFLAGS} -Wl,-Ttext,0 -Wl,-cref \
 	    ${OBJS} ${LIBLIST} | ( \
 		while read symbol file; do \
 			[ -z "$$file" ] && continue; \
@@ -156,9 +163,8 @@ ${PROG}: ${OBJS} ${LIBLIST} ${.CURDIR}/../Makefile.boot
 		do :; \
 		done; \
 	) )"; \
-	${CC} -o ${PROG}.tmp ${LDFLAGS} -Wl,-Ttext,0 \
+	${CC} -o ${PROG}.syms ${LDFLAGS} -Wl,-Ttext,0 \
 		-Wl,-Map,${PROG}.map -Wl,-cref ${OBJS} $$bb ${LIBLIST}
-	${OBJCOPY} -O binary ${PROG}.tmp ${PROG}
-	rm -f ${PROG}.tmp
+	${OBJCOPY} -O binary ${PROG}.syms ${PROG}
 
 .include <bsd.prog.mk>

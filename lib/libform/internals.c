@@ -1,4 +1,4 @@
-/*	$NetBSD: internals.c,v 1.32 2006/04/09 00:44:40 christos Exp $	*/
+/*	$NetBSD: internals.c,v 1.35 2011/05/23 20:43:02 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: internals.c,v 1.32 2006/04/09 00:44:40 christos Exp $");
+__RCSID("$NetBSD: internals.c,v 1.35 2011/05/23 20:43:02 joerg Exp $");
 
 #include <limits.h>
 #include <ctype.h>
@@ -139,14 +139,14 @@ adjust_ypos(FIELD *field, _FORMI_FIELD_LINES *line)
 	_FORMI_FIELD_LINES *rs;
 	
 	ypos = 0;
-	rs = field->lines;
+	rs = field->alines;
 	while (rs != line) {
 		rs = rs->next;
 		ypos++;
 	}
 
 	field->cursor_ypos = ypos;
-	field->start_line = field->lines;
+	field->start_line = field->alines;
 	if (ypos > (field->rows - 1)) {
 		  /*
 		   * cur_line off the end of the field,
@@ -178,11 +178,11 @@ add_to_free(FIELD *field, _FORMI_FIELD_LINES *line)
 
 	if (line->prev == NULL) {
 		/* handle top of list */
-		field->lines = line->next;
-		field->lines->prev = NULL;
+		field->alines = line->next;
+		field->alines->prev = NULL;
 
 		if (field->cur_line == saved)
-			field->cur_line = field->lines;
+			field->cur_line = field->alines;
 		if (field->start_line == saved)
 			field->start_line = saved;
 	} else if (line->next == NULL) {
@@ -351,13 +351,13 @@ check_field_size(FIELD *field)
 			return TRUE;
 
 		if (field->rows == 1) {
-			return (field->lines->length < field->max);
+			return (field->alines->length < field->max);
 		} else {
 			return (field->row_count <= field->max);
 		}
 	} else {
 		if ((field->rows + field->nrows) == 1) {
-			return (field->lines->length <= field->cols);
+			return (field->alines->length <= field->cols);
 		} else {
 			return (field->row_count <= (field->rows
 						     + field->nrows));
@@ -590,7 +590,7 @@ _formi_wrap_field(FIELD *field, _FORMI_FIELD_LINES *loc)
 				continue;
 			}
 			
-			if ((row->next == NULL)) {
+			if (row->next == NULL) {
 				/*
 				 * If there are no more lines and this line
 				 * is too short then our job is over.
@@ -619,9 +619,9 @@ _formi_wrap_field(FIELD *field, _FORMI_FIELD_LINES *loc)
 				pos = tab_fit_len(row, field->cols);
 			}
 
-			if ((!isblank(row->string[pos])) &&
+			if ((!isblank((unsigned char)row->string[pos])) &&
 			    ((field->opts & O_WRAP) == O_WRAP)) {
-				if (!isblank(row->string[pos - 1]))
+				if (!isblank((unsigned char)row->string[pos - 1]))
 					pos = find_sow((unsigned int) pos,
 						       &row);
 				/*
@@ -630,7 +630,7 @@ _formi_wrap_field(FIELD *field, _FORMI_FIELD_LINES *loc)
 				 * should not autoskip (if that is enabled)
 				 */
 				if ((pos == 0)
-				    || (!isblank(row->string[pos - 1]))) {
+				    || (!isblank((unsigned char)row->string[pos - 1]))) {
 					wrap_err = E_NO_ROOM;
 					goto restore_and_exit;
 				}
@@ -640,7 +640,7 @@ _formi_wrap_field(FIELD *field, _FORMI_FIELD_LINES *loc)
 			   * a trailing blank, don't wrap the blank.
 			   */
 			if ((row->next == NULL) && (pos == row->length - 1) &&
-			    (isblank(row->string[pos])) &&
+			    (isblank((unsigned char)row->string[pos])) &&
 			    row->expanded <= field->cols)
 				continue;
 
@@ -650,7 +650,7 @@ _formi_wrap_field(FIELD *field, _FORMI_FIELD_LINES *loc)
 			   * move forward one char so the blank
 			   * is on the line boundary.
 			   */
-			if ((isblank(row->string[pos])) &&
+			if ((isblank((unsigned char)row->string[pos])) &&
 			    (pos != row->length - 1))
 				pos++;
 
@@ -672,7 +672,7 @@ _formi_wrap_field(FIELD *field, _FORMI_FIELD_LINES *loc)
 
 	  restore_and_exit:
 		if (saved_row->prev == NULL) {
-			field->lines = row_backup;
+			field->alines = row_backup;
 		} else {
 			saved_row->prev->next = row_backup;
 			row_backup->prev = saved_row->prev;
@@ -1073,7 +1073,7 @@ _formi_skip_blanks(char *string, unsigned int start)
 
 	i = start;
 	
-	while ((string[i] != '\0') && isblank(string[i]))
+	while ((string[i] != '\0') && isblank((unsigned char)string[i]))
 		i++;
 
 	return i;
@@ -1097,7 +1097,7 @@ field_skip_blanks(unsigned int start, _FORMI_FIELD_LINES **rowp)
 
 	do {
 		i = _formi_skip_blanks(&row->string[i], i);
-		if (!isblank(row->string[i])) {
+		if (!isblank((unsigned char)row->string[i])) {
 			last = row;
 			row = row->next;
 			  /*
@@ -1191,7 +1191,7 @@ find_eow(FIELD *cur, unsigned int offset, bool do_join,
 	do {
 		  /* first skip any non-whitespace */
 		while ((row->string[start] != '\0')
-		       && !isblank(row->string[start]))
+		       && !isblank((unsigned char)row->string[start]))
 			start++;
 
 		  /* see if we hit the end of the string */
@@ -1215,12 +1215,12 @@ find_eow(FIELD *cur, unsigned int offset, bool do_join,
 				} while (row->length == 0);
 			}
 		}
-	} while (!isblank(row->string[start]));
+	} while (!isblank((unsigned char)row->string[start]));
 
 	do {
 		  /* otherwise skip the whitespace.... */
 		while ((row->string[start] != '\0')
-		       && isblank(row->string[start]))
+		       && isblank((unsigned char)row->string[start]))
 			start++;
 
 		if (row->string[start] == '\0') {
@@ -1243,7 +1243,7 @@ find_eow(FIELD *cur, unsigned int offset, bool do_join,
 				} while (row->length == 0);
 			}
 		}
-	} while (isblank(row->string[start]));
+	} while (isblank((unsigned char)row->string[start]));
 
 	*rowp = row;
 	return start;
@@ -1266,11 +1266,13 @@ find_sow(unsigned int offset, _FORMI_FIELD_LINES **rowp)
 
 	do {
 		if (start > 0) {
-			if (isblank(str[start]) || isblank(str[start - 1])) {
-				if (isblank(str[start - 1]))
+			if (isblank((unsigned char)str[start]) ||
+			    isblank((unsigned char)str[start - 1])) {
+				if (isblank((unsigned char)str[start - 1]))
 					start--;
 				  /* skip the whitespace.... */
-				while ((start >= 0) && isblank(str[start]))
+				while ((start >= 0) &&
+				    isblank((unsigned char)str[start]))
 					start--;
 			}
 		}
@@ -1292,7 +1294,7 @@ find_sow(unsigned int offset, _FORMI_FIELD_LINES **rowp)
 				}
 			} while (row->length == 0);
 		}
-	} while (isblank(row->string[start]));
+	} while (isblank((unsigned char)row->string[start]));
 
 	  /* see if we hit the start of the string */
 	if (start < 0) {
@@ -1302,7 +1304,7 @@ find_sow(unsigned int offset, _FORMI_FIELD_LINES **rowp)
 
 	  /* now skip any non-whitespace */
 	do {
-		while ((start >= 0) && !isblank(str[start]))
+		while ((start >= 0) && !isblank((unsigned char)str[start]))
 			start--;
 
 		
@@ -1322,7 +1324,7 @@ find_sow(unsigned int offset, _FORMI_FIELD_LINES **rowp)
 				}
 			} while (row->length == 0);
 		}
-	} while (!isblank(str[start]));
+	} while (!isblank((unsigned char)str[start]));
 	
 	if (start > 0) {
 		start++; /* last loop has us pointing at a space, adjust */
@@ -1839,7 +1841,7 @@ _formi_add_char(FIELD *field, unsigned int pos, char c)
 	if (((field->opts & O_BLANK) == O_BLANK) &&
 	    (field->buf0_status == FALSE) &&
 	    ((field->row_xpos + field->start_char) == 0)) {
-		row = field->lines;
+		row = field->alines;
 		if (row->next != NULL) {
 			  /* shift all but one line structs to free list */
 			temp = row->next;
@@ -2814,7 +2816,7 @@ _formi_manipulate_field(FORM *form, int c)
 					cur->row_xpos = row->length - 1;
 				}
 
-				cur->start_line = cur->lines;
+				cur->start_line = cur->alines;
 				rs = cur->start_line;
 				cur->cursor_ypos = 0;
 				while (rs != row) {
@@ -2846,7 +2848,8 @@ _formi_manipulate_field(FORM *form, int c)
 		   * a word.
 		   */
 		if ((start > 0)
-		    && !(isblank(str[start - 1]) && !isblank(str[start])))
+		    && !(isblank((unsigned char)str[start - 1]) &&
+			!isblank((unsigned char)str[start])))
 			start = find_sow(start, &row);
 		str = row->string;
 		  /* XXXX hmmmm what if start and end on diff rows? XXXX */
@@ -2897,9 +2900,9 @@ _formi_manipulate_field(FORM *form, int c)
 		break;
 		
 	case REQ_CLR_FIELD:
-		row = cur->lines->next;
-		cur->cur_line = cur->lines;
-		cur->start_line = cur->lines;
+		row = cur->alines->next;
+		cur->cur_line = cur->alines;
+		cur->start_line = cur->alines;
 		
 		while (row != NULL) {
 			rs = row->next;
@@ -2907,9 +2910,9 @@ _formi_manipulate_field(FORM *form, int c)
 			row = rs;
 		}
 
-		cur->lines->string[0] = '\0';
-		cur->lines->length = 0;
-		cur->lines->expanded = 0;
+		cur->alines->string[0] = '\0';
+		cur->alines->length = 0;
+		cur->alines->expanded = 0;
 		cur->row_count = 1;
 		cur->cursor_ypos = 0;
 		cur->row_xpos = 0;
@@ -3502,17 +3505,17 @@ tab_fit_window(FIELD *field, unsigned int pos, unsigned int window)
 	_formi_tab_t *ts;
 	
 	  /* first find the last tab */
-	ts = field->lines->tabs;
+	ts = field->alines->tabs;
 
 	  /*
 	   * unless there are no tabs - just return the window size,
 	   * if there is enough room, otherwise 0.
 	   */
 	if (ts == NULL) {
-		if (field->lines->length < window)
+		if (field->alines->length < window)
 			return 0;
 		else
-			return field->lines->length - window + 1;
+			return field->alines->length - window + 1;
 	}
 		
 	while ((ts->fwd != NULL) && (ts->fwd->in_use == TRUE))
@@ -3527,7 +3530,7 @@ tab_fit_window(FIELD *field, unsigned int pos, unsigned int window)
 	
 	scroll_amt = 0;
 	for (i = pos; i >= 0; i--) {
-		if (field->lines->string[i] == '\t') {
+		if (field->alines->string[i] == '\t') {
 			assert((ts != NULL) && (ts->in_use == TRUE));
 			if (ts->pos == i) {
 				if ((scroll_amt + ts->size) > window) {
@@ -3601,10 +3604,10 @@ _formi_sync_buffer(FIELD *field)
 	char *nstr, *tmp;
 	unsigned length;
 
-	if (field->lines == NULL)
+	if (field->alines == NULL)
 		return E_BAD_ARGUMENT;
 
-	if (field->lines->string == NULL)
+	if (field->alines->string == NULL)
 		return E_BAD_ARGUMENT;
 
 	  /*
@@ -3615,7 +3618,7 @@ _formi_sync_buffer(FIELD *field)
 		return E_SYSTEM_ERROR;
 	nstr[0] = '\0';
 	
-	line = field->lines;
+	line = field->alines;
 	length = 1; /* allow for terminating null */
 	
 	while (line != NULL) {

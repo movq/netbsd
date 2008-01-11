@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.34 2007/10/17 19:53:30 garbled Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.39 2011/02/24 04:28:45 joerg Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -40,19 +40,17 @@
  * Created      : 17/09/94
  */
 
-#include "opt_compat_netbsd.h"
 #include "opt_armfpe.h"
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.34 2007/10/17 19:53:30 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.39 2011/02/24 04:28:45 joerg Exp $");
 
 #include <sys/mount.h>		/* XXX only needed by syscallargs.h */
 #include <sys/proc.h>
 #include <sys/signal.h>
 #include <sys/syscallargs.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <sys/ras.h>
 #include <sys/ucontext.h>
 
@@ -89,7 +87,7 @@ getframe(struct lwp *l, int sig, int *onstack)
  * resets the signal mask, the stack, and the
  * frame pointer, it returns to the user specified pc.
  */
-static void
+void
 sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	struct lwp *l = curlwp;
@@ -112,18 +110,6 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	/* make the stack aligned */
 	fp = (struct sigframe_siginfo *)STACKALIGN(fp);
 
-	/* Build stack frame for signal trampoline. */
-	switch (ps->sa_sigdesc[sig].sd_vers) {
-	case 0:		/* handled by sendsig_sigcontext */
-	case 1:		/* handled by sendsig_sigcontext */
-	default:	/* unknown version */
-		printf("nsendsig: bad version %d\n",
-		    ps->sa_sigdesc[sig].sd_vers);
-		sigexit(l, SIGILL);
-	case 2:
-		break;
-	}
-
 	/* populate the siginfo frame */
 	frame.sf_si._info = ksi->ksi_info;
 	frame.sf_uc.uc_flags = _UC_SIGMASK;
@@ -134,10 +120,10 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	memset(&frame.sf_uc.uc_stack, 0, sizeof(frame.sf_uc.uc_stack));
 	sendsig_reset(l, sig);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	cpu_getmcontext(l, &frame.sf_uc.uc_mcontext, &frame.sf_uc.uc_flags);
 	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -177,21 +163,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 }
 
 void
-sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
-{
-#ifdef COMPAT_16
-	if (curproc->p_sigacts->sa_sigdesc[ksi->ksi_signo].sd_vers < 2)
-		sendsig_sigcontext(ksi, mask);
-	else
-#endif
-		sendsig_siginfo(ksi, mask);
-}
-
-void
-cpu_getmcontext(l, mcp, flags)
-	struct lwp *l;
-	mcontext_t *mcp;
-	unsigned int *flags;
+cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 {
 	struct trapframe *tf = process_frame(l);
 	__greg_t *gr = mcp->__gregs;
@@ -227,13 +199,13 @@ cpu_getmcontext(l, mcp, flags)
 	arm_fpe_getcontext(p, (struct fpreg *)(void *)&mcp->fpregs);
 	*flags |= _UC_FPU;
 #endif
+
+	mcp->_mc_tlsbase = (uintptr_t)l->l_private;
+	*flags |= _UC_TLSBASE;
 }
 
 int
-cpu_setmcontext(l, mcp, flags)
-	struct lwp *l;
-	const mcontext_t *mcp;
-	unsigned int flags;
+cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
 	struct trapframe *tf = process_frame(l);
 	const __greg_t *gr = mcp->__gregs;
@@ -271,12 +243,15 @@ cpu_setmcontext(l, mcp, flags)
 	}
 #endif
 
-	mutex_enter(&p->p_smutex);
+	if ((flags & _UC_TLSBASE) != 0)
+		lwp_setprivate(l, (void *)(uintptr_t)mcp->_mc_tlsbase);
+
+	mutex_enter(p->p_lock);
 	if (flags & _UC_SETSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	if (flags & _UC_CLRSTACK)
 		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (0);
 }

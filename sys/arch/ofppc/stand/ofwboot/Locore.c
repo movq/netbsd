@@ -1,4 +1,4 @@
-/*	$NetBSD: Locore.c,v 1.18 2008/01/09 19:34:44 garbled Exp $	*/
+/*	$NetBSD: Locore.c,v 1.22 2009/01/12 07:49:57 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -44,9 +44,11 @@ void startup(void *, int, int (*)(void *), char *, int)
 	__attribute__((__used__));
 static void setup(void);
 
-int stack[8192/4 + 4] __attribute__((__used__));
-char *heapspace;
-char altheap[0x20000];
+/* this pad gets the rodata laignment right, don't EVER fiddle it */
+char *pad __attribute__((__aligned__ (8))) = "pad";
+int stack[8192/4 + 4] __attribute__((__aligned__ (4), __used__));
+char *heapspace __attribute__((__aligned__ (4)));
+char altheap[0x20000] __attribute__((__aligned__ (4)));
 
 static int
 openfirmware(void *arg)
@@ -513,7 +515,6 @@ OF_chain(void *virt, u_int size, boot_entry_t entry, void *arg, u_int len)
 
 static int stdin;
 static int stdout;
-static int memory;
 
 static void
 setup(void)
@@ -528,7 +529,7 @@ setup(void)
 	    sizeof(stdout))
 		OF_exit();
 
-	printf("Allocating 0x20000 bytes of ram for boot\n");
+	//printf("Allocating 0x20000 bytes of ram for boot\n");
 	heapspace = OF_claim(0, 0x20000, NBPG);
 	if (heapspace == (char *)-1) {
 		printf("WARNING: Failed to alloc ram, using bss\n");
@@ -558,3 +559,152 @@ getchar(void)
 			return -1;
 	return ch;
 }
+
+#ifdef OFWDUMP
+
+static int
+OF_peer(int phandle)
+{
+	static struct {
+		const char *name;
+		int nargs;
+		int nreturns;
+		int phandle;
+		int sibling;
+	} args = {
+		"peer",
+			1,
+			1,
+	};
+	
+	args.phandle = phandle;
+	if (openfirmware(&args) == -1)
+		return 0;
+	return args.sibling;
+}
+
+static int
+OF_child(int phandle)
+{
+	static struct {
+		const char *name;
+		int nargs;
+		int nreturns;
+		int phandle;
+		int child;
+	} args = {
+		"child",
+			1,
+			1,
+	};
+
+	args.phandle = phandle;
+	if (openfirmware(&args) == -1)
+		return 0;
+	return args.child;
+}
+
+int
+OF_nextprop(int handle, const char *prop, void *nextprop)
+{
+	static struct {
+		const char *name;
+		int nargs;
+		int nreturns;
+		int phandle;
+		const char *prop;
+		char *buf;
+		int flag;
+	} args = {
+		"nextprop",
+			3,
+			1,
+	};
+
+	args.phandle = handle;
+	args.prop = prop;
+	args.buf = nextprop;
+	if (openfirmware(&args) == -1)
+		return -1;
+	return args.flag;
+}
+
+static int
+OF_package_to_path(int phandle, char *buf, int buflen)
+{
+	static struct {
+		const char *name;
+		int nargs;
+		int nreturns;
+		int phandle;
+		char *buf;
+		int buflen;
+		int length;
+	} args = {
+		"package-to-path",
+			3,
+			1,
+	};
+
+	if (buflen > 4096)
+		return -1;
+	args.phandle = phandle;
+	args.buf = buf;
+	args.buflen = buflen;
+	if (openfirmware(&args) < 0)
+		return -1;
+	if (args.length > buflen)
+		args.length = buflen;
+	return args.length;
+}
+
+void
+dump_ofwtree(int node)
+{
+	int peer, child, namelen, dlen, i;
+	char namebuf[33], newnamebuf[33];
+	char path[256], data[256];
+
+	for (peer = node; peer; peer = OF_peer(peer)) {
+		printf("\nnode: 0x%x ", peer);
+		if (OF_package_to_path(peer, path, 512) >= 0)
+			printf("path=%s", path);
+		printf("\n");
+		namebuf[0] = '\0';
+		namelen = OF_nextprop(peer, namebuf, &newnamebuf);
+		while (namelen >= 0) {
+			/*printf("namelen == %d namebuf=%s new=%s\n", namelen,
+			  namebuf, newnamebuf);*/
+			//newnamebuf[namelen] = '\0';
+			strcpy(namebuf, newnamebuf);
+			printf("  %s :", newnamebuf);
+			dlen = OF_getprop(peer, newnamebuf, data, 256);
+			if (dlen > 0) {
+				if (data[0] < 0177)
+					printf(" %s\n", data);
+				else
+					printf("\n");
+				printf("    ");
+				for (i=0; i < dlen && i < 256; i++) {
+					if (data[i] < 0x10)
+						printf("0");
+					printf("%x", data[i]);
+					if ((i+1)%4 == 0)
+						printf(" ");
+					if ((i+1)%32 == 0)
+						printf("\n    ");
+				}
+			}
+			printf("\n");
+			namelen = OF_nextprop(peer, namebuf, &newnamebuf);
+			if (newnamebuf[0] == '\0' ||
+			    strcmp(namebuf, newnamebuf) == 0)
+				break;
+		}
+		child = OF_child(peer);
+		if (child > 0)
+			dump_ofwtree(child);
+	}
+}
+
+#endif /* OFWDUMP */

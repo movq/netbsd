@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xi.c,v 1.62 2007/09/01 07:32:31 dyoung Exp $ */
+/*	$NetBSD: if_xi.c,v 1.71 2010/04/05 07:21:47 joerg Exp $ */
 /*	OpenBSD: if_xe.c,v 1.9 1999/09/16 11:28:42 niklas Exp 	*/
 
 /*
@@ -55,11 +55,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.62 2007/09/01 07:32:31 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.71 2010/04/05 07:21:47 joerg Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipx.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,10 +90,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.62 2007/09/01 07:32:31 dyoung Exp $");
 #endif
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 /*
  * Maximum number of bytes to read per interrupt.  Linux recommends
@@ -149,22 +146,19 @@ STATIC int xi_ether_ioctl(struct ifnet *, u_long cmd, void *);
 STATIC void xi_full_reset(struct xi_softc *);
 STATIC void xi_init(struct xi_softc *);
 STATIC int xi_ioctl(struct ifnet *, u_long, void *);
-STATIC int xi_mdi_read(struct device *, int, int);
-STATIC void xi_mdi_write(struct device *, int, int, int);
+STATIC int xi_mdi_read(device_t, int, int);
+STATIC void xi_mdi_write(device_t, int, int, int);
 STATIC int xi_mediachange(struct ifnet *);
-STATIC void xi_mediastatus(struct ifnet *, struct ifmediareq *);
 STATIC u_int16_t xi_get(struct xi_softc *);
 STATIC void xi_reset(struct xi_softc *);
 STATIC void xi_set_address(struct xi_softc *);
 STATIC void xi_start(struct ifnet *);
-STATIC void xi_statchg(struct device *);
+STATIC void xi_statchg(device_t);
 STATIC void xi_stop(struct xi_softc *);
 STATIC void xi_watchdog(struct ifnet *);
 
 void
-xi_attach(sc, myea)
-	struct xi_softc *sc;
-	u_int8_t *myea;
+xi_attach(struct xi_softc *sc, u_int8_t *myea)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
@@ -214,11 +208,11 @@ xi_attach(sc, myea)
 	/* Reset and initialize the card. */
 	xi_full_reset(sc);
 
-	printf("%s: MAC address %s\n", sc->sc_dev.dv_xname, ether_sprintf(myea));
+	printf("%s: MAC address %s\n", device_xname(sc->sc_dev), ether_sprintf(myea));
 
 	ifp = &sc->sc_ethercom.ec_if;
 	/* Initialize the ifnet structure. */
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = xi_start;
 	ifp->if_ioctl = xi_ioctl;
@@ -241,12 +235,13 @@ xi_attach(sc, myea)
 	sc->sc_mii.mii_readreg = xi_mdi_read;
 	sc->sc_mii.mii_writereg = xi_mdi_write;
 	sc->sc_mii.mii_statchg = xi_statchg;
+	sc->sc_ethercom.ec_mii = &sc->sc_mii;
 	ifmedia_init(&sc->sc_mii.mii_media, 0, xi_mediachange,
-	    xi_mediastatus);
+	    ether_mediastatus);
 	DPRINTF(XID_MII | XID_CONFIG,
-	    ("xi: bmsr %x\n", xi_mdi_read(&sc->sc_dev, 0, 1)));
+	    ("xi: bmsr %x\n", xi_mdi_read(sc->sc_dev, 0, 1)));
 
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 		MII_OFFSET_ANY, 0);
 	if (LIST_FIRST(&sc->sc_mii.mii_phys) == NULL)
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER | IFM_AUTO, 0,
@@ -254,14 +249,14 @@ xi_attach(sc, myea)
 	ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER | IFM_AUTO);
 
 #if NRND > 0
-	rnd_attach_source(&sc->sc_rnd_source, sc->sc_dev.dv_xname, RND_TYPE_NET, 0);
+	rnd_attach_source(&sc->sc_rnd_source, device_xname(sc->sc_dev), RND_TYPE_NET, 0);
 #endif
 }
 
 int
-xi_detach(struct device *self, int flags)
+xi_detach(device_t self, int flags)
 {
-	struct xi_softc *sc = (void *)self;
+	struct xi_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
 	DPRINTF(XID_CONFIG, ("xi_detach()\n"));
@@ -281,32 +276,7 @@ xi_detach(struct device *self, int flags)
 }
 
 int
-xi_activate(self, act)
-	struct device *self;
-	enum devact act;
-{
-	struct xi_softc *sc = (void *)self;
-	int s, rv = 0;
-
-	DPRINTF(XID_CONFIG, ("xi_activate()\n"));
-
-	s = splnet();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if_deactivate(&sc->sc_ethercom.ec_if);
-		break;
-	}
-	splx(s);
-	return (rv);
-}
-
-int
-xi_intr(arg)
-	void *arg;
+xi_intr(void *arg)
 {
 	struct xi_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -315,8 +285,7 @@ xi_intr(arg)
 
 	DPRINTF(XID_CONFIG, ("xi_intr()\n"));
 
-	if (sc->sc_enabled == 0 ||
-	    !device_is_active(&sc->sc_dev))
+	if (sc->sc_enabled == 0 || !device_is_active(sc->sc_dev))
 		return (0);
 
 	ifp->if_timer = 0;	/* turn watchdog timer off */
@@ -334,7 +303,8 @@ xi_intr(arg)
 	/* Check to see if card has been ejected. */
 	if (isr == 0xff) {
 #ifdef DIAGNOSTIC
-		printf("%s: interrupt for dead card\n", sc->sc_dev.dv_xname);
+		printf("%s: interrupt for dead card\n",
+		    device_xname(sc->sc_dev));
 #endif
 		goto end;
 	}
@@ -430,8 +400,7 @@ end:
  * Pull a packet from the card into an mbuf chain.
  */
 STATIC u_int16_t
-xi_get(sc)
-	struct xi_softc *sc;
+xi_get(struct xi_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mbuf *top, **mp, *m;
@@ -516,10 +485,7 @@ xi_get(sc)
 
 	ifp->if_ipackets++;
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, top);
-#endif
+	bpf_mtap(ifp, top);
 
 	(*ifp->if_input)(ifp, top);
 	return (recvcount);
@@ -535,8 +501,7 @@ xi_get(sc)
 /* Let the MII serial management be idle for one period. */
 static INLINE void xi_mdi_idle(struct xi_softc *);
 static INLINE void
-xi_mdi_idle(sc)
-	struct xi_softc *sc;
+xi_mdi_idle(struct xi_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -553,9 +518,7 @@ xi_mdi_idle(sc)
 /* Pulse out one bit of data. */
 static INLINE void xi_mdi_pulse(struct xi_softc *, int);
 static INLINE void
-xi_mdi_pulse(sc, data)
-	struct xi_softc *sc;
-	int data;
+xi_mdi_pulse(struct xi_softc *sc, int data)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -573,8 +536,7 @@ xi_mdi_pulse(sc, data)
 /* Probe one bit of data. */
 static INLINE int xi_mdi_probe(struct xi_softc *sc);
 static INLINE int
-xi_mdi_probe(sc)
-	struct xi_softc *sc;
+xi_mdi_probe(struct xi_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -595,10 +557,7 @@ xi_mdi_probe(sc)
 /* Pulse out a sequence of data bits. */
 static INLINE void xi_mdi_pulse_bits(struct xi_softc *, u_int32_t, int);
 static INLINE void
-xi_mdi_pulse_bits(sc, data, len)
-	struct xi_softc *sc;
-	u_int32_t data;
-	int len;
+xi_mdi_pulse_bits(struct xi_softc *sc, u_int32_t data, int len)
 {
 	u_int32_t mask;
 
@@ -608,12 +567,9 @@ xi_mdi_pulse_bits(sc, data, len)
 
 /* Read a PHY register. */
 STATIC int
-xi_mdi_read(self, phy, reg)
-	struct device *self;
-	int phy;
-	int reg;
+xi_mdi_read(device_t self, int phy, int reg)
 {
-	struct xi_softc *sc = (struct xi_softc *)self;
+	struct xi_softc *sc = device_private(self);
 	int i;
 	u_int32_t mask;
 	u_int32_t data = 0;
@@ -641,13 +597,9 @@ xi_mdi_read(self, phy, reg)
 
 /* Write a PHY register. */
 STATIC void
-xi_mdi_write(self, phy, reg, value)
-	struct device *self;
-	int phy;
-	int reg;
-	int value;
+xi_mdi_write(device_t self, int phy, int reg, int value)
 {
-	struct xi_softc *sc = (struct xi_softc *)self;
+	struct xi_softc *sc = device_private(self);
 	int i;
 
 	PAGE(sc, 2);
@@ -665,7 +617,7 @@ xi_mdi_write(self, phy, reg, value)
 }
 
 STATIC void
-xi_statchg(struct device *self)
+xi_statchg(device_t self)
 {
 	/* XXX Update ifp->if_baudrate */
 }
@@ -674,8 +626,7 @@ xi_statchg(struct device *self)
  * Change media according to request.
  */
 STATIC int
-xi_mediachange(ifp)
-	struct ifnet *ifp;
+xi_mediachange(struct ifnet *ifp)
 {
 	int s;
 
@@ -689,28 +640,8 @@ xi_mediachange(ifp)
 	return (0);
 }
 
-/*
- * Notify the world which media we're using.
- */
 STATIC void
-xi_mediastatus(ifp, ifmr)
-	struct ifnet *ifp;
-	struct ifmediareq *ifmr;
-{
-	struct xi_softc *sc = ifp->if_softc;
-
-	DPRINTF(XID_CONFIG, ("xi_mediastatus()\n"));
-
-	if (LIST_FIRST(&sc->sc_mii.mii_phys)) {
-		mii_pollstat(&sc->sc_mii);
-		ifmr->ifm_status = sc->sc_mii.mii_media_status;
-		ifmr->ifm_active = sc->sc_mii.mii_media_active;
-	}
-}
-
-STATIC void
-xi_reset(sc)
-	struct xi_softc *sc;
+xi_reset(struct xi_softc *sc)
 {
 	int s;
 
@@ -723,20 +654,18 @@ xi_reset(sc)
 }
 
 STATIC void
-xi_watchdog(ifp)
-	struct ifnet *ifp;
+xi_watchdog(struct ifnet *ifp)
 {
 	struct xi_softc *sc = ifp->if_softc;
 
-	printf("%s: device timeout\n", sc->sc_dev.dv_xname);
+	printf("%s: device timeout\n", device_xname(sc->sc_dev));
 	++ifp->if_oerrors;
 
 	xi_reset(sc);
 }
 
 STATIC void
-xi_stop(sc)
-	register struct xi_softc *sc;
+xi_stop(register struct xi_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -758,8 +687,7 @@ xi_stop(sc)
 }
 
 STATIC int
-xi_enable(sc)
-	struct xi_softc *sc;
+xi_enable(struct xi_softc *sc)
 {
 	int error;
 
@@ -774,8 +702,7 @@ xi_enable(sc)
 }
 
 STATIC void
-xi_disable(sc)
-	struct xi_softc *sc;
+xi_disable(struct xi_softc *sc)
 {
 
 	if (sc->sc_enabled) {
@@ -785,8 +712,7 @@ xi_disable(sc)
 }
 
 STATIC void
-xi_init(sc)
-	struct xi_softc *sc;
+xi_init(struct xi_softc *sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	bus_space_tag_t bst = sc->sc_bst;
@@ -830,8 +756,7 @@ xi_init(sc)
  * Always called as splnet().
  */
 STATIC void
-xi_start(ifp)
-	struct ifnet *ifp;
+xi_start(struct ifnet *ifp)
 {
 	struct xi_softc *sc = ifp->if_softc;
 	bus_space_tag_t bst = sc->sc_bst;
@@ -880,10 +805,7 @@ xi_start(ifp)
 
 	IFQ_DEQUEUE(&ifp->if_snd, m0);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0);
 
 	/*
 	 * Do the output at splhigh() so that an interrupt from another device
@@ -921,10 +843,7 @@ xi_start(ifp)
 }
 
 STATIC int
-xi_ether_ioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	void *data;
+xi_ether_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ifaddr *ifa = (struct ifaddr *)data;
 	struct xi_softc *sc = ifp->if_softc;
@@ -933,23 +852,22 @@ xi_ether_ioctl(ifp, cmd, data)
 	DPRINTF(XID_CONFIG, ("xi_ether_ioctl()\n"));
 
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		if ((error = xi_enable(sc)) != 0)
 			break;
 
 		ifp->if_flags |= IFF_UP;
 
+		xi_init(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-			xi_init(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif	/* INET */
 
 
 		default:
-			xi_init(sc);
 			break;
 		}
 		break;
@@ -962,13 +880,9 @@ xi_ether_ioctl(ifp, cmd, data)
 }
 
 STATIC int
-xi_ioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	void *data;
+xi_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct xi_softc *sc = ifp->if_softc;
-	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
 	DPRINTF(XID_CONFIG, ("xi_ioctl()\n"));
@@ -976,13 +890,16 @@ xi_ioctl(ifp, cmd, data)
 	s = splnet();
 
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		error = xi_ether_ioctl(ifp, cmd, data);
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		/* XXX re-use ether_ioctl() */
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_RUNNING:
 			/*
 			 * If interface is marked down and it is running,
 			 * stop it.
@@ -990,8 +907,8 @@ xi_ioctl(ifp, cmd, data)
 			xi_stop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
 			xi_disable(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-			   (ifp->if_flags & IFF_RUNNING) == 0) {
+			break;
+		case IFF_UP:
 			/*
 			 * If interface is marked up and it is stopped,
 			 * start it.
@@ -999,12 +916,16 @@ xi_ioctl(ifp, cmd, data)
 			if ((error = xi_enable(sc)) != 0)
 				break;
 			xi_init(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0) {
+			break;
+		case IFF_UP|IFF_RUNNING:
 			/*
 			 * Reset the interface to pick up changes in any
 			 * other flags that affect hardware registers.
 			 */
 			xi_set_address(sc);
+			break;
+		case 0:
+			break;
 		}
 		break;
 
@@ -1014,7 +935,9 @@ xi_ioctl(ifp, cmd, data)
 			error = EIO;
 			break;
 		}
-
+		/*FALLTHROUGH*/
+	case SIOCSIFMEDIA:
+	case SIOCGIFMEDIA:
 		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware
@@ -1026,13 +949,8 @@ xi_ioctl(ifp, cmd, data)
 		}
 		break;
 
-	case SIOCSIFMEDIA:
-	case SIOCGIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, cmd);
-		break;
-
 	default:
-		error = EINVAL;
+		error = ether_ioctl(ifp, cmd, data);
 		break;
 	}
 
@@ -1041,8 +959,7 @@ xi_ioctl(ifp, cmd, data)
 }
 
 STATIC void
-xi_set_address(sc)
-	struct xi_softc *sc;
+xi_set_address(struct xi_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -1143,8 +1060,7 @@ done:
 }
 
 STATIC void
-xi_cycle_power(sc)
-	struct xi_softc *sc;
+xi_cycle_power(struct xi_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;
@@ -1164,8 +1080,7 @@ xi_cycle_power(sc)
 }
 
 STATIC void
-xi_full_reset(sc)
-	struct xi_softc *sc;
+xi_full_reset(struct xi_softc *sc)
 {
 	bus_space_tag_t bst = sc->sc_bst;
 	bus_space_handle_t bsh = sc->sc_bsh;

@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.9 2008/01/05 12:53:54 dsl Exp $	*/
+/*	$NetBSD: syscall.c,v 1.13 2010/12/20 00:25:43 matt Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
@@ -78,10 +78,15 @@
  * T.Horiuchi 1998.06.8
  */
 
+#include "opt_sa.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
+#include <sys/syscallvar.h>
 
 #include <sh3/userret.h>
 
@@ -118,13 +123,19 @@ syscall_plain(struct lwp *l, struct trapframe *tf)
 	size_t argsize;
 	register_t code, args[8], rval[2], ocode;
 
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 
 	opc = tf->tf_spc;
 	ocode = code = tf->tf_r0;
 
 	nsys = p->p_emul->e_nsysent;
 	callp = p->p_emul->e_sysent;
+
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
 
 	params = (void *)tf->tf_r15;
 
@@ -207,7 +218,7 @@ syscall_plain(struct lwp *l, struct trapframe *tf)
 
 	rval[0] = 0;
 	rval[1] = tf->tf_r1;
-	error = (*callp->sy_call)(l, args, rval);
+	error = sy_call(callp, l, args, rval);
 
 	switch (error) {
 	case 0:
@@ -251,13 +262,19 @@ syscall_fancy(struct lwp *l, struct trapframe *tf)
 	size_t argsize;
 	register_t code, args[8], rval[2], ocode;
 
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 
 	opc = tf->tf_spc;
 	ocode = code = tf->tf_r0;
 
 	nsys = p->p_emul->e_nsysent;
 	callp = p->p_emul->e_sysent;
+
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
 
 	params = (void *)tf->tf_r15;
 
@@ -338,12 +355,12 @@ syscall_fancy(struct lwp *l, struct trapframe *tf)
 	if (error)
 		goto bad;
 
-	if ((error = trace_enter(code, code, NULL, args)) != 0)
+	if ((error = trace_enter(code, args, callp->sy_narg)) != 0)
 		goto out;
 
 	rval[0] = 0;
 	rval[1] = tf->tf_r1;
-	error = (*callp->sy_call)(l, args, rval);
+	error = sy_call(callp, l, args, rval);
 out:
 	switch (error) {
 	case 0:
@@ -371,7 +388,7 @@ out:
 	}
 
 
-	trace_exit(code, args, rval, error);
+	trace_exit(code, rval, error);
 
 	userret(l);
 }

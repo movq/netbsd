@@ -1,4 +1,4 @@
-/*	$NetBSD: mt.c,v 1.12 2008/01/02 11:48:37 ad Exp $ */
+/*	$NetBSD: mt.c,v 1.24 2011/02/08 20:20:27 rmind Exp $ */
 
 /*-
  * Copyright (c) 1996-2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,7 @@
  */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -74,46 +68,6 @@
  */
 
 /*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: rd.c 1.44 92/12/26$
- *
- *	@(#)rd.c	8.2 (Berkeley) 5/19/94
- */
-
-/*
  * Magnetic tape driver (HP7974a, HP7978a/b, HP7979a, HP7980a, HP7980xc)
  * Original version contributed by Mt. Xinu.
  * Modified for 4.4BSD by Mark Davies and Andrew Vignaux, Department of
@@ -121,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mt.c,v 1.12 2008/01/02 11:48:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mt.c,v 1.24 2011/02/08 20:20:27 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -181,8 +135,8 @@ struct	mt_softc {
 #define B_CMD		B_DEVPRIVATE	/* command buf instead of data */
 #define	b_cmd		b_blkno		/* blkno holds cmd when B_CMD */
 
-int	mtmatch(struct device *, struct cfdata *, void *);
-void	mtattach(struct device *, struct device *, void *);
+int	mtmatch(device_t, cfdata_t, void *);
+void	mtattach(device_t, device_t, void *);
 
 CFATTACH_DECL(mt, sizeof(struct mt_softc),
 	mtmatch, mtattach, NULL, NULL);
@@ -231,10 +185,7 @@ int	nmtinfo = sizeof(mtinfo) / sizeof(mtinfo[0]);
 
 
 int
-mtlookup(id, slave, punit)
-	int id;
-	int slave;
-	int punit;
+mtlookup(int id, int slave, int punit)
 {
 	int i;
 
@@ -247,10 +198,7 @@ mtlookup(id, slave, punit)
 }
 
 int
-mtmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+mtmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct cs80bus_attach_args *ca = aux;
 
@@ -259,9 +207,7 @@ mtmatch(parent, match, aux)
 }
 
 void
-mtattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+mtattach(device_t parent, device_t self, void *aux)
 {
 	struct mt_softc *sc = device_private(self);
 	struct cs80bus_attach_args *ca = aux;
@@ -284,7 +230,7 @@ mtattach(parent, self, aux)
 
 	if (gpibregister(sc->sc_ic, sc->sc_slave, mtcallback, sc,
 	    &sc->sc_hdl)) {
-		printf("%s: can't register callback\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't register callback\n");
 		return;
 	}
 }
@@ -296,9 +242,7 @@ mtattach(parent, self, aux)
  * and -2 on "temporary" failure.
  */
 int
-mtreaddsj(sc, ecmd)
-	struct mt_softc *sc;
-	int ecmd;
+mtreaddsj(struct mt_softc *sc, int ecmd)
 {
 	int retval;
 
@@ -310,7 +254,7 @@ mtreaddsj(sc, ecmd)
 	sc->sc_flags &= ~MTF_DSJTIMEO;
 	if (retval != 1) {
 		DPRINTF(MDB_ANY, ("%s can't gpibrecv DSJ",
-		    sc->sc_dev.dv_xname));
+		    device_xname(&sc->sc_dev)));
 		if (sc->sc_recvtimeo == 0)
 			sc->sc_recvtimeo = hz;
 		if (--sc->sc_recvtimeo == 0)
@@ -321,7 +265,7 @@ mtreaddsj(sc, ecmd)
 	}
 	sc->sc_recvtimeo = 0;
 	sc->sc_statindex = 0;
-	DPRINTF(MDB_ANY, ("%s readdsj: 0x%x", sc->sc_dev.dv_xname,
+	DPRINTF(MDB_ANY, ("%s readdsj: 0x%x", device_xname(&sc->sc_dev),
 	    sc->sc_lastdsj));
 	sc->sc_lastecmd = ecmd;
 	switch (sc->sc_lastdsj) {
@@ -336,7 +280,7 @@ mtreaddsj(sc, ecmd)
 		break;
 
 	    default:
-		printf("%s readdsj: DSJ 0x%x\n", sc->sc_dev.dv_xname,
+		printf("%s readdsj: DSJ 0x%x\n", device_xname(&sc->sc_dev),
 		    sc->sc_lastdsj);
 		return (-1);
 	}
@@ -358,13 +302,13 @@ getstats:
 			sc->sc_flags |= MTF_STATTIMEO;
 			return (-2);
 		}
-		printf("%s readdsj: can't read status", sc->sc_dev.dv_xname);
+		printf("%s readdsj: can't read status", device_xname(&sc->sc_dev));
 		return (-1);
 	}
 	sc->sc_recvtimeo = 0;
 	sc->sc_statindex = 0;
 	DPRINTF(MDB_ANY, ("%s readdsj: status is %x %x %x %x %x %x",
-	    sc->sc_dev.dv_xname,
+	    device_xname(&sc->sc_dev),
 	    sc->sc_stat1, sc->sc_stat2, sc->sc_stat3,
 	    sc->sc_stat4, sc->sc_stat5, sc->sc_stat6));
 	if (sc->sc_lastecmd)
@@ -374,23 +318,20 @@ getstats:
 }
 
 int
-mtopen(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+mtopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct mt_softc *sc;
 	int req_den;
 	int error;
 
-	sc = device_lookup(&mt_cd, MTUNIT(dev));
+	sc = device_lookup_private(&mt_cd, MTUNIT(dev));
 	if (sc == NULL || (sc->sc_flags & MTF_EXISTS) == 0)
 		return (ENXIO);
 
 	if (sc->sc_flags & MTF_OPEN)
 		return (EBUSY);
 
-	DPRINTF(MDB_ANY, ("%s open: flags 0x%x", sc->sc_dev.dv_xname,
+	DPRINTF(MDB_ANY, ("%s open: flags 0x%x", device_xname(&sc->sc_dev),
 	    sc->sc_flags));
 
 	sc->sc_flags |= MTF_OPEN;
@@ -407,8 +348,8 @@ mtopen(dev, flag, mode, l)
 			goto errout;
 		if (!(sc->sc_flags & MTF_REW))
 			break;
-		if (tsleep((void *) &lbolt, PCATCH | (PZERO + 1),
-		    "mt", 0) != 0) {
+		error = kpause("mt", true, hz, NULL);
+		if (error != 0 && error != EWOULDBLOCK) {
 			error = EINTR;
 			goto errout;
 		}
@@ -418,7 +359,7 @@ mtopen(dev, flag, mode, l)
 		goto errout;
 	}
 	if (!(sc->sc_stat1 & SR1_ONLINE)) {
-		uprintf("%s: not online\n", sc->sc_dev.dv_xname);
+		uprintf("%s: not online\n", device_xname(&sc->sc_dev));
 		error = EIO;
 		goto errout;
 	}
@@ -456,7 +397,7 @@ mtopen(dev, flag, mode, l)
 		if (!(sc->sc_stat1 & SR1_BOT)) {
 			if (sc->sc_density != req_den) {
 				uprintf("%s: can't change density mid-tape\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(&sc->sc_dev));
 				error = EIO;
 				goto errout;
 			}
@@ -480,14 +421,11 @@ errout:
 }
 
 int
-mtclose(dev, flag, fmt, l)
-	dev_t dev;
-	int flag, fmt;
-	struct lwp *l;
+mtclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct mt_softc *sc;
 
-	sc = device_lookup(&mt_cd, MTUNIT(dev));
+	sc = device_lookup_private(&mt_cd, MTUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -503,16 +441,13 @@ mtclose(dev, flag, fmt, l)
 }
 
 int
-mtcommand(dev, cmd, cnt)
-	dev_t dev;
-	int cmd;
-	int cnt;
+mtcommand(dev_t dev, int cmd, int cnt)
 {
 	struct mt_softc *sc;
 	struct buf *bp;
 	int error = 0;
 
-	sc = device_lookup(&mt_cd, MTUNIT(dev));
+	sc = device_lookup_private(&mt_cd, MTUNIT(dev));
 	bp = &sc->sc_bufstore;
 
 	if (bp->b_cflags & BC_BUSY)
@@ -544,15 +479,14 @@ mtcommand(dev, cmd, cnt)
  * Only thing to check here is for legal record lengths (writes only).
  */
 void
-mtstrategy(bp)
-	struct buf *bp;
+mtstrategy(struct buf *bp)
 {
 	struct mt_softc *sc;
 	int s;
 
-	sc = device_lookup(&mt_cd, MTUNIT(bp->b_dev));
+	sc = device_lookup_private(&mt_cd, MTUNIT(bp->b_dev));
 
-	DPRINTF(MDB_ANY, ("%s strategy", sc->sc_dev.dv_xname));
+	DPRINTF(MDB_ANY, ("%s strategy", device_xname(&sc->sc_dev)));
 
 	if ((bp->b_flags & (B_CMD | B_READ)) == 0) {
 #define WRITE_BITS_IGNORED	8
@@ -560,7 +494,7 @@ mtstrategy(bp)
 		if (bp->b_bcount & ((1 << WRITE_BITS_IGNORED) - 1)) {
 			tprintf(sc->sc_ttyp,
 				"%s: write record must be multiple of %d\n",
-				sc->sc_dev.dv_xname, 1 << WRITE_BITS_IGNORED);
+				device_xname(&sc->sc_dev), 1 << WRITE_BITS_IGNORED);
 			goto error;
 		}
 #endif
@@ -580,7 +514,7 @@ mtstrategy(bp)
 		if (bp->b_bcount > s) {
 			tprintf(sc->sc_ttyp,
 				"%s: write record (%d) too big: limit (%d)\n",
-				sc->sc_dev.dv_xname, bp->b_bcount, s);
+				device_xname(&sc->sc_dev), bp->b_bcount, s);
 #if 0 /* XXX see above */
 	    error:
 #endif
@@ -590,7 +524,7 @@ mtstrategy(bp)
 		}
 	}
 	s = splbio();
-	BUFQ_PUT(sc->sc_tab, bp);
+	bufq_put(sc->sc_tab, bp);
 	if (sc->sc_active == 0) {
 		sc->sc_active = 1;
 		mtustart(sc);
@@ -599,19 +533,16 @@ mtstrategy(bp)
 }
 
 void
-mtustart(sc)
-	struct mt_softc *sc;
+mtustart(struct mt_softc *sc)
 {
 
-	DPRINTF(MDB_ANY, ("%s ustart", sc->sc_dev.dv_xname));
+	DPRINTF(MDB_ANY, ("%s ustart", device_xname(&sc->sc_dev)));
 	if (gpibrequest(sc->sc_ic, sc->sc_hdl))
 		mtstart(sc);
 }
 
 void
-mtcallback(v, action)
-	void *v;
-	int action;
+mtcallback(void *v, int action)
 {
 	struct mt_softc *sc = v;
 
@@ -633,8 +564,7 @@ mtcallback(v, action)
 }
 
 void
-mtintr_callout(arg)
-	void *arg;
+mtintr_callout(void *arg)
 {
 	struct mt_softc *sc = arg;
 	int s = splbio();
@@ -645,8 +575,7 @@ mtintr_callout(arg)
 }
 
 void
-mtstart_callout(arg)
-	void *arg;
+mtstart_callout(void *arg)
 {
 	int s = splbio();
 
@@ -655,16 +584,15 @@ mtstart_callout(arg)
 }
 
 void
-mtstart(sc)
-	struct mt_softc *sc;
+mtstart(struct mt_softc *sc)
 {
 	struct buf *bp;
 	short	cmdcount = 1;
 	u_char	cmdbuf[2];
 
-	DPRINTF(MDB_ANY, ("%s start", sc->sc_dev.dv_xname));
+	DPRINTF(MDB_ANY, ("%s start", device_xname(&sc->sc_dev)));
 	sc->sc_flags &= ~MTF_WRT;
-	bp = BUFQ_PEEK(sc->sc_tab);
+	bp = bufq_peek(sc->sc_tab);
 	if ((sc->sc_flags & MTF_ALIVE) == 0 &&
 	    ((bp->b_flags & B_CMD) == 0 || bp->b_cmd != MTRESET))
 		goto fatalerror;
@@ -787,7 +715,7 @@ mtstart(sc)
 			 * 3) interrupt will read DSJ (and END COMPLETE-IDLE)
 			 */
 			if (gpibsend(sc->sc_ic, sc->sc_slave, -2, NULL, 0)){
-				printf("%s can't reset", sc->sc_dev.dv_xname);
+				aprint_error_dev(&sc->sc_dev, "can't reset");
 				goto fatalerror;
 			}
 			callout_reset(&sc->sc_intr_ch, 4*hz, mtintr_callout,
@@ -843,18 +771,17 @@ fatalerror:
 	bp->b_error = EIO;
 done:
 	sc->sc_flags &= ~(MTF_HITEOF | MTF_HITBOF);
-	(void)BUFQ_GET(sc->sc_tab);
+	(void)bufq_get(sc->sc_tab);
 	biodone(bp);
 	gpibrelease(sc->sc_ic, sc->sc_hdl);
-	if ((bp = BUFQ_PEEK(sc->sc_tab)) == NULL)
+	if ((bp = bufq_peek(sc->sc_tab)) == NULL)
 		sc->sc_active = 0;
 	else
 		mtustart(sc);
 }
 
 void
-mtintr(sc)
-	struct mt_softc *sc;
+mtintr(struct mt_softc *sc)
 {
 	struct buf *bp;
 	int slave, dir, i;
@@ -862,13 +789,13 @@ mtintr(sc)
 
 	slave = sc->sc_slave;
 
-	bp = BUFQ_PEEK(sc->sc_tab);
+	bp = bufq_peek(sc->sc_tab);
 	if (bp == NULL) {
-		printf("%s intr: bp == NULL", sc->sc_dev.dv_xname);
+		printf("%s intr: bp == NULL", device_xname(&sc->sc_dev));
 		return;
 	}
 
-	DPRINTF(MDB_ANY, ("%s intr", sc->sc_dev.dv_xname));
+	DPRINTF(MDB_ANY, ("%s intr", device_xname(&sc->sc_dev)));
 
 	/*
 	 * Some operation completed.  Read status bytes and report errors.
@@ -909,13 +836,13 @@ mtintr(sc)
 		return;
 
 	    default:
-		printf("%s intr: can't get drive stat", sc->sc_dev.dv_xname);
+		printf("%s intr: can't get drive stat", device_xname(&sc->sc_dev));
 		goto error;
 	}
 	if (sc->sc_stat1 & (SR1_ERR | SR1_REJECT)) {
 		i = sc->sc_stat4 & SR4_ERCLMASK;
 		printf("%s: %s error, retry %d, SR2/3 %x/%x, code %d",
-			sc->sc_dev.dv_xname, i == SR4_DEVICE ? "device" :
+			device_xname(&sc->sc_dev), i == SR4_DEVICE ? "device" :
 			(i == SR4_PROTOCOL ? "protocol" :
 			(i == SR4_SELFTEST ? "selftest" : "unknown")),
 			sc->sc_stat4 & SR4_RETRYMASK, sc->sc_stat2,
@@ -931,7 +858,7 @@ mtintr(sc)
 	 * Report and clear any soft errors.
 	 */
 	if (sc->sc_stat1 & SR1_SOFTERR) {
-		printf("%s: soft error, retry %d\n", sc->sc_dev.dv_xname,
+		printf("%s: soft error, retry %d\n", device_xname(&sc->sc_dev),
 		    sc->sc_stat4 & SR4_RETRYMASK);
 		sc->sc_stat1 &= ~SR1_SOFTERR;
 	}
@@ -981,8 +908,7 @@ mtintr(sc)
 	} else {
 		i = gpibrecv(sc->sc_ic, slave, MTT_BCNT, cmdbuf, 2);
 		if (i != 2) {
-			printf("%s intr: can't get xfer length\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "intr: can't get xfer length\n");
 			goto error;
 		}
 		i = (int) *((u_short *) cmdbuf);
@@ -990,12 +916,13 @@ mtintr(sc)
 			if (i == 0)
 				sc->sc_flags |= MTF_HITEOF;
 			bp->b_resid = bp->b_bcount - i;
-			DPRINTF(MDB_ANY, ("%s intr: bcount %ld, resid %ld",
-			    sc->sc_dev.dv_xname, bp->b_bcount, bp->b_resid));
+			DPRINTF(MDB_ANY, ("%s intr: bcount %d, resid %d",
+			    device_xname(&sc->sc_dev),
+			    bp->b_bcount, bp->b_resid));
 		} else {
 			tprintf(sc->sc_ttyp,
 				"%s: record (%d) larger than wanted (%d)\n",
-				sc->sc_dev.dv_xname, i, bp->b_bcount);
+				device_xname(&sc->sc_dev), i, bp->b_bcount);
 error:
 			sc->sc_flags &= ~MTF_IO;
 			bp->b_error = EIO;
@@ -1008,50 +935,37 @@ error:
 	cmdbuf[0] = MTE_COMPLETE | MTE_IDLE;
 	(void) gpibsend(sc->sc_ic, slave, MTL_ECMD, cmdbuf, 1);
 	bp->b_flags &= ~B_CMD;
-	(void)BUFQ_GET(sc->sc_tab);
+	(void)bufq_get(sc->sc_tab);
 	biodone(bp);
 	gpibrelease(sc->sc_ic, sc->sc_hdl);
-	if (BUFQ_PEEK(sc->sc_tab) == NULL)
+	if (bufq_peek(sc->sc_tab) == NULL)
 		sc->sc_active = 0;
 	else
 		mtustart(sc);
 }
 
 int
-mtread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+mtread(dev_t dev, struct uio *uio, int flags)
 {
 	struct mt_softc *sc;
 
-	sc = device_lookup(&mt_cd, MTUNIT(dev));
+	sc = device_lookup_private(&mt_cd, MTUNIT(dev));
 
-	return (physio(mtstrategy, &sc->sc_bufstore,
-	    dev, B_READ, minphys, uio));
+	return (physio(mtstrategy, NULL, dev, B_READ, minphys, uio));
 }
 
 int
-mtwrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+mtwrite(dev_t dev, struct uio *uio, int flags)
 {
 	struct mt_softc *sc;
 
-	sc = device_lookup(&mt_cd, MTUNIT(dev));
+	sc = device_lookup_private(&mt_cd, MTUNIT(dev));
 
-	return (physio(mtstrategy, &sc->sc_bufstore,
-	    dev, B_WRITE, minphys, uio));
+	return (physio(mtstrategy, NULL, dev, B_WRITE, minphys, uio));
 }
 
 int
-mtioctl(dev, cmd, data, flag, l)
-	dev_t dev;
-	u_long cmd;
-	void *data;
-	int flag;
-	struct lwp *l;
+mtioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct mtop *op;
 	int cnt;

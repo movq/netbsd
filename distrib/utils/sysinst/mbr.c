@@ -1,4 +1,4 @@
-/*	$NetBSD: mbr.c,v 1.79 2007/12/28 00:48:43 dholland Exp $ */
+/*	$NetBSD: mbr.c,v 1.87 2011/05/30 14:20:48 joerg Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,24 +14,20 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
@@ -114,7 +110,7 @@ struct part_id {
 };
 
 static int get_mapping(struct mbr_partition *, int, int *, int *, int *,
-			    unsigned long *);
+			    daddr_t *);
 static void convert_mbr_chs(int, int, int, uint8_t *, uint8_t *,
 				 uint8_t *, uint32_t);
 
@@ -188,6 +184,23 @@ dump_mbr(mbr_info_t *mbr, const char *msg)
 #endif
 
 /*
+ * To be used only on ports which cannot provide any bios geometry
+ */
+int
+set_bios_geom_with_mbr_guess(void)
+{
+	int cyl, head;
+	daddr_t sec;
+
+	read_mbr(diskdev, &mbr);
+	msg_display(MSG_nobiosgeom, dlcyl, dlhead, dlsec);
+	if (guess_biosgeom_from_mbr(&mbr, &cyl, &head, &sec) >= 0)
+		msg_display_add(MSG_biosguess, cyl, head, sec);
+	set_bios_geom(cyl, head, sec);
+	return edit_mbr(&mbr);
+}
+
+/*
  * get C/H/S geometry from user via menu interface and
  * store in globals.
  */
@@ -235,16 +248,16 @@ disp_cur_geom(void)
  * in the netbsd disklabel to the part we changed.
  */
 static void
-remove_old_partitions(uint start, int size)
+remove_old_partitions(uint start, int64_t size)
 {
 	partinfo *p;
 	uint end;
 
-	/* Allow for size being -ve, get it right for very large partitions */
-	end = start + size;
-	if (end < start) {
+	if (size > 0) {
+		end = start + size;
+	} else {
 		end = start;
-		start = end + size;
+		start = end - size;
 	}
 
 	if (end == 0)
@@ -258,9 +271,9 @@ remove_old_partitions(uint start, int size)
 }
 
 static int
-find_mbr_space(struct mbr_sector *mbrs, uint *start, uint *size, int from, int ignore)
+find_mbr_space(struct mbr_sector *mbrs, uint *start, uint *size, uint from, int ignore)
 {
-	int sz;
+	uint sz;
 	int i;
 	uint s, e;
 
@@ -376,7 +389,7 @@ set_mbr_type(menudesc *m, void *arg)
 #ifdef BOOTSEL
 		if (ombri->bootsec == mbri->sector + mbrp->mbrp_start)
 			ombri->bootsec = 0;
-				
+
 		memset(mbri->mbrb.mbrbs_nametab[opt], 0,
 		    sizeof mbri->mbrb.mbrbs_nametab[opt]);
 #endif
@@ -462,18 +475,18 @@ set_type_label(menudesc *m, int opt, void *arg)
 {
 
 	if (opt == 0) {
-		wprintw(m->mw, msg_string(MSG_Dont_change));
+		wprintw(m->mw, "%s", msg_string(MSG_Dont_change));
 		return;
 	}
 	if (opt == 1) {
-		wprintw(m->mw, msg_string(MSG_Delete_partition));
+		wprintw(m->mw, "%s", msg_string(MSG_Delete_partition));
 		return;
 	}
 	if (part_ids[opt - 1].id == -1) {
-		wprintw(m->mw, msg_string(MSG_Other_kind));
+		wprintw(m->mw, "%s", msg_string(MSG_Other_kind));
 		return;
 	}
-	wprintw(m->mw, part_ids[opt - 1].name);
+	wprintw(m->mw, "%s", part_ids[opt - 1].name);
 }
 
 static int
@@ -481,7 +494,7 @@ edit_mbr_type(menudesc *m, void *arg)
 {
 	static menu_ent type_opts[1 + nelem(part_ids)];
 	static int type_menu = -1;
-	int i;
+	unsigned int i;
 
 	if (type_menu == -1) {
 		for (i = 0; i < nelem(type_opts); i++) {
@@ -510,7 +523,7 @@ edit_mbr_start(menudesc *m, void *arg)
 	int opt = mbri->opt;
 	uint start, sz;
 	uint new_r, new, limit, dflt_r;
-	int delta;
+	int64_t delta;
 	const char *errmsg;
 	char *cp;
 	struct {
@@ -518,10 +531,10 @@ edit_mbr_start(menudesc *m, void *arg)
 		uint	start_r;
 		uint	limit;
 	} freespace[MBR_PART_COUNT];
-	int spaces;
-	int i;
+	unsigned int spaces;
+	unsigned int i;
 	char prompt[MBR_PART_COUNT * 60];
-	int len;
+	unsigned int len;
 	char numbuf[12];
 
 	if (opt >= MBR_PART_COUNT)
@@ -798,7 +811,7 @@ edit_mbr_size(menudesc *m, void *arg)
 		break;
 	}
 
-	if (opt >= MBR_PART_COUNT && max - new <= bsec)
+	if (opt >= MBR_PART_COUNT && max - new <= (uint32_t)bsec)
 		/* Round up if not enough space for a header for free area */
 		new = max;
 
@@ -806,7 +819,7 @@ edit_mbr_size(menudesc *m, void *arg)
 		/* Kill information about old partition from label */
 		mbri->last_mounted[opt < MBR_PART_COUNT ? opt : 0] = NULL;
 		remove_old_partitions(mbri->sector + mbrp->mbrp_start +
-					mbrp->mbrp_size, new - mbrp->mbrp_size);
+			    mbrp->mbrp_size, (int64_t)new - mbrp->mbrp_size);
 	}
 
 	mbrp->mbrp_size = new;
@@ -859,7 +872,7 @@ edit_mbr_active(menudesc *m, void *arg)
 		*fl = 0;
 		return 0;
 	}
-		
+
 	/* Ensure there is at most one active partition */
 	for (i = 0; i < MBR_PART_COUNT; i++)
 		mbri->mbr.mbr_parts[i].mbrp_flag = 0;
@@ -1156,8 +1169,8 @@ set_mbr_header(menudesc *m, void *arg)
 
 	msg_display(MSG_editparttable);
 
-	msg_table_add(MSG_part_header, dlsize/sizemult, multname, multname,
-	    multname, multname);
+	msg_table_add(MSG_part_header, (unsigned long)(dlsize/sizemult),
+	    multname, multname, multname, multname);
 
 	if (num_opts == 0) {
 		num_opts = 6;
@@ -1323,7 +1336,7 @@ edit_mbr(mbr_info_t *mbri)
 		}
 
 		/* Install in only netbsd partition if none tagged */
-		if (ptstart == 0 && bsdstart != ~0) {
+		if (ptstart == 0 && bsdstart != ~0u) {
 			ptstart = bsdstart;
 			ptsize = bsdsize;
 		}
@@ -1377,6 +1390,45 @@ get_partname(int typ)
 	return unknown;
 }
 
+#ifdef BOOTSEL
+static int
+validate_and_set_names(mbr_info_t *mbri, const struct mbr_bootsel *src,
+    uint32_t ext_base)
+{
+	size_t i, l;
+	const unsigned char *p;
+
+	/*
+	 * The 16 bit magic used to detect wether mbr_bootsel is valid
+	 * or not is pretty week - collisions have been seen in the wild;
+	 * but maybe it is just foreign tools corruption reminiscents
+	 * of NetBSD MBRs. Anyway, before accepting a boot menu definition,
+	 * make sure it is kinda "sane".
+	 */
+
+	for (i = 0; i < MBR_PART_COUNT; i++) {
+		/*
+		 * Make sure the name does not contain controll chars
+		 * (not using iscntrl due to minimalistic locale support
+		 * in miniroot environments) and is properly 0-terminated.
+		 */
+		for (l = 0, p = (const unsigned char *)&src->mbrbs_nametab[i];
+		    *p != 0; l++, p++) {
+			if (l >	MBR_BS_PARTNAMESIZE)
+				return 0;
+			if (*p < ' ')	/* hacky 'iscntrl' */
+				return 0;
+		}
+	}
+
+	memcpy(&mbri->mbrb, src, sizeof(*src));
+
+	if (ext_base == 0)
+		return mbri->mbrb.mbrbs_defkey - SCAN_1;
+	return 0;
+}
+#endif
+
 int
 read_mbr(const char *disk, mbr_info_t *mbri)
 {
@@ -1408,7 +1460,7 @@ read_mbr(const char *disk, mbr_info_t *mbri)
 
 	for (;;) {
 		if (pread(fd, mbrs, sizeof *mbrs,
-		    (ext_base + next_ext) * (off_t)MBR_SECSIZE) < sizeof *mbrs)
+		    (ext_base + next_ext) * (off_t)MBR_SECSIZE) - sizeof *mbrs != 0)
 			break;
 
 		if (!valid_mbr(mbrs))
@@ -1434,15 +1486,14 @@ read_mbr(const char *disk, mbr_info_t *mbri)
 #if BOOTSEL
 		if (mbrs->mbr_bootsel_magic == htole16(MBR_MAGIC)) {
 			/* old bootsel, grab bootsel info */
-			mbri->mbrb = *(struct mbr_bootsel *)
-				((uint8_t *)mbrs + MBR_BS_OLD_OFFSET);
-			if (ext_base == 0)
-				bootkey = mbri->mbrb.mbrbs_defkey - SCAN_1;
+			bootkey = validate_and_set_names(mbri,
+				(struct mbr_bootsel *)
+				((uint8_t *)mbrs + MBR_BS_OLD_OFFSET),
+				ext_base);
 		} else if (mbrs->mbr_bootsel_magic == htole16(MBR_BS_MAGIC)) {
 			/* new location */
-			mbri->mbrb = mbrs->mbr_bootsel;
-			if (ext_base == 0)
-				bootkey = mbri->mbrb.mbrbs_defkey - SCAN_1;
+			bootkey = validate_and_set_names(mbri,
+			    &mbrs->mbr_bootsel, ext_base);
 		}
 		/* Save original flags for mbr code update tests */
 		mbri->oflags = mbri->mbrb.mbrbs_flags;
@@ -1682,13 +1733,14 @@ convert_mbr_chs(int cyl, int head, int sec,
  */
 
 int
-guess_biosgeom_from_mbr(mbr_info_t *mbri, int *cyl, int *head, int *sec)
+guess_biosgeom_from_mbr(mbr_info_t *mbri, int *cyl, int *head, daddr_t *sec)
 {
 	struct mbr_sector *mbrs = &mbri->mbr;
 	struct mbr_partition *parts = &mbrs->mbr_parts[0];
-	int xcylinders, xheads, xsectors, i, j;
+	int xcylinders, xheads, i, j;
+	daddr_t xsectors;
 	int c1, h1, s1, c2, h2, s2;
-	unsigned long a1, a2;
+	daddr_t a1, a2;
 	uint64_t num, denom;
 
 	/*
@@ -1773,7 +1825,7 @@ guess_biosgeom_from_mbr(mbr_info_t *mbri, int *cyl, int *head, int *sec)
 
 static int
 get_mapping(struct mbr_partition *parts, int i,
-	    int *cylinder, int *head, int *sector, unsigned long *absolute)
+	    int *cylinder, int *head, int *sector, daddr_t *absolute)
 {
 	struct mbr_partition *apart = &parts[i / 2];
 
@@ -1792,7 +1844,7 @@ get_mapping(struct mbr_partition *parts, int i,
 			+ le32toh(apart->mbrp_size) - 1;
 	}
 	/* Sanity check the data against max values */
-	if ((((*cylinder * MAXHEAD) + *head) * MAXSECTOR + *sector) < *absolute)
+	if ((((*cylinder * MAXHEAD) + *head) * (uint32_t)MAXSECTOR + *sector) < *absolute)
 		/* cannot be a CHS mapping */
 		return -1;
 

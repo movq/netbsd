@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.h,v 1.6 2007/10/30 15:07:07 tsutsui Exp $	*/
+/*	$NetBSD: boot.h,v 1.12 2008/05/29 14:25:01 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -97,3 +90,16 @@ int tgets(char *);
 void pdcache_wb(uint32_t, u_int);
 void pdcache_inv(uint32_t, u_int);
 void pdcache_wbinv(uint32_t, u_int);
+
+/*
+ * pci
+ */
+uint32_t pcicfgread(uint32_t, uint32_t);
+
+/*
+ * lcd
+ */
+void lcd_init(void);
+void lcd_banner(void);
+void lcd_loadfile(const char *);
+void lcd_failed(void);

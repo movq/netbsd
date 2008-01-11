@@ -1,4 +1,4 @@
-/*	$NetBSD: qdisc_conf.c,v 1.4 2006/10/12 19:59:13 peter Exp $	*/
+/*	$NetBSD: qdisc_conf.c,v 1.6 2011/01/04 09:13:22 wiz Exp $	*/
 /*	$KAME: qdisc_conf.c,v 1.5 2002/10/26 06:59:54 kjc Exp $	*/
 /*
  * Copyright (C) 1999-2000
@@ -63,11 +63,11 @@ struct qdisc_conf qdisc_table[] = {
 stat_loop_t *
 qdisc2stat_loop(const char *qdisc_name)
 {
-	struct qdisc_conf *stat;
+	struct qdisc_conf *st;
 
-	for (stat = qdisc_table; stat->qdisc_name != NULL; stat++)
-		if (strcmp(stat->qdisc_name, qdisc_name) == 0)
-			return (stat->stat_loop);
+	for (st = qdisc_table; st->qdisc_name != NULL; st++)
+		if (strcmp(st->qdisc_name, qdisc_name) == 0)
+			return (st->stat_loop);
 	return (NULL);
 }
 
@@ -91,17 +91,18 @@ ifname2qdisc(const char *ifname, char *qname)
 	}
 	if (ioctl(fd, ALTQGTYPE, &qtypereq) < 0) {
 		warn("ALTQGQTYPE");
+		close(fd);
 		return (0);
 	}
 	close(fd);
 
 	if (qname != NULL) {
-		struct qdisc_conf *stat;
+		struct qdisc_conf *st;
 
 		qtype = qtypereq.arg;
-		for (stat = qdisc_table; stat->qdisc_name != NULL; stat++)
-			if (stat->altqtype == qtype)
-				strlcpy(qname, stat->qdisc_name, 64);
+		for (st = qdisc_table; st->qdisc_name != NULL; st++)
+			if (st->altqtype == qtype)
+				strlcpy(qname, st->qdisc_name, 64);
 	}
 		
 	return (qtype);

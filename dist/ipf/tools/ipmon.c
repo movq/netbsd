@@ -1,4 +1,4 @@
-/*	$NetBSD: ipmon.c,v 1.13 2007/09/17 18:02:21 martti Exp $	*/
+/*	$NetBSD: ipmon.c,v 1.18 2011/02/24 18:33:06 plunky Exp $	*/
 
 /*
  * Copyright (C) 2001-2006 by Darren Reed.
@@ -78,7 +78,7 @@
 
 #if !defined(lint)
 static const char sccsid[] = "@(#)ipmon.c	1.21 6/5/96 (C)1993-2000 Darren Reed";
-static const char rcsid[] = "@(#)Id: ipmon.c,v 1.33.2.18 2007/05/27 11:12:12 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ipmon.c,v 1.33.2.24 2009/07/21 22:32:53 darrenr Exp";
 #endif
 
 
@@ -421,12 +421,12 @@ static void init_tabs()
 			    p->p_name != NULL && protocols[p->p_proto] == NULL)
 				protocols[p->p_proto] = strdup(p->p_name);
 		endprotoent();
-#if defined(_AIX51)
 		if (protocols[0])
 			free(protocols[0]);
+		protocols[0] = strdup("ip");
+#if defined(_AIX51)
 		if (protocols[252])
 			free(protocols[252]);
-		protocols[0] = "ip";
 		protocols[252] = NULL;
 #endif
 	}
@@ -668,7 +668,7 @@ int	len;
 				*t++ = (ISPRINT(*s) ? *s : '.');
 			s--;
 		}
-			
+
 		if ((j + 1) & 0xf)
 			*t++ = ' ';;
 	}
@@ -735,7 +735,8 @@ int	blen;
 	}
 	(void) strftime(t, len, "%T", tm);
 	t += strlen(t);
-	(void) sprintf(t, ".%-.6ld @%hd ", ipl->ipl_usec, nl->nl_rule + 1);
+	(void) sprintf(t, ".%-.6ld @%hd ", (long)ipl->ipl_usec,
+	    nl->nl_rule + 1);
 	t += strlen(t);
 
 	if (nl->nl_type == NL_NEWMAP)
@@ -752,6 +753,8 @@ int	blen;
 		strcpy(t, "NAT:MAPBLOCK ");
 	else if (nl->nl_type == NL_CLONE)
 		strcpy(t, "NAT:CLONE ");
+	else if (nl->nl_type == NL_DESTROY)
+		strcpy(t, "NAT:DESTROY ");
 	else
 		sprintf(t, "Type: %d ", nl->nl_type);
 	t += strlen(t);
@@ -764,8 +767,9 @@ int	blen;
 	(void) sprintf(t, "%s,%s ", HOSTNAME_V4(res, nl->nl_outip),
 		portname(res, proto, (u_int)nl->nl_outport));
 	t += strlen(t);
-	(void) sprintf(t, "[%s,%s]", HOSTNAME_V4(res, nl->nl_origip),
-		portname(res, proto, (u_int)nl->nl_origport));
+	(void) sprintf(t, "[%s,%s PR %s]", HOSTNAME_V4(res, nl->nl_origip),
+		portname(res, proto, (u_int)nl->nl_origport),
+		getproto(nl->nl_p));
 	t += strlen(t);
 	if (nl->nl_type == NL_EXPIRE) {
 #ifdef	USE_QUAD_T
@@ -814,7 +818,7 @@ int	blen;
 	}
 	(void) strftime(t, len, "%T", tm);
 	t += strlen(t);
-	(void) sprintf(t, ".%-.6ld ", ipl->ipl_usec);
+	(void) sprintf(t, ".%-.6ld ", (long)ipl->ipl_usec);
 	t += strlen(t);
 
 	switch (sl->isl_type)
@@ -900,19 +904,20 @@ int	blen;
 		t += strlen(t);
 	}
 	if (sl->isl_type != ISL_NEW) {
-		sprintf(t,
+		static const char fmt[] =
 #ifdef	USE_QUAD_T
 #ifdef	PRId64
 			" Forward: Pkts in %" PRId64 " Bytes in %" PRId64
 			" Pkts out %" PRId64 " Bytes out %" PRId64
 			" Backward: Pkts in %" PRId64 " Bytes in %" PRId64
-			" Pkts out %" PRId64 " Bytes out %" PRId64,
+			" Pkts out %" PRId64 " Bytes out %" PRId64;
 #else
-			" Forward: Pkts in %qd Bytes in %qd Pkts out %qd Bytes out %qd Backward: Pkts in %qd Bytes in %qd Pkts out %qd Bytes out %qd",
+			" Forward: Pkts in %qd Bytes in %qd Pkts out %qd Bytes out %qd Backward: Pkts in %qd Bytes in %qd Pkts out %qd Bytes out %qd";
 #endif /* PRId64 */
 #else
-			" Forward: Pkts in %ld Bytes in %ld Pkts out %ld Bytes out %ld Backward: Pkts in %ld Bytes in %ld Pkts out %ld Bytes out %ld",
+			" Forward: Pkts in %ld Bytes in %ld Pkts out %ld Bytes out %ld Backward: Pkts in %ld Bytes in %ld Pkts out %ld Bytes out %ld";
 #endif
+		sprintf(t, fmt,
 			sl->isl_pkts[0], sl->isl_bytes[0],
 			sl->isl_pkts[1], sl->isl_bytes[1],
 			sl->isl_pkts[2], sl->isl_bytes[2],
@@ -1002,10 +1007,10 @@ int	blen;
 	ipflog_t *ipf;
 	iplog_t	*ipl;
 #ifdef	USE_INET6
+	struct ip6_ext *ehp;
+	u_short ehl;
 	ip6_t *ip6;
-	int	go;
-	u_short	ehl;
-	struct	ip6_ext *ehp;
+	int go;
 #endif
 
 	ipl = (iplog_t *)buf;
@@ -1026,7 +1031,7 @@ int	blen;
 	}
 	(void) strftime(t, len, "%T", tm);
 	t += strlen(t);
-	(void) sprintf(t, ".%-.6ld ", ipl->ipl_usec);
+	(void) sprintf(t, ".%-.6ld ", (long)ipl->ipl_usec);
 	t += strlen(t);
 	if (ipl->ipl_count > 1) {
 		(void) sprintf(t, "%dx ", ipl->ipl_count);
@@ -1044,10 +1049,16 @@ int	blen;
 	(void) sprintf(t, "%s", ifname);
 	t += strlen(t);
 # if defined(MENTAT) || defined(linux)
-	if (ISALPHA(*(t - 1))) {
-		sprintf(t, "%d", ipf->fl_unit);
-		t += strlen(t);
-	}
+#  if defined(linux)
+	/*
+	 * On Linux, the loopback interface is just "lo", not "lo0".
+	 */
+	if (strcmp(ifname, "lo") != 0)
+#  endif
+		if (ISALPHA(*(t - 1))) {
+			sprintf(t, "%d", ipf->fl_unit);
+			t += strlen(t);
+		}
 # endif
 	}
 #else
@@ -1116,24 +1127,27 @@ int	blen;
 		plen = hl + ntohs(ip6->ip6_plen);
 		go = 1;
 		ehp = (struct ip6_ext *)((char *)ip6 + hl);
-		do {
-		    switch (p) {
-			case IPPROTO_HOPOPTS:
-			case IPPROTO_MOBILITY:
-			case IPPROTO_DSTOPTS:
-			case IPPROTO_ROUTING:
-			case IPPROTO_AH:
-			    p = ehp->ip6e_nxt;
-			    ehl = 8 + (ehp->ip6e_len << 3);
-			    hl += ehl;
-			    ehp = (struct ip6_ext *)((char *)ehp + ehl);
-			    break;
-			case IPPROTO_FRAGMENT:
-			    hl += sizeof(struct ip6_frag);
-			default:
-			    go = 0;
-		    }
-		} while (go);
+		while (go == 1) {
+			switch (p)
+			{
+			case IPPROTO_HOPOPTS :
+			case IPPROTO_MOBILITY :
+			case IPPROTO_DSTOPTS :
+			case IPPROTO_ROUTING :
+			case IPPROTO_AH :
+				p = ehp->ip6e_nxt;
+				ehl = 8 + (ehp->ip6e_len << 3);
+				hl += ehl;
+				ehp = (struct ip6_ext *)((char *)ehp + ehl);
+				break;
+			case IPPROTO_FRAGMENT :
+				hl += sizeof(struct ip6_frag);
+				/* FALLTHROUGH */
+			default :
+				go = 0;
+				break;
+			}
+		}
 #else
 		sprintf(t, "ipv6");
 		goto printipflog;
@@ -1467,12 +1481,17 @@ char *argv[];
 	int	fd[3], doread, n, i;
 	int	tr, nr, regular[3], c;
 	int	fdt[3], devices = 0, make_daemon = 0;
-	char	buf[DEFAULT_IPFLOGSIZE], *iplfile[3], *s;
+	char	buf[DEFAULT_IPFLOGSIZE], *iplfile[3], *prog;
 	extern	int	optind;
 	extern	char	*optarg;
 
 	n = 0;	/* XXX gcc */
 
+	prog = strrchr(argv[0], '/');
+	if (prog == NULL)
+		prog = argv[0];
+	else
+		prog++;
 	fd[0] = fd[1] = fd[2] = -1;
 	fdt[0] = fdt[1] = fdt[2] = -1;
 	iplfile[0] = IPL_NAME;
@@ -1546,13 +1565,6 @@ char *argv[];
 			pidfile = optarg;
 			break;
 		case 's' :
-			s = strrchr(argv[0], '/');
-			if (s == NULL)
-				s = argv[0];
-			else
-				s++;
-			openlog(s, LOG_NDELAY|LOG_PID, logfac);
-			s = NULL;
 			opts |= OPT_SYSLOG;
 			log = NULL;
 			break;
@@ -1578,6 +1590,9 @@ char *argv[];
 		case '?' :
 			usage(argv[0]);
 		}
+
+	if (opts & OPT_SYSLOG)
+		openlog(prog, LOG_NDELAY|LOG_PID, logfac);
 
 	init_tabs();
 	if (conf_file)

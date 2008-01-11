@@ -1,6 +1,7 @@
-/* $NetBSD: locore.s,v 1.28 2007/10/17 19:55:04 garbled Exp $ */
+/* $NetBSD: locore.s,v 1.37 2011/02/08 20:20:16 rmind Exp $ */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1980, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,45 +37,6 @@
  *
  *	@(#)locore.s	8.6 (Berkeley) 5/27/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: locore.s 1.66 92/12/22$
- *
- *	@(#)locore.s	8.6 (Berkeley) 5/27/94
- */
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -83,6 +45,7 @@
 #include "opt_lockdebug.h"
 #include "opt_compat_sunos.h"
 #include "opt_fpu_emulate.h"
+#include "opt_m68k_arch.h"
 
 #include "assym.h"
 #include <machine/asm.h>
@@ -267,9 +230,8 @@ Lstart3:
  * Enable the MMU.
  * Since the kernel is mapped logical == physical, we just turn it on.
  */
-	RELOC(Sysseg,%a0)		| system segment table addr
-	movl	%a0@,%d1		| read value (a KVA)
-	addl	%a5,%d1			| convert to PA (%a5 == 0, indeed)
+	RELOC(Sysseg_pa,%a0)		| system segment table addr
+	movl	%a0@,%d1		| read value (a PA)
 #if defined(M68040)
 	RELOC(mmutype,%a0)
 	cmpl	#MMU_68040,%a0@		| 68040?
@@ -309,19 +271,14 @@ Lmotommu1:
  * Should be running mapped from this point on
  */
 Lenab1:
-/* select the software page size now */
 	lea	_ASM_LABEL(tmpstk),%sp	| temporary stack
-	jbsr	_C_LABEL(uvm_setpagesize) | select software page size
-
-/* set kernel stack, user SP, lwp0, and initial pcb */
-	movl	_C_LABEL(proc0paddr),%a1 | get lwp0 pcb addr
+/* call final pmap setup */
+	jbsr	_C_LABEL(pmap_bootstrap_finalize)
+/* set kernel stack, user SP */
+	movl	_C_LABEL(lwp0uarea),%a1	| get lwp0 uarea
 	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area
-	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.l_addr
-	movl	%a2,_C_LABEL(curlwp)	|   and curlwp so that
-	movl	%a1,%a2@(L_ADDR)	|   we don't deref NULL in trap()
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init user SP
-	movl	%a1,_C_LABEL(curpcb)	| lwp0 is running
 
 	tstl	_C_LABEL(fputype)	| Have an FPU?
 	jeq	Lenab2			| No, skip.
@@ -346,7 +303,7 @@ Lenab3:
 
 /*
  * Create a fake exception frame that returns to user mode,
- * and save its address in p->p_md.md_regs for cpu_fork().
+ * and save its address in p->p_md.md_regs for cpu_lwp_fork().
  * The new frames for process 1 and 2 will be adjusted by
  * cpu_set_kpc() to arrange for a call to a kernel function
  * before the new process does its rte out to user mode.
@@ -602,7 +559,7 @@ ENTRY_NOPROFILE(fpfault)
 #if defined(M68040) || defined(M68060)
 	/* always null state frame on 68040, 68060 */
 	cmpl	#FPU_68040,_C_LABEL(fputype)
-	jle	Lfptnull
+	jge	Lfptnull
 #endif
 	tstb	%a0@		| null state frame?
 	jeq	Lfptnull	| yes, safe
@@ -791,12 +748,11 @@ Lbrkpt3:
  * _intrhand_vectored is the entry point for vectored interrupts.
  */
 
-#define INTERRUPT_SAVEREG	moveml	#0xC0C0,%sp@-
-#define INTERRUPT_RESTOREREG	moveml	%sp@+,#0x0303
-
 ENTRY_NOPROFILE(spurintr)		/* Level 0 */
 	addql	#1,_C_LABEL(intrcnt)+0
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	INTERRUPT_SAVEREG
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
 	jra	_ASM_LABEL(rei)
 
 ENTRY_NOPROFILE(intrhand_autovec)	/* Levels 1 through 6 */
@@ -1203,8 +1159,6 @@ nullrp:
 	.long	0x7fff0001	| do-nothing MMU root pointer
 
 GLOBAL(memavail)
-	.long	0
-GLOBAL(proc0paddr)
 	.long	0
 GLOBAL(bootdev)
 	.long	0

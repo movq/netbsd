@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tokensubr.c,v 1.52 2007/12/20 21:08:22 dyoung Exp $	*/
+/*	$NetBSD: if_tokensubr.c,v 1.60 2010/04/05 07:22:24 joerg Exp $	*/
 
 /*
  * Copyright (c) 1982, 1989, 1993
@@ -46,13 +46,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by The NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -99,14 +92,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.52 2007/12/20 21:08:22 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.60 2010/04/05 07:22:24 joerg Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
 #include "opt_iso.h"
 #include "opt_gateway.h"
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -128,9 +120,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.52 2007/12/20 21:08:22 dyoung Exp
 #include <net/if_dl.h>
 #include <net/if_types.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <net/if_ether.h>
 #include <net/if_token.h>
@@ -158,7 +148,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tokensubr.c,v 1.52 2007/12/20 21:08:22 dyoung Exp
 #include <netiso/iso_snpac.h>
 #endif
 
-#include "bpfilter.h"
 
 #define senderr(e) { error = (e); goto bad;}
 
@@ -189,7 +178,7 @@ static int
 token_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
     struct rtentry *rt0)
 {
-	u_int16_t etype;
+	uint16_t etype;
 	int error = 0;
 	u_char edst[ISO88025_ADDR_LEN];
 	struct mbuf *m = m0;
@@ -315,10 +304,10 @@ token_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 			memcpy(edst, tokenbroadcastaddr, sizeof(edst));
 		}
 		else {
-			void *tha = (void *)ar_tha(ah);
-			KASSERT(tha);
-			if (tha)
-				bcopy(tha, (void *)edst, sizeof(edst));
+			void *tha = ar_tha(ah);
+			if (tha == NULL)
+				return 0;
+			memcpy(edst, tha, sizeof(edst));
 			trh = (struct token_header *)M_TRHSTART(m);
 			trh->token_ac = TOKEN_AC;
 			trh->token_fc = TOKEN_FC;
@@ -328,9 +317,9 @@ token_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 				trrif = TOKEN_RIF(trh);
 				riflen = (ntohs(trrif->tr_rcf) & TOKEN_RCF_LEN_MASK) >> 8;
 			}
-			bcopy((void *)edst, (void *)trh->token_dhost,
+			memcpy((void *)trh->token_dhost, (void *)edst,
 			    sizeof (edst));
-			bcopy(CLLADDR(ifp->if_sadl), (void *)trh->token_shost,
+			memcpy((void *)trh->token_shost, CLLADDR(ifp->if_sadl),
 			    sizeof(trh->token_shost));
 			if (riflen != 0)
 				trh->token_shost[0] |= TOKEN_RI_PRESENT;
@@ -430,8 +419,8 @@ token_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 		l->llc_dsap = l->llc_ssap = LLC_SNAP_LSAP;
 		l->llc_snap.org_code[0] = l->llc_snap.org_code[1] =
 		    l->llc_snap.org_code[2] = 0;
-		bcopy((void *) &etype, (void *) &l->llc_snap.ether_type,
-		    sizeof(u_int16_t));
+		memcpy((void *) &l->llc_snap.ether_type, (void *) &etype,
+		    sizeof(uint16_t));
 	}
 
 	/*
@@ -445,8 +434,8 @@ token_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 	trh = mtod(m, struct token_header *);
 	trh->token_ac = TOKEN_AC;
 	trh->token_fc = TOKEN_FC;
-	bcopy((void *)edst, (void *)trh->token_dhost, sizeof (edst));
-	bcopy(CLLADDR(ifp->if_sadl), (void *)trh->token_shost,
+	memcpy((void *)trh->token_dhost, (void *)edst, sizeof (edst));
+	memcpy((void *)trh->token_shost, CLLADDR(ifp->if_sadl),
 	    sizeof(trh->token_shost));
 
 	if (riflen != 0) {
@@ -454,7 +443,7 @@ token_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 
 		trh->token_shost[0] |= TOKEN_RI_PRESENT;
 		trrif = TOKEN_RIF(trh);
-		bcopy(rif, trrif, riflen);
+		memcpy(trrif, rif, riflen);
 	}
 #ifdef INET
 send:
@@ -462,7 +451,7 @@ send:
 
 #if NCARP > 0
 	if (ifp0 != ifp && ifp0->if_type == IFT_CARP) {
-		bcopy(CLLADDR(ifp0->if_sadl), (void *)trh->token_shost,	    
+		memcpy((void *)trh->token_shost, CLLADDR(ifp0->if_sadl),	    
 		    sizeof(trh->token_shost));
 	}
 #endif /* NCARP > 0 */
@@ -512,13 +501,13 @@ token_input(struct ifnet *ifp, struct mbuf *m)
 		lan_hdr_len += (ntohs(trrif->tr_rcf) & TOKEN_RCF_LEN_MASK) >> 8;
 	}
 
-	l = (struct llc *)(mtod(m, u_int8_t *) + lan_hdr_len);
+	l = (struct llc *)(mtod(m, uint8_t *) + lan_hdr_len);
 
 	switch (l->llc_dsap) {
 #if defined(INET) || defined(NS) || defined(DECNET)
 	case LLC_SNAP_LSAP:
 	{
-		u_int16_t etype;
+		uint16_t etype;
 		if (l->llc_control != LLC_UI || l->llc_ssap != LLC_SNAP_LSAP)
 			goto dropanyway;
 		if (l->llc_snap.org_code[0] != 0 ||
@@ -529,8 +518,8 @@ token_input(struct ifnet *ifp, struct mbuf *m)
 		m_adj(m, lan_hdr_len + LLC_SNAPFRAMELEN);
 #if NCARP > 0
 		if (ifp->if_carp && ifp->if_type != IFT_CARP &&
-		    (carp_input(m, (u_int8_t *)&trh->token_shost,
-		    (u_int8_t *)&trh->token_dhost, l->llc_snap.ether_type) == 0))
+		    (carp_input(m, (uint8_t *)&trh->token_shost,
+		    (uint8_t *)&trh->token_dhost, l->llc_snap.ether_type) == 0))
 			return;
 #endif /* NCARP > 0 */
 
@@ -663,20 +652,16 @@ token_ifattach(struct ifnet *ifp, void *lla)
 	ifp->if_flags |= IFF_NOTRAILERS;
 #endif
 
-	if_set_sadl(ifp, lla, ISO88025_ADDR_LEN);
+	if_set_sadl(ifp, lla, ISO88025_ADDR_LEN, true);
 
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_IEEE802, sizeof(struct token_header));
-#endif
+	bpf_attach(ifp, DLT_IEEE802, sizeof(struct token_header));
 }
 
 void
 token_ifdetach(struct ifnet *ifp)
 {
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 #if 0	/* done in if_detach() */
 	if_free_sadl(ifp);
 #endif

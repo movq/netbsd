@@ -1,4 +1,4 @@
-/*	$NetBSD: rs.c,v 1.11 2004/11/01 21:43:35 dsl Exp $	*/
+/*	$NetBSD: rs.c,v 1.14 2009/07/13 19:05:41 roy Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rs.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: rs.c,v 1.11 2004/11/01 21:43:35 dsl Exp $");
+__RCSID("$NetBSD: rs.c,v 1.14 2009/07/13 19:05:41 roy Exp $");
 #endif
 #endif /* not lint */
 
@@ -93,11 +93,11 @@ int	propgutter;
 char	isep = ' ', osep = ' ';
 int	owidth = 80, gutter = 2;
 
-void	  usage __P((char *, ...))
+void	  usage __P((const char *, ...))
      __attribute__((__format__(__printf__, 1, 2)));
 void	  getargs __P((int, char *[]));
 void	  getfile __P((void));
-int	  getline __P((void));
+int	  get_line __P((void));
 char	 *getlist __P((short **, char *));
 char	 *getnum __P((int *, char *, int));
 char	**getptrs __P((char **));
@@ -130,6 +130,7 @@ main(argc, argv)
 void
 getfile()
 {
+	char empty[1] = { '\0' };
 	char *p;
 	char *endp;
 	char **ep = 0;
@@ -138,11 +139,11 @@ getfile()
 	char **padto;
 
 	while (skip--) {
-		getline();
+		get_line();
 		if (flags & SKIPPRINT)
 			puts(curline);
 	}
-	getline();
+	get_line();
 	if (flags & NOARGS && curlen < owidth)
 		flags |= ONEPERLINE;
 	if (flags & ONEPERLINE)
@@ -170,7 +171,7 @@ getfile()
 			if (*p == isep && multisep)
 				continue;	/* eat up column separators */
 			if (*p == isep)		/* must be an empty column */
-				*ep = "";
+				*ep = empty;
 			else			/* store column entry */
 				*ep = p;
 			while (p < endp && *p != isep)
@@ -184,11 +185,11 @@ getfile()
 		if (nullpad) {			/* pad missing entries */
 			padto = elem + irows * icols;
 			while (ep < padto) {
-				*ep = "";
+				*ep = empty;
 				INCR(ep);
 			}
 		}
-	} while (getline() != EOF);
+	} while (get_line() != EOF);
 	*ep = 0;				/* mark end of pointers */
 	nelem = ep - elem;
 }
@@ -239,7 +240,7 @@ prints(s, col)
 }
 
 void
-usage(char *msg, ...)
+usage(const char *msg, ...)
 {
 	va_list ap;
 
@@ -345,7 +346,7 @@ prepfile()
 char	ibuf[BSIZE];		/* two screenfuls should do */
 
 int
-getline()	/* get line; maintain curline, curlen; manage storage */
+get_line()	/* get line; maintain curline, curlen; manage storage */
 {
 	static	int putlength;
 	static	char *endblock = ibuf + BSIZE;

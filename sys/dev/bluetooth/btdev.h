@@ -1,4 +1,4 @@
-/*	$NetBSD: btdev.h,v 1.7 2007/11/03 17:41:03 plunky Exp $	*/
+/*	$NetBSD: btdev.h,v 1.9 2010/04/28 06:13:51 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -39,6 +39,8 @@
 #define BTDEV_DETACH		_IOW('b', 15, struct plistref)
 
 /* btdev properties */
+#define BTDEVvendor		"vendor-id"
+#define BTDEVproduct		"product-id"
 #define BTDEVtype		"device-type"
 #define BTDEVladdr		"local-bdaddr"
 #define BTDEVraddr		"remote-bdaddr"
@@ -47,12 +49,5 @@
 #define BTDEVauth		"auth"
 #define BTDEVencrypt		"encrypt"
 #define BTDEVsecure		"secure"
-
-#ifdef _KERNEL
-struct btdev {
-	device_t		sc_dev;
-	LIST_ENTRY(btdev)	sc_next;
-};
-#endif /* _KERNEL */
 
 #endif /* _DEV_BLUETOOTH_BTDEV_H_ */

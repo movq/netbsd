@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.4 2005/12/11 12:16:47 christos Exp $	*/
+/*	$NetBSD: pci_machdep.h,v 1.7 2011/04/04 20:37:45 dyoung Exp $	*/
 
 /*
  * Modified for arm32 by Mark Brinicombe
@@ -31,6 +31,8 @@
  * rights to redistribute these changes.
  */
 
+#ifndef _ARM_PCI_MACHDEP_H_
+#define _ARM_PCI_MACHDEP_H_
 /*
  * Machine-specific definitions for PCI autoconfiguration.
  */
@@ -63,13 +65,20 @@ struct arm32_pci_chipset {
 	void		(*pc_conf_write)(void *, pcitag_t, int, pcireg_t);
 
 	void		*pc_intr_v;
-	int		(*pc_intr_map)(struct pci_attach_args *,
+	int		(*pc_intr_map)(const struct pci_attach_args *,
 			    pci_intr_handle_t *);
 	const char	*(*pc_intr_string)(void *, pci_intr_handle_t);
 	const struct evcnt *(*pc_intr_evcnt)(void *, pci_intr_handle_t);
 	void		*(*pc_intr_establish)(void *, pci_intr_handle_t,
 			    int, int (*)(void *), void *);
 	void		(*pc_intr_disestablish)(void *, void *);
+
+#ifdef __HAVE_PCI_CONF_HOOK
+	int		(*pc_conf_hook)(pci_chipset_tag_t, int, int, int,
+			    pcireg_t);
+#endif
+
+	uint32_t	pc_cfg_cmd;
 };
 
 /*
@@ -97,3 +106,9 @@ struct arm32_pci_chipset {
     (*(c)->pc_intr_establish)((c)->pc_intr_v, (ih), (l), (h), (a))
 #define	pci_intr_disestablish(c, iv)					\
     (*(c)->pc_intr_disestablish)((c)->pc_intr_v, (iv))
+#ifdef __HAVE_PCI_CONF_HOOK
+#define	pci_conf_hook(c, b, d, f, id)					\
+    (*(c)->pc_conf_hook)((c), (b), (d), (f), (id))
+#endif
+
+#endif	/* _ARM_PCI_MACHDEP_H_ */

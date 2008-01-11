@@ -1,4 +1,4 @@
-/*	$NetBSD: ibm4xx_intr.h,v 1.15 2007/12/03 15:34:13 ad Exp $	*/
+/*	$NetBSD: ibm4xx_intr.h,v 1.20 2011/05/12 08:14:36 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,18 +52,18 @@
 
 #ifndef _LOCORE
 
-#define	CLKF_BASEPRI(frame)	((frame)->pri == 0)
-
 void 	*intr_establish(int, int, int, int (*)(void *), void *);
 void 	intr_disestablish(void *);
 void 	intr_init(void);
+int 	uic_add(u_int, int);
 void 	ext_intr(void); 			/* for machdep */
 int 	splraise(int);
 int 	spllower(int);
 void 	splx(int);
 void 	softintr(int);
 
-extern volatile u_int 		imask[NIPL];
+typedef u_int imask_t;
+extern volatile imask_t 	imask[NIPL];
 extern const int 		mask_clock; 		/* for clock.c */
 extern const int 		mask_statclock; 	/* for clock.c */
 
@@ -97,7 +90,7 @@ splraiseipl(ipl_cookie_t icookie)
 
 #include <sys/spl.h>
 
-#define	spl0()			spllower(0)
+#define	spl0()			spllower(IPL_NONE)
 
 #endif /* !_LOCORE */
 #endif /* !_IBM4XX_INTR_H_ */

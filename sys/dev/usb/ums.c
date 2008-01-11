@@ -1,4 +1,4 @@
-/*	$NetBSD: ums.c,v 1.70 2007/12/11 03:45:57 jmcneill Exp $	*/
+/*	$NetBSD: ums.c,v 1.81 2010/11/03 22:34:24 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.70 2007/12/11 03:45:57 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.81 2010/11/03 22:34:24 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.70 2007/12/11 03:45:57 jmcneill Exp $");
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
-#include <sys/tty.h>
 #include <sys/file.h>
 #include <sys/select.h>
 #include <sys/proc.h>
@@ -71,8 +63,8 @@ __KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.70 2007/12/11 03:45:57 jmcneill Exp $");
 #include <dev/wscons/wsmousevar.h>
 
 #ifdef USB_DEBUG
-#define DPRINTF(x)	if (umsdebug) logprintf x
-#define DPRINTFN(n,x)	if (umsdebug>(n)) logprintf x
+#define DPRINTF(x)	if (umsdebug) printf x
+#define DPRINTFN(n,x)	if (umsdebug>(n)) printf x
 int	umsdebug = 0;
 #else
 #define DPRINTF(x)
@@ -102,17 +94,18 @@ struct ums_softc {
 #define UMS_Z		0x01	/* z direction available */
 #define UMS_SPUR_BUT_UP	0x02	/* spurious button up events */
 #define UMS_REVZ	0x04	/* Z-axis is reversed */
+#define UMS_W		0x08	/* w direction/tilt available */
+#define UMS_ABS		0x10	/* absolute position, touchpanel */
 
 	int nbuttons;
 
 	u_int32_t sc_buttons;	/* mouse button status */
-	struct device *sc_wsmousedev;
+	device_t sc_wsmousedev;
 
 	char			sc_dying;
 };
 
 #define MOUSE_FLAGS_MASK (HIO_CONST|HIO_RELATIVE)
-#define MOUSE_FLAGS (HIO_RELATIVE)
 
 Static void ums_intr(struct uhidev *addr, void *ibuf, u_int len);
 
@@ -126,38 +119,56 @@ const struct wsmouse_accessops ums_accessops = {
 	ums_disable,
 };
 
-USB_DECLARE_DRIVER(ums);
+int ums_match(device_t, cfdata_t, void *);
+void ums_attach(device_t, device_t, void *);
+void ums_childdet(device_t, device_t);
+int ums_detach(device_t, int);
+int ums_activate(device_t, enum devact);
+extern struct cfdriver ums_cd;
+CFATTACH_DECL2_NEW(ums, sizeof(struct ums_softc), ums_match, ums_attach,
+    ums_detach, ums_activate, NULL, ums_childdet);
 
 int
-ums_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ums_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct uhidev_attach_arg *uha = aux;
 	int size;
 	void *desc;
 
+	/*
+	 * Some (older) Griffin PowerMate knobs may masquerade as a
+	 * mouse, avoid treating them as such, they have only one axis.
+	 */
+	if (uha->uaa->vendor == USB_VENDOR_GRIFFIN &&
+	    uha->uaa->product == USB_PRODUCT_GRIFFIN_POWERMATE)
+		return (UMATCH_NONE);
+
 	uhidev_get_report_desc(uha->parent, &desc, &size);
 	if (!hid_is_collection(desc, size, uha->reportid,
-			       HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_MOUSE)))
+			       HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_MOUSE)) &&
+	    !hid_is_collection(desc, size, uha->reportid,
+			       HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_POINTER)))
 		return (UMATCH_NONE);
 
 	return (UMATCH_IFACECLASS);
 }
 
 void
-ums_attach(struct device *parent, struct device *self, void *aux)
+ums_attach(device_t parent, device_t self, void *aux)
 {
-	struct ums_softc *sc = (struct ums_softc *)self;
+	struct ums_softc *sc = device_private(self);
 	struct uhidev_attach_arg *uha = aux;
 	struct wsmousedev_attach_args a;
 	int size;
 	void *desc;
 	u_int32_t flags, quirks;
-	int i, wheel;
+	int i, hl;
+	struct hid_location *zloc;
 	struct hid_location loc_btn;
 
 	aprint_naive("\n");
 
+	sc->sc_hdev.sc_dev = self;
 	sc->sc_hdev.sc_intr = ums_intr;
 	sc->sc_hdev.sc_parent = uha->parent;
 	sc->sc_hdev.sc_report_id = uha->reportid;
@@ -176,68 +187,113 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 	if (!hid_locate(desc, size, HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_X),
 	       uha->reportid, hid_input, &sc->sc_loc_x, &flags)) {
 		aprint_error("\n%s: mouse has no X report\n",
-		       USBDEVNAME(sc->sc_hdev.sc_dev));
-		USB_ATTACH_ERROR_RETURN;
+		       device_xname(sc->sc_hdev.sc_dev));
+		return;
 	}
-	if ((flags & MOUSE_FLAGS_MASK) != MOUSE_FLAGS) {
+	switch (flags & MOUSE_FLAGS_MASK) {
+	case 0:
+		sc->flags |= UMS_ABS;
+		break;
+	case HIO_RELATIVE:
+		break;
+	default:
 		aprint_error("\n%s: X report 0x%04x not supported\n",
-		       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
-		USB_ATTACH_ERROR_RETURN;
+		       device_xname(sc->sc_hdev.sc_dev), flags);
+		return;
 	}
 
 	if (!hid_locate(desc, size, HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_Y),
 	       uha->reportid, hid_input, &sc->sc_loc_y, &flags)) {
 		aprint_error("\n%s: mouse has no Y report\n",
-		       USBDEVNAME(sc->sc_hdev.sc_dev));
-		USB_ATTACH_ERROR_RETURN;
+		       device_xname(sc->sc_hdev.sc_dev));
+		return;
 	}
-	if ((flags & MOUSE_FLAGS_MASK) != MOUSE_FLAGS) {
+	switch (flags & MOUSE_FLAGS_MASK) {
+	case 0:
+		sc->flags |= UMS_ABS;
+		break;
+	case HIO_RELATIVE:
+		break;
+	default:
 		aprint_error("\n%s: Y report 0x%04x not supported\n",
-		       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
-		USB_ATTACH_ERROR_RETURN;
+		       device_xname(sc->sc_hdev.sc_dev), flags);
+		return;
 	}
 
 	/* Try the wheel first as the Z activator since it's tradition. */
-	wheel = hid_locate(desc, size, HID_USAGE2(HUP_GENERIC_DESKTOP,
-						  HUG_WHEEL),
-			   uha->reportid, hid_input, &sc->sc_loc_z, &flags);
-	if (wheel) {
-		if ((flags & MOUSE_FLAGS_MASK) != MOUSE_FLAGS) {
+	hl = hid_locate(desc, 
+			size, 
+			HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_WHEEL), 
+			uha->reportid, 
+			hid_input, 
+			&sc->sc_loc_z, 
+			&flags);
+
+	zloc = &sc->sc_loc_z;
+	if (hl) {
+		if ((flags & MOUSE_FLAGS_MASK) != HIO_RELATIVE) {
 			aprint_verbose("\n%s: Wheel report 0x%04x not "
-			    "supported\n", USBDEVNAME(sc->sc_hdev.sc_dev),
+			    "supported\n", device_xname(sc->sc_hdev.sc_dev),
 			    flags);
 			sc->sc_loc_z.size = 0;	/* Bad Z coord, ignore it */
 		} else {
 			sc->flags |= UMS_Z;
 			/* Wheels need the Z axis reversed. */
 			sc->flags ^= UMS_REVZ;
-		}
-		/*
-		 * We might have both a wheel and Z direction, if so put
-		 * put the Z on the W coordinate.
-		 */
-		if (hid_locate(desc, size, HID_USAGE2(HUP_GENERIC_DESKTOP,
-						      HUG_Z),
-			uha->reportid, hid_input, &sc->sc_loc_w, &flags)) {
-			if ((flags & MOUSE_FLAGS_MASK) != MOUSE_FLAGS) {
-				aprint_verbose("\n%s: Z report 0x%04x not "
-				    "supported\n",
-				       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
-				sc->sc_loc_w.size = 0;	/* Bad Z, ignore */
-			}
-		}
-	 } else if (hid_locate(desc, size, HID_USAGE2(HUP_GENERIC_DESKTOP,
-						      HUG_Z),
-		      uha->reportid, hid_input, &sc->sc_loc_z, &flags)) {
-		if ((flags & MOUSE_FLAGS_MASK) != MOUSE_FLAGS) {
-			aprint_verbose("\n%s: Z report 0x%04x not supported\n",
-			       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
-			sc->sc_loc_z.size = 0;	/* Bad Z coord, ignore it */
-		} else {
-			sc->flags |= UMS_Z;
+			/* Put Z on the W coordinate */
+			zloc = &sc->sc_loc_w;
 		}
 	}
 
+	hl = hid_locate(desc, 
+			size, 
+			HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_Z),
+			uha->reportid,
+			hid_input,
+			zloc,
+			&flags);
+
+	/*
+	 * The horizontal component of the scrollball can also be given by
+	 * Application Control Pan in the Consumer page, so if we didnt see
+	 * any Z then check that.
+	 */
+	if (!hl) {
+		hl = hid_locate(desc, 
+				size, 
+				HID_USAGE2(HUP_CONSUMER, HUC_AC_PAN), 
+				uha->reportid,
+				hid_input,
+				zloc,
+				&flags);
+	}
+
+	if (hl) {
+		if ((flags & MOUSE_FLAGS_MASK) != HIO_RELATIVE) {
+			aprint_verbose("\n%s: Z report 0x%04x not supported\n",
+			       device_xname(sc->sc_hdev.sc_dev), flags);
+			zloc->size = 0;	/* Bad Z coord, ignore it */
+		} else {
+			if (sc->flags & UMS_Z)
+				sc->flags |= UMS_W;
+			else
+				sc->flags |= UMS_Z;
+		}
+	}
+
+	/*
+	 * The Microsoft Wireless Laser Mouse 6000 v2.0 reports a bad
+	 * position for the wheel and wheel tilt controls -- should be
+	 * in bytes 3 & 4 of the report.  Fix this if necessary.
+	 */
+	if (uha->uaa->vendor == USB_VENDOR_MICROSOFT &&
+	    (uha->uaa->product == USB_PRODUCT_MICROSOFT_24GHZ_XCVR10 ||
+	     uha->uaa->product == USB_PRODUCT_MICROSOFT_24GHZ_XCVR20)) {	
+		if ((sc->flags & UMS_Z) && sc->sc_loc_z.pos == 0)
+			sc->sc_loc_z.pos = 24;
+		if ((sc->flags & UMS_W) && sc->sc_loc_w.pos == 0)
+			sc->sc_loc_w.pos = sc->sc_loc_z.pos + 8;
+	}
 
 	/* figure out the number of buttons */
 	for (i = 1; i <= MAX_BUTTONS; i++)
@@ -246,9 +302,11 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 			break;
 	sc->nbuttons = i - 1;
 
-	aprint_normal(": %d button%s%s\n",
+	aprint_normal(": %d button%s%s%s%s\n",
 	    sc->nbuttons, sc->nbuttons == 1 ? "" : "s",
-	    sc->flags & UMS_Z ? " and Z dir." : "");
+	    sc->flags & UMS_W ? ", W" : "",
+	    sc->flags & UMS_Z ? " and Z dir" : "",
+	    sc->flags & UMS_W ? "s" : "");
 
 	for (i = 1; i <= sc->nbuttons; i++)
 		hid_locate(desc, size, HID_USAGE2(HUP_BUTTON, i),
@@ -264,6 +322,9 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 	if (sc->flags & UMS_Z)
 		DPRINTF(("ums_attach: Z\t%d/%d\n",
 			 sc->sc_loc_z.pos, sc->sc_loc_z.size));
+	if (sc->flags & UMS_W)
+		DPRINTF(("ums_attach: W\t%d/%d\n",
+			 sc->sc_loc_w.pos, sc->sc_loc_w.size));
 	for (i = 1; i <= sc->nbuttons; i++) {
 		DPRINTF(("ums_attach: B%d\t%d/%d\n",
 			 i, sc->sc_loc_btn[i-1].pos,sc->sc_loc_btn[i-1].size));
@@ -275,32 +336,36 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_wsmousedev = config_found(self, &a, wsmousedevprint);
 
-	USB_ATTACH_SUCCESS_RETURN;
+	return;
 }
 
 int
-ums_activate(device_ptr_t self, enum devact act)
+ums_activate(device_t self, enum devact act)
 {
-	struct ums_softc *sc = (struct ums_softc *)self;
-	int rv = 0;
+	struct ums_softc *sc = device_private(self);
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
 	case DVACT_DEACTIVATE:
-		if (sc->sc_wsmousedev != NULL)
-			rv = config_deactivate(sc->sc_wsmousedev);
 		sc->sc_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (rv);
+}
+
+void
+ums_childdet(device_t self, device_t child)
+{
+	struct ums_softc *sc = device_private(self);
+
+	KASSERT(sc->sc_wsmousedev == child);
+	sc->sc_wsmousedev = NULL;
 }
 
 int
-ums_detach(struct device *self, int flags)
+ums_detach(device_t self, int flags)
 {
-	struct ums_softc *sc = (struct ums_softc *)self;
+	struct ums_softc *sc = device_private(self);
 	int rv = 0;
 
 	DPRINTF(("ums_detach: sc=%p flags=%d\n", sc, flags));
@@ -320,15 +385,21 @@ ums_intr(struct uhidev *addr, void *ibuf, u_int len)
 	struct ums_softc *sc = (struct ums_softc *)addr;
 	int dx, dy, dz, dw;
 	u_int32_t buttons = 0;
-	int i;
-	int s;
+	int i, flags, s;
 
 	DPRINTFN(5,("ums_intr: len=%d\n", len));
 
+	flags = WSMOUSE_INPUT_DELTA;	/* equals 0 */
+
 	dx =  hid_get_data(ibuf, &sc->sc_loc_x);
-	dy = -hid_get_data(ibuf, &sc->sc_loc_y);
+	if (sc->flags & UMS_ABS) {
+		flags |= (WSMOUSE_INPUT_ABSOLUTE_X | WSMOUSE_INPUT_ABSOLUTE_Y);
+		dy = hid_get_data(ibuf, &sc->sc_loc_y);
+	} else
+		dy = -hid_get_data(ibuf, &sc->sc_loc_y);
 	dz =  hid_get_data(ibuf, &sc->sc_loc_z);
 	dw =  hid_get_data(ibuf, &sc->sc_loc_w);
+
 	if (sc->flags & UMS_REVZ)
 		dz = -dz;
 	for (i = 0; i < sc->nbuttons; i++)
@@ -342,10 +413,8 @@ ums_intr(struct uhidev *addr, void *ibuf, u_int len)
 		sc->sc_buttons = buttons;
 		if (sc->sc_wsmousedev != NULL) {
 			s = spltty();
-			wsmouse_input(sc->sc_wsmousedev,
-					buttons,
-					dx, dy, dz, dw,
-					WSMOUSE_INPUT_DELTA);
+			wsmouse_input(sc->sc_wsmousedev, buttons, dx, dy, dz,
+			    dw, flags);
 			splx(s);
 		}
 	}
@@ -392,9 +461,14 @@ ums_ioctl(void *v, u_long cmd, void *data, int flag,
     struct lwp * p)
 
 {
+	struct ums_softc *sc = v;
+
 	switch (cmd) {
 	case WSMOUSEIO_GTYPE:
-		*(u_int *)data = WSMOUSE_TYPE_USB;
+		if (sc->flags & UMS_ABS)
+			*(u_int *)data = WSMOUSE_TYPE_TPANEL;
+		else
+			*(u_int *)data = WSMOUSE_TYPE_USB;
 		return (0);
 	}
 

@@ -1,4 +1,4 @@
-/* $NetBSD: segwrite.c,v 1.17 2007/10/10 20:42:20 ad Exp $ */
+/* $NetBSD: segwrite.c,v 1.20 2010/02/16 23:20:30 mlelstv Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -447,7 +440,8 @@ lfs_update_single(struct lfs * fs, struct segment * sp, daddr_t lbn,
 	struct uvnode *vp;
 	daddr_t daddr, ooff;
 	int num, error;
-	int bb, osize, obb;
+	int osize;
+	int frags, ofrags;
 
 	vp = sp->vp;
 	ip = VTOI(vp);
@@ -458,34 +452,34 @@ lfs_update_single(struct lfs * fs, struct segment * sp, daddr_t lbn,
 	if (daddr > 0)
 		daddr = dbtofsb(fs, daddr);
 
-	bb = fragstofsb(fs, numfrags(fs, size));
+	frags = numfrags(fs, size);
 	switch (num) {
 	case 0:
 		ooff = ip->i_ffs1_db[lbn];
 		if (ooff == UNWRITTEN)
-			ip->i_ffs1_blocks += bb;
+			ip->i_ffs1_blocks += frags;
 		else {
 			/* possible fragment truncation or extension */
-			obb = btofsb(fs, ip->i_lfs_fragsize[lbn]);
-			ip->i_ffs1_blocks += (bb - obb);
+			ofrags = btofsb(fs, ip->i_lfs_fragsize[lbn]);
+			ip->i_ffs1_blocks += (frags - ofrags);
 		}
 		ip->i_ffs1_db[lbn] = ndaddr;
 		break;
 	case 1:
 		ooff = ip->i_ffs1_ib[a[0].in_off];
 		if (ooff == UNWRITTEN)
-			ip->i_ffs1_blocks += bb;
+			ip->i_ffs1_blocks += frags;
 		ip->i_ffs1_ib[a[0].in_off] = ndaddr;
 		break;
 	default:
 		ap = &a[num - 1];
-		if (bread(vp, ap->in_lbn, fs->lfs_bsize, NULL, &bp))
+		if (bread(vp, ap->in_lbn, fs->lfs_bsize, NULL, 0, &bp))
 			errx(1, "lfs_updatemeta: bread bno %" PRId64,
 			    ap->in_lbn);
 
 		ooff = ((ufs_daddr_t *) bp->b_data)[ap->in_off];
 		if (ooff == UNWRITTEN)
-			ip->i_ffs1_blocks += bb;
+			ip->i_ffs1_blocks += frags;
 		((ufs_daddr_t *) bp->b_data)[ap->in_off] = ndaddr;
 		(void) VOP_BWRITE(bp);
 	}
@@ -527,7 +521,7 @@ lfs_updatemeta(struct segment * sp)
 	struct uvnode *vp;
 	daddr_t lbn;
 	int i, nblocks, num;
-	int bb;
+	int frags;
 	int bytesleft, size;
 
 	vp = sp->vp;
@@ -592,10 +586,10 @@ lfs_updatemeta(struct segment * sp)
 		for (bytesleft = sbp->b_bcount; bytesleft > 0;
 		    bytesleft -= fs->lfs_bsize) {
 			size = MIN(bytesleft, fs->lfs_bsize);
-			bb = fragstofsb(fs, numfrags(fs, size));
+			frags = numfrags(fs, size);
 			lbn = *sp->start_lbp++;
 			lfs_update_single(fs, sp, lbn, fs->lfs_offset, size);
-			fs->lfs_offset += bb;
+			fs->lfs_offset += frags;
 		}
 
 	}

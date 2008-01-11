@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_fault_i.h,v 1.24 2008/01/02 11:49:16 ad Exp $	*/
+/*	$NetBSD: uvm_fault_i.h,v 1.26 2011/02/02 15:13:34 chuck Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -45,7 +38,7 @@
  * uvmfault_unlockmaps: unlock the maps
  */
 
-static __inline void
+static inline void
 uvmfault_unlockmaps(struct uvm_faultinfo *ufi, bool write_locked)
 {
 	/*
@@ -70,7 +63,7 @@ uvmfault_unlockmaps(struct uvm_faultinfo *ufi, bool write_locked)
  * => maps must be read-locked (not write-locked).
  */
 
-static __inline void
+static inline void
 uvmfault_unlockall(struct uvm_faultinfo *ufi, struct vm_amap *amap,
     struct uvm_object *uobj, struct vm_anon *anon)
 {
@@ -99,7 +92,7 @@ uvmfault_unlockall(struct uvm_faultinfo *ufi, struct vm_amap *amap,
  *	map and the submap is unnecessary).
  */
 
-static __inline bool
+static inline bool
 uvmfault_lookup(struct uvm_faultinfo *ufi, bool write_lock)
 {
 	struct vm_map *tmpmap;
@@ -184,7 +177,7 @@ uvmfault_lookup(struct uvm_faultinfo *ufi, bool write_lock)
  * => if a success (true) maps will be locked after call.
  */
 
-static __inline bool
+static inline bool
 uvmfault_relock(struct uvm_faultinfo *ufi)
 {
 	/*

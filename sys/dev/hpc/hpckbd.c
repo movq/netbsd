@@ -1,4 +1,4 @@
-/*	$NetBSD: hpckbd.c,v 1.24 2007/10/19 11:59:43 ad Exp $ */
+/*	$NetBSD: hpckbd.c,v 1.28 2009/05/12 14:22:39 cegger Exp $ */
 
 /*-
  * Copyright (c) 1999-2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.24 2007/10/19 11:59:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.28 2009/05/12 14:22:39 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -99,8 +92,8 @@ struct hpckbd_softc {
 	struct hpckbd_core	sc_coredata;
 };
 
-int	hpckbd_match(struct device *, struct cfdata *, void *);
-void	hpckbd_attach(struct device *, struct device *, void *);
+int	hpckbd_match(device_t, cfdata_t, void *);
+void	hpckbd_attach(device_t, device_t, void *);
 
 void	hpckbd_initcore(struct hpckbd_core *, struct hpckbd_ic_if *, int);
 void	hpckbd_initif(struct hpckbd_core *);
@@ -146,14 +139,14 @@ struct wskbd_mapdata hpckbd_keymapdata = {
 };
 
 int
-hpckbd_match(struct device *parent,
-	     struct cfdata *cf, void *aux)
+hpckbd_match(device_t parent,
+	     cfdata_t cf, void *aux)
 {
 	return (1);
 }
 
 void
-hpckbd_attach(struct device *parent, struct device *self, void *aux)
+hpckbd_attach(device_t parent, device_t self, void *aux)
 {
 	struct hpckbd_attach_args *haa = aux;
 	struct hpckbd_softc *sc = device_private(self);
@@ -189,6 +182,9 @@ hpckbd_attach(struct device *parent, struct device *self, void *aux)
 	wa.accessops = &hpckbd_accessops;
 	wa.accesscookie = sc->sc_core;
 	sc->sc_core->hc_wskbddev = config_found(self, &wa, wskbddevprint);
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: map_scan.l,v 1.3 2006/02/05 18:11:46 jmmv Exp $ */
+/*	$NetBSD: map_scan.l,v 1.7 2011/05/24 12:07:14 joerg Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,7 +40,6 @@
 #include "wsconsctl.h"
 #include "map_parse.h"
 
-#define yywrap()	1
 
 void
 map_scan_setinput(char *str)
@@ -57,6 +49,9 @@ map_scan_setinput(char *str)
 }
 
 %}
+
+%option noyywrap
+%option noinput
 
 %%
 
@@ -74,6 +69,10 @@ keycode {
 
 keysym {
 		return(T_KEYSYM);
+	}
+
+Cmd {
+		return(T_CMD);
 	}
 
 [a-zA-Z][a-zA-Z0-9_]* {

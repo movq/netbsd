@@ -1,6 +1,6 @@
-/*	$NetBSD: osiopvar.h,v 1.11 2007/12/25 18:33:39 perry Exp $	*/
+/*	$NetBSD: osiopvar.h,v 1.13 2008/05/14 13:29:28 tsutsui Exp $	*/
 
-/*
+/*-
  * Copyright (c) 2001 Izumi Tsutsui.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -190,7 +188,7 @@ struct osiop_tinfo {
 };
 
 struct osiop_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	bus_space_tag_t sc_bst;		/* bus space tag */
 	bus_space_handle_t sc_reg;	/* register I/O handle */

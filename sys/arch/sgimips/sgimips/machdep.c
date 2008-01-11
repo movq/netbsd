@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.117 2007/12/03 15:34:18 ad Exp $	*/
+/*	$NetBSD: machdep.c,v 1.134 2011/02/20 07:59:51 matt Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -34,13 +34,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.117 2007/12/03 15:34:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.134 2011/02/20 07:59:51 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_execfmt.h"
 #include "opt_cputype.h"
 #include "opt_mips_cache.h"
+#include "opt_modular.h"
+
+#define __INTR_PRIVATE
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,7 +57,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.117 2007/12/03 15:34:18 ad Exp $");
 #include <sys/mbuf.h>
 #include <sys/msgbuf.h>
 #include <sys/device.h>
-#include <sys/user.h>
 #include <sys/exec.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
@@ -91,7 +93,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.117 2007/12/03 15:34:18 ad Exp $");
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(LKM) || defined(KGDB)
+#if NKSYMS || defined(DDB) || defined(MODULAR) || defined(KGDB)
 #include <machine/db_machdep.h>
 #include <ddb/db_access.h>
 #include <ddb/db_sym.h>
@@ -116,49 +118,58 @@ struct sgimips_intrhand intrtab[NINTR];
 struct cpu_info cpu_info_store;
 
 /* Maps for VM objects. */
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-int mach_type;		/* IPxx type */
-int mach_subtype;	/* subtype: eg., Guinness/Fullhouse for IP22 */
-int mach_boardrev;	/* machine board revision, in case it matters */
+int mach_type = 0;	/* IPxx type */
+int mach_subtype = 0;	/* subtype: eg., Guinness/Fullhouse for IP22 */
+int mach_boardrev = 0;	/* machine board revision, in case it matters */
 
-int physmem;		/* Total physical memory */
 int arcsmem;		/* Memory used by the ARCS firmware */
 
 int ncpus;
 
-/* CPU interrupt masks */
-const int *ipl2spl_table;
+#define IPL2SPL_TABLE_COMMON					\
+	[IPL_NONE] =		0,				\
+	[IPL_SOFTCLOCK] =	MIPS_SOFT_INT_MASK_0,		\
+	[IPL_SOFTNET] =		MIPS_SOFT_INT_MASK,		\
+	[IPL_DDB] =		MIPS_INT_MASK,			\
+	[IPL_HIGH] =		MIPS_INT_MASK
 
-#define	IPL2SPL_TABLE_COMMON \
-	[IPL_SOFTCLOCK] = MIPS_SOFT_INT_MASK_1, \
-	[IPL_HIGH] = MIPS_INT_MASK,
-
+/* CPU interrupt sr maps */
 #if defined(MIPS1)
-static const int sgi_ip12_ipl2spl_table[] = {
-	IPL2SPL_TABLE_COMMON
+static const struct ipl_sr_map sgi_ip6_ipl_sr_map = {
+    .sr_bits = {
+	IPL2SPL_TABLE_COMMON,
+	[IPL_VM] = MIPS_INT_MASK_1|MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK,
+	[IPL_SCHED] = MIPS_INT_MASK_4|MIPS_INT_MASK_2|
+	    MIPS_INT_MASK_1|MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK,
+    },
+};
+static const struct ipl_sr_map sgi_ip12_ipl_sr_map = {
+    .sr_bits = {
+	IPL2SPL_TABLE_COMMON,
 	[IPL_VM] = MIPS_INT_MASK_2|MIPS_INT_MASK_1|MIPS_INT_MASK_0|
-	    MIPS_SOFT_INT_MASK_0,
+	    MIPS_SOFT_INT_MASK,
 	[IPL_SCHED] = MIPS_INT_MASK_4|MIPS_INT_MASK_3|MIPS_INT_MASK_2|
-	    MIPS_INT_MASK_1|MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_0,
+	    MIPS_INT_MASK_1|MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK,
+    },
 };
 #endif /* defined(MIPS1) */
+
 #if defined(MIPS3)
-static const int sgi_ip2x_ipl2spl_table[] = {
-	IPL2SPL_TABLE_COMMON
-	[IPL_VM] = MIPS_INT_MASK_1|MIPS_INT_MASK_0|
-	    MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
-	[IPL_SCHED] = MIPS_INT_MASK_5|MIPS_INT_MASK_3|MIPS_INT_MASK_2|
-	    MIPS_INT_MASK_1|MIPS_INT_MASK_0|
-	    MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
+static const struct ipl_sr_map sgi_ip2x_ipl_sr_map = {
+    .sr_bits = {
+	IPL2SPL_TABLE_COMMON,
+	[IPL_VM] = MIPS_INT_MASK_1|MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK,
+	[IPL_SCHED] = MIPS_INT_MASK,
+    },
 };
-static const int sgi_ip3x_ipl2spl_table[] = {
-	IPL2SPL_TABLE_COMMON
-	[IPL_VM] = MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
-	[IPL_SCHED] = MIPS_INT_MASK_5|MIPS_INT_MASK_0|
-	    MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
+static const struct ipl_sr_map sgi_ip3x_ipl_sr_map = {
+    .sr_bits = {
+	IPL2SPL_TABLE_COMMON,
+	[IPL_VM] = MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK,
+	[IPL_SCHED] = MIPS_INT_MASK_5|MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK,
+    },
 };
 #endif /* defined(MIPS3) */
 
@@ -170,15 +181,11 @@ extern void	ip22_sdcache_disable(void);
 extern void	ip22_sdcache_enable(void);
 #endif
 
-#if defined(MIPS1)
-extern void mips1_fpu_intr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
-#endif
-
 #if defined(MIPS3)
-extern void mips3_clock_intr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+extern void mips3_clock_intr(vaddr_t, uint32_t, uint32_t);
 #endif
 
-void	mach_init(int, char **, int, struct btinfo_common *);
+void	mach_init(int, int32_t *, uintptr_t, int32_t);
 
 void	sgimips_count_cpus(struct arcbios_component *,
 	    struct arcbios_treewalk_context *);
@@ -194,7 +201,7 @@ void mips_machdep_find_l2cache(struct arcbios_component *comp, struct arcbios_tr
 static void	unimpl_bus_reset(void);
 static void	unimpl_cons_init(void);
 static void	*unimpl_intr_establish(int, int, int (*)(void *), void *);
-static void	unimpl_intr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+static void	unimpl_intr(vaddr_t, uint32_t, uint32_t);
 static unsigned	long nulllong(void);
 static void	nullvoid(void);
 
@@ -219,43 +226,47 @@ struct platform platform = {
 	.intr5			= unimpl_intr
 };
 
-/*
- * safepri is a safe priority for sleep to set for a spin-wait during
- * autoconfiguration or after a panic.  Used as an argument to splx().
- */
-int	safepri = MIPS1_PSL_LOWIPL;
-
-extern void *esym;
 extern u_int32_t ssir;
-extern struct user *proc0paddr;
+extern char kernel_text[], edata[], end[];
 
-static struct btinfo_common *bootinfo;
+uint8_t *bootinfo;			/* pointer to bootinfo structure */
+static uint8_t bi_buf[BOOTINFO_SIZE];	/* buffer to store bootinfo data */
+static const char *bootinfo_msg = NULL;
 
-#if defined(_LP64)
-#define ARCS_VECTOR 0xa800000000001000
-#else
-#define ARCS_VECTOR (MIPS_PHYS_TO_KSEG0(0x00001000))
-#endif
+#define ARCS_VECTOR MIPS_PHYS_TO_KSEG0(0x00001000)
 
 /*
  * Do all the stuff that locore normally does before calling main().
  * Process arguments passed to us by the ARCS firmware.
  */
 void
-mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
+mach_init(int argc, int32_t argv32[], uintptr_t magic, int32_t bip32)
 {
-	extern char kernel_text[], _end[];
 	paddr_t first, last;
-	int firstpfn, lastpfn;
-	void *v;
 	vsize_t size;
+	void *bip = (void *)(intptr_t)bip32;
 	struct arcbios_mem *mem;
 	const char *cpufreq, *osload;
-	struct btinfo_symtab *bi_syms;
-	void *ssym;
+	char *bootpath = NULL;
 	vaddr_t kernend;
 	int kernstartpfn, kernendpfn;
-	int i, rv, nsym;
+	u_int i;
+	int rv;
+#if NKSYMS > 0 || defined(DDB) || defined(MODULAR)
+	int nsym = 0;
+	char *ssym = NULL;
+	char *esym = NULL;
+	struct btinfo_symtab *bi_syms;
+#endif
+#ifdef _LP64
+	char *argv[argc+1];
+
+	for (i = 0; i < argc; i++) {
+		argv[i] = (void *)(intptr_t)argv32[i];
+	}
+#else
+	char **argv = (void *)argv32;
+#endif
 
 	/*
 	 * Initialize firmware.  This will set up the bootstrap console.
@@ -268,33 +279,52 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	 * there's no bootinfo.
 	 */
 	if (arcbios_init(ARCS_VECTOR) == 1) {
+#ifdef _LP64
+		panic("no ARCS firmware");
+#else
 		if (magic == BOOTINFO_MAGIC)
 			arcemu_init(NULL);	/* XXX - need some prom env */
 		else
 			arcemu_init((const char **)magic);
+#endif
 	}
 
 	strcpy(cpu_model, arcbios_system_identifier);
 
 	uvm_setpagesize();
 
-	nsym = 0;
-	ssym = esym = NULL;
-	kernend = round_page((vaddr_t) _end);
-	bi_syms = NULL;
-	bootinfo = NULL;
+	/* set up bootinfo structures */
+	if (magic == BOOTINFO_MAGIC && bip != NULL) {
+		struct btinfo_magic *bi_magic;
+		struct btinfo_bootpath *bi_path;
 
-	if (magic == BOOTINFO_MAGIC && btinfo != NULL) {
-		printf("Found bootinfo at %p\n", btinfo);
-		bootinfo = btinfo;
+		memcpy(bi_buf, bip, BOOTINFO_SIZE);
+		bootinfo = bi_buf;
+		bi_magic = lookup_bootinfo(BTINFO_MAGIC);
+		if (bi_magic != NULL && bi_magic->magic == BOOTINFO_MAGIC) {
+			bootinfo_msg = "bootinfo found.\n";
+			bi_path = lookup_bootinfo(BTINFO_BOOTPATH);
+			if (bi_path != NULL)
+				bootpath = bi_path->bootpath;
+		} else
+			bootinfo_msg =
+			    "invalid magic number in bootinfo structure.\n";
+	} else
+		bootinfo_msg = "no bootinfo found. (old bootblocks?)\n";
 
-		bi_syms = lookup_bootinfo(BTINFO_SYMTAB);
-		if (bi_syms != NULL) {
-			nsym = bi_syms->nsym;
-			ssym = (void *) bi_syms->ssym;
-			esym = (void *) bi_syms->esym;
-			kernend = round_page((vaddr_t) esym);
-		}
+#if NKSYM > 0 || defined(DDB) || defined(MODULAR)
+	bi_syms = lookup_bootinfo(BTINFO_SYMTAB);
+
+	/* check whether there is valid bootinfo symtab info */
+	if (bi_syms != NULL) {
+		nsym = bi_syms->nsym;
+		ssym = (char *)bi_syms->ssym;
+		esym = (char *)bi_syms->esym;
+		kernend = mips_round_page(esym);
+	} else
+#endif
+	{
+		kernend = mips_round_page(end);
 	}
 
 	/* Leave 1 page before kernel untouched as that's where our initial
@@ -303,7 +333,7 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	kernstartpfn = atop(MIPS_KSEG0_TO_PHYS((vaddr_t) kernel_text)) - 1;
 	kernendpfn = atop(MIPS_KSEG0_TO_PHYS(kernend));
 
-	cpufreq = ARCBIOS->GetEnvironmentVariable("cpufreq");
+	cpufreq = arcbios_GetEnvironmentVariable("cpufreq");
 
 	if (cpufreq == 0)
 		panic("no $cpufreq");
@@ -315,49 +345,102 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	curcpu()->ci_cpu_freq = strtoul(cpufreq, NULL, 10) * 1000000;
 
 	/*
-	 * Try to get the boot device information from ARCBIOS. If we fail,
-	 * attempt to use the environment variables passed as follows:
+	 * Check machine (IPn) type.
 	 *
-	 * argv[0] can be either the bootloader loaded by the PROM, or a
-	 * kernel loaded directly by the PROM.
-	 *
-	 * If argv[0] is the bootloader, then argv[1] might be the kernel
-	 * that was loaded.  How to tell which one to use?
-	 *
-	 * If argv[1] isn't an environment string, try to use it to set the
-	 * boot device.
+	 * Note even on IP12 (which doesn't have ARCBIOS),
+	 * arcbios_system_identifiler[] has been initilialized
+	 * in arcemu_ip12_init().
 	 */
-	osload = ARCBIOS->GetEnvironmentVariable("OSLoadPartition");
+	for (i = 0; arcbios_system_identifier[i] != '\0'; i++) {
+		if (mach_type == 0 &&
+		    arcbios_system_identifier[i] >= '0' &&
+		    arcbios_system_identifier[i] <= '9') {
+			mach_type = strtoul(&arcbios_system_identifier[i],
+			    NULL, 10);
+			break;
+		}
+	}
+	if (mach_type <= 0)
+		panic("invalid architecture");
+
+	/*
+	 * Get boot device infomation.
+	 */
+
+	/* Try to get the boot device information from bootinfo first. */
+	if (bootpath != NULL)
+		makebootdev(bootpath);
+	else {
+		/*
+		 * The old bootloader prior to 5.0 doesn't pass bootinfo.
+		 * If argv[0] is the bootloader, then argv[1] might be
+		 * the kernel that was loaded.
+		 * If argv[1] isn't an environment string, try to use it
+		 * to set the boot device.
+		 */
+		if (argc > 1 && strchr(argv[1], '=') != 0)
+			makebootdev(argv[1]);
+
+		/*
+		 * If we are loaded directly by ARCBIOS,
+		 * argv[0] is the path of the loaded kernel,
+		 * but booted_partition could be SGIVOLHDR in such case,
+		 * so assume root is partition a.
+		 */
+		if (argc > 0 && argv[0] != NULL) {
+			makebootdev(argv[0]);
+			booted_partition = 0;
+		}
+	}
+
+	/*
+	 * Also try to get the default bootpath from ARCBIOS envronment
+	 * bacause bootpath is not set properly by old bootloaders and
+	 * argv[0] might be invalid on some machine.
+	 */
+	osload = arcbios_GetEnvironmentVariable("OSLoadPartition");
 	if (osload != NULL)
 		makebootdev(osload);
-	else if (argc > 1 && strchr(argv[1], '=') != 0)
-		makebootdev(argv[1]);
 
-	boothowto = RB_SINGLE;
+	/*
+	 * The case where the kernel has been loaded by a
+	 * boot loader will usually have been catched by
+	 * the first makebootdev() case earlier on, but
+	 * we still use OSLoadPartition to get the preferred
+	 * root filesystem location, even if it's not
+	 * actually the location of the loaded kernel.
+	 */
+	for (i = 0; i < argc; i++) {
+		if (strncmp(argv[i], "OSLoadPartition=", 15) == 0)
+			makebootdev(argv[i] + 16);
+	}
+
+	/*
+	 * When the kernel is loaded directly by the firmware, and
+	 * no explicit OSLoadPartition is set, we fall back on
+	 * SystemPartition for the boot device.
+	 */
+	for (i = 0; i < argc; i++) {
+		if (strncmp(argv[i], "SystemPartition", 15) == 0)
+			makebootdev(argv[i] + 16);
+	}
 
 	/*
 	 * Single- or multi-user ('auto' in SGI terms).
 	 *
 	 * Query ARCBIOS first, then default to environment variables.
 	 */
-	osload = ARCBIOS->GetEnvironmentVariable("OSLoadOptions");
+
+	/* Set default to single user. */
+	boothowto = RB_SINGLE;
+
+	osload = arcbios_GetEnvironmentVariable("OSLoadOptions");
 	if (osload != NULL && strcmp(osload, "auto") == 0)
 		boothowto &= ~RB_SINGLE;
 
 	for (i = 0; i < argc; i++) {
 		if (strcmp(argv[i], "OSLoadOptions=auto") == 0)
 			boothowto &= ~RB_SINGLE;
-
-		/*
-		 * The case where the kernel has been loaded by a
-		 * boot loader will usually have been catched by
-		 * the first makebootdev() case earlier on, but
-		 * we still use OSLoadPartition to get the preferred
-		 * root filesystem location, even if it's not
-		 * actually the location of the loaded kernel.
-		 */
-		if (strncmp(argv[i], "OSLoadPartition=", 15) == 0)
-			makebootdev(argv[i] + 16);
 	}
 
 	/*
@@ -406,54 +489,40 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 #ifdef DEBUG
 	boothowto |= AB_DEBUG;
 #endif
+	aprint_debug("argc = %d\n", argc);
+	for (i = 0; i < argc; i++)
+		aprint_debug("argv[%d] = %s\n", i, argv[i]);
 
-	/*
-	 * When the kernel is loaded directly by the firmware, and
-	 * no explicit OSLoadPartition is set, we fall back on
-	 * SystemPartition for the boot device.
-	 */
-	for (i = 0; i < argc; i++) {
-		if (strncmp(argv[i], "SystemPartition", 15) == 0)
-			makebootdev(argv[i] + 16);
-
-		aprint_debug("argv[%d]: %s\n", i, argv[i]);
-	}
-
-	for (i = 0; arcbios_system_identifier[i] != '\0'; i++) {
-		if (arcbios_system_identifier[i] >= '0' &&
-		    arcbios_system_identifier[i] <= '9') {
-			mach_type = strtoul(&arcbios_system_identifier[i],
-			    NULL, 10);
-			break;
-		}
-	}
-
-	if (mach_type <= 0)
-		panic("invalid architecture");
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	/* init symbols if present */
+	if (esym)
+		ksyms_addsyms_elf(nsym, ssym, esym);
+#endif /* NKSYMS || defined(DDB) || defined(MODULAR) */
 
 #if defined(KGDB) || defined(DDB)
 	/* Set up DDB hook to turn off watchdog on entry */
 	db_trap_callback = ddb_trap_hook;
 
-#if NKSYMS || defined(DDB) || defined(LKM)
-	ksyms_init(nsym, ssym, esym);
-#endif /* NKSYMS || defined(DDB) || defined(LKM) */
-
-#  ifdef DDB
+#ifdef DDB
 	if (boothowto & RB_KDB)
 		Debugger();
-#  endif
+#endif
 
-#  ifdef KGDB
+#ifdef KGDB
 	kgdb_port_init();
 
 	if (boothowto & RB_KDB)
 		kgdb_connect(0);
-#  endif
+#endif
 #endif
 
 	switch (mach_type) {
 #if defined(MIPS1)
+	case MACH_SGI_IP6 | MACH_SGI_IP10:
+		platform.intr3 = mips1_fpu_intr;
+		ipl_sr_map = sgi_ip6_ipl_sr_map;
+		break;
+
 	case MACH_SGI_IP12:
 		i = *(volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(0x1fbd0000);
         	mach_boardrev = (i & 0x7000) >> 12; 
@@ -470,7 +539,7 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 				mach_subtype = MACH_SGI_IP12_HPLC;
                 }
 
-		ipl2spl_table = sgi_ip12_ipl2spl_table;
+		ipl_sr_map = sgi_ip12_ipl_sr_map;
 		platform.intr0 = mips1_fpu_intr;
 		break;
 #endif /* MIPS1 */
@@ -479,19 +548,19 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	case MACH_SGI_IP20:
 		i = *(volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(0x1fbd0000);
 		mach_boardrev = (i & 0x7000) >> 12;
-		ipl2spl_table = sgi_ip2x_ipl2spl_table;
+		ipl_sr_map = sgi_ip2x_ipl_sr_map;
 		platform.intr5 = mips3_clock_intr;
 		break;
 	case MACH_SGI_IP22:
-		ipl2spl_table = sgi_ip2x_ipl2spl_table;
+		ipl_sr_map = sgi_ip2x_ipl_sr_map;
 		platform.intr5 = mips3_clock_intr;
 		break;
 	case MACH_SGI_IP30:
-		ipl2spl_table = sgi_ip3x_ipl2spl_table;
+		ipl_sr_map = sgi_ip3x_ipl_sr_map;
 		platform.intr5 = mips3_clock_intr;
 		break;
 	case MACH_SGI_IP32:
-		ipl2spl_table = sgi_ip3x_ipl2spl_table;
+		ipl_sr_map = sgi_ip3x_ipl_sr_map;
 		platform.intr5 = mips3_clock_intr;
 		break;
 #endif /* MIPS3 */
@@ -509,7 +578,7 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	mem = NULL;
 
 	do {
-		if ((mem = ARCBIOS->GetMemoryDescriptor(mem)) != NULL) {
+		if ((mem = arcbios_GetMemoryDescriptor(mem)) != NULL) {
 			i++;
 			printf("Mem block %d: type %d, "
 			    "base 0x%04lx, size 0x%04lx\n",
@@ -524,7 +593,7 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	 */
 	mem = NULL;
 	for (i = 0; mem_cluster_cnt < VM_PHYSSEG_MAX; i++) {
-		mem = ARCBIOS->GetMemoryDescriptor(mem);
+		mem = arcbios_GetMemoryDescriptor(mem);
 
 		if (mem == NULL)
 			break;
@@ -533,51 +602,10 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 		last = trunc_page(first + mem->PageCount * ARCBIOS_PAGESIZE);
 		size = last - first;
 
-		firstpfn = atop(first);
-		lastpfn = atop(last);
-
 		switch (mem->Type) {
 		case ARCBIOS_MEM_FreeContiguous:
 		case ARCBIOS_MEM_FreeMemory:
 		case ARCBIOS_MEM_LoadedProgram:
-			if (kernstartpfn >= lastpfn ||
-			    kernendpfn <= firstpfn) {
-				/* Kernel is not in this cluster at all */
-				
-				aprint_debug("Loading cluster %d: "
-				    "0x%x / 0x%x\n",
-				    i, firstpfn, lastpfn);
-				uvm_page_physload(firstpfn, lastpfn,
-				    firstpfn, lastpfn, VM_FREELIST_DEFAULT);
-			} else {
-				if (firstpfn < kernstartpfn) {
-					/*
-					 * There is space before kernel in
-					 * this cluster
-					 */
-
-					aprint_debug("Loading cluster %d "
-					    "(before kernel): 0x%x / 0x%x\n",
-					    i, firstpfn, kernstartpfn);
-					uvm_page_physload(firstpfn,
-					    kernstartpfn, firstpfn,
-					    kernstartpfn, VM_FREELIST_DEFAULT);
-				}
-
-				if (lastpfn > kernendpfn) {
-					/*
-					 * There is space after kernel in
-					 * this cluster
-					 */
-
-					aprint_debug("Loading cluster %d "
-					    "(after kernel): 0x%x / 0x%x\n",
-					    i, kernendpfn, lastpfn);
-					uvm_page_physload(kernendpfn,
-					    lastpfn, kernendpfn,
-					    lastpfn, VM_FREELIST_DEFAULT);
-				}
-			}
 			mem_clusters[mem_cluster_cnt].start = first;
 			mem_clusters[mem_cluster_cnt].size = size;
 			mem_cluster_cnt++;
@@ -605,6 +633,9 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	if (mem_cluster_cnt == 0)
 		panic("no free memory descriptors found");
 
+	mips_page_physload((vaddr_t)kernel_text - PAGE_SIZE, (vaddr_t)kernend,
+	    mem_clusters, mem_cluster_cnt, NULL, 0);
+
 	/* We can now no longer use bootinfo. */
 	bootinfo = NULL;
 
@@ -624,7 +655,7 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	 * Initialize locore-function vector.
 	 * Clear out the I and D caches.
 	 */
-	mips_vector_init();
+	mips_vector_init(NULL, false);
 
 	/*
 	 * Initialize error message buffer (at end of core).
@@ -634,13 +665,9 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	pmap_bootstrap();
 
 	/*
-	 * Allocate space for proc0's USPACE.
+	 * Allocate uarea for lwp0 and set it.
 	 */
-	v = (void *)uvm_pageboot_alloc(USPACE);
-	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)((char *)v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	mips_init_lwp0_uarea();
 }
 
 void
@@ -663,10 +690,15 @@ sgimips_count_cpus(struct arcbios_component *node,
  * Allocate memory for variable-sized tables.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
 	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
+
+#ifdef BOOTINFO_DEBUG
+	if (bootinfo_msg)
+		printf(bootinfo_msg);
+#endif
 
 	printf("%s%s", copyright, version);
 
@@ -676,12 +708,6 @@ cpu_startup()
 	printf("(%s reserved for ARCS)\n", pbuf);
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
 	/*
 	 * Allocate a submap for physio.
 	 */
@@ -703,8 +729,7 @@ void
 cpu_reboot(int howto, char *bootstr)
 {
 	/* Take a snapshot before clobbering any registers. */
-	if (curlwp)
-		savectx((struct user *)curpcb);
+	savectx(curpcb);
 
 	if (cold) {
 		howto |= RB_HALT;
@@ -739,8 +764,10 @@ haltsys:
 
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	/*
-	 * Calling ARCBIOS->PowerDown() results in a "CP1 unusable trap"
+	 * Calling arcbios_PowerDown() results in a "CP1 unusable trap"
 	 * which lands me back in DDB, at least on my Indy.  So, enable
 	 * the FPU before asking the PROM to power down to avoid this..
 	 * It seems to want the FPU to play the `poweroff tune' 8-/
@@ -757,7 +784,7 @@ haltsys:
 			mcclock_poweroff();
 		} else 
 #endif
-			ARCBIOS->PowerDown();
+			arcbios_PowerDown();
 		printf("WARNING: powerdown failed\n");
 		/*
 		 * RB_POWERDOWN implies RB_HALT... fall into it...
@@ -766,7 +793,7 @@ haltsys:
 
 	if (howto & RB_HALT) {
 		printf("halting...\n\n");
-		ARCBIOS->EnterInteractiveMode();
+		arcbios_EnterInteractiveMode();
 	}
 
 	printf("rebooting...\n\n");
@@ -775,7 +802,7 @@ haltsys:
 		crime_reboot();
 	} else
 #endif	
-		ARCBIOS->Reboot();
+		arcbios_Reboot();
 
 	for (;;);
 }
@@ -813,14 +840,14 @@ badaddr_workaround(void *addr, size_t size)
  *  Ensure all platform vectors are always initialized.
  */
 static void
-unimpl_bus_reset()
+unimpl_bus_reset(void)
 {
 
 	panic("target init didn't set bus_reset");
 }
 
 static void
-unimpl_cons_init()
+unimpl_cons_init(void)
 {
 
 	panic("target init didn't set cons_init");
@@ -830,24 +857,24 @@ static void *
 unimpl_intr_establish(int level, int ipl, int (*handler) (void *), void *arg)
 {
 	panic("target init didn't set intr_establish");
-	return (void *)NULL;
+	return NULL;
 }
 
 static void
-unimpl_intr(u_int32_t status, u_int32_t cause, u_int32_t pc, u_int32_t ipending)
+unimpl_intr(vaddr_t pc, uint32_t status, uint32_t pending)
 {
-	printf("spurious interrupt, ipending %x\n", ipending);
+	printf("spurious interrupt pending %#x\n", pending);
 }
 
 static unsigned long
-nulllong()
+nulllong(void)
 {
 	printf("nulllong\n");
 	return (0);
 }
 
 static void
-nullvoid()
+nullvoid(void)
 {
 	printf("nullvoid\n");
 	return;
@@ -856,15 +883,24 @@ nullvoid()
 void *
 lookup_bootinfo(int type)
 {
-	struct btinfo_common *b = bootinfo;
+	struct btinfo_common *bt;
+	uint8_t *bip;
 
-	while (bootinfo != NULL) {
-		if (b->type == type)
-			return (b);
-		b = b->next;
-	}
+	/* check for a bootinfo record first */
+	if (bootinfo == NULL)
+		return NULL;
 
-	return (NULL);
+	bip = bootinfo;
+	do {
+		bt = (struct btinfo_common *)bip;
+		if (bt->type == type)
+			return (void *)bt;
+		bip += bt->next;
+	} while (bt->next != 0 &&
+	    bt->next < BOOTINFO_SIZE /* sanity */ &&
+	    (size_t)bip < (size_t)bootinfo + BOOTINFO_SIZE);
+
+	return NULL;
 }
 
 #if defined(DDB) || defined(KGDB)
@@ -886,17 +922,18 @@ void ddb_trap_hook(int where)
 
 void mips_machdep_cache_config(void)
 {
+
 	arcbios_tree_walk(mips_machdep_find_l2cache, NULL);
 
-	switch (MIPS_PRID_IMPL(cpu_id)) {
+	switch (MIPS_PRID_IMPL(mips_options.mips_cpu_id)) {
 #if defined(INDY_R4600_CACHE)
 	case MIPS_R4600:
 		/*
 		 * R4600 is on Indy-class machines only.  Disable and
 		 * flush pcache.
 		 */
-		mips_sdcache_size = 0;
-		mips_sdcache_line_size = 0;
+		mips_cache_info.mci_sdcache_size = 0;
+		mips_cache_info.mci_sdcache_line_size = 0;
 		ip22_sdcache_disable();
 		break;
 #endif
@@ -912,7 +949,8 @@ void mips_machdep_cache_config(void)
 void
 mips_machdep_find_l2cache(struct arcbios_component *comp, struct arcbios_treewalk_context *atc)
 {
-	struct device *self = atc->atc_cookie;
+	struct mips_cache_info * const mci = &mips_cache_info;
+	device_t self = atc->atc_cookie;
 
 	if (comp->Class != COMPONENT_CLASS_CacheClass)
 		return;
@@ -922,18 +960,11 @@ mips_machdep_find_l2cache(struct arcbios_component *comp, struct arcbios_treewal
 		panic("%s: split L2 cache", self->dv_xname);
 	case COMPONENT_TYPE_SecondaryDCache:
 	case COMPONENT_TYPE_SecondaryCache:
-		mips_sdcache_size = COMPONENT_KEY_Cache_CacheSize(comp->Key);
-		mips_sdcache_line_size =
+		mci->mci_sdcache_size = COMPONENT_KEY_Cache_CacheSize(comp->Key);
+		mci->mci_sdcache_line_size =
 		    COMPONENT_KEY_Cache_LineSize(comp->Key);
 		/* XXX */
-		mips_sdcache_ways = 1;
+		mci->mci_sdcache_ways = 1;
 		break;
 	}
-}
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._spl = ipl2spl_table[ipl]};
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: efs_ihash.c,v 1.2 2008/01/02 11:48:40 ad Exp $	*/
+/*	$NetBSD: efs_ihash.c,v 1.6 2010/07/21 17:52:09 hannken Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -36,12 +36,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efs_ihash.c,v 1.2 2008/01/02 11:48:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efs_ihash.c,v 1.6 2010/07/21 17:52:09 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/vnode.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/mutex.h>
 
@@ -81,8 +80,7 @@ efs_ihashinit(void)
 
 	mutex_init(&efs_hashlock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&efs_ihash_lock, MUTEX_DEFAULT, IPL_NONE);
-	ihashtbl =
-	    hashinit(desiredvnodes, HASH_LIST, M_EFSINO, M_WAITOK, &ihash);
+	ihashtbl = hashinit(desiredvnodes, HASH_LIST, true, &ihash);
 }
 
 /*
@@ -97,7 +95,7 @@ efs_ihashreinit(void)
 	u_long oldmask, mask, val;
 	int i;
 
-	hash = hashinit(desiredvnodes, HASH_LIST, M_EFSINO, M_WAITOK, &mask);
+	hash = hashinit(desiredvnodes, HASH_LIST, true, &mask);
 	mutex_enter(&efs_ihash_lock);
 	oldhash = ihashtbl;
 	oldmask = ihash;
@@ -111,7 +109,7 @@ efs_ihashreinit(void)
 		}
 	}
 	mutex_exit(&efs_ihash_lock);
-	hashdone(oldhash, M_EFSINO);
+	hashdone(oldhash, HASH_LIST, oldmask);
 }
 
 /*
@@ -121,7 +119,7 @@ void
 efs_ihashdone(void)
 {
 
-	hashdone(ihashtbl, M_EFSINO);
+	hashdone(ihashtbl, HASH_LIST, ihash);
 	mutex_destroy(&efs_hashlock);
 	mutex_destroy(&efs_ihash_lock);
 }
@@ -148,7 +146,7 @@ efs_ihashget(dev_t dev, ino_t inum, int flags)
 			} else {
 				mutex_enter(&vp->v_interlock);
 				mutex_exit(&efs_ihash_lock);
-				if (vget(vp, flags | LK_INTERLOCK))
+				if (vget(vp, flags))
 					goto loop;
 			}
 			return (vp);
@@ -169,7 +167,7 @@ efs_ihashins(struct efs_inode *eip)
 	KASSERT(mutex_owned(&efs_hashlock));
 
 	/* lock the inode, then put it on the appropriate hash list */
-	lockmgr(&eip->ei_vp->v_lock, LK_EXCLUSIVE, NULL);
+	VOP_LOCK(EFS_ITOV(eip), LK_EXCLUSIVE);
 
 	mutex_enter(&efs_ihash_lock);
 	ipp = &ihashtbl[INOHASH(eip->ei_dev, eip->ei_number)];

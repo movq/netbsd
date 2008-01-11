@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vfsops.c,v 1.50 2007/12/08 19:29:46 pooka Exp $	*/
+/*	$NetBSD: union_vfsops.c,v 1.63 2010/07/05 21:27:08 pooka Exp $	*/
 
 /*
  * Copyright (c) 1994 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.50 2007/12/08 19:29:46 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.63 2010/07/05 21:27:08 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,23 +92,23 @@ __KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.50 2007/12/08 19:29:46 pooka Exp 
 #include <sys/queue.h>
 #include <sys/stat.h>
 #include <sys/kauth.h>
+#include <sys/module.h>
 
 #include <fs/union/union.h>
 
+MODULE(MODULE_CLASS_VFS, union, NULL);
+
 VFS_PROTOS(union);
+
+static struct sysctllog *union_sysctl_log;
 
 /*
  * Mount union filesystem
  */
 int
-union_mount(mp, path, data, data_len)
-	struct mount *mp;
-	const char *path;
-	void *data;
-	size_t *data_len;
+union_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
-	struct nameidata nd;
 	int error = 0;
 	struct union_args *args = data;
 	struct vnode *lowerrootvp = NULLVP;
@@ -148,18 +148,19 @@ union_mount(mp, path, data, data_len)
 		goto bad;
 	}
 
+	printf("WARNING: the union file system is experimental\n"
+	    "WARNING: it can cause crashes and file system corruption\n");
+
 	lowerrootvp = mp->mnt_vnodecovered;
-	VREF(lowerrootvp);
+	vref(lowerrootvp);
 
 	/*
 	 * Find upper node.
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->target);
-
-	if ((error = namei(&nd)) != 0)
+	error = namei_simple_user(args->target,
+				NSM_FOLLOW_NOEMULROOT, &upperrootvp);
+	if (error != 0)
 		goto bad;
-
-	upperrootvp = nd.ni_vp;
 
 	if (upperrootvp->v_type != VDIR) {
 		error = EINVAL;
@@ -207,7 +208,10 @@ union_mount(mp, path, data, data_len)
 	 * supports whiteout operations
 	 */
 	if ((mp->mnt_flag & MNT_RDONLY) == 0) {
-		error = VOP_WHITEOUT(um->um_uppervp, (struct componentname *) 0, LOOKUP);
+		vn_lock(um->um_uppervp, LK_EXCLUSIVE | LK_RETRY);
+		error = VOP_WHITEOUT(um->um_uppervp,
+		    (struct componentname *) 0, LOOKUP);
+		VOP_UNLOCK(um->um_uppervp);
 		if (error)
 			goto bad;
 	}
@@ -370,14 +374,12 @@ union_unmount(struct mount *mp, int mntflags)
 	 * Finally, throw away the union_mount structure
 	 */
 	free(mp->mnt_data, M_UFSMNT);	/* XXX */
-	mp->mnt_data = 0;
+	mp->mnt_data = NULL;
 	return (0);
 }
 
 int
-union_root(mp, vpp)
-	struct mount *mp;
-	struct vnode **vpp;
+union_root(struct mount *mp, struct vnode **vpp)
 {
 	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
 	int error;
@@ -385,10 +387,10 @@ union_root(mp, vpp)
 	/*
 	 * Return locked reference to root.
 	 */
-	VREF(um->um_uppervp);
+	vref(um->um_uppervp);
 	vn_lock(um->um_uppervp, LK_EXCLUSIVE | LK_RETRY);
 	if (um->um_lowervp)
-		VREF(um->um_lowervp);
+		vref(um->um_lowervp);
 	error = union_allocvp(vpp, mp, NULL, NULL, NULL,
 			      um->um_uppervp, um->um_lowervp, 1);
 
@@ -402,9 +404,7 @@ union_root(mp, vpp)
 }
 
 int
-union_statvfs(mp, sbp)
-	struct mount *mp;
-	struct statvfs *sbp;
+union_statvfs(struct mount *mp, struct statvfs *sbp)
 {
 	int error;
 	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
@@ -481,25 +481,21 @@ union_vget(struct mount *mp, ino_t ino,
 	return (EOPNOTSUPP);
 }
 
-SYSCTL_SETUP(sysctl_vfs_union_setup, "sysctl vfs.union subtree setup")
+static int
+union_renamelock_enter(struct mount *mp)
 {
+	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
 
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "union",
-		       SYSCTL_DESCR("Union file system"),
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, 15, CTL_EOL);
-	/*
-	 * XXX the "15" above could be dynamic, thereby eliminating
-	 * one more instance of the "number to vfs" mapping problem,
-	 * but "15" is the order as taken from sys/mount.h
-	 */
+	/* Lock just the upper fs, where the action happens. */
+	return VFS_RENAMELOCK_ENTER(um->um_uppervp->v_mount);
+}
+
+static void
+union_renamelock_exit(struct mount *mp)
+{
+	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
+
+	VFS_RENAMELOCK_EXIT(um->um_uppervp->v_mount);
 }
 
 extern const struct vnodeopv_desc union_vnodeop_opv_desc;
@@ -529,8 +525,51 @@ struct vfsops union_vfsops = {
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
 	(void *)eopnotsupp,		/* vfs_suspendctl */
+	union_renamelock_enter,
+	union_renamelock_exit,
+	(void *)eopnotsupp,
 	union_vnodeopv_descs,
 	0,				/* vfs_refcount */
 	{ NULL, NULL },
 };
-VFS_ATTACH(union_vfsops);
+
+static int
+union_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&union_vfsops);
+		if (error != 0)
+			break;
+		sysctl_createv(&union_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "vfs", NULL,
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, CTL_EOL);
+		sysctl_createv(&union_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "union",
+			       SYSCTL_DESCR("Union file system"),
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, 15, CTL_EOL);
+		/*
+		 * XXX the "15" above could be dynamic, thereby eliminating
+		 * one more instance of the "number to vfs" mapping problem,
+		 * but "15" is the order as taken from sys/mount.h
+		 */
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&union_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&union_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}

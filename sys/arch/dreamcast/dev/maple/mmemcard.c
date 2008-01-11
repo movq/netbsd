@@ -1,4 +1,4 @@
-/*	$NetBSD: mmemcard.c,v 1.14 2007/10/17 19:54:10 garbled Exp $	*/
+/*	$NetBSD: mmemcard.c,v 1.20 2010/10/17 14:17:49 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mmemcard.c,v 1.14 2007/10/17 19:54:10 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mmemcard.c,v 1.20 2010/10/17 14:17:49 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -55,6 +48,8 @@ __KERNEL_RCSID(0, "$NetBSD: mmemcard.c,v 1.14 2007/10/17 19:54:10 garbled Exp $"
 
 #include <dreamcast/dev/maple/maple.h>
 #include <dreamcast/dev/maple/mapleconf.h>
+
+#include "ioconf.h"
 
 #define MMEM_MAXACCSIZE	1012	/* (255*4) - 8  =  253*32 / 8 */
 
@@ -109,9 +104,9 @@ struct mmem_response_media_info {
 };
 
 struct mmem_softc {
-	struct device	sc_dev;
+	device_t sc_dev;
 
-	struct device	*sc_parent;
+	device_t sc_parent;
 	struct maple_unit *sc_unit;
 	struct maple_devinfo *sc_devinfo;
 
@@ -174,11 +169,11 @@ struct mmem_softc {
 #define MMEM_DISKMINOR(unit, part, disklabel_partition) \
 	DISKMINOR(((unit) << 8) | (part), (disklabel_partition))
 
-static int	mmemmatch(struct device *, struct cfdata *, void *);
-static void	mmemattach(struct device *, struct device *, void *);
+static int	mmemmatch(device_t, cfdata_t, void *);
+static void	mmemattach(device_t, device_t, void *);
 static void	mmem_defaultlabel(struct mmem_softc *, struct mmem_pt *,
 		    struct disklabel *);
-static int	mmemdetach(struct device *, int);
+static int	mmemdetach(device_t, int);
 static void	mmem_intr(void *, struct maple_response *, int, int);
 static void	mmem_printerror(const char *, int, int, uint32_t);
 static void	mmemstart(struct mmem_softc *);
@@ -203,15 +198,13 @@ const struct cdevsw mmem_cdevsw = {
 	nostop, notty, nopoll, nommap, nokqfilter, D_DISK
 };
 
-CFATTACH_DECL(mmem, sizeof(struct mmem_softc),
+CFATTACH_DECL_NEW(mmem, sizeof(struct mmem_softc),
     mmemmatch, mmemattach, mmemdetach, NULL);
-
-extern struct cfdriver mmem_cd;
 
 struct dkdriver mmemdkdriver = { mmemstrategy };
 
 static int
-mmemmatch(struct device *parent, struct cfdata *cf, void *aux)
+mmemmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct maple_attach_args *ma = aux;
 
@@ -219,9 +212,9 @@ mmemmatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-mmemattach(struct device *parent, struct device *self, void *aux)
+mmemattach(device_t parent, device_t self, void *aux)
 {
-	struct mmem_softc *sc = (void *)self;
+	struct mmem_softc *sc = device_private(self);
 	struct maple_attach_args *ma = aux;
 	int i;
 	union {
@@ -229,6 +222,7 @@ mmemattach(struct device *parent, struct device *self, void *aux)
 		struct mmem_funcdef s;
 	} funcdef;
 
+	sc->sc_dev = self;
 	sc->sc_parent = parent;
 	sc->sc_unit = ma->ma_unit;
 	sc->sc_devinfo = ma->ma_devinfo;
@@ -236,7 +230,7 @@ mmemattach(struct device *parent, struct device *self, void *aux)
 	funcdef.v = maple_get_function_data(ma->ma_devinfo, MAPLE_FN_MEMCARD);
 	printf(": Memory card\n");
 	printf("%s: %d part, %d bytes/block, ",
-	    sc->sc_dev.dv_xname,
+	    device_xname(self),
 	    sc->sc_npt = funcdef.s.pt + 1,
 	    sc->sc_bsize = (funcdef.s.bb + 1)  << 5);
 	if ((sc->sc_wacc = funcdef.s.wa) == 0)
@@ -259,11 +253,11 @@ mmemattach(struct device *parent, struct device *self, void *aux)
 		sc->sc_waccsz = sc->sc_bsize / sc->sc_wacc;
 		if (sc->sc_bsize != sc->sc_waccsz * sc->sc_wacc) {
 			printf("%s: write access isn't equally divided\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(self));
 			sc->sc_wacc = 0;	/* no write */
 		} else if (sc->sc_waccsz > MMEM_MAXACCSIZE) {
 			printf("%s: write access size is too large\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(self));
 			sc->sc_wacc = 0;	/* no write */
 		}
 	}
@@ -271,17 +265,17 @@ mmemattach(struct device *parent, struct device *self, void *aux)
 		sc->sc_raccsz = sc->sc_bsize / sc->sc_racc;
 		if (sc->sc_bsize != sc->sc_raccsz * sc->sc_racc) {
 			printf("%s: read access isn't equally divided\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(self));
 			sc->sc_racc = 0;	/* no read */
 		} else if (sc->sc_raccsz > MMEM_MAXACCSIZE) {
 			printf("%s: read access size is too large\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(self));
 			sc->sc_racc = 0;	/* no read */
 		}
 	}
 	if (sc->sc_wacc == 0 && sc->sc_racc == 0) {
 		printf("%s: device doesn't support read nor write\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(self));
 		return;
 	}
 
@@ -290,7 +284,7 @@ mmemattach(struct device *parent, struct device *self, void *aux)
 	    M_WAITOK|M_ZERO);
 
 	for (i = 0; i < sc->sc_npt; i++) {
-		sprintf(sc->sc_pt[i].pt_name, "%s.%d", sc->sc_dev.dv_xname, i);
+		sprintf(sc->sc_pt[i].pt_name, "%s.%d", device_xname(self), i);
 	}
 
 	maple_set_callback(parent, sc->sc_unit, MAPLE_FN_MEMCARD,
@@ -306,9 +300,9 @@ mmemattach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-mmemdetach(struct device *self, int flags)
+mmemdetach(device_t self, int flags)
 {
-	struct mmem_softc *sc = (struct mmem_softc *) self;
+	struct mmem_softc *sc = device_private(self);
 	struct buf *bp;
 	int i;
 	int minor_l, minor_h;
@@ -323,7 +317,7 @@ mmemdetach(struct device *self, int flags)
 		bp->b_resid = bp->b_bcount;
 		biodone(bp);
 	}
-	while ((bp = BUFQ_GET(sc->sc_q)) != NULL) {
+	while ((bp = bufq_get(sc->sc_q)) != NULL) {
 		bp->b_error = EIO;
 		bp->b_resid = bp->b_bcount;
 		biodone(bp);
@@ -393,9 +387,9 @@ mmem_defaultlabel(struct mmem_softc *sc, struct mmem_pt *pt,
  * called back from maple bus driver
  */
 static void
-mmem_intr(void *dev, struct maple_response *response, int sz, int flags)
+mmem_intr(void *arg, struct maple_response *response, int sz, int flags)
 {
-	struct mmem_softc *sc = dev;
+	struct mmem_softc *sc = arg;
 	struct mmem_response_read_data *r = (void *) response->data;
 	struct mmem_response_media_info *rm = (void *) response->data;
 	struct buf *bp;
@@ -629,7 +623,7 @@ mmemopen(dev_t dev, int flags, int devtype, struct lwp *l)
 	unit = MMEM_UNIT(diskunit);
 	part = MMEM_PART(diskunit);
 	labelpart = DISKPART(dev);
-	if ((sc = device_lookup(&mmem_cd, unit)) == NULL
+	if ((sc = device_lookup_private(&mmem_cd, unit)) == NULL
 	    || sc->sc_stat == MMEM_INIT
 	    || sc->sc_stat == MMEM_INIT2
 	    || part >= sc->sc_npt || (pt = &sc->sc_pt[part])->pt_flags == 0)
@@ -657,7 +651,7 @@ mmemclose(dev_t dev, int flags, int devtype, struct lwp *l)
 	diskunit = DISKUNIT(dev);
 	unit = MMEM_UNIT(diskunit);
 	part = MMEM_PART(diskunit);
-	sc = mmem_cd.cd_devs[unit];
+	sc = device_lookup_private(&mmem_cd, unit);
 	pt = &sc->sc_pt[part];
 	labelpart = DISKPART(dev);
 
@@ -684,7 +678,7 @@ mmemstrategy(struct buf *bp)
 	diskunit = DISKUNIT(bp->b_dev);
 	unit = MMEM_UNIT(diskunit);
 	part = MMEM_PART(diskunit);
-	if ((sc = device_lookup(&mmem_cd, unit)) == NULL
+	if ((sc = device_lookup_private(&mmem_cd, unit)) == NULL
 	    || sc->sc_stat == MMEM_INIT
 	    || sc->sc_stat == MMEM_INIT2
 	    || part >= sc->sc_npt || (pt = &sc->sc_pt[part])->pt_flags == 0)
@@ -737,7 +731,7 @@ mmemstrategy(struct buf *bp)
 	bp->b_rawblkno = off;
 
 	/* queue this transfer */
-	BUFQ_PUT(sc->sc_q, bp);
+	bufq_put(sc->sc_q, bp);
 
 	if (sc->sc_stat == MMEM_IDLE)
 		mmemstart(sc);
@@ -759,7 +753,7 @@ mmemstart(struct mmem_softc *sc)
 	struct mmem_pt *pt;
 	int s;
 
-	if ((bp = BUFQ_GET(sc->sc_q)) == NULL) {
+	if ((bp = bufq_get(sc->sc_q)) == NULL) {
 		sc->sc_stat = MMEM_IDLE;
 		maple_enable_unit_ping(sc->sc_parent, sc->sc_unit,
 		    MAPLE_FN_MEMCARD, 1);
@@ -923,7 +917,7 @@ mmemioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	diskunit = DISKUNIT(dev);
 	unit = MMEM_UNIT(diskunit);
 	part = MMEM_PART(diskunit);
-	sc = mmem_cd.cd_devs[unit];
+	sc = device_lookup_private(&mmem_cd, unit);
 	pt = &sc->sc_pt[part];
 
 	switch (cmd) {

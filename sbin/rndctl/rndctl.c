@@ -1,4 +1,4 @@
-/*	$NetBSD: rndctl.c,v 1.17 2005/06/27 01:00:06 christos Exp $	*/
+/*	$NetBSD: rndctl.c,v 1.19 2009/04/05 12:06:33 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1997 Michael Graff.
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: rndctl.c,v 1.17 2005/06/27 01:00:06 christos Exp $");
+__RCSID("$NetBSD: rndctl.c,v 1.19 2009/04/05 12:06:33 lukem Exp $");
 #endif
 
 
@@ -74,9 +74,9 @@ static void
 usage(void)
 {
 
-	fprintf(stderr, "usage: %s -CEce [-t devtype] [-d devname]\n",
+	fprintf(stderr, "usage: %s -CEce [-d devname | -t devtype]\n",
 	    getprogname());
-	fprintf(stderr, "       %s -ls [-t devtype] [-d devname]\n",
+	fprintf(stderr, "       %s -ls [-d devname | -t devtype]\n",
 	    getprogname());
 	exit(1);
 }
@@ -163,6 +163,7 @@ do_list(int all, u_int32_t type, char *name)
 	rndstat_name_t rstat_name;
 	int fd;
 	int res;
+	uint32_t i;
 	u_int32_t start;
 
 	fd = open("/dev/urandom", O_RDONLY, 0644);
@@ -200,14 +201,14 @@ do_list(int all, u_int32_t type, char *name)
 		if (rstat.count == 0)
 			break;
 
-		for (res = 0; res < rstat.count; res++) {
+		for (i = 0; i < rstat.count; i++) {
 			if (all != 0 ||
-			    type == rstat.source[res].type)
+			    type == rstat.source[i].type)
 				printf("%-16s %10u %-4s %s\n",
-				    rstat.source[res].name,
-				    rstat.source[res].total,
-				    find_name(rstat.source[res].type),
-				    strflags(rstat.source[res].flags));
+				    rstat.source[i].name,
+				    rstat.source[i].total,
+				    find_name(rstat.source[i].type),
+				    strflags(rstat.source[i].flags));
 		}
 		start += rstat.count;
 	}
@@ -256,7 +257,7 @@ main(int argc, char **argv)
 	sflag = 0;
 	type = 0xff;
 
-	while ((ch = getopt(argc, argv, "CEcelt:d:s")) != -1)
+	while ((ch = getopt(argc, argv, "CEcelt:d:s")) != -1) {
 		switch (ch) {
 		case 'C':
 			rctl.flags |= RND_FLAG_NO_COLLECT;
@@ -303,6 +304,15 @@ main(int argc, char **argv)
 		default:
 			usage();
 		}
+	}
+	argc -= optind;
+	argv += optind;
+
+	/*
+	 * No leftover non-option arguments.
+	 */
+	if (argc > 0)
+		usage();
 
 	/*
 	 * Cannot list and modify at the same time.

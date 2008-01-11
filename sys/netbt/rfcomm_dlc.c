@@ -1,4 +1,4 @@
-/*	$NetBSD: rfcomm_dlc.c,v 1.4 2007/11/03 17:20:17 plunky Exp $	*/
+/*	$NetBSD: rfcomm_dlc.c,v 1.6 2008/08/06 15:01:24 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,12 +32,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rfcomm_dlc.c,v 1.4 2007/11/03 17:20:17 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rfcomm_dlc.c,v 1.6 2008/08/06 15:01:24 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/mbuf.h>
 #include <sys/proc.h>
+#include <sys/socketvar.h>
 #include <sys/systm.h>
 
 #include <netbt/bluetooth.h>
@@ -195,9 +196,8 @@ void
 rfcomm_dlc_timeout(void *arg)
 {
 	struct rfcomm_dlc *dlc = arg;
-	int s;
 
-	s = splsoftnet();
+	mutex_enter(bt_lock);
 	callout_ack(&dlc->rd_timeout);
 
 	if (dlc->rd_state != RFCOMM_DLC_CLOSED)
@@ -207,7 +207,7 @@ rfcomm_dlc_timeout(void *arg)
 		free(dlc, M_BLUETOOTH);
 	}
 
-	splx(s);
+	mutex_exit(bt_lock);
 }
 
 /*
@@ -220,7 +220,8 @@ rfcomm_dlc_timeout(void *arg)
 int
 rfcomm_dlc_setmode(struct rfcomm_dlc *dlc)
 {
-	int mode = 0;
+	struct sockopt sopt;
+	int mode = 0, err;
 
 	KASSERT(dlc->rd_session != NULL);
 	KASSERT(dlc->rd_session->rs_state == RFCOMM_SESSION_OPEN);
@@ -239,7 +240,12 @@ rfcomm_dlc_setmode(struct rfcomm_dlc *dlc)
 	if (dlc->rd_mode & RFCOMM_LM_SECURE)
 		mode |= L2CAP_LM_SECURE;
 
-	return l2cap_setopt(dlc->rd_session->rs_l2cap, SO_L2CAP_LM, &mode);
+	sockopt_init(&sopt, BTPROTO_L2CAP, SO_L2CAP_LM, 0);
+	sockopt_setint(&sopt, mode);
+	err = l2cap_setopt(dlc->rd_session->rs_l2cap, &sopt);
+	sockopt_destroy(&sopt);
+
+	return err;
 }
 
 /*

@@ -1,7 +1,6 @@
-/*	$NetBSD: natm_pcb.c,v 1.9 2005/12/11 12:25:16 christos Exp $	*/
+/*	$NetBSD: natm_pcb.c,v 1.14 2011/02/01 19:40:24 chuck Exp $	*/
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: natm_pcb.c,v 1.9 2005/12/11 12:25:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: natm_pcb.c,v 1.14 2011/02/01 19:40:24 chuck Exp $");
 
 #include "opt_ddb.h"
 
@@ -70,14 +63,14 @@ int wait;
 {
   struct natmpcb *npcb;
 
-  MALLOC(npcb, struct natmpcb *, sizeof(*npcb), M_PCB, wait);
+  npcb = malloc(sizeof(*npcb), M_PCB, wait);
 
 #ifdef DIAGNOSTIC
   if (wait == M_WAITOK && npcb == NULL) panic("npcb_alloc: malloc didn't wait");
 #endif
 
   if (npcb) {
-    bzero(npcb, sizeof(*npcb));
+    memset(npcb, 0, sizeof(*npcb));
     npcb->npcb_flags = NPCB_FREE;
   }
   return(npcb);
@@ -104,7 +97,7 @@ int op;
     if (npcb->npcb_inq) {
       npcb->npcb_flags = NPCB_DRAIN;	/* flag for distruction */
     } else {
-      FREE(npcb, M_PCB);		/* kill it! */
+      free(npcb, M_PCB);		/* kill it! */
     }
   }
 
@@ -177,9 +170,9 @@ done:
 
 #ifdef DDB
 
-int npcb_dump __P((void));
+int npcb_dump(void);
 
-int npcb_dump()
+int npcb_dump(void)
 
 {
   struct natmpcb *cpcb;

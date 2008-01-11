@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_usrreq.c,v 1.33 2007/05/06 06:21:26 dyoung Exp $	*/
+/*	$NetBSD: raw_usrreq.c,v 1.36 2011/01/11 10:52:42 pooka Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.33 2007/05/06 06:21:26 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.36 2011/01/11 10:52:42 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -51,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.33 2007/05/06 06:21:26 dyoung Exp $
 #include <net/raw_cb.h>
 
 #include <machine/stdarg.h>
+
 /*
  * Initialize raw connection block q.
  */
@@ -80,11 +81,12 @@ raw_input(struct mbuf *m0, ...)
 {
 	struct rawcb *rp;
 	struct mbuf *m = m0;
-	int sockets = 0;
 	struct socket *last;
 	va_list ap;
 	struct sockproto *proto;
 	struct sockaddr *src, *dst;
+
+	KASSERT(mutex_owned(softnet_lock));
 
 	va_start(ap, m0);
 	proto = va_arg(ap, struct sockproto *);
@@ -120,7 +122,6 @@ raw_input(struct mbuf *m0, ...)
 				m_freem(n);
 			else {
 				sorwakeup(last);
-				sockets++;
 			}
 		}
 		last = rp->rcb_socket;
@@ -129,7 +130,6 @@ raw_input(struct mbuf *m0, ...)
 		m_freem(m);
 	else {
 		sorwakeup(last);
-		sockets++;
 	}
 }
 
@@ -173,6 +173,7 @@ raw_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		return (EOPNOTSUPP);
 
 	s = splsoftnet();
+	KERNEL_LOCK(1, NULL);
 	rp = sotorawcb(so);
 #ifdef DIAGNOSTIC
 	if (req != PRU_SEND && req != PRU_SENDOOB && control)
@@ -191,6 +192,7 @@ raw_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	 * the appropriate raw interface routine.
 	 */
 	case PRU_ATTACH:
+		sosetlock(so);
 		if (l == NULL)
 			break;
 
@@ -274,7 +276,8 @@ raw_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		/*
 		 * stat: don't bother with a blocksize.
 		 */
-		return (0);
+		error = 0;
+		break;
 
 	/*
 	 * Not supported.
@@ -310,6 +313,7 @@ raw_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	}
 
 release:
+	KERNEL_UNLOCK_ONE(NULL);
 	splx(s);
 	return (error);
 }

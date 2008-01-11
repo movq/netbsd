@@ -1,4 +1,4 @@
-/* $NetBSD: exec.c,v 1.3 2006/09/21 10:06:36 kochi Exp $ */
+/* $NetBSD: exec.c,v 1.5 2009/03/18 16:00:12 cegger Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -165,7 +158,7 @@ elf64_exec(struct preloaded_file *fp)
 	 * special page reserved in the link map.
 	 */
 	bi = &bootinfo;
-	bzero(bi, sizeof(struct bootinfo));
+	memset(bi, 0, sizeof(struct bootinfo));
 	bi_load(bi, fp);
 
 	/*
@@ -177,7 +170,7 @@ elf64_exec(struct preloaded_file *fp)
 	ia64_set_rr(IA64_RR_BASE(6), (6 << 8) | (28 << 2));
 	ia64_set_rr(IA64_RR_BASE(7), (7 << 8) | (28 << 2));
 
-	bzero(&pte, sizeof(pte));
+	memset(&pte, 0, sizeof(pte));
 	pte.pte_p = 1;
 	pte.pte_ma = PTE_MA_WB;
 	pte.pte_a = 1;

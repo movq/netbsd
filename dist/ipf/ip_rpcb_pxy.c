@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_rpcb_pxy.c,v 1.1.1.5 2007/04/14 20:17:24 martin Exp $	*/
+/*	$NetBSD: ip_rpcb_pxy.c,v 1.1.1.7 2009/08/19 08:28:50 darrenr Exp $	*/
 
 /*
  * Copyright (C) 2002-2003 by Ryan Beasley <ryanb@goddamnbastard.org>
@@ -39,7 +39,7 @@
  *   o The enclosed hack of STREAMS support is pretty sick and most likely
  *     broken.
  *
- *	Id: ip_rpcb_pxy.c,v 2.25.2.6 2007/01/17 11:34:54 darrenr Exp
+ *	Id: ip_rpcb_pxy.c,v 2.25.2.12 2008/11/06 21:18:36 darrenr Exp
  */
 
 #define	IPF_RPCB_PROXY
@@ -292,6 +292,7 @@ ippr_rpcb_out(fin, aps, nat)
 
 	/* Perform basic variable initialization. */
 	rs = (rpcb_session_t *)aps->aps_data;
+	rx = NULL;
 
 	m = fin->fin_m;
 	off = (char *)fin->fin_dp - (char *)fin->fin_ip;
@@ -917,14 +918,14 @@ ippr_rpcb_decoderep(fin, nat, rs, rm, rxp)
 		/* There must be only one 4 byte argument. */
 		if (!RPCB_BUF_EQ(rm, p, 4))
 			return(-1);
-		
+
 		rr->rr_v2 = p;
 		xdr = B(rr->rr_v2);
-		
+
 		/* Reply w/ a 0 port indicates service isn't registered */
 		if (xdr == 0)
 			return(0);
-		
+
 		/* Is the value sane? */
 		if (xdr > 65535)
 			return(-1);
@@ -1123,7 +1124,7 @@ ippr_rpcb_getproto(rm, xp, p)
 	else {
 		return(-1);
 	}
-	
+
 	/* Advance past the string. */
 	(*p)++;
 
@@ -1160,8 +1161,6 @@ ippr_rpcb_getnat(fin, nat, proto, port)
 
 	/* Generate dummy fr_info */
 	bcopy((char *)fin, (char *)&fi, sizeof(fi));
-	fi.fin_state = NULL;
-	fi.fin_nat = NULL;
 	fi.fin_out = 0;
 	fi.fin_src = fin->fin_dst;
 	fi.fin_dst = nat->nat_outip;
@@ -1242,8 +1241,10 @@ ippr_rpcb_getnat(fin, nat, proto, port)
 		*ipn->in_plabel = '\0';
 
 		/* Create NAT entry.  return NULL if this fails. */
+		MUTEX_ENTER(&ipf_nat_new);
 		natl = nat_new(&fi, ipn, NULL, nflags|SI_CLONE|NAT_SLAVE,
 			       NAT_INBOUND);
+		MUTEX_EXIT(&ipf_nat_new);
 
 		bcopy((char *)&ipnat, (char *)ipn, sizeof(ipnat));
 
@@ -1254,14 +1255,15 @@ ippr_rpcb_getnat(fin, nat, proto, port)
 
 		ipn->in_use++;
 		(void) nat_proto(&fi, natl, nflags);
-		nat_update(&fi, natl, natl->nat_ptr);
+		MUTEX_ENTER(&natl->nat_lock);
+		nat_update(&fi, natl);
+		MUTEX_EXIT(&natl->nat_lock);
 	}
 	MUTEX_DOWNGRADE(&ipf_nat);
 
 	if (is == NULL) {
 		/* Create state entry.  Return NULL if this fails. */
 		fi.fin_dst = nat->nat_inip;
-		fi.fin_nat = (void *)natl;
 		fi.fin_flx |= FI_NATED;
 		fi.fin_flx &= ~FI_STATE;
 		nflags &= NAT_TCPUDP;
@@ -1277,8 +1279,6 @@ ippr_rpcb_getnat(fin, nat, proto, port)
 			 */
 			return(-1);
 		}
-		if (fi.fin_state != NULL)
-			fr_statederef((ipstate_t **)&fi.fin_state);
 	}
 
 	return(0);
@@ -1337,7 +1337,7 @@ ippr_rpcb_modv3(fin, nat, rm, m, off)
 
 	/* Write new string. */
 	COPYBACK(m, off, xlen, uaddr);
-	
+
 	/* Determine difference in data lengths. */
 	diff = xlen - XDRALIGN(B(rr->rr_v3.xu_xslen));
 

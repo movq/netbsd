@@ -1,4 +1,4 @@
-/*	$NetBSD: mopchk.c,v 1.10 2003/04/20 00:19:56 christos Exp $	*/
+/*	$NetBSD: mopchk.c,v 1.12 2009/10/20 00:51:13 snj Exp $	*/
 
 /*
  * Copyright (c) 1995-96 Mats O Jansson.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopchk.c,v 1.10 2003/04/20 00:19:56 christos Exp $");
+__RCSID("$NetBSD: mopchk.c,v 1.12 2009/10/20 00:51:13 snj Exp $");
 #endif
 
 /*
@@ -73,7 +68,7 @@ main(argc, argv)
 	int     op, i;
 	char   *filename;
 	struct if_info *ii;
-	int	err;
+	int	error;
 
 	mopInteractive = 1;
 
@@ -126,17 +121,17 @@ main(argc, argv)
 		if (dl.ldfd == -1)
 			printf("Unknown file.\n");
 		else {
-			if ((err = CheckElfFile(dl.ldfd)) == 0) {
+			if ((error = CheckElfFile(dl.ldfd)) == 0) {
 				if (GetElfFileInfo(&dl) < 0) {
 					printf(
 					"Some failure in GetElfFileInfo\n");
 				}
-			} else if ((err = CheckAOutFile(dl.ldfd)) == 0) {
+			} else if ((error = CheckAOutFile(dl.ldfd)) == 0) {
 				if (GetAOutFileInfo(&dl) < 0) {
 					printf(
 					"Some failure in GetAOutFileInfo\n");
 				}
-			} else if ((err = CheckMopFile(dl.ldfd)) == 0) {
+			} else if ((error = CheckMopFile(dl.ldfd)) == 0) {
 				if (GetMopFileInfo(&dl) < 0) {
 					printf(
 					    "Some failure in GetMopFileInfo\n");

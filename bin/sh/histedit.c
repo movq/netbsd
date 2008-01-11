@@ -1,4 +1,4 @@
-/*	$NetBSD: histedit.c,v 1.40 2006/10/16 00:36:19 christos Exp $	*/
+/*	$NetBSD: histedit.c,v 1.42 2011/01/07 22:21:56 jmmv Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)histedit.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: histedit.c,v 1.40 2006/10/16 00:36:19 christos Exp $");
+__RCSID("$NetBSD: histedit.c,v 1.42 2011/01/07 22:21:56 jmmv Exp $");
 #endif
 #endif /* not lint */
 
@@ -149,13 +149,13 @@ bad:
 			INTON;
 		}
 		if (el) {
+			el_source(el, NULL);
 			if (Vflag)
 				el_set(el, EL_EDITOR, "vi");
 			else if (Eflag)
 				el_set(el, EL_EDITOR, "emacs");
 			el_set(el, EL_BIND, "^I", 
 			    tabcomplete ? "rl-complete" : "ed-insert", NULL);
-			el_source(el, NULL);
 		}
 	} else {
 		INTOFF;
@@ -183,6 +183,7 @@ sethistsize(const char *hs)
 		   (histsize = atoi(hs)) < 0)
 			histsize = 100;
 		history(hist, &he, H_SETSIZE, histsize);
+		history(hist, &he, H_SETUNIQUE, 1);
 	}
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: OsdMisc.c,v 1.5 2006/11/16 01:32:47 christos Exp $	*/
+/*	$NetBSD: OsdMisc.c,v 1.11 2011/02/17 12:08:46 jruoho Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: OsdMisc.c,v 1.5 2006/11/16 01:32:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: OsdMisc.c,v 1.11 2011/02/17 12:08:46 jruoho Exp $");
 
 #include "opt_acpi.h"
 #include "opt_ddb.h"
@@ -58,24 +58,9 @@ __KERNEL_RCSID(0, "$NetBSD: OsdMisc.c,v 1.5 2006/11/16 01:32:47 christos Exp $")
 #include <dev/acpi/acpica.h>
 #include <dev/acpi/acpi_osd.h>
 
-#include <dist/acpica/acdebug.h>
-/*
- * for debugging DSDT (try this at your own risk!):
- *
- * 1. dump your raw DSDT (with acpidump(*1) etc.)
- * 2. disassemble with iasl -d (*2)
- * 3. modify the ASL file
- * 4. compile it with iasl -tc
- * 5. copy *.hex to src/sys/dev/acpi/acpica/Osd/dsdt.hex
- *    -or-
- *    options ACPI_DSDT_FILE="\"yourdsdt.hex\"" in
- *    your config file and yourdsdt.hex in the build directory
- * 6. options ACPI_DSDT_OVERRIDE in your kernel config file
- *    and rebuild the kernel
- *
- * (*1) /usr/pkgsrc/sysutils/acpidump
- * (*2) /usr/pkgsrc/sysutils/acpi-iasl
- */
+#ifdef ACPI_DEBUG
+#include <external/bsd/acpica/dist/include/acdebug.h>
+#endif
 
 #ifdef ACPI_DSDT_OVERRIDE
 #ifndef ACPI_DSDT_FILE
@@ -92,7 +77,7 @@ int acpi_indebugger;
  *	Break to the debugger or display a breakpoint message.
  */
 ACPI_STATUS
-AcpiOsSignal(UINT32 Function, const void *Info)
+AcpiOsSignal(UINT32 Function, void *Info)
 {
 	/*
 	 * the upper layer might call with Info = NULL,
@@ -104,7 +89,7 @@ AcpiOsSignal(UINT32 Function, const void *Info)
 	switch (Function) {
 	case ACPI_SIGNAL_FATAL:
 	    {
-		const ACPI_SIGNAL_FATAL_INFO *info = Info;
+		ACPI_SIGNAL_FATAL_INFO *info = Info;
 
 		panic("ACPI fatal signal: "
 		    "Type 0x%08x, Code 0x%08x, Argument 0x%08x",
@@ -115,14 +100,16 @@ AcpiOsSignal(UINT32 Function, const void *Info)
 
 	case ACPI_SIGNAL_BREAKPOINT:
 	    {
-		const char *info = Info;
+#ifdef ACPI_BREAKPOINT
+		char *info = Info;
 
 		printf("%s\n", info);
-#if defined(DDB)
+#  if defined(DDB)
 		Debugger();
-#else
+#  else
 		printf("ACPI: WARNING: DDB not configured into kernel.\n");
 		return AE_NOT_EXIST;
+#  endif
 #endif
 		break;
 	    }

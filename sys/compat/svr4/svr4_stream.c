@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_stream.c,v 1.74 2008/01/05 19:14:08 dsl Exp $	 */
+/*	$NetBSD: svr4_stream.c,v 1.78 2010/11/19 06:44:38 dholland Exp $	 */
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_stream.c,v 1.74 2008/01/05 19:14:08 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_stream.c,v 1.78 2010/11/19 06:44:38 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -126,7 +119,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_stream.c,v 1.74 2008/01/05 19:14:08 dsl Exp $")
 
 /* Utils */
 static int clean_pipe(struct lwp *, const char *);
-static void getparm(struct file *, struct svr4_si_sockparms *);
+static void getparm(file_t *, struct svr4_si_sockparms *);
 
 /* Address Conversions */
 static void sockaddr_to_netaddr_in(struct svr4_strmcmd *,
@@ -139,41 +132,41 @@ static void netaddr_to_sockaddr_un(struct sockaddr_un *,
 					const struct svr4_strmcmd *);
 
 /* stream ioctls */
-static int i_nread(struct file *, struct lwp *, register_t *, int,
+static int i_nread(file_t *, struct lwp *, register_t *, int,
     u_long, void *);
-static int i_fdinsert(struct file *, struct lwp *, register_t *, int,
+static int i_fdinsert(file_t *, struct lwp *, register_t *, int,
     u_long, void *);
-static int i_str(struct file *, struct lwp *, register_t *, int,
+static int i_str(file_t *, struct lwp *, register_t *, int,
     u_long, void *);
-static int i_setsig(struct file *, struct lwp *, register_t *, int,
+static int i_setsig(file_t *, struct lwp *, register_t *, int,
     u_long, void *);
-static int i_getsig(struct file *, struct lwp *, register_t *, int,
+static int i_getsig(file_t *, struct lwp *, register_t *, int,
     u_long, void *);
-static int _i_bind_rsvd(struct file *, struct lwp *, register_t *, int,
+static int _i_bind_rsvd(file_t *, struct lwp *, register_t *, int,
     u_long, void *);
-static int _i_rele_rsvd(struct file *, struct lwp *, register_t *, int,
+static int _i_rele_rsvd(file_t *, struct lwp *, register_t *, int,
     u_long, void *);
 
 /* i_str sockmod calls */
-static int sockmod(struct file *, int, struct svr4_strioctl *,
+static int sockmod(file_t *, int, struct svr4_strioctl *,
 			      struct lwp *);
-static int si_listen(struct file *, int, struct svr4_strioctl *,
+static int si_listen(file_t *, int, struct svr4_strioctl *,
 			      struct lwp *);
-static int si_ogetudata(struct file *, int, struct svr4_strioctl *,
+static int si_ogetudata(file_t *, int, struct svr4_strioctl *,
 			      struct lwp *);
-static int si_sockparams(struct file *, int, struct svr4_strioctl *,
+static int si_sockparams(file_t *, int, struct svr4_strioctl *,
 			      struct lwp *);
-static int si_shutdown(struct file *, int, struct svr4_strioctl *,
+static int si_shutdown(file_t *, int, struct svr4_strioctl *,
 			      struct lwp *);
-static int si_getudata(struct file *, int, struct svr4_strioctl *,
+static int si_getudata(file_t *, int, struct svr4_strioctl *,
 			      struct lwp *);
 
 /* i_str timod calls */
-static int timod(struct file *, int, struct svr4_strioctl *,
+static int timod(file_t *, int, struct svr4_strioctl *,
 		              struct lwp *);
-static int ti_getinfo(struct file *, int, struct svr4_strioctl *,
+static int ti_getinfo(file_t *, int, struct svr4_strioctl *,
 			      struct lwp *);
-static int ti_bind(struct file *, int, struct svr4_strioctl *,
+static int ti_bind(file_t *, int, struct svr4_strioctl *,
 			      struct lwp *);
 
 #ifdef DEBUG_SVR4
@@ -306,16 +299,22 @@ show_msg(const char *str, int fd, struct svr4_strbuf *ctl, struct svr4_strbuf *d
 static int
 clean_pipe(struct lwp *l, const char *path)
 {
+	struct pathbuf *pb;
 	struct nameidata nd;
 	struct vattr va;
 	int error;
 
-	NDINIT(&nd, DELETE, NOFOLLOW | LOCKPARENT | LOCKLEAF | TRYEMULROOT,
-	    UIO_SYSSPACE, path);
+	pb = pathbuf_create(path);
+	if (pb == NULL) {
+		return ENOMEM;
+	}
 
+	NDINIT(&nd, DELETE, NOFOLLOW | LOCKPARENT | LOCKLEAF | TRYEMULROOT, pb);
 	error = namei(&nd);
-	if (error != 0)
+	if (error != 0) {
+		pathbuf_destroy(pb);
 		return error;
+	}
 
 	/*
 	 * Make sure we are dealing with a mode 0 named pipe.
@@ -328,7 +327,9 @@ clean_pipe(struct lwp *l, const char *path)
 	if ((va.va_mode & ALLPERMS) != 0)
 		goto bad;
 
-	return VOP_REMOVE(nd.ni_dvp, nd.ni_vp, &nd.ni_cnd);
+	error = VOP_REMOVE(nd.ni_dvp, nd.ni_vp, &nd.ni_cnd);
+	pathbuf_destroy(pb);
+	return error;
 
     bad:
 	if (nd.ni_dvp == nd.ni_vp)
@@ -336,6 +337,7 @@ clean_pipe(struct lwp *l, const char *path)
 	else
 		vput(nd.ni_dvp);
 	vput(nd.ni_vp);
+	pathbuf_destroy(pb);
 	return error;
 }
 
@@ -408,7 +410,7 @@ netaddr_to_sockaddr_un(struct sockaddr_un *saun, const struct svr4_strmcmd *sc)
 
 
 static void
-getparm(struct file *fp, struct svr4_si_sockparms *pa)
+getparm(file_t *fp, struct svr4_si_sockparms *pa)
 {
 	struct svr4_strm *st = svr4_stream_get(fp);
 	struct socket *so = (struct socket *) fp->f_data;
@@ -447,7 +449,7 @@ getparm(struct file *fp, struct svr4_si_sockparms *pa)
 
 
 static int
-si_ogetudata(struct file *fp, int fd, struct svr4_strioctl *ioc,
+si_ogetudata(file_t *fp, int fd, struct svr4_strioctl *ioc,
     struct lwp *l)
 {
 	int error;
@@ -502,7 +504,7 @@ si_ogetudata(struct file *fp, int fd, struct svr4_strioctl *ioc,
 
 
 static int
-si_sockparams(struct file *fp, int fd, struct svr4_strioctl *ioc,
+si_sockparams(file_t *fp, int fd, struct svr4_strioctl *ioc,
     struct lwp *l)
 {
 	struct svr4_si_sockparms pa;
@@ -513,7 +515,7 @@ si_sockparams(struct file *fp, int fd, struct svr4_strioctl *ioc,
 
 
 static int
-si_listen(struct file *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
+si_listen(file_t *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
 {
 	int error;
 	struct svr4_strm *st = svr4_stream_get(fp);
@@ -577,7 +579,7 @@ si_listen(struct file *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
 
 
 static int
-si_getudata(struct file *fp, int fd, struct svr4_strioctl *ioc,
+si_getudata(file_t *fp, int fd, struct svr4_strioctl *ioc,
     struct lwp *l)
 {
 	int error;
@@ -631,7 +633,7 @@ si_getudata(struct file *fp, int fd, struct svr4_strioctl *ioc,
 
 
 static int
-si_shutdown(struct file *fp, int fd, struct svr4_strioctl *ioc,
+si_shutdown(file_t *fp, int fd, struct svr4_strioctl *ioc,
     struct lwp *l)
 {
 	int error;
@@ -654,7 +656,7 @@ si_shutdown(struct file *fp, int fd, struct svr4_strioctl *ioc,
 
 
 static int
-sockmod(struct file *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
+sockmod(file_t *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
 {
 	switch (ioc->cmd) {
 	case SVR4_SI_OGETUDATA:
@@ -706,7 +708,7 @@ sockmod(struct file *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
 
 
 static int
-ti_getinfo(struct file *fp, int fd, struct svr4_strioctl *ioc,
+ti_getinfo(file_t *fp, int fd, struct svr4_strioctl *ioc,
     struct lwp *l)
 {
 	int error;
@@ -744,7 +746,7 @@ ti_getinfo(struct file *fp, int fd, struct svr4_strioctl *ioc,
 
 
 static int
-ti_bind(struct file *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
+ti_bind(file_t *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
 {
 	int error;
 	struct svr4_strm *st = svr4_stream_get(fp);
@@ -843,7 +845,7 @@ reply:
 
 
 static int
-timod(struct file *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
+timod(file_t *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
 {
 	switch (ioc->cmd) {
 	case SVR4_TI_GETINFO:
@@ -870,7 +872,7 @@ timod(struct file *fp, int fd, struct svr4_strioctl *ioc, struct lwp *l)
 
 
 int
-svr4_stream_ti_ioctl(struct file *fp, struct lwp *l, register_t *retval, int fd, u_long cmd, void *dat)
+svr4_stream_ti_ioctl(file_t *fp, struct lwp *l, register_t *retval, int fd, u_long cmd, void *dat)
 {
 	struct svr4_strbuf skb, *sub = (struct svr4_strbuf *) dat;
 	struct svr4_strm *st = svr4_stream_get(fp);
@@ -954,7 +956,7 @@ svr4_stream_ti_ioctl(struct file *fp, struct lwp *l, register_t *retval, int fd,
 
 
 static int
-i_nread(struct file *fp, struct lwp *l, register_t *retval, int fd,
+i_nread(file_t *fp, struct lwp *l, register_t *retval, int fd,
     u_long cmd, void *dat)
 {
 	int error;
@@ -967,8 +969,7 @@ i_nread(struct file *fp, struct lwp *l, register_t *retval, int fd,
 	 * for us, and if we do, then we assume that we have at least one
 	 * message waiting for us.
 	 */
-	if ((error = (*fp->f_ops->fo_ioctl)(fp, FIONREAD,
-	    (void *) &nread, l)) != 0)
+	if ((error = (*fp->f_ops->fo_ioctl)(fp, FIONREAD, &nread)) != 0)
 		return error;
 
 	if (nread != 0)
@@ -980,7 +981,7 @@ i_nread(struct file *fp, struct lwp *l, register_t *retval, int fd,
 }
 
 static int
-i_fdinsert(struct file *fp, struct lwp *l, register_t *retval, int fd,
+i_fdinsert(file_t *fp, struct lwp *l, register_t *retval, int fd,
     u_long cmd, void *dat)
 {
 	/*
@@ -1037,7 +1038,7 @@ i_fdinsert(struct file *fp, struct lwp *l, register_t *retval, int fd,
 
 
 static int
-_i_bind_rsvd(struct file *fp, struct lwp *l, register_t *retval,
+_i_bind_rsvd(file_t *fp, struct lwp *l, register_t *retval,
     int fd, u_long cmd, void *dat)
 {
 	struct sys_mkfifo_args ap;
@@ -1056,7 +1057,7 @@ _i_bind_rsvd(struct file *fp, struct lwp *l, register_t *retval,
 }
 
 static int
-_i_rele_rsvd(struct file *fp, struct lwp *l, register_t *retval,
+_i_rele_rsvd(file_t *fp, struct lwp *l, register_t *retval,
     int fd, u_long cmd, void *dat)
 {
 	struct sys_unlink_args ap;
@@ -1071,7 +1072,7 @@ _i_rele_rsvd(struct file *fp, struct lwp *l, register_t *retval,
 }
 
 static int
-i_str(struct file *fp, struct lwp *l, register_t *retval, int fd,
+i_str(file_t *fp, struct lwp *l, register_t *retval, int fd,
     u_long cmd, void *dat)
 {
 	int			 error;
@@ -1116,7 +1117,7 @@ i_str(struct file *fp, struct lwp *l, register_t *retval, int fd,
 }
 
 static int
-i_setsig(struct file *fp, struct lwp *l, register_t *retval, int fd,
+i_setsig(file_t *fp, struct lwp *l, register_t *retval, int fd,
     u_long cmd, void *dat)
 {
 	/*
@@ -1178,7 +1179,7 @@ i_setsig(struct file *fp, struct lwp *l, register_t *retval, int fd,
 }
 
 static int
-i_getsig(struct file *fp, struct lwp *l, register_t *retval,
+i_getsig(file_t *fp, struct lwp *l, register_t *retval,
     int fd, u_long cmd, void *dat)
 {
 	int error;
@@ -1200,7 +1201,7 @@ i_getsig(struct file *fp, struct lwp *l, register_t *retval,
 }
 
 int
-svr4_stream_ioctl(struct file *fp, struct lwp *l, register_t *retval, int fd, u_long cmd, void *dat)
+svr4_stream_ioctl(file_t *fp, struct lwp *l, register_t *retval, int fd, u_long cmd, void *dat)
 {
 	*retval = 0;
 
@@ -1372,8 +1373,7 @@ int
 svr4_sys_putmsg(struct lwp *l, const struct svr4_sys_putmsg_args *uap, register_t *retval)
 {
 	struct proc *p = l->l_proc;
-	struct filedesc	*fdp = p->p_fd;
-	struct file	*fp;
+	file_t	*fp;
 	struct svr4_strbuf dat, ctl;
 	struct svr4_strmcmd sc;
 	struct sockaddr_in sain;
@@ -1392,10 +1392,10 @@ svr4_sys_putmsg(struct lwp *l, const struct svr4_sys_putmsg_args *uap, register_
 		 SCARG(uap, dat), SCARG(uap, flags));
 #endif /* DEBUG_SVR4 */
 
-	if ((fp = fd_getfile(fdp, SCARG(uap, fd))) == NULL)
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
 		return EBADF;
 
-	FILE_USE(fp);
+	KERNEL_LOCK(1, NULL);	/* svr4_find_socket */
 
 	if (SCARG_PTR(uap, ctl) != NULL) {
 		if ((error = copyin(SCARG_PTR(uap, ctl),
@@ -1501,9 +1501,11 @@ svr4_sys_putmsg(struct lwp *l, const struct svr4_sys_putmsg_args *uap, register_
 
  	switch (st->s_cmd = sc.cmd) {
 	case SVR4_TI_CONNECT_REQUEST:	/* connect 	*/
+	 	KERNEL_UNLOCK_ONE(NULL);
 		return do_sys_connect(l, SCARG(uap, fd), nam);
 
 	case SVR4_TI_SENDTO_REQUEST:	/* sendto 	*/
+	 	KERNEL_UNLOCK_ONE(NULL);
 		msg.msg_name = nam;
 		msg.msg_namelen = sasize;
 		msg.msg_iov = &aiov;
@@ -1526,7 +1528,8 @@ svr4_sys_putmsg(struct lwp *l, const struct svr4_sys_putmsg_args *uap, register_
 	}
 
  out:
- 	FILE_UNUSE(fp, l);
+ 	KERNEL_UNLOCK_ONE(NULL);
+ 	fd_putfile(SCARG(uap, fd));
  	return error;
 }
 
@@ -1534,9 +1537,7 @@ svr4_sys_putmsg(struct lwp *l, const struct svr4_sys_putmsg_args *uap, register_
 int
 svr4_sys_getmsg(struct lwp *l, const struct svr4_sys_getmsg_args *uap, register_t *retval)
 {
-	struct proc *p = l->l_proc;
-	struct filedesc	*fdp = p->p_fd;
-	struct file	*fp;
+	file_t *fp;
 	struct svr4_strbuf dat, ctl;
 	struct svr4_strmcmd sc;
 	int error = 0;
@@ -1553,10 +1554,8 @@ svr4_sys_getmsg(struct lwp *l, const struct svr4_sys_getmsg_args *uap, register_
 		 SCARG(uap, dat), 0);
 #endif /* DEBUG_SVR4 */
 
-	if ((fp = fd_getfile(fdp, SCARG(uap, fd))) == NULL)
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL)
 		return EBADF;
-
-	FILE_USE(fp);
 
 	if (SCARG_PTR(uap, ctl) != NULL) {
 		if ((error = copyin(SCARG_PTR(uap, ctl), &ctl,
@@ -1846,6 +1845,6 @@ svr4_sys_getmsg(struct lwp *l, const struct svr4_sys_getmsg_args *uap, register_
 #endif /* DEBUG_SVR4 */
 
  out:
- 	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, fd));
 	return error;
 }

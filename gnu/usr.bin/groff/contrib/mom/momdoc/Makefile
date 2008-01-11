@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2006/02/06 18:29:48 wiz Exp $
+# $NetBSD: Makefile,v 1.3 2010/01/26 15:11:56 wiz Exp $
 
 DIST_SUBDIR=    contrib/mom/momdoc
 

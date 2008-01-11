@@ -1,9 +1,11 @@
-/*	$NetBSD: ip_htable.c,v 1.8 2007/12/11 04:55:01 lukem Exp $	*/
+/*	$NetBSD: ip_htable.c,v 1.10 2009/08/19 08:36:11 darrenr Exp $	*/
 
 /*
  * Copyright (C) 1993-2001, 2003 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
+ *
+ * Copyright 2008 Sun Microsystems, Inc.
  */
 #if defined(KERNEL) || defined(_KERNEL)
 # undef KERNEL
@@ -60,9 +62,9 @@ struct file;
 #if !defined(lint)
 #if defined(__NetBSD__)
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_htable.c,v 1.8 2007/12/11 04:55:01 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_htable.c,v 1.10 2009/08/19 08:36:11 darrenr Exp $");
 #else
-static const char rcsid[] = "@(#)Id: ip_htable.c,v 2.34.2.9 2007/02/02 23:06:16 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ip_htable.c,v 2.34.2.13 2009/05/13 19:13:36 darrenr Exp";
 #endif
 #endif
 
@@ -114,31 +116,29 @@ iplookupop_t *op;
 	int err, i, unit;
 
 	unit = op->iplo_unit;
-	if ((op->iplo_arg & IPHASH_ANON) == 0)
+	if ((op->iplo_arg & IPHASH_ANON) == 0) {
 		iph = fr_existshtable(unit, op->iplo_name);
-	else
-		iph = NULL;
+		if (iph != NULL) {
+			if ((iph->iph_flags & IPHASH_DELETE) == 0)
+				return EEXIST;
+			iph->iph_flags &= ~IPHASH_DELETE;
+			return 0;
+		}
+	}
 
+	KMALLOC(iph, iphtable_t *);
 	if (iph == NULL) {
-		KMALLOC(iph, iphtable_t *);
-		if (iph == NULL) {
-			ipht_nomem[op->iplo_unit]++;
-			return ENOMEM;
-		}
-		err = COPYIN(op->iplo_struct, iph, sizeof(*iph));
-		if (err != 0) {
-			KFREE(iph);
-			return EFAULT;
-		}
-	} else {
-		if ((iph->iph_flags & IPHASH_DELETE) == 0)
-			return EEXIST;
+		ipht_nomem[op->iplo_unit]++;
+		return ENOMEM;
+	}
+	err = COPYIN(op->iplo_struct, iph, sizeof(*iph));
+	if (err != 0) {
+		KFREE(iph);
+		return EFAULT;
 	}
 
 	if (iph->iph_unit != unit) {
-		if ((iph->iph_flags & IPHASH_DELETE) == 0) {
-			KFREE(iph);
-		}
+		KFREE(iph);
 		return EINVAL;
 	}
 
@@ -163,33 +163,25 @@ iplookupop_t *op;
 		iph->iph_type |= IPHASH_ANON;
 	}
 
-	if ((iph->iph_flags & IPHASH_DELETE) == 0) {
-		KMALLOCS(iph->iph_table, iphtent_t **,
-			 iph->iph_size * sizeof(*iph->iph_table));
-		if (iph->iph_table == NULL) {
-			if ((iph->iph_flags & IPHASH_DELETE) == 0) {
-				KFREE(iph);
-			}
-			ipht_nomem[unit]++;
-			return ENOMEM;
-		}
-
-		bzero((char *)iph->iph_table,
-		      iph->iph_size * sizeof(*iph->iph_table));
-		iph->iph_masks = 0;
-		iph->iph_list = NULL;
-
-		iph->iph_ref = 1;
-		iph->iph_next = ipf_htables[unit];
-		iph->iph_pnext = &ipf_htables[unit];
-		if (ipf_htables[unit] != NULL)
-			ipf_htables[unit]->iph_pnext = &iph->iph_next;
-		ipf_htables[unit] = iph;
-
-		ipf_nhtables[unit]++;
+	KMALLOCS(iph->iph_table, iphtent_t **,
+		 iph->iph_size * sizeof(*iph->iph_table));
+	if (iph->iph_table == NULL) {
+		KFREE(iph);
+		ipht_nomem[unit]++;
+		return ENOMEM;
 	}
 
-	iph->iph_flags &= ~IPHASH_DELETE;
+	bzero((char *)iph->iph_table, iph->iph_size * sizeof(*iph->iph_table));
+	iph->iph_masks = 0;
+	iph->iph_list = NULL;
+
+	iph->iph_ref = 1;
+	iph->iph_next = ipf_htables[unit];
+	iph->iph_pnext = &ipf_htables[unit];
+	if (ipf_htables[unit] != NULL)
+		ipf_htables[unit]->iph_pnext = &iph->iph_next;
+	ipf_htables[unit] = iph;
+	ipf_nhtables[unit]++;
 
 	return 0;
 }
@@ -549,6 +541,12 @@ ipflookupiter_t *ilp;
 
 	READ_ENTER(&ip_poolrw);
 
+	/*
+	 * Get "previous" entry from the token and find the next entry.
+	 *
+	 * If we found an entry, add a reference to it and update the token.
+	 * Otherwise, zero out data to be returned and NULL out token.
+	 */
 	switch (ilp->ili_otype)
 	{
 	case IPFLOOKUPITER_LIST :
@@ -561,11 +559,11 @@ ipflookupiter_t *ilp;
 
 		if (nextiph != NULL) {
 			ATOMIC_INC(nextiph->iph_ref);
-			if (nextiph->iph_next == NULL)
-				token->ipt_alive = 0;
+			token->ipt_data = nextiph;
 		} else {
 			bzero((char *)&zp, sizeof(zp));
 			nextiph = &zp;
+			token->ipt_data = NULL;
 		}
 		break;
 
@@ -584,46 +582,59 @@ ipflookupiter_t *ilp;
 
 		if (nextnode != NULL) {
 			ATOMIC_INC(nextnode->ipe_ref);
-			if (nextnode->ipe_next == NULL)
-				token->ipt_alive = 0;
+			token->ipt_data = nextnode;
 		} else {
 			bzero((char *)&zn, sizeof(zn));
 			nextnode = &zn;
+			token->ipt_data = NULL;
 		}
 		break;
+
 	default :
 		err = EINVAL;
 		break;
 	}
 
+	/*
+	 * Now that we have ref, it's save to give up lock.
+	 */
 	RWLOCK_EXIT(&ip_poolrw);
 	if (err != 0)
 		return err;
 
+	/*
+	 * Copy out data and clean up references and token as needed.
+	 */
 	switch (ilp->ili_otype)
 	{
 	case IPFLOOKUPITER_LIST :
-		if (iph != NULL) {
-			WRITE_ENTER(&ip_poolrw);
-			fr_derefhtable(iph);
-			RWLOCK_EXIT(&ip_poolrw);
-		}
-		token->ipt_data = nextiph;
 		err = COPYOUT(nextiph, ilp->ili_data, sizeof(*nextiph));
 		if (err != 0)
 			err = EFAULT;
+		if (token->ipt_data != NULL) {
+			if (iph != NULL) {
+				WRITE_ENTER(&ip_poolrw);
+				fr_derefhtable(iph);
+				RWLOCK_EXIT(&ip_poolrw);
+			}
+			if (nextiph->iph_next == NULL)
+				token->ipt_data = NULL;
+		}
 		break;
 
 	case IPFLOOKUPITER_NODE :
-		if (node != NULL) {
-			WRITE_ENTER(&ip_poolrw);
-			fr_derefhtent(node);
-			RWLOCK_EXIT(&ip_poolrw);
-		}
-		token->ipt_data = nextnode;
 		err = COPYOUT(nextnode, ilp->ili_data, sizeof(*nextnode));
 		if (err != 0)
 			err = EFAULT;
+		if (token->ipt_data != NULL) {
+			if (node != NULL) {
+				WRITE_ENTER(&ip_poolrw);
+				fr_derefhtent(node);
+				RWLOCK_EXIT(&ip_poolrw);
+			}
+			if (nextnode->ipe_next == NULL)
+				token->ipt_data = NULL;
+		}
 		break;
 	}
 

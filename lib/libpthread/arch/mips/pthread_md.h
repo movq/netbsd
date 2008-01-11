@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_md.h,v 1.6 2005/12/24 21:11:16 perry Exp $	*/
+/*	$NetBSD: pthread_md.h,v 1.9 2011/01/25 19:12:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,10 +32,10 @@
 #ifndef _LIB_PTHREAD_MIPS_MD_H
 #define _LIB_PTHREAD_MIPS_MD_H
 
-static inline long
+static inline unsigned long
 pthread__sp(void)
 {
-	long ret;
+	unsigned long ret;
 
 	__asm("move %0, $sp" : "=r" (ret));
 
@@ -50,64 +43,5 @@ pthread__sp(void)
 }
 
 #define pthread__uc_sp(ucp) ((ucp)->uc_mcontext.__gregs[_REG_SP])
-#define pthread__uc_pc(ucp) ((ucp)->uc_mcontext.__gregs[_REG_EPC])
-
-/*
- * Usable stack space below the ucontext_t.
- *    For a good time, see comments in pthread_switch.S and
- *    ../i386/pthread_switch.S about STACK_SWITCH.
- */
-#define STACKSPACE	(6*4)		/* 6 integer values */
-
-/*
- * Conversions between struct reg and struct mcontext. Used by
- * libpthread_dbg.  Note that in the "reg" structure, the indices
- * are the same as are used in the "frame" structure in the kernel.
- * These do NOT, in all cases, match the indices used in the
- * "mcontext" structure.
- */
-#include <mips/regnum.h>
-
-#define PTHREAD_UCONTEXT_TO_REG(reg, uc)				\
-do {									\
-	memcpy(&(reg)->r_regs[_R_AST], &(uc)->uc_mcontext.__gregs[_REG_AT],\
-	    sizeof(__greg_t) * 31);					\
-	(reg)->r_regs[_R_MULLO] = (uc)->uc_mcontext.__gregs[_REG_MDLO];	\
-	(reg)->r_regs[_R_MULHI] = (uc)->uc_mcontext.__gregs[_REG_MDHI];	\
-	(reg)->r_regs[_R_CAUSE] = (uc)->uc_mcontext.__gregs[_REG_CAUSE];\
-	(reg)->r_regs[_R_PC] = (uc)->uc_mcontext.__gregs[_REG_EPC];	\
-	(reg)->r_regs[_R_SR] = (uc)->uc_mcontext.__gregs[_REG_SR];	\
-} while (/*CONSTCOND*/0)
-
-#define PTHREAD_REG_TO_UCONTEXT(uc, reg)				\
-do {									\
-	memcpy(&(uc)->uc_mcontext.__gregs[_REG_AT], &(reg)->r_regs[_R_AST],\
-	    sizeof(__greg_t) * 31);					\
-	(uc)->uc_mcontext.__gregs[_REG_MDLO] = (reg)->r_regs[_R_MULLO];	\
-	(uc)->uc_mcontext.__gregs[_REG_MDHI] = (reg)->r_regs[_R_MULHI];	\
-	(uc)->uc_mcontext.__gregs[_REG_CAUSE] = (reg)->r_regs[_R_CAUSE];\
-	(uc)->uc_mcontext.__gregs[_REG_EPC] = (reg)->r_regs[_R_PC];	\
-	(uc)->uc_mcontext.__gregs[_REG_SR] = (reg)->r_regs[_R_SR];	\
-									\
-	(uc)->uc_flags = ((uc)->uc_flags | _UC_CPU) & ~_UC_USER;       	\
-} while (/*CONSTCOND*/0)
-
-#define PTHREAD_UCONTEXT_TO_FPREG(freg, uc)       			\
-do {									\
-	memcpy((freg), &(uc)->uc_mcontext.__fpregs.__fp_r.__fp_regs,	\
-	    sizeof((uc)->uc_mcontext.__fpregs.__fp_r.__fp_regs));	\
-	(freg)->r_regs[_R_FSR - _FPBASE] =				\
-	    (uc)->uc_mcontext.__fpregs.__fp_csr;			\
-} while (/*CONSTCOND*/0)
-
-#define PTHREAD_FPREG_TO_UCONTEXT(uc, freg)				\
-do {						       	       		\
-	memcpy(&(uc)->uc_mcontext.__fpregs.__fp_r.__fp_regs, (freg),	\
-	    sizeof((uc)->uc_mcontext.__fpregs.__fp_r.__fp_regs));	\
-	(uc)->uc_mcontext.__fpregs.__fp_csr =				\
-	    (freg)->r_regs[_R_FSR - _FPBASE];				\
-									\
-	(uc)->uc_flags = ((uc)->uc_flags | _UC_FPU) & ~_UC_USER;       	\
-} while (/*CONSTCOND*/0)
 
 #endif /* !_LIB_PTHREAD_MIPS_MD_H */

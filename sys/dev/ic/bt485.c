@@ -1,4 +1,4 @@
-/* $NetBSD: bt485.c,v 1.13 2005/12/11 12:21:26 christos Exp $ */
+/* $NetBSD: bt485.c,v 1.15 2010/11/13 13:52:00 uebayasi Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -32,7 +32,7 @@
   */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bt485.c,v 1.13 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bt485.c,v 1.15 2010/11/13 13:52:00 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,8 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: bt485.c,v 1.13 2005/12/11 12:21:26 christos Exp $");
 #include <sys/buf.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/ic/bt485reg.h>
@@ -180,8 +178,7 @@ bt485_cninit(v, sched_update, wr, rd)
 }
 
 void
-bt485_init(rc)
-	struct ramdac_cookie *rc;
+bt485_init(struct ramdac_cookie *rc)
 {
 	u_int8_t regval;
 	struct bt485data *data = (struct bt485data *)rc;
@@ -251,9 +248,7 @@ bt485_init(rc)
 }
 
 int
-bt485_set_cmap(rc, cmapp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cmap *cmapp;
+bt485_set_cmap(struct ramdac_cookie *rc, struct wsdisplay_cmap *cmapp)
 {
 	struct bt485data *data = (struct bt485data *)rc;
 	u_int count, index;
@@ -285,9 +280,7 @@ bt485_set_cmap(rc, cmapp)
 }
 
 int
-bt485_get_cmap(rc, cmapp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cmap *cmapp;
+bt485_get_cmap(struct ramdac_cookie *rc, struct wsdisplay_cmap *cmapp)
 {
 	struct bt485data *data = (struct bt485data *)rc;
 	u_int count, index;
@@ -309,9 +302,7 @@ bt485_get_cmap(rc, cmapp)
 }
 
 int
-bt485_set_cursor(rc, cursorp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cursor *cursorp;
+bt485_set_cursor(struct ramdac_cookie *rc, struct wsdisplay_cursor *cursorp)
 {
 	struct bt485data *data = (struct bt485data *)rc;
 	u_int count = 0, icount = 0, index = 0, v;
@@ -392,9 +383,7 @@ bt485_set_cursor(rc, cursorp)
 }
 
 int
-bt485_get_cursor(rc, cursorp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_cursor *cursorp;
+bt485_get_cursor(struct ramdac_cookie *rc, struct wsdisplay_cursor *cursorp)
 {
 	struct bt485data *data = (struct bt485data *)rc;
 	int error, count;
@@ -439,9 +428,7 @@ bt485_get_cursor(rc, cursorp)
 }
 
 int
-bt485_set_curpos(rc, curposp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_curpos *curposp;
+bt485_set_curpos(struct ramdac_cookie *rc, struct wsdisplay_curpos *curposp)
 {
 	struct bt485data *data = (struct bt485data *)rc;
 
@@ -452,9 +439,7 @@ bt485_set_curpos(rc, curposp)
 }
 
 int
-bt485_get_curpos(rc, curposp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_curpos *curposp;
+bt485_get_curpos(struct ramdac_cookie *rc, struct wsdisplay_curpos *curposp)
 {
 	struct bt485data *data = (struct bt485data *)rc;
 
@@ -463,9 +448,7 @@ bt485_get_curpos(rc, curposp)
 }
 
 int
-bt485_get_curmax(rc, curposp)
-	struct ramdac_cookie *rc;
-	struct wsdisplay_curpos *curposp;
+bt485_get_curmax(struct ramdac_cookie *rc, struct wsdisplay_curpos *curposp)
 {
 
 	curposp->x = curposp->y = CURSOR_MAX_SIZE;
@@ -479,27 +462,21 @@ bt485_get_curmax(rc, curposp)
  */
 
 inline void
-bt485_wr_i(data, ireg, val)
-	struct bt485data *data;
-	u_int8_t ireg;
-	u_int8_t val;
+bt485_wr_i(struct bt485data *data, u_int8_t ireg, u_int8_t val)
 {
 	data->ramdac_wr(data->cookie, BT485_REG_PCRAM_WRADDR, ireg);
 	data->ramdac_wr(data->cookie, BT485_REG_EXTENDED, val);
 }
 
 inline u_int8_t
-bt485_rd_i(data, ireg)
-	struct bt485data *data;
-	u_int8_t ireg;
+bt485_rd_i(struct bt485data *data, u_int8_t ireg)
 {
 	data->ramdac_wr(data->cookie, BT485_REG_PCRAM_WRADDR, ireg);
 	return (data->ramdac_rd(data->cookie, BT485_REG_EXTENDED));
 }
 
 void
-bt485_update(vp)
-	void *vp;
+bt485_update(void *vp)
 {
 	struct bt485data *data = vp;
 	u_int8_t regval;
@@ -588,8 +565,7 @@ bt485_update(vp)
 }
 
 void
-bt485_update_curpos(data)
-	struct bt485data *data;
+bt485_update_curpos(struct bt485data *data)
 {
 	void *cookie = data->cookie;
 	int s, x, y;

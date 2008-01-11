@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_wait.c,v 1.17 2007/12/20 23:03:02 dsl Exp $	*/
+/*	$NetBSD: netbsd32_wait.c,v 1.21 2009/11/04 21:23:03 rmind Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_wait.c,v 1.17 2007/12/20 23:03:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_wait.c,v 1.21 2009/11/04 21:23:03 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +46,8 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_wait.c,v 1.17 2007/12/20 23:03:02 dsl Exp $
 #include <compat/netbsd32/netbsd32_conv.h>
 
 int
-netbsd32_wait4(struct lwp *l, const struct netbsd32_wait4_args *uap, register_t *retval)
+netbsd32___wait450(struct lwp *l, const struct netbsd32___wait450_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(int) pid;
@@ -56,14 +55,12 @@ netbsd32_wait4(struct lwp *l, const struct netbsd32_wait4_args *uap, register_t 
 		syscallarg(int) options;
 		syscallarg(netbsd32_rusagep_t) rusage;
 	} */
-	int		status, error;
-	int		was_zombie;
-	struct rusage	ru;
-	struct netbsd32_rusage	ru32;
-	int pid = SCARG(uap, pid);
+	int error, status, pid = SCARG(uap, pid);
+	struct netbsd32_rusage ru32;
+	struct rusage ru;
 
-	error = do_sys_wait(l, &pid, &status, SCARG(uap, options),
-	    SCARG_P32(uap, rusage) != NULL ? &ru : NULL, &was_zombie);
+	error = do_sys_wait(&pid, &status, SCARG(uap, options),
+	    SCARG_P32(uap, rusage) != NULL ? &ru : NULL);
 
 	retval[0] = pid;
 	if (pid == 0)
@@ -82,7 +79,8 @@ netbsd32_wait4(struct lwp *l, const struct netbsd32_wait4_args *uap, register_t 
 
 
 int
-netbsd32_getrusage(struct lwp *l, const struct netbsd32_getrusage_args *uap, register_t *retval)
+netbsd32___getrusage50(struct lwp *l,
+    const struct netbsd32___getrusage50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) who;
@@ -96,9 +94,9 @@ netbsd32_getrusage(struct lwp *l, const struct netbsd32_getrusage_args *uap, reg
 
 	case RUSAGE_SELF:
 		rup = &p->p_stats->p_ru;
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 		calcru(p, &rup->ru_utime, &rup->ru_stime, NULL, NULL);
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 		break;
 
 	case RUSAGE_CHILDREN:

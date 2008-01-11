@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_extern.h,v 1.17 2007/09/24 00:42:12 rumble Exp $	*/
+/*	$NetBSD: filecore_extern.h,v 1.20 2011/05/23 22:00:30 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -76,11 +76,6 @@
 #define	FILECOREMNT_ROOT	0
 #endif
 
-#include <sys/mallocvar.h>
-
-MALLOC_DECLARE(M_FILECOREMNT);
-MALLOC_DECLARE(M_FILECORETMP);
-
 struct filecore_mnt {
 	struct mount *fc_mountp;
 	dev_t fc_dev;
@@ -110,13 +105,9 @@ extern struct pool filecore_node_pool;
 
 VFS_PROTOS(filecore);
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_filecore_setup);
-#endif /* SYSCTL_SETUP_PROTO */
+extern int (**filecore_vnodeop_p)(void *);
 
-extern int (**filecore_vnodeop_p) __P((void *));
-
-int filecore_bbchecksum __P((void *));
-int filecore_bread __P((struct filecore_mnt *, u_int32_t, int,
-    kauth_cred_t, struct buf **));
-int filecore_map __P((struct filecore_mnt *, u_int32_t, daddr_t, daddr_t *));
+int filecore_bbchecksum(void *);
+int filecore_bread(struct filecore_mnt *, u_int32_t, int,
+    kauth_cred_t, struct buf **);
+int filecore_map(struct filecore_mnt *, u_int32_t, daddr_t, daddr_t *);

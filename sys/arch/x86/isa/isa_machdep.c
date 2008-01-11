@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.c,v 1.18 2007/10/17 19:58:15 garbled Exp $	*/
+/*	$NetBSD: isa_machdep.c,v 1.28 2009/08/19 15:04:27 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,20 +65,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.18 2007/10/17 19:58:15 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.28 2009/08/19 15:04:27 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/mbuf.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 
-#include <machine/bus.h>
 #include <machine/bus_private.h>
-
 #include <machine/pio.h>
 #include <machine/cpufunc.h>
 
@@ -127,7 +119,7 @@ struct x86_bus_dma_tag isa_bus_dma_tag = {
 };
 
 #define	IDTVEC(name)	__CONCAT(X,name)
-typedef void (vector) __P((void));
+typedef void (vector)(void);
 extern vector *IDTVEC(intr)[];
 
 #define	LEGAL_IRQ(x)	((x) >= 0 && (x) < NUM_LEGACY_IRQS && (x) != 2)
@@ -135,7 +127,6 @@ extern vector *IDTVEC(intr)[];
 int
 isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 {
-	extern kmutex_t x86_intr_lock;
 	int i, tmp, bestirq, count;
 	struct intrhand **p, *q;
 	struct intrsource *isp;
@@ -158,7 +149,7 @@ isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 	 */
 	mask &= 0xefbf;
 
-	mutex_enter(&x86_intr_lock);
+	mutex_enter(&cpu_lock);
 
 	for (i = 0; i < NUM_LEGACY_IRQS; i++) {
 		if (LEGAL_IRQ(i) == 0 || (mask & (1<<i)) == 0)
@@ -169,7 +160,7 @@ isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 			 * if nothing's using the irq, just return it
 			 */
 			*irq = i;
-			mutex_exit(&x86_intr_lock);
+			mutex_exit(&cpu_lock);
 			return (0);
 		}
 
@@ -202,7 +193,7 @@ isa_intr_alloc(isa_chipset_tag_t ic, int mask, int type, int *irq)
 		}
 	}
 
-	mutex_exit(&x86_intr_lock);
+	mutex_exit(&cpu_lock);
 
 	if (bestirq == -1)
 		return (1);
@@ -234,6 +225,7 @@ isa_intr_establish(
 	int pin;
 #if NIOAPIC > 0
 	int mpih;
+	struct ioapic_softc *ioapic;
 #endif
 
 	pin = irq;
@@ -245,20 +237,20 @@ isa_intr_establish(
 		    intr_find_mpmapping(mp_eisa_bus, irq, &mpih) == 0) {
 			if (!APIC_IRQ_ISLEGACY(mpih)) {
 				pin = APIC_IRQ_PIN(mpih);
-				pic = (struct pic *)
-				    ioapic_find(APIC_IRQ_APIC(mpih));
-				if (pic == NULL) {
+				ioapic = ioapic_find(APIC_IRQ_APIC(mpih));
+				if (ioapic == NULL) {
 					printf("isa_intr_establish: "
 					       "unknown apic %d\n",
 					    APIC_IRQ_APIC(mpih));
 					return NULL;
 				}
+				pic = &ioapic->sc_pic;
 			}
 		} else
 			printf("isa_intr_establish: no MP mapping found\n");
 	}
 #endif
-	return intr_establish(irq, pic, pin, type, level, ih_fun, ih_arg);
+	return intr_establish(irq, pic, pin, type, level, ih_fun, ih_arg, false);
 }
 
 /*
@@ -276,7 +268,7 @@ isa_intr_disestablish(isa_chipset_tag_t ic, void *arg)
 }
 
 void
-isa_attach_hook(struct device *parent, struct device *self,
+isa_attach_hook(device_t parent, device_t self,
     struct isabus_attach_args *iba)
 {
 	extern struct x86_isa_chipset x86_isa_chipset;
@@ -298,14 +290,17 @@ isa_attach_hook(struct device *parent, struct device *self,
 	iba->iba_ic = &x86_isa_chipset;
 }
 
+void
+isa_detach_hook(isa_chipset_tag_t ic, device_t self)
+{
+	extern int isa_has_been_seen;
+
+	isa_has_been_seen = 0;
+}
+
 int
-isa_mem_alloc(t, size, align, boundary, flags, addrp, bshp)
-	bus_space_tag_t t;
-	bus_size_t size, align;
-	bus_addr_t boundary;
-	int flags;
-	bus_addr_t *addrp;
-	bus_space_handle_t *bshp;
+isa_mem_alloc(bus_space_tag_t t, bus_size_t size, bus_size_t align,
+		bus_addr_t boundary, int flags, bus_addr_t *addrp, bus_space_handle_t *bshp)
 {
 
 	/*
@@ -316,10 +311,7 @@ isa_mem_alloc(t, size, align, boundary, flags, addrp, bshp)
 }
 
 void
-isa_mem_free(t, bsh, size)
-	bus_space_tag_t t;
-	bus_space_handle_t bsh;
-	bus_size_t size;
+isa_mem_free(bus_space_tag_t t, bus_space_handle_t bsh, bus_size_t size)
 {
 
 	bus_space_free(t, bsh, size);

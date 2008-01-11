@@ -1,6 +1,7 @@
-/*	$NetBSD: machdep.c,v 1.208 2008/01/06 18:50:30 mhitch Exp $	*/
+/*	$NetBSD: machdep.c,v 1.233 2011/05/16 13:22:51 tsutsui Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -37,55 +38,17 @@
  *	@(#)machdep.c	7.16 (Berkeley) 6/3/91
  */
 
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: machdep.c 1.63 91/04/24$
- *
- *	@(#)machdep.c	7.16 (Berkeley) 6/3/91
- */
-
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
 #include "opt_fpu_emulate.h"
 #include "opt_lev6_defer.h"
 #include "opt_m060sp.h"
+#include "opt_modular.h"
 #include "opt_panicbutton.h"
+#include "opt_m68k_arch.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.208 2008/01/06 18:50:30 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.233 2011/05/16 13:22:51 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,7 +63,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.208 2008/01/06 18:50:30 mhitch Exp $")
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/msgbuf.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/device.h>
 #include <sys/queue.h>
@@ -108,6 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.208 2008/01/06 18:50:30 mhitch Exp $")
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 #include <sys/cpu.h>
 #include <sys/exec.h>
 
@@ -129,6 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.208 2008/01/06 18:50:30 mhitch Exp $")
 #include <ddb/db_extern.h>
 
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 #include <machine/kcore.h>
@@ -153,7 +117,6 @@ vm_offset_t reserve_dumppages(vm_offset_t);
 void dumpsys(void);
 void initcpu(void);
 void straytrap(int, u_short);
-static void call_sicallbacks(void);
 void intrhand(int);
 #if NSER > 0
 void ser_outintr(void);
@@ -164,8 +127,6 @@ void fdintr(int);
 
 volatile unsigned int interrupt_depth = 0;
 
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 void *	msgbufaddr;
@@ -174,12 +135,7 @@ paddr_t msgbufpa;
 int	machineid;
 int	maxmem;			/* max memory per process */
 int	physmem = MAXMEM;	/* max supported memory, changes to actual */
-/*
- * extender "register" for software interrupts. Moved here
- * from locore.s, since softints are no longer dealt with
- * in locore.s.
- */
-unsigned char ssir;
+
 /*
  * safepri is a safe priority for sleep to set for a spin-wait
  * during autoconfiguration or after a panic.
@@ -216,7 +172,7 @@ volatile struct drioct *draco_ioct;
  * to choose and initialize a console.
  */
 void
-consinit()
+consinit(void)
 {
 	/* initialize custom chip interface */
 #ifdef DRACO
@@ -230,12 +186,12 @@ consinit()
 	 */
 	cninit();
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	{
 		extern int end[];
 		extern int *esym;
 
-		ksyms_init((int)esym - (int)&end - sizeof(Elf32_Ehdr),
+		ksyms_addsyms_elf((int)esym - (int)&end - sizeof(Elf32_Ehdr),
 		    (void *)&end, esym);
 	}
 #endif
@@ -250,9 +206,8 @@ consinit()
  * initialize CPU, and do autoconfiguration.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
-	char pbuf[9];
 	u_int i;
 #ifdef DEBUG
 	extern int pmapdebug;
@@ -281,23 +236,7 @@ cpu_startup()
 	pmap_update(pmap_kernel());
 	initmsgbuf(msgbufaddr, m68k_round_page(MSGBUFSIZE));
 
-	/*
-	 * Good {morning,afternoon,evening,night}.
-	 */
-	printf("%s%s", copyright, version);
-	identifycpu();
-	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
-	printf("total memory = %s\n", pbuf);
-
-
 	minaddr = 0;
-
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
@@ -306,17 +245,13 @@ cpu_startup()
 				   VM_PHYS_SIZE, 0, false, NULL);
 
 	/*
-	 * Finally, allocate mbuf cluster submap.
+	 * Good {morning,afternoon,evening,night}.
 	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
+	banner();
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
 #endif
-	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
-	printf("avail memory = %s\n", pbuf);
 
 	/*
 	 * display memory configuration passed from loadbsd
@@ -341,46 +276,6 @@ cpu_startup()
 }
 
 /*
- * Set registers on exec.
- */
-void
-setregs(l, pack, stack)
-	struct lwp *l;
-	struct exec_package *pack;
-	u_long stack;
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-#ifdef FPU_EMULATE
-	if (!fputype)
-		bzero(&l->l_addr->u_pcb.pcb_fpregs, sizeof(struct fpframe));
-	else
-#endif
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
-}
-
-/*
  * Info for CTL_HW
  */
 char cpu_model[120];
@@ -391,7 +286,7 @@ int m68060_pcr_init = 0x21;	/* make this patchable */
 
 
 void
-identifycpu()
+identifycpu(void)
 {
         /* there's alot of XXX in here... */
 	const char *mach, *mmu, *fpu;
@@ -415,6 +310,8 @@ identifycpu()
 		mach = "Amiga 3000";
 	else if (is_a1200())
 		mach = "Amiga 1200";
+	else if (is_a600())
+		mach = "Amiga 600";
 	else
 		mach = "Amiga 500/2000";
 
@@ -503,13 +400,13 @@ bootsync(void)
 
 
 void
-cpu_reboot(howto, bootstr)
-	register int howto;
-	char *bootstr;
+cpu_reboot(register int howto, char *bootstr)
 {
+	struct pcb *pcb = lwp_getpcb(curlwp);
+
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	boothowto = howto;
 	if ((howto & RB_NOSYNC) == 0)
@@ -545,17 +442,16 @@ cpu_kcore_hdr_t cpu_kcore_hdr;
 #define MDHDRSIZE roundup(CHDRSIZE, dbtob(1))
 
 void
-cpu_dumpconf()
+cpu_dumpconf(void)
 {
 	cpu_kcore_hdr_t *h = &cpu_kcore_hdr;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
 	const struct bdevsw *bdev;
 	int nblks;
 	int i;
-	extern u_int Sysseg_pa;
 	extern int end[];
 
-	bzero(&cpu_kcore_hdr, sizeof(cpu_kcore_hdr));
+	memset(&cpu_kcore_hdr, 0, sizeof(cpu_kcore_hdr));
 
 	/*
 	 * Intitialize the `dispatcher' portion of the header.
@@ -585,7 +481,7 @@ cpu_dumpconf()
 	/*
 	 * Initialize the pointer to the kernel segment table.
 	 */
-	m->sysseg_pa = Sysseg_pa;
+	m->sysseg_pa = (paddr_t)pmap_kernel()->pm_stpa;
 
 	/*
 	 * Initialize relocation value such that:
@@ -640,15 +536,14 @@ cpu_dumpconf()
 static vm_offset_t dumpspace;
 
 vm_offset_t
-reserve_dumppages(p)
-	vm_offset_t p;
+reserve_dumppages(vm_offset_t p)
 {
 	dumpspace = p;
 	return (p + BYTES_PER_DUMP);
 }
 
 void
-dumpsys()
+dumpsys(void)
 {
 	unsigned bytes, i, n, seg;
 	int     maddr, psize;
@@ -687,7 +582,7 @@ dumpsys()
 	}
 	kseg_p = (kcore_seg_t *)dump_hdr;
 	chdr_p = (cpu_kcore_hdr_t *)&dump_hdr[ALIGN(sizeof(*kseg_p))];
-	bzero(dump_hdr, sizeof(dump_hdr));
+	memset(dump_hdr, 0, sizeof(dump_hdr));
 
 	/*
 	 * Generate a segment header
@@ -712,7 +607,7 @@ dumpsys()
 		/* Print out how many MBs we have to go. */
 		n = bytes - i;
 		if (n && (n % (1024 * 1024)) == 0)
-			printf("%d ", n / (1024 * 1024));
+			printf_nolog("%d ", n / (1024 * 1024));
 
 		/* Limit size for next transfer. */
 		if (n > BYTES_PER_DUMP)
@@ -766,7 +661,7 @@ dumpsys()
 }
 
 void
-initcpu()
+initcpu(void)
 {
 	typedef void trapfun(void);
 
@@ -894,9 +789,7 @@ initcpu()
 }
 
 void
-straytrap(pc, evec)
-	int pc;
-	u_short evec;
+straytrap(int pc, u_short evec)
 {
 	printf("unexpected trap format %x (vector offset %x) from %x\n",
 	       evec>>12, evec & 0xFFF, pc);
@@ -906,8 +799,7 @@ straytrap(pc, evec)
 int	*nofault;
 
 int
-badaddr(addr)
-	register void *addr;
+badaddr(register void *addr)
 {
 	register int i;
 	label_t	faultbuf;
@@ -926,8 +818,7 @@ badaddr(addr)
 }
 
 int
-badbaddr(addr)
-	register void *addr;
+badbaddr(register void *addr)
 {
 	register int i;
 	label_t	faultbuf;
@@ -945,164 +836,6 @@ badbaddr(addr)
 	return(0);
 }
 
-/*
- * this is a handy package to have asynchronously executed
- * function calls executed at very low interrupt priority.
- * Example for use is keyboard repeat, where the repeat
- * handler running at splclock() triggers such a (hardware
- * aided) software interrupt.
- * Note: the installed functions are currently called in a
- * LIFO fashion, might want to change this to FIFO
- * later.
- */
-struct si_callback {
-	struct si_callback *next;
-	void (*function)(void *rock1, void *rock2);
-	void *rock1, *rock2;
-};
-
-struct softintr {
-	int pending;
-	void (*function)(void *);
-	void *arg;
-};
-
-static struct si_callback *si_callbacks;
-static struct si_callback *si_free;
-#ifdef DIAGNOSTIC
-static int ncb;		/* number of callback blocks allocated */
-static int ncbd;	/* number of callback blocks dynamically allocated */
-#endif
-
-void
-alloc_sicallback()
-{
-	struct si_callback *si;
-	int s;
-
-	si = (struct si_callback *)malloc(sizeof(*si), M_TEMP, M_NOWAIT);
-	if (si == NULL)
-		return;
-	s = splhigh();
-	si->next = si_free;
-	si_free = si;
-	splx(s);
-#ifdef DIAGNOSTIC
-	++ncb;
-#endif
-}
-
-void
-add_sicallback (function, rock1, rock2)
-	void (*function)(void *rock1, void *rock2);
-	void *rock1, *rock2;
-{
-	struct si_callback *si;
-	int s;
-
-	/*
-	 * this function may be called from high-priority interrupt handlers.
-	 * We may NOT block for  memory-allocation in here!.
-	 */
-	s = splhigh();
-	si = si_free;
-	if (si != NULL)
-		si_free = si->next;
-	splx(s);
-
-	if (si == NULL) {
-		si = (struct si_callback *)malloc(sizeof(*si), M_TEMP, M_NOWAIT);
-#ifdef DIAGNOSTIC
-		if (si)
-			++ncbd;		/* count # dynamically allocated */
-#endif
-
-		if (!si)
-			return;
-	}
-
-	si->function = function;
-	si->rock1 = rock1;
-	si->rock2 = rock2;
-
-	s = splhigh();
-	si->next = si_callbacks;
-	si_callbacks = si;
-	splx(s);
-
-	/*
-	 * Cause a software interrupt (spl1). This interrupt might
-	 * happen immediately, or after returning to a safe enough level.
-	 */
-	setsoftcback();
-}
-
-
-void
-rem_sicallback(function)
-	void (*function)(void *rock1, void *rock2);
-{
-	struct si_callback *si, *psi, *nsi;
-	int s;
-
-	s = splhigh();
-	for (psi = 0, si = si_callbacks; si; ) {
-		nsi = si->next;
-
-		if (si->function != function)
-			psi = si;
-		else {
-/*			free(si, M_TEMP); */
-			si->next = si_free;
-			si_free = si;
-			if (psi)
-				psi->next = nsi;
-			else
-				si_callbacks = nsi;
-		}
-		si = nsi;
-	}
-	splx(s);
-}
-
-/* purge the list */
-static void
-call_sicallbacks()
-{
-	struct si_callback *si;
-	int s;
-	void *rock1, *rock2;
-	void (*function)(void *, void *);
-
-	do {
-		s = splhigh ();
-		if ((si = si_callbacks) != 0)
-			si_callbacks = si->next;
-		splx(s);
-
-		if (si) {
-			function = si->function;
-			rock1 = si->rock1;
-			rock2 = si->rock2;
-/*			si->function(si->rock1, si->rock2); */
-/*			free(si, M_TEMP); */
-			s = splhigh ();
-			si->next = si_free;
-			si_free = si;
-			splx(s);
-			function (rock1, rock2);
-		}
-	} while (si);
-#ifdef DIAGNOSTIC
-	if (ncbd) {
-		ncb += ncbd;
-		printf("call_sicallback: %d more dynamic structures %d total\n",
-		    ncbd, ncb);
-		ncbd = 0;
-	}
-#endif
-}
-
 struct isr *isr_ports;
 #ifdef DRACO
 struct isr *isr_slot3;
@@ -1111,8 +844,7 @@ struct isr *isr_supio;
 struct isr *isr_exter;
 
 void
-add_isr(isr)
-	struct isr *isr;
+add_isr(struct isr *isr)
 {
 	struct isr **p, *q;
 
@@ -1159,8 +891,7 @@ add_isr(isr)
 }
 
 void
-remove_isr(isr)
-	struct isr *isr;
+remove_isr(struct isr *isr)
 {
 	struct isr **p, *q;
 
@@ -1233,8 +964,7 @@ remove_isr(isr)
 static int idepth;
 
 void
-intrhand(sr)
-	int sr;
+intrhand(int sr)
 {
 	register unsigned int ipl;
 	register unsigned short ireq;
@@ -1274,30 +1004,11 @@ intrhand(sr)
 			custom.intreq = INTF_DSKBLK;
 		}
 		if (ireq & INTF_SOFTINT) {
-			unsigned char ssir_active;
-			int s;
-
-			/*
-			 * first clear the softint-bit
-			 * then process all classes of softints.
-			 * this order is dicated by the nature of
-			 * software interrupts.  The other order
-			 * allows software interrupts to be missed.
-			 * Also copy and clear ssir to prevent
-			 * interrupt loss.
-			 */
-			clrsoftint();
-			s = splhigh();
-			ssir_active = ssir;
-			siroff(SIR_NET | SIR_CBACK);
-			splx(s);
-			if (ssir_active & SIR_CBACK) {
-#ifdef REALLYDEBUG
-				printf("calling softcallbacks\n");
+			/* sicallback handling removed */
+#ifdef DEBUG
+			printf("intrhand: SOFTINT ignored\n");
 #endif
-				uvmexp.softs++;
-				call_sicallbacks();
-			}
+			custom.intreq = INTF_SOFTINT;
 		}
 		break;
 
@@ -1404,7 +1115,7 @@ void candbtimer(void);
 callout_t candbtimer_ch;
 
 void
-candbtimer()
+candbtimer(void)
 {
 	crashandburn = 0;
 }
@@ -1414,8 +1125,7 @@ candbtimer()
 /*
  * Level 7 interrupts can be caused by the keyboard or parity errors.
  */
-nmihand(frame)
-	struct frame frame;
+nmihand(struct frame frame)
 {
 	if (kbdnmi()) {
 #ifdef PANICBUTTON
@@ -1457,9 +1167,7 @@ nmihand(frame)
  * MID and proceed to new zmagic code ;-)
  */
 int
-cpu_exec_aout_makecmds(l, epp)
-	struct lwp *l;
-	struct exec_package *epp;
+cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	int error = ENOEXEC;
 #ifdef COMPAT_NOMID
@@ -1474,7 +1182,14 @@ cpu_exec_aout_makecmds(l, epp)
 	return(error);
 }
 
-#ifdef LKM
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
 
 int _spllkm6(void);
 int _spllkm7(void);
@@ -1505,19 +1220,12 @@ int _spllkm7() {
 int ipl2spl_table[_NIPL] = {
 	[IPL_NONE] = PSL_IPL0|PSL_S,
 	[IPL_SOFTCLOCK] = PSL_IPL1|PSL_S,
-	[IPL_BIO] = PSL_IPL3|PSL_S,
-	[IPL_NET] = PSL_IPL3|PSL_S,
-	[IPL_TTY] = PSL_IPL4|PSL_S,
-	[IPL_SERIAL] = PSL_IPL5|PSL_S,
 	[IPL_VM] = PSL_IPL4|PSL_S,
-	[IPL_SERIAL] = PSL_IPL4|PSL_S,	/* patched by some devices at attach
-					   time (currently, only the coms) */
-	[IPL_AUDIO] = PSL_IPL6|PSL_S,
 #if defined(LEV6_DEFER)
-	[IPL_CLOCK] = PSL_IPL4|PSL_S,
+	[IPL_SCHED] = PSL_IPL4|PSL_S,
 	[IPL_HIGH] = PSL_IPL4|PSL_S,
 #else /* defined(LEV6_DEFER) */
-	[IPL_CLOCK] = PSL_IPL6|PSL_S,
+	[IPL_SCHED] = PSL_IPL6|PSL_S,
 	[IPL_HIGH] = PSL_IPL7|PSL_S,
 #endif /* defined(LEV6_DEFER) */
 };

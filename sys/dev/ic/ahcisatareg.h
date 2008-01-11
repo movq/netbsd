@@ -1,4 +1,4 @@
-/*	$NetBSD: ahcisatareg.h,v 1.3 2007/12/25 18:33:37 perry Exp $	*/
+/*	$NetBSD: ahcisatareg.h,v 1.7 2010/07/20 19:24:11 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,10 +34,9 @@
 /* in-memory structures used by the controller */
 /* physical region descriptor: points to a region of data (max 4MB) */
 struct ahci_dma_prd {
-	u_int32_t prd_dba; /* data base address (64 bits) */
-	u_int32_t prd_dbau;
-	u_int32_t prd_res; /* reserved */
-	u_int32_t prd_dbc; /* data byte count */
+	uint64_t prd_dba; /* data base address */
+	uint32_t prd_res; /* reserved */
+	uint32_t prd_dbc; /* data byte count */
 #define AHCI_PRD_DBC_MASK 0x003fffff
 #define AHCI_PRD_DBC_IPC  0x80000000 /* interrupt on completion */
 } __packed;
@@ -51,9 +45,9 @@ struct ahci_dma_prd {
 
 /* command table: describe a command to send to drive */
 struct ahci_cmd_tbl {
-	u_int8_t cmdt_cfis[64]; /* command FIS */
-	u_int8_t cmdt_acmd[16]; /* ATAPI command */
-	u_int8_t cmdt_res[48]; /* reserved */
+	uint8_t cmdt_cfis[64]; /* command FIS */
+	uint8_t cmdt_acmd[16]; /* ATAPI command */
+	uint8_t cmdt_res[48]; /* reserved */
 	struct ahci_dma_prd cmdt_prd[1]; /* extended to AHCI_NPRD */
 } __packed;
 
@@ -68,7 +62,7 @@ struct ahci_cmd_tbl {
  * of theses.
  */
 struct ahci_cmd_header {
-	u_int16_t cmdh_flags;
+	uint16_t cmdh_flags;
 #define AHCI_CMDH_F_PMP_MASK	0xf000 /* port multiplier port */
 #define AHCI_CMDH_F_PMP_SHIFT	12
 #define AHCI_CMDH_F_CBSY	0x0400 /* clear BSY on R_OK */
@@ -79,23 +73,22 @@ struct ahci_cmd_header {
 #define AHCI_CMDH_F_A		0x0020 /* ATAPI */
 #define AHCI_CMDH_F_CFL_MASK	0x001f /* command FIS length (in dw) */
 #define AHCI_CMDH_F_CFL_SHIFT	0
-	u_int16_t cmdh_prdtl;	/* number of cmdt_prd */
-	u_int32_t cmdh_prdbc;	/* physical region descriptor byte count */
-	u_int32_t cmdh_cmdtba;	/* phys. addr. of cmd_tbl */
-	u_int32_t cmdh_cmdtbau;	/* (64bits, 128bytes aligned) */
-	u_int32_t cmdh_res[4];	/* reserved */
+	uint16_t cmdh_prdtl;	/* number of cmdt_prd */
+	uint32_t cmdh_prdbc;	/* physical region descriptor byte count */
+	uint64_t cmdh_cmdtba;	/* phys. addr. of cmd_tbl, 128bytes aligned */
+	uint32_t cmdh_res[4];	/* reserved */
 } __packed;
 
 #define AHCI_CMDH_SIZE (sizeof(struct ahci_cmd_header) * AHCI_MAX_CMDS)
 
 /* received FIS: where the HBA stores various type of FIS it receives */
 struct ahci_r_fis {
-	u_int8_t rfis_dsfis[32]; /* DMA setup FIS */
-	u_int8_t rfis_psfis[32]; /* PIO setup FIS */
-	u_int8_t rfis_rfis[24]; /* D2H register FIS */
-	u_int8_t rfis_sdbfis[8]; /* set device bit FIS */
-	u_int8_t rfis_ukfis[64]; /* unknown FIS */
-	u_int8_t rfis_res[96];
+	uint8_t rfis_dsfis[32];	/* DMA setup FIS */
+	uint8_t rfis_psfis[32]; /* PIO setup FIS */
+	uint8_t rfis_rfis[24];  /* D2H register FIS */
+	uint8_t rfis_sdbfis[8]; /* set device bit FIS */
+	uint8_t rfis_ukfis[64]; /* unknown FIS */
+	uint8_t rfis_res[96];   /* reserved */
 } __packed;
 
 #define AHCI_RFIS_SIZE (sizeof(struct ahci_r_fis))
@@ -146,6 +139,7 @@ struct ahci_r_fis {
 #define AHCI_VS		0x10 /* AHCI version */
 #define 	AHCI_VS_10	0x00010000 /* AHCI spec 1.0 */
 #define 	AHCI_VS_11	0x00010100 /* AHCI spec 1.1 */
+#define 	AHCI_VS_12	0x00010200 /* AHCI spec 1.2 */
 
 #define AHCI_CC_CTL	0x14 /* command completion coalescing control */
 #define 	AHCI_CC_TV_MASK	0xffff0000 /* timeout value */

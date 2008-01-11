@@ -1,4 +1,4 @@
-/*	$NetBSD: xboxfb.c,v 1.11 2007/12/11 12:00:55 lukem Exp $	*/
+/*	$NetBSD: xboxfb.c,v 1.14 2010/12/16 07:59:10 cegger Exp $	*/
 
 /*
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xboxfb.c,v 1.11 2007/12/11 12:00:55 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xboxfb.c,v 1.14 2010/12/16 07:59:10 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,7 +98,6 @@ MALLOC_DEFINE(M_XBOXFB, "xboxfb", "xboxfb shadow framebuffer");
 */
 
 struct xboxfb_softc {
-	struct device sc_dev;
 	struct vcons_data vd;
 
 	bus_space_tag_t sc_memt;
@@ -118,13 +117,13 @@ static uint8_t *xboxfb_console_bits;
 static int xboxfb_console_width;
 static int xboxfb_console_height;
 
-static int	xboxfb_match(struct device *, struct cfdata *, void *);
-static void	xboxfb_attach(struct device *, struct device *, void *);
+static int	xboxfb_match(device_t, cfdata_t, void *);
+static void	xboxfb_attach(device_t, device_t, void *);
 
 static uint8_t	xboxfb_get_avpack(void);
 static void	xboxfb_clear_fb(struct xboxfb_softc *);
 
-CFATTACH_DECL(xboxfb, sizeof(struct xboxfb_softc), xboxfb_match,
+CFATTACH_DECL_NEW(xboxfb, sizeof(struct xboxfb_softc), xboxfb_match,
 	xboxfb_attach, NULL, NULL);
 
 /* static void	xboxfb_init(struct xboxfb_softc *); */
@@ -171,7 +170,7 @@ struct wsdisplay_accessops xboxfb_accessops = {
 };
 
 static int
-xboxfb_match(struct device *parent, struct cfdata *match, void *aux)
+xboxfb_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -190,9 +189,9 @@ xboxfb_match(struct device *parent, struct cfdata *match, void *aux)
 };
 
 static void
-xboxfb_attach(struct device *parent, struct device *self, void *aux)
+xboxfb_attach(device_t parent, device_t self, void *aux)
 {
-	struct xboxfb_softc *sc = (void *)self;
+	struct xboxfb_softc *sc = device_private(self);
 	struct wsemuldisplaydev_attach_args aa;
 	struct rasops_info *ri;
 	int console;
@@ -201,7 +200,7 @@ xboxfb_attach(struct device *parent, struct device *self, void *aux)
 
 	ri = &xboxfb_console_screen.scr_ri;
 
-	sc->sc_memt = X86_BUS_SPACE_MEM;
+	sc->sc_memt = x86_bus_space_mem;
 	sc->sc_memh = xboxfb_console_memh;
 	sc->sc_mode = WSDISPLAYIO_MODE_EMUL;
 
@@ -245,40 +244,39 @@ xboxfb_ioctl(void *v, void*vs, u_long cmd, void *data, int flag,
 	struct vcons_screen *ms = vd->active;
 
 	switch (cmd) {
-		case WSDISPLAYIO_GTYPE:
-			*(u_int *)data = WSDISPLAY_TYPE_PCIMISC;
-			return 0;
+	case WSDISPLAYIO_GTYPE:
+		*(u_int *)data = WSDISPLAY_TYPE_PCIMISC;
+		return 0;
 
-		case WSDISPLAYIO_GINFO:
-			wdf = (void *)data;
-			wdf->height = xboxfb_console_height;
-			wdf->width = xboxfb_console_width;
-			wdf->depth = ms->scr_ri.ri_depth;
-			wdf->cmsize = 256;
-			return 0;
+	case WSDISPLAYIO_GINFO:
+		wdf = (void *)data;
+		wdf->height = xboxfb_console_height;
+		wdf->width = xboxfb_console_width;
+		wdf->depth = ms->scr_ri.ri_depth;
+		wdf->cmsize = 256;
+		return 0;
 
-		case WSDISPLAYIO_GETCMAP:
-			return EINVAL;
+	case WSDISPLAYIO_GETCMAP:
+		return EINVAL;
 
-		case WSDISPLAYIO_PUTCMAP:
-			return EINVAL;
+	case WSDISPLAYIO_PUTCMAP:
+		return EINVAL;
 
-		case WSDISPLAYIO_LINEBYTES:
-			*(u_int *)data = ms->scr_ri.ri_stride;
-			return 0;
+	case WSDISPLAYIO_LINEBYTES:
+		*(u_int *)data = ms->scr_ri.ri_stride;
+		return 0;
 
-		case WSDISPLAYIO_SMODE:
-			{
-				int new_mode = *(int *)data;
-				if (new_mode != sc->sc_mode) {
-					sc->sc_mode = new_mode;
-					if (new_mode == WSDISPLAYIO_MODE_EMUL) {
-						xboxfb_clear_fb(sc);
-						vcons_redraw_screen(vd->active);
-					}
+	case WSDISPLAYIO_SMODE: {
+			int new_mode = *(int *)data;
+			if (new_mode != sc->sc_mode) {
+				sc->sc_mode = new_mode;
+				if (new_mode == WSDISPLAYIO_MODE_EMUL) {
+					xboxfb_clear_fb(sc);
+					vcons_redraw_screen(vd->active);
 				}
 			}
-			return 0;
+		}
+		return 0;
 	}
 	return EPASSTHROUGH;
 }
@@ -294,7 +292,7 @@ xboxfb_mmap(void *v, void *vs, off_t offset, int prot)
 	sc = (struct xboxfb_softc *)vd->cookie;
 
 	if (offset >= 0 && offset < XBOX_FB_SIZE) {
-		pa = bus_space_mmap(X86_BUS_SPACE_MEM, XBOX_FB_START,
+		pa = bus_space_mmap(x86_bus_space_mem, XBOX_FB_START,
 		    offset, prot, BUS_SPACE_MAP_LINEAR);
 		return pa;
 	}
@@ -390,7 +388,7 @@ xboxfb_smbus_pic_read(bus_space_tag_t t, bus_space_handle_t h, uint8_t cmd)
 static uint8_t
 xboxfb_get_encoder(void)
 {
-	bus_space_tag_t t = X86_BUS_SPACE_IO;
+	bus_space_tag_t t = x86_bus_space_io;
 	bus_space_handle_t h;
 	uint8_t rv;
 
@@ -416,7 +414,7 @@ xboxfb_get_encoder(void)
 static uint8_t
 xboxfb_is_widescreen(void)
 {
-	bus_space_tag_t t = X86_BUS_SPACE_IO;
+	bus_space_tag_t t = x86_bus_space_io;
 	bus_space_handle_t h;
 	uint8_t rv;
 
@@ -438,7 +436,7 @@ xboxfb_get_avpack(void)
 	bus_space_handle_t h;
 	uint8_t rv;
 
-	t = X86_BUS_SPACE_IO;
+	t = x86_bus_space_io;
 	rv = bus_space_map(t, XBOX_SMBUS_BA, 16, 0, &h);
 	if (rv)
 		return PIC16LC_REG_AVPACK_COMPOSITE; /* shouldn't happen */
@@ -519,7 +517,7 @@ xboxfb_cnattach(void)
 	if (xboxfb_console_shadowbits == NULL)
 		aprint_error("xboxfb_cnattach: failed to allocate shadowfb\n");
 
-	if (bus_space_map(X86_BUS_SPACE_MEM, XBOX_FB_START, fbsize,
+	if (bus_space_map(x86_bus_space_mem, XBOX_FB_START, fbsize,
 	    BUS_SPACE_MAP_LINEAR, &xboxfb_console_memh)) {
 		aprint_error("xboxfb_cnattach: failed to map memory.\n");
 		return 1;
@@ -530,11 +528,11 @@ xboxfb_cnattach(void)
 	ri->ri_flg = 0; /* RI_CENTER does not work with shadowfb */
 	if (xboxfb_console_shadowbits) {
 		ri->ri_bits = xboxfb_console_shadowbits;
-		ri->ri_hwbits = bus_space_vaddr(X86_BUS_SPACE_MEM,
+		ri->ri_hwbits = bus_space_vaddr(x86_bus_space_mem,
 		    xboxfb_console_memh);
 		xboxfb_console_bits = ri->ri_hwbits;
 	} else {
-		ri->ri_bits = bus_space_vaddr(X86_BUS_SPACE_MEM,
+		ri->ri_bits = bus_space_vaddr(x86_bus_space_mem,
 		    xboxfb_console_memh);
 		ri->ri_hwbits = NULL;
 		xboxfb_console_bits = ri->ri_bits;

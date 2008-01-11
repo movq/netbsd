@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.10 2007/03/04 06:00:50 christos Exp $ */
+/*	$NetBSD: kgdb_machdep.c,v 1.15 2011/05/23 18:38:51 rmind Exp $ */
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -128,7 +121,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.10 2007/03/04 06:00:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.15 2011/05/23 18:38:51 rmind Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_multiprocessor.h"
@@ -220,7 +213,7 @@ kgdb_resume_others(void)
 }
 
 static void
-kgdb_suspend()
+kgdb_suspend(void)
 {
 
 	sparc64_ipi_pause_thiscpu(NULL);
@@ -232,11 +225,10 @@ kgdb_suspend()
  * noting on the console why nothing else is going on.
  */
 void
-kgdb_connect(verbose)
-	int verbose;
+kgdb_connect(int verbose)
 {
 
-	if (kgdb_dev < 0)
+	if (kgdb_dev == NODEV)
 		return;
 #if NFB > 0
 	fb_unblank();
@@ -264,10 +256,10 @@ kgdb_connect(verbose)
  * Decide what to do on panic.
  */
 void
-kgdb_panic()
+kgdb_panic(void)
 {
 
-	if (kgdb_dev >= 0 && kgdb_debug_panic)
+	if (kgdb_dev != NODEV && kgdb_debug_panic)
 		kgdb_connect(kgdb_active == 0);
 }
 
@@ -277,8 +269,7 @@ kgdb_panic()
  * XXX should this be done at the other end?
  */
 int
-kgdb_signal(type)
-	int type;
+kgdb_signal(int type)
 {
 	int sigval;
 
@@ -348,9 +339,7 @@ kgdb_signal(type)
  * understood by gdb.
  */
 void
-kgdb_getregs(regs, gdb_regs)
-	db_regs_t *regs;
-	kgdb_reg_t *gdb_regs;
+kgdb_getregs(db_regs_t *regs, kgdb_reg_t *gdb_regs)
 {
 	struct trapframe64 *tf = &regs->db_tf;
 
@@ -373,9 +362,7 @@ kgdb_getregs(regs, gdb_regs)
  * Reverse the above.
  */
 void
-kgdb_setregs(regs, gdb_regs)
-	db_regs_t *regs;
-	kgdb_reg_t *gdb_regs;
+kgdb_setregs(db_regs_t *regs, kgdb_reg_t *gdb_regs)
 {
 	struct trapframe64 *tf = &regs->db_tf;
 
@@ -389,9 +376,7 @@ kgdb_setregs(regs, gdb_regs)
  * Determine if memory at [va..(va+len)] is valid.
  */
 int
-kgdb_acc(va, len)
-	vaddr_t va;
-	size_t len;
+kgdb_acc(vaddr_t va, size_t len)
 {
 	int64_t data;
 	vaddr_t eva;
@@ -400,15 +385,15 @@ kgdb_acc(va, len)
 	eva = round_page(va + len);
 	va = trunc_page(va);
 
-	simple_lock(&pm->pm_lock);
+	mutex_enter(&pm->pm_lock);
 	for (; va < eva; va += PAGE_SIZE) {
 		data = pseg_get(pm, va);
 		if ((data & TLB_V) == 0) {
-			simple_unlock(&pm->pm_lock);
+			mutex_exit(&pm->pm_lock);
 			return 0;
 		}
 	}
-	simple_unlock(&pm->pm_lock);
+	mutex_exit(&pm->pm_lock);
 
 	return (1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.95 2007/10/17 19:54:29 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.114 2011/02/20 07:58:14 matt Exp $	*/
 
 /*-
  * Copyright (c) 1999 Shin Takemura, All rights reserved.
@@ -30,6 +30,7 @@
  */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -66,60 +67,19 @@
  *
  *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department, The Mach Operating System project at
- * Carnegie-Mellon University and Ralph Campbell.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah Hdr: machdep.c 1.63 91/04/24
- *
- *	@(#)machdep.c	8.3 (Berkeley) 1/12/94
- */
 
-#include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.95 2007/10/17 19:54:29 garbled Exp $");
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.114 2011/02/20 07:58:14 matt Exp $");
 
 #include "opt_vr41xx.h"
 #include "opt_tx39xx.h"
 #include "opt_boot_standalone.h"
+#include "opt_modular.h"
 #include "opt_spec_platform.h"
 #include "biconsdev.h"
-#include "fs_mfs.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_rtc_offset.h"
-#include "fs_nfs.h"
 #include "opt_kloader.h"
 #include "opt_kloader_kernel_path.h"
 #include "debug_hpc.h"
@@ -130,18 +90,20 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.95 2007/10/17 19:54:29 garbled Exp $")
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/mount.h>
 #include <sys/boot_flag.h>
 #include <sys/ksyms.h>
+#include <sys/device.h>
+#include <sys/lwp.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <ufs/mfs/mfs_extern.h>	/* mfs_initminiroot() */
 #include <dev/cons.h>		/* cntab access (cpu_reboot) */
 
+#include <machine/locore.h>
 #include <machine/psl.h>
 #include <machine/sysconf.h>
 #include <machine/platid.h>
@@ -155,7 +117,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.95 2007/10/17 19:54:29 garbled Exp $")
 
 #include "ksyms.h"
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 #include <machine/db_machdep.h>
 #include <ddb/db_sym.h>
 #include <ddb/db_extern.h>
@@ -179,19 +141,17 @@ static int __bicons_enable;
 #define DPRINTF(arg)
 #endif /* NBICONSDEV > 0 */
 
-#ifdef NFS
 #include <nfs/rpcv2.h>
 #include <nfs/nfsproto.h>
 #include <nfs/nfs.h>
 #include <nfs/nfsmount.h>
-#endif
 
 #ifdef MEMORY_DISK_DYNAMIC
 #include <dev/md.h>
 #endif
 
 /* the following is used externally (sysctl_hw) */
-char	cpu_name[40];			/* set CPU depend xx_init() */
+char	hpcmips_cpuname[40];		/* set CPU depend xx_init() */
 
 struct cpu_info cpu_info_store;		/* only one CPU */
 int	cpuspeed = 1;			/* approx # instr per usec. */
@@ -218,23 +178,12 @@ static char kernel_path[] = KLOADER_KERNEL_PATH;
 #endif /* KLOADER */
 
 /* maps for VM objects */
-struct vm_map *exec_map;
-struct vm_map *mb_map;
 struct vm_map *phys_map;
 
 /* physical memory */
 int	physmem;		/* max supported memory, changes to actual */
 int	mem_cluster_cnt;
 phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
-
-/*
- * safepri is a safe priority for sleep to set for a spin-wait
- * during autoconfiguration or after a panic.
- * Used as an argument to splx().
- * XXX disables interrupt 5 to disable mips3 on-chip clock, which also
- * disables mips1 FPU interrupts.
- */
-int	safepri = MIPS3_PSL_LOWIPL;	/* XXX */
 
 void mach_init(int, char *[], struct bootinfo *);
 
@@ -259,9 +208,8 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 #ifdef KLOADER
 	struct kloader_bootinfo kbi;
 #endif
-	extern struct user *proc0paddr;
 	extern char edata[], end[];
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	extern void *esym;
 #endif
 	void *kernend;
@@ -269,7 +217,7 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	int i;
 
 	/* clear the BSS segment */
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	size_t symbolsz = 0;
 	Elf_Ehdr *eh = (void *)end;
 	if (memcmp(eh->e_ident, ELFMAG, SELFMAG) == 0 &&
@@ -291,9 +239,9 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 		}
 		esym = (char*)esym + symbolsz;
 		kernend = (void *)mips_round_page(esym);
-		bzero(edata, end - edata);
+		memset(edata, 0, end - edata);
 	} else
-#endif /* NKSYMS || defined(DDB) || defined(LKM) */
+#endif /* NKSYMS || defined(DDB) || defined(MODULAR) */
 	{
 		kernend = (void *)mips_round_page(end);
 		memset(edata, 0, (char *)kernend - edata);
@@ -370,7 +318,7 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	 * Initialize locore-function vector.
 	 * Clear out the I and D caches.
 	 */
-	mips_vector_init();
+	mips_vector_init(NULL, false);
 	intr_init();
 
 #ifdef DEBUG
@@ -416,14 +364,10 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 
 			case 'b':
 				/* boot device: -b=sd0 etc. */
-#ifdef NFS
 				if (strcmp(cp+2, "nfs") == 0)
-					mountroot = nfs_mountroot;
+					rootfstype = MOUNT_NFS;
 				else
 					makebootdev(cp+2);
-#else /* NFS */
-				makebootdev(cp+2);
-#endif /* NFS */
 				cp += strlen(cp);
 				break;
 			default:
@@ -432,7 +376,6 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 			}
 		}
 	}
-#ifdef MFS
 	/*
 	 * Check to see if a mini-root was loaded into memory. It resides
 	 * at the start of the next page just after the end of BSS.
@@ -445,24 +388,12 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 #endif /* MEMORY_DISK_DYNAMIC */
 		kernend = (char *)kernend + fssz;
 	}
-#endif /* MFS */
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	/* init symbols if present */
 	if (esym)
-		ksyms_init(symbolsz, &end, esym);
+		ksyms_addsyms_elf(symbolsz, &end, esym);
 #endif /* DDB */
-	/*
-	 * Alloc u pages for lwp0 stealing KSEG0 memory.
-	 */
-	lwp0.l_addr = proc0paddr = (struct user *)kernend;
-	lwp0.l_md.md_regs =
-	    (struct frame *)((char *)kernend + UPAGES * PAGE_SIZE) - 1;
-	memset(kernend, 0, UPAGES * PAGE_SIZE);
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
-
-	kernend = (char *)kernend + UPAGES * PAGE_SIZE;
 
 	/* Initialize console and KGDB serial port. */
 	(*platform.cons_init)();
@@ -503,27 +434,14 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	printf("mem_cluster_cnt = %d\n", mem_cluster_cnt);
 	physmem = 0;
 	for (i = 0; i < mem_cluster_cnt; i++) {
-		printf("mem_clusters[%d] = {0x%lx,0x%lx}\n", i,
+		printf("mem_clusters[%d] = {%#"PRIxPADDR",%#"PRIxPSIZE"}\n", i,
 		    (paddr_t)mem_clusters[i].start,
-		    (paddr_t)mem_clusters[i].size);
+		    (psize_t)mem_clusters[i].size);
 		physmem += atop(mem_clusters[i].size);
 	}
 
-	/* Cluster 0 is always the kernel, which doesn't get loaded. */
-	for (i = 1; i < mem_cluster_cnt; i++) {
-		paddr_t start, size;
-
-		start = (paddr_t)mem_clusters[i].start;
-		size = (paddr_t)mem_clusters[i].size;
-
-		printf("loading 0x%lx,0x%lx\n", start, size);
-
-		memset((void *)MIPS_PHYS_TO_KSEG1(start), 0, size);
-
-		uvm_page_physload(atop(start), atop(start + size),
-		    atop(start), atop(start + size),
-		    VM_FREELIST_DEFAULT);
-	}
+	mips_page_physload(MIPS_KSEG0_START, (vaddr_t)kernend,
+	    mem_clusters, mem_cluster_cnt, NULL, 0);
 
 	/*
 	 * Initialize error message buffer (at end of core).
@@ -534,6 +452,11 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	 * Initialize the virtual memory system.
 	 */
 	pmap_bootstrap();
+
+	/*
+	 * Initialize lwp0's uarea.
+	 */
+	mips_init_lwp0_uarea();
 }
 
 /*
@@ -541,11 +464,11 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
  * allocate memory for variable-sized tables, initialize CPU.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
 	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
-	u_int i;
+	size_t i;
 #ifdef DEBUG
 	extern int pmapdebug;
 	int opmapdebug = pmapdebug;
@@ -557,7 +480,7 @@ cpu_startup()
 	 * Good {morning,afternoon,evening,night}.
 	 */
 	printf("%s%s", copyright, version);
-	sprintf(cpu_model, "%s (%s)", platid_name(&platid), cpu_name);
+	sprintf(cpu_model, "%s (%s)", platid_name(&platid), hpcmips_cpuname);
 	printf("%s\n", cpu_model);
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
 	printf("total memory = %s\n", pbuf);
@@ -565,20 +488,15 @@ cpu_startup()
 		/* show again when verbose mode */
 		printf("total memory banks = %d\n", mem_cluster_cnt);
 		for (i = 0; i < mem_cluster_cnt; i++) {
-			printf("memory bank %d = 0x%08lx %ldKB(0x%08lx)\n", i,
+			printf("memory bank %zu = "
+			    "0x%08"PRIxPADDR" %"PRIdPSIZE"KB(0x%08"PRIxPSIZE")\n", i,
 			    (paddr_t)mem_clusters[i].start,
-			    (paddr_t)mem_clusters[i].size/1024,
-			    (paddr_t)mem_clusters[i].size);
+			    (psize_t)mem_clusters[i].size/1024,
+			    (psize_t)mem_clusters[i].size);
 		}
 	}
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
@@ -604,8 +522,7 @@ cpu_reboot(int howto, char *bootstr)
 {
 
 	/* take a snap shot before clobbering any registers */
-	if (curlwp)
-		savectx((struct user *)curpcb);
+		savectx(curpcb);
 
 #ifdef DEBUG
 	if (panicstr)
@@ -658,6 +575,8 @@ cpu_reboot(int howto, char *bootstr)
 	/* run any shutdown hooks */
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	/* Finally, halt/reboot the system. */
 	if (howto & RB_HALT) {
 		printf("halted.\n");
@@ -675,7 +594,7 @@ cpu_reboot(int howto, char *bootstr)
 }
 
 void
-consinit()
+consinit(void)
 {
 	/* platform.cons_init() do it */
 }

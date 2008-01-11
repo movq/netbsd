@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.17 2007/02/09 21:55:02 ad Exp $
+#	$NetBSD: Makefile,v 1.19 2009/08/12 23:29:18 matt Exp $
 
 INCSDIR= /usr/include/cobalt
 
-INCS=	ansi.h aout_machdep.h asm.h autoconf.h \
-	bsd-aout.h bswap.h \
+INCS=	ansi.h asm.h autoconf.h \
+	bswap.h \
 	cdefs.h cpu.h \
 	disklabel.h \
 	ecoff_machdep.h elf_machdep.h endian.h endian_machdep.h \
@@ -12,7 +12,7 @@ INCS=	ansi.h aout_machdep.h asm.h autoconf.h \
 	int_const.h int_fmtio.h int_limits.h int_mwgwtypes.h int_types.h \
 	intr.h \
 	kcore.h kdbparam.h \
-	leds.h limits.h lock.h locore.h \
+	limits.h lock.h locore.h \
 	math.h mcontext.h mips_opcode.h mutex.h \
 	nvram.h \
 	param.h pcb.h pmap.h pmc.h proc.h profile.h psl.h pte.h ptrace.h \

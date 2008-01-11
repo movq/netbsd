@@ -1,4 +1,4 @@
-/*	$NetBSD: audio_if.h,v 1.64 2007/12/03 15:34:31 ad Exp $	*/
+/*	$NetBSD: audio_if.h,v 1.66 2009/09/29 15:58:54 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1994 Havard Eidnes.
@@ -86,13 +86,15 @@ typedef struct audio_stream {
 static __inline int
 audio_stream_get_space(const audio_stream_t *s)
 {
-	return (s->end - s->start) - s->used;
+	if (s)
+		return (s->end - s->start) - s->used;
+	return 0;
 }
 
 static __inline int
 audio_stream_get_used(const audio_stream_t *s)
 {
-	return s->used;
+	return s ? s->used : 0;
 }
 
 static __inline uint8_t *
@@ -253,8 +255,7 @@ struct audio_attach_args {
 #define AUDIODEV_TYPE_AUX	4
 
 /* Attach the MI driver(s) to the MD driver. */
-struct device *audio_attach_mi(const struct audio_hw_if *, void *,
-    struct device *);
+device_t audio_attach_mi(const struct audio_hw_if *, void *, device_t);
 int	audioprint(void *, const char *);
 
 /* Device identity flags */

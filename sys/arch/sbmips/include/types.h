@@ -1,7 +1,7 @@
-/* $NetBSD: types.h,v 1.6 2008/01/08 14:38:48 simonb Exp $ */
+/* $NetBSD: types.h,v 1.8 2011/02/20 07:47:38 matt Exp $ */
+
+#define	_MIPS_PADDR_T_64BIT
 
 #include <mips/types.h>
 
 #define	__HAVE_DEVICE_REGISTER
-#define	__HAVE_GENERIC_TODR
-#define	__HAVE_TIMECOUNTER

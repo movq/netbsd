@@ -1,4 +1,4 @@
-/*	$NetBSD: ipcs.c,v 1.39 2007/12/15 19:44:51 perry Exp $	*/
+/*	$NetBSD: ipcs.c,v 1.42 2009/01/18 01:10:34 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,6 +57,7 @@
 #include <sys/cdefs.h>
 #include <sys/param.h>
 #include <sys/sysctl.h>
+#include <sys/inttypes.h>
 #include <sys/ipc.h>
 #include <sys/sem.h>
 #include <sys/shm.h>
@@ -276,7 +270,7 @@ static void
 show_shmtotal(struct shminfo *shminfo)
 {
 	(void)printf("shminfo:\n");
-	(void)printf("\tshmmax: %7d\t(max shared memory segment size)\n",
+	(void)printf("\tshmmax: %" PRIu64 "\t(max shared memory segment size)\n",
 	    shminfo->shmmax);
 	(void)printf("\tshmmin: %7d\t(min shared memory segment size)\n",
 	    shminfo->shmmin);
@@ -548,7 +542,7 @@ shm_sysctl(void)
 	void *buf;
 	int mib[4];
 	size_t len;
-	int i /*, valid */;
+	uint32_t i;
 	long valid;
 
 	mib[0] = CTL_KERN;
@@ -715,7 +709,8 @@ ipcs_kvm(void)
 	struct shmid_ds *shmsegs;
 	kvm_t *kd;
 	char errbuf[_POSIX2_LINE_MAX];
-	int i;
+	int32_t i;
+	uint32_t u;
 
 	if ((kd = kvm_openfiles(namelist, core, NULL, O_RDONLY,
 	    errbuf)) == NULL)
@@ -758,7 +753,7 @@ ipcs_kvm(void)
 			xmsqids = malloc(sizeof(struct msqid_ds) *
 			    msginfo.msgmni);
 
-			if (kvm_read(kd, (u_long)msqids, xmsqids,
+			if ((size_t)kvm_read(kd, (u_long)msqids, xmsqids,
 			    sizeof(struct msqid_ds) * msginfo.msgmni) !=
 			    sizeof(struct msqid_ds) * msginfo.msgmni)
 				errx(1, "kvm_read (msqids): %s",
@@ -808,20 +803,20 @@ ipcs_kvm(void)
 			xshmids = malloc(sizeof(struct shmid_ds) *
 			    shminfo.shmmni);
 
-			if (kvm_read(kd, (u_long)shmsegs, xshmids,
+			if ((size_t)kvm_read(kd, (u_long)shmsegs, xshmids,
 			    sizeof(struct shmid_ds) * shminfo.shmmni) !=
 			    sizeof(struct shmid_ds) * shminfo.shmmni)
 				errx(1, "kvm_read (shmsegs): %s",
 				    kvm_geterr(kd));
 
 			show_shminfo_hdr();
-			for (i = 0; i < shminfo.shmmni; i++) {
-				struct shmid_ds *shmptr = &xshmids[i];
+			for (u = 0; u < shminfo.shmmni; u++) {
+				struct shmid_ds *shmptr = &xshmids[u];
 				if (shmptr->shm_perm.mode & 0x0800)
 					show_shminfo(shmptr->shm_atime,
 					    shmptr->shm_dtime,
 					    shmptr->shm_ctime,
-					    IXSEQ_TO_IPCID(i, shmptr->shm_perm),
+					    IXSEQ_TO_IPCID(u, shmptr->shm_perm),
 					    (u_int64_t)shmptr->shm_perm._key,
 					    shmptr->shm_perm.mode,
 					    shmptr->shm_perm.uid,
@@ -856,7 +851,7 @@ ipcs_kvm(void)
 			xsema = malloc(sizeof(struct semid_ds) *
 			    seminfo.semmni);
 
-			if (kvm_read(kd, (u_long)sema, xsema,
+			if ((size_t)kvm_read(kd, (u_long)sema, xsema,
 			    sizeof(struct semid_ds) * seminfo.semmni) !=
 			    sizeof(struct semid_ds) * seminfo.semmni)
 				errx(1, "kvm_read (sema): %s",

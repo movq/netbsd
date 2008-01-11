@@ -1,4 +1,4 @@
-/*	$NetBSD: in.h,v 1.82 2007/12/25 18:33:46 perry Exp $	*/
+/*	$NetBSD: in.h,v 1.86 2009/09/14 10:36:50 degroote Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -103,6 +103,7 @@ typedef __sa_family_t	sa_family_t;
 #define	IPPROTO_IPCOMP		108		/* IP Payload Comp. Protocol */
 #define	IPPROTO_VRRP		112		/* VRRP RFC 2338 */
 #define	IPPROTO_CARP		112		/* Common Address Resolution Protocol */
+#define IPPROTO_PFSYNC      240     /* PFSYNC */
 #define	IPPROTO_RAW		255		/* raw IP packet */
 #define	IPPROTO_MAX		256
 
@@ -282,6 +283,8 @@ struct ip_opts {
 #if 1 /*IPSEC*/
 #define	IP_IPSEC_POLICY		22 /* struct; get/set security policy */
 #endif
+#define	IP_RECVTTL		23   /* bool; receive IP TTL w/dgram */
+#define	IP_MINTTL		24   /* minimum TTL for packet or drop */
 
 /*
  * Defaults and limits for options
@@ -541,6 +544,7 @@ extern const struct sockaddr_in in_any;
 
 int	in_broadcast(struct in_addr, struct ifnet *);
 int	in_canforward(struct in_addr);
+int	cpu_in_cksum(struct mbuf *, int, int, uint32_t);
 int	in_cksum(struct mbuf *, int);
 int	in4_cksum(struct mbuf *, u_int8_t, int, int);
 void	in_delayed_cksum(struct mbuf *);

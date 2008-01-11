@@ -1,7 +1,7 @@
-/*	$NetBSD: iostat.h,v 1.8 2008/01/04 21:18:17 ad Exp $	*/
+/*	$NetBSD: iostat.h,v 1.10 2009/04/04 07:30:09 ad Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 2004, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -105,6 +98,7 @@ TAILQ_HEAD(iostatlist_head, io_stats);	/* the iostatlist is a TAILQ */
 void	iostat_init(void);
 void	iostat_busy(struct io_stats *);
 void	iostat_unbusy(struct io_stats *, long, int);
+bool	iostat_isbusy(struct io_stats *);
 struct io_stats *iostat_find(const char *);
 struct io_stats *iostat_alloc(int32_t, void *, const char *);
 void	iostat_free(struct io_stats *);

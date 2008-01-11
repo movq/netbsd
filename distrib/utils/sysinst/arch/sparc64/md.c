@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.21 2006/08/19 22:41:27 martin Exp $	*/
+/*	$NetBSD: md.c,v 1.27 2011/04/04 08:30:44 mbalmer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -55,6 +51,19 @@
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
+
+static void install_bootblocks(void);
+
+void
+md_init(void)
+{
+}
+
+void
+md_init_set_status(int flags)
+{
+	(void)flags;
+}
 
 int
 md_get_info(void)
@@ -104,6 +113,24 @@ md_get_info(void)
 }
 
 /*
+ * md back-end code for menu-driven BSD disklabel editor.
+ */
+int
+md_make_bsd_partitions(void)
+{
+	return make_bsd_partitions();
+}
+
+/*
+ * any additional partition validation
+ */
+int
+md_check_partitions(void)
+{
+	return 1;
+}
+
+/*
  * hook called before writing new disklabel.
  */
 int
@@ -121,19 +148,10 @@ md_post_disklabel(void)
 	return 0;
 }
 
-/* install/update bootblocks */
-static void
-install_bootblocks(void)
-{
-
-	/* Install boot blocks now that we have a full system ... */
-	msg_display(MSG_dobootblks, diskdev);
-	run_program(RUN_DISPLAY, "/sbin/disklabel -W %s", diskdev);
-	run_program(RUN_DISPLAY, "/usr/mdec/binstall ffs %s", targetroot_mnt);
-}
-
 /*
- * hook called after running newfs.
+ * hook called after upgrade() or install() has finished setting
+ * up the target disk but immediately before the user is given the
+ * ``disks are now set up'' message.
  */
 int
 md_post_newfs(void)
@@ -142,71 +160,40 @@ md_post_newfs(void)
 	return 0;
 }
 
-/*
- * some ports use this to copy the MD filesystem, we do not.
- */
 int
-md_copy_filesystem(void)
+md_post_extract(void)
 {
 	return 0;
 }
 
-/*
- * md back-end code for menu-driven BSD disklabel editor.
- */
-int
-md_make_bsd_partitions(void)
+void
+md_cleanup_install(void)
 {
-	return make_bsd_partitions();
+#ifndef DEBUG
+	enable_rc_conf();
+#endif
 }
 
-/*
- * any additional partition validation
- */
 int
-md_check_partitions(void)
+md_pre_update(void)
 {
-	return check_partitions();
+	return 1;
 }
 
 /* Upgrade support */
 int
 md_update(void)
 {
-	/* endwin(); */
-	md_copy_filesystem();
 	md_post_newfs();
-	wrefresh(curscr);
-	wmove(stdscr, 0, 0);
-	wclear(stdscr);
-	wrefresh(stdscr);
 	return 1;
 }
 
-void
-md_cleanup_install(void)
+/* install/update bootblocks */
+static void
+install_bootblocks(void)
 {
-
-	enable_rc_conf();
-
-	run_program(0, "rm -f %s", target_expand("/sysinst"));
-	run_program(0, "rm -f %s", target_expand("/.termcap"));
-	run_program(0, "rm -f %s", target_expand("/.profile"));
-}
-
-int
-md_pre_update()
-{
-	return 1;
-}
-
-void
-md_init()
-{
-}
-
-int
-md_post_extract(void)
-{
-	return 0;
+	/* Install boot blocks now that we have a full system ... */
+	msg_display(MSG_dobootblks, diskdev);
+	run_program(RUN_DISPLAY, "/sbin/disklabel -W %s", diskdev);
+	run_program(RUN_DISPLAY, "/usr/mdec/binstall ffs %s", targetroot_mnt);
 }

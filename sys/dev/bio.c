@@ -1,4 +1,4 @@
-/*	$NetBSD: bio.c,v 1.6 2008/01/03 02:30:08 christos Exp $ */
+/*	$NetBSD: bio.c,v 1.9 2009/05/07 12:15:33 cegger Exp $ */
 /*	$OpenBSD: bio.c,v 1.9 2007/03/20 02:35:55 marco Exp $	*/
 
 /*
@@ -28,7 +28,7 @@
 /* A device controller ioctl tunnelling device.  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bio.c,v 1.6 2008/01/03 02:30:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bio.c,v 1.9 2009/05/07 12:15:33 cegger Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -48,8 +48,8 @@ __KERNEL_RCSID(0, "$NetBSD: bio.c,v 1.6 2008/01/03 02:30:08 christos Exp $");
 
 struct bio_mapping {
 	LIST_ENTRY(bio_mapping) bm_link;
-	struct device *bm_dev;
-	int (*bm_ioctl)(struct device *, u_long, void *);
+	device_t bm_dev;
+	int (*bm_ioctl)(device_t, u_long, void *);
 };
 
 static LIST_HEAD(, bio_mapping) bios = LIST_HEAD_INITIALIZER(bios);
@@ -69,7 +69,7 @@ void	bioattach(int);
 
 const struct cdevsw bio_cdevsw = {
         bioopen, bioclose, noread, nowrite, bioioctl,
-        nostop, notty, nopoll, nommap, nokqfilter, 0
+        nostop, notty, nopoll, nommap, nokqfilter, D_OTHER | D_MPSAFE
 };
 
 
@@ -222,7 +222,7 @@ bioioctl(dev_t dev, u_long cmd, void *addr, int flag, struct  lwp *l)
 }
 
 int
-bio_register(struct device *dev, int (*ioctl)(struct device *, u_long, void *))
+bio_register(device_t dev, int (*ioctl)(device_t, u_long, void *))
 {
 	struct bio_mapping *bm;
 
@@ -241,7 +241,7 @@ bio_register(struct device *dev, int (*ioctl)(struct device *, u_long, void *))
 }
 
 void
-bio_unregister(struct device *dev)
+bio_unregister(device_t dev)
 {
 	struct bio_mapping *bm, *next;
 
@@ -264,7 +264,7 @@ bio_lookup(char *name)
 
 	mutex_enter(&bio_lock);
 	LIST_FOREACH(bm, &bios, bm_link) {
-		if (strcmp(name, bm->bm_dev->dv_xname) == 0) {
+		if (strcmp(name, device_xname(bm->bm_dev)) == 0) {
 			mutex_exit(&bio_lock);
 			return bm;
 		}

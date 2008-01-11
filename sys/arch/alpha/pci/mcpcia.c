@@ -1,4 +1,4 @@
-/* $NetBSD: mcpcia.c,v 1.20 2007/03/04 05:59:11 christos Exp $ */
+/* $NetBSD: mcpcia.c,v 1.27 2011/05/17 17:34:47 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,7 +67,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.20 2007/03/04 05:59:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.27 2011/05/17 17:34:47 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,12 +96,12 @@ __KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.20 2007/03/04 05:59:11 christos Exp $")
 	 (MCBUS_IOSPACE) | MCPCIA_PCI_BRIDGE | _MCPCIA_PCI_REV)), \
 	sizeof(u_int32_t))
 
-static int	mcpciamatch __P((struct device *, struct cfdata *, void *));
-static void	mcpciaattach __P((struct device *, struct device *, void *));
+static int	mcpciamatch(struct device *, struct cfdata *, void *);
+static void	mcpciaattach(struct device *, struct device *, void *);
 CFATTACH_DECL(mcpcia, sizeof(struct mcpcia_softc),
     mcpciamatch, mcpciaattach, NULL, NULL);
 
-void	mcpcia_init0 __P((struct mcpcia_config *, int));
+void	mcpcia_init0(struct mcpcia_config *, int);
 
 /*
  * We have one statically-allocated mcpcia_config structure; this is
@@ -117,14 +110,11 @@ void	mcpcia_init0 __P((struct mcpcia_config *, int));
  */
 struct mcpcia_config mcpcia_console_configuration;
 
-int	mcpcia_bus_get_window __P((int, int,
-	    struct alpha_bus_space_translation *abst));
+int	mcpcia_bus_get_window(int, int,
+	    struct alpha_bus_space_translation *abst);
 
 static int
-mcpciamatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+mcpciamatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mcbus_dev_attach_args *ma = aux;
 	if (ma->ma_type == MCBUS_TYPE_PCI)
@@ -133,10 +123,7 @@ mcpciamatch(parent, cf, aux)
 }
 
 static void
-mcpciaattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+mcpciaattach(struct device *parent, struct device *self, void *aux)
 {
 	static int first = 1;
 	struct mcbus_dev_attach_args *ma = aux;
@@ -200,7 +187,7 @@ mcpciaattach(parent, self, aux)
 	pba.pba_pc = &ccp->cc_pc;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	(void) config_found_ia(self, "pcibus", &pba, pcibusprint);
 
@@ -213,7 +200,7 @@ mcpciaattach(parent, self, aux)
 }
 
 void
-mcpcia_init()
+mcpcia_init(void)
 {
 	struct mcpcia_config *ccp = &mcpcia_console_configuration;
 	int i;
@@ -254,9 +241,7 @@ mcpcia_init()
 }
 
 void
-mcpcia_init0(ccp, mallocsafe)
-	struct mcpcia_config *ccp;
-	int mallocsafe;
+mcpcia_init0(struct mcpcia_config *ccp, int mallocsafe)
 {
 	u_int32_t ctl;
 
@@ -303,8 +288,7 @@ mcpcia_init0(ccp, mallocsafe)
 
 #ifdef TEST_PROBE_DEATH
 static void
-die_heathen_dog(arg)
-	void *arg;
+die_heathen_dog(void *arg)
 {
 	struct mcpcia_config *ccp = arg;
 
@@ -314,7 +298,7 @@ die_heathen_dog(arg)
 #endif
 
 void
-mcpcia_config_cleanup()
+mcpcia_config_cleanup(void)
 {
 	volatile u_int32_t ctl;
 	struct mcpcia_softc *mcp;
@@ -326,7 +310,7 @@ mcpcia_config_cleanup()
 	 * Turn on Hard, Soft error interrupts. Maybe i2c too.
 	 */
 	for (i = 0; i < mcpcia_cd.cd_ndevs; i++) {
-		if ((mcp = mcpcia_cd.cd_devs[i]) == NULL)
+		if ((mcp = device_lookup_private(&mcpcia_cd, i)) == NULL)
 			continue;
 		
 		ccp = mcp->mcpcia_cc;
@@ -348,9 +332,7 @@ mcpcia_config_cleanup()
 }
 
 int
-mcpcia_bus_get_window(type, window, abst)
-	int type, window;
-	struct alpha_bus_space_translation *abst;
+mcpcia_bus_get_window(int type, int window, struct alpha_bus_space_translation *abst)
 {
 	struct mcpcia_config *ccp = &mcpcia_console_configuration;
 	bus_space_tag_t st;

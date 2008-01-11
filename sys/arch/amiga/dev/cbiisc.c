@@ -1,4 +1,4 @@
-/*	$NetBSD: cbiisc.c,v 1.26 2007/10/17 19:53:15 garbled Exp $ */
+/*	$NetBSD: cbiisc.c,v 1.32 2010/12/20 00:25:25 matt Exp $ */
 
 /*
  * Copyright (c) 1997 Michael L. Hitch
@@ -13,11 +13,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product contains software written by Michael L. Hitch for
- *	the NetBSD project.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -35,8 +31,12 @@
  *
  */
 
+#ifdef __m68k__
+#include "opt_m68k_arch.h"
+#endif
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cbiisc.c,v 1.26 2007/10/17 19:53:15 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cbiisc.c,v 1.32 2010/12/20 00:25:25 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -47,10 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: cbiisc.c,v 1.26 2007/10/17 19:53:15 garbled Exp $");
 #include <sys/device.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/queue.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -71,22 +68,22 @@ __KERNEL_RCSID(0, "$NetBSD: cbiisc.c,v 1.26 2007/10/17 19:53:15 garbled Exp $");
 #define badaddr(a)      badaddr_read(a, 2, NULL)
 #endif
 
-void	cbiiscattach(struct device *, struct device *, void *);
-int	cbiiscmatch(struct device *, struct cfdata *, void *);
+int	cbiiscmatch(device_t, cfdata_t, void *);
+void	cbiiscattach(device_t, device_t, void *);
 
 /* Linkup to the rest of the kernel */
-CFATTACH_DECL(cbiisc, sizeof(struct cbiisc_softc),
+CFATTACH_DECL_NEW(cbiisc, sizeof(struct cbiisc_softc),
     cbiiscmatch, cbiiscattach, NULL, NULL);
 
 /*
  * Functions and the switch for the MI code.
  */
-u_char	cbiisc_read_reg(struct ncr53c9x_softc *, int);
-void	cbiisc_write_reg(struct ncr53c9x_softc *, int, u_char);
+uint8_t	cbiisc_read_reg(struct ncr53c9x_softc *, int);
+void	cbiisc_write_reg(struct ncr53c9x_softc *, int, uint8_t);
 int	cbiisc_dma_isintr(struct ncr53c9x_softc *);
 void	cbiisc_dma_reset(struct ncr53c9x_softc *);
 int	cbiisc_dma_intr(struct ncr53c9x_softc *);
-int	cbiisc_dma_setup(struct ncr53c9x_softc *, void **,
+int	cbiisc_dma_setup(struct ncr53c9x_softc *, uint8_t **,
 	    size_t *, int, size_t *);
 void	cbiisc_dma_go(struct ncr53c9x_softc *);
 void	cbiisc_dma_stop(struct ncr53c9x_softc *);
@@ -102,7 +99,7 @@ struct ncr53c9x_glue cbiisc_glue = {
 	cbiisc_dma_go,
 	cbiisc_dma_stop,
 	cbiisc_dma_isactive,
-	0,
+	NULL,
 };
 
 /* Maximum DMA transfer length to reduce impact on high-speed serial input */
@@ -116,10 +113,10 @@ u_long cbiisc_cnt_dma3 = 0;	/* number of pages combined */
 
 #ifdef DEBUG
 struct {
-	u_char hardbits;
-	u_char status;
-	u_char xx;
-	u_char yy;
+	uint8_t hardbits;
+	uint8_t status;
+	uint8_t xx;
+	uint8_t yy;
 } cbiisc_trace[128];
 int cbiisc_trace_ptr = 0;
 int cbiisc_trace_enable = 1;
@@ -130,32 +127,32 @@ void cbiisc_dump(void);
  * if we are a Phase5 CyberSCSI II
  */
 int
-cbiiscmatch(struct device *parent, struct cfdata *cf, void *aux)
+cbiiscmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct zbus_args *zap;
-	volatile u_char *regs;
+	volatile uint8_t *regs;
 
 	zap = aux;
 	if (zap->manid != 0x2140 || zap->prodid != 25)
-		return(0);
-	regs = &((volatile u_char *)zap->va)[0x1ff03];
+		return 0;
+	regs = &((volatile uint8_t *)zap->va)[0x1ff03];
 	if (badaddr((void *)__UNVOLATILE(regs)))
-		return(0);
+		return 0;
 	regs[NCR_CFG1 * 4] = 0;
 	regs[NCR_CFG1 * 4] = NCRCFG1_PARENB | 7;
 	delay(5);
 	if (regs[NCR_CFG1 * 4] != (NCRCFG1_PARENB | 7))
-		return(0);
-	return(1);
+		return 0;
+	return 1;
 }
 
 /*
  * Attach this instance, and then all the sub-devices
  */
 void
-cbiiscattach(struct device *parent, struct device *self, void *aux)
+cbiiscattach(device_t parent, device_t self, void *aux)
 {
-	struct cbiisc_softc *csc = (void *)self;
+	struct cbiisc_softc *csc = device_private(self);
 	struct ncr53c9x_softc *sc = &csc->sc_ncr53c9x;
 	struct zbus_args  *zap;
 	extern u_long scsi_nosync;
@@ -165,18 +162,19 @@ cbiiscattach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * Set up the glue for MI code early; we use some of it here.
 	 */
+	sc->sc_dev = self;
 	sc->sc_glue = &cbiisc_glue;
 
 	/*
 	 * Save the regs
 	 */
 	zap = aux;
-	csc->sc_reg = &((volatile u_char *)zap->va)[0x1ff03];
+	csc->sc_reg = &((volatile uint8_t *)zap->va)[0x1ff03];
 	csc->sc_dmabase = &csc->sc_reg[0x80];
 
 	sc->sc_freq = 40;		/* Clocked at 40 MHz */
 
-	printf(": address %p", csc->sc_reg);
+	aprint_normal(": address %p", csc->sc_reg);
 
 	sc->sc_id = 7;
 
@@ -206,7 +204,7 @@ cbiiscattach(struct device *parent, struct device *self, void *aux)
 	 * NOTE: low 8 bits are to disable disconnect, and the next
 	 *       8 bits are to disable sync.
 	 */
-	device_cfdata(&sc->sc_dev)->cf_flags |= (scsi_nosync >> shift_nosync)
+	device_cfdata(self)->cf_flags |= (scsi_nosync >> shift_nosync)
 	    & 0xffff;
 	shift_nosync += 16;
 
@@ -242,7 +240,7 @@ cbiiscattach(struct device *parent, struct device *self, void *aux)
  * Glue functions.
  */
 
-u_char
+uint8_t
 cbiisc_read_reg(struct ncr53c9x_softc *sc, int reg)
 {
 	struct cbiisc_softc *csc = (struct cbiisc_softc *)sc;
@@ -251,10 +249,10 @@ cbiisc_read_reg(struct ncr53c9x_softc *sc, int reg)
 }
 
 void
-cbiisc_write_reg(struct ncr53c9x_softc *sc, int reg, u_char val)
+cbiisc_write_reg(struct ncr53c9x_softc *sc, int reg, uint8_t val)
 {
 	struct cbiisc_softc *csc = (struct cbiisc_softc *)sc;
-	u_char v = val;
+	uint8_t v = val;
 
 	csc->sc_reg[reg * 4] = v;
 #ifdef DEBUG
@@ -323,7 +321,7 @@ cbiisc_dma_intr(struct ncr53c9x_softc *sc)
 	cnt = csc->sc_dmasize - cnt;	/* number of bytes transferred */
 	NCR_DMA(("DMA xferred %d\n", cnt));
 	if (csc->sc_xfr_align) {
-		bcopy(csc->sc_alignbuf, *csc->sc_dmaaddr, cnt);
+		memcpy(*csc->sc_dmaaddr, csc->sc_alignbuf, cnt);
 		csc->sc_xfr_align = 0;
 	}
 	*csc->sc_dmaaddr += cnt;
@@ -333,15 +331,15 @@ cbiisc_dma_intr(struct ncr53c9x_softc *sc)
 }
 
 int
-cbiisc_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
+cbiisc_dma_setup(struct ncr53c9x_softc *sc, uint8_t **addr, size_t *len,
                  int datain, size_t *dmasize)
 {
 	struct cbiisc_softc *csc = (struct cbiisc_softc *)sc;
 	paddr_t pa;
-	u_char *ptr;
+	uint8_t *ptr;
 	size_t xfer;
 
-	csc->sc_dmaaddr = (char **)addr;
+	csc->sc_dmaaddr = addr;
 	csc->sc_pdmalen = len;
 	csc->sc_datain = datain;
 	csc->sc_dmasize = *dmasize;
@@ -373,14 +371,14 @@ cbiisc_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
 	 */
 	else if ((int)ptr & 1) {
 		pa = kvtop((void *)&csc->sc_alignbuf);
-		xfer = csc->sc_dmasize = min(xfer, sizeof (csc->sc_alignbuf));
+		xfer = csc->sc_dmasize = min(xfer, sizeof(csc->sc_alignbuf));
 		NCR_DMA(("cbiisc_dma_setup: align read by %d bytes\n", xfer));
 		csc->sc_xfr_align = 1;
 	}
 ++cbiisc_cnt_dma;		/* number of DMA operations */
 
 	while (xfer < csc->sc_dmasize) {
-		if ((pa + xfer) != kvtop((char*)*addr + xfer))
+		if ((pa + xfer) != kvtop(*addr + xfer))
 			break;
 		if ((csc->sc_dmasize - xfer) < PAGE_SIZE)
 			xfer = csc->sc_dmasize;
@@ -409,10 +407,10 @@ if (xfer != *len)
 		pa &= ~1;
 	else
 		pa |= 1;
-	csc->sc_dmabase[0] = (u_int8_t)(pa >> 24);
-	csc->sc_dmabase[4] = (u_int8_t)(pa >> 16);
-	csc->sc_dmabase[8] = (u_int8_t)(pa >> 8);
-	csc->sc_dmabase[12] = (u_int8_t)(pa);
+	csc->sc_dmabase[0] = (uint8_t)(pa >> 24);
+	csc->sc_dmabase[4] = (uint8_t)(pa >> 16);
+	csc->sc_dmabase[8] = (uint8_t)(pa >> 8);
+	csc->sc_dmabase[12] = (uint8_t)(pa);
 	csc->sc_active = 1;
 	return 0;
 }

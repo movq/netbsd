@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_et.c,v 1.20 2007/03/04 05:59:40 christos Exp $	*/
+/*	$NetBSD: ite_et.c,v 1.29 2010/04/13 11:31:11 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite_et.c,v 1.20 2007/03/04 05:59:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite_et.c,v 1.29 2010/04/13 11:31:11 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,25 +74,25 @@ static u_char etconscolors[3][3] = {	/* background, foreground, hilite */
 extern font_info	font_info_8x8;
 extern font_info	font_info_8x16;
 
-static void grfet_iteinit __P((struct grf_softc *));
-static void view_init __P((struct ite_softc *));
-static void view_deinit __P((struct ite_softc *));
-static int  iteet_ioctl __P((struct ite_softc *, u_long, void *, int,
-							struct lwp *));
-static int  ite_newsize __P((struct ite_softc *, struct itewinsize *));
-static void et_inittextmode __P((struct ite_softc *, et_sv_reg_t *, int));
-void et_cursor __P((struct ite_softc *ip, int flag));
-void et_clear __P((struct ite_softc *ip, int sy, int sx, int h, int w));
-void et_putc __P((struct ite_softc *ip, int c, int dy, int dx, int mode));
-void et_scroll __P((struct ite_softc *ip, int sy, int sx, int count,
-    int dir));
+static void grfet_iteinit(struct grf_softc *);
+static void view_init(struct ite_softc *);
+static void view_deinit(struct ite_softc *);
+static int  iteet_ioctl(struct ite_softc *, u_long, void *, int,
+							struct lwp *);
+static int  ite_newsize(struct ite_softc *, struct itewinsize *);
+static void et_inittextmode(struct ite_softc *, et_sv_reg_t *, int);
+void et_cursor(struct ite_softc *ip, int flag);
+void et_clear(struct ite_softc *ip, int sy, int sx, int h, int w);
+void et_putc(struct ite_softc *ip, int c, int dy, int dx, int mode);
+void et_scroll(struct ite_softc *ip, int sy, int sx, int count,
+    int dir);
 
 /*
  * grfet config stuff
  */
-void grfetattach __P((struct device *, struct device *, void *));
-int  grfetmatch __P((struct device *, struct cfdata *, void *));
-int  grfetprint __P((void *, const char *));
+void grfetattach(struct device *, struct device *, void *);
+int  grfetmatch(struct device *, struct cfdata *, void *);
+int  grfetprint(void *, const char *);
 
 CFATTACH_DECL(grfet, sizeof(struct grf_softc),
     grfetmatch, grfetattach, NULL, NULL);
@@ -108,10 +103,7 @@ CFATTACH_DECL(grfet, sizeof(struct grf_softc),
 static struct cfdata *cfdata_grf   = NULL;
 
 int
-grfetmatch(pdp, cfp, auxp)
-struct device	*pdp;
-struct cfdata	*cfp;
-void		*auxp;
+grfetmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	static int	card_probed  = -1;
 	static int	did_consinit = 0;
@@ -126,7 +118,7 @@ void		*auxp;
 		/*
 		 * Check if the layers we depend on exist
 		 */
-		if(!(machineid & ATARI_HADES))
+		if (!(machineid & ATARI_HADES))
 			return 0;
 		if (!et_probe_card())
 			return 0;
@@ -164,9 +156,9 @@ void		*auxp;
 	/*
 	 * Final constraint: each grf needs a view....
 	 */
-	if((cfdata_grf == NULL) || (did_consinit > 1)) {
-	    if((*view_cdevsw.d_open)(cfp->cf_unit, 0, 0, NULL))
-		return 0;
+	if ((cfdata_grf == NULL) || (did_consinit > 1)) {
+		if ((*view_cdevsw.d_open)(cfp->cf_unit, 0, 0, NULL))
+			return 0;
 	}
 	did_consinit = 2;
 	return 1;
@@ -177,9 +169,7 @@ void		*auxp;
  * note  : dp is NULL during early console init.
  */
 void
-grfetattach(pdp, dp, auxp)
-struct device	*pdp, *dp;
-void		*auxp;
+grfetattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	static struct grf_softc		congrf;
 	static int			first_attach = 1;
@@ -195,9 +185,9 @@ void		*auxp;
 	maj = cdevsw_lookup_major(&grf_cdevsw);
 
 	/*
-	 * Handle exeption case: early console init
+	 * Handle exception case: early console init
 	 */
-	if(dp == NULL) {
+	if (dp == NULL) {
 		congrf.g_unit    = cfdata_grf->cf_unit;
 		congrf.g_grfdev  = makedev(maj, congrf.g_unit);
 		congrf.g_itedev  = (dev_t)-1;
@@ -217,15 +207,14 @@ void		*auxp;
 	gp->g_unit = device_unit(&gp->g_device);
 	grfsp[gp->g_unit] = gp;
 
-	if((cfdata_grf != NULL) && (gp->g_unit == congrf.g_unit)) {
+	if ((cfdata_grf != NULL) && (gp->g_unit == congrf.g_unit)) {
 		/*
 		 * We inited earlier just copy the info, take care
 		 * not to copy the device struct though.
 		 */
-		bcopy(&congrf.g_display, &gp->g_display,
+		memcpy(&gp->g_display, &congrf.g_display,
 			(char *)&gp[1] - (char *)&gp->g_display);
-	}
-	else {
+	} else {
 		gp->g_grfdev  = makedev(maj, gp->g_unit);
 		gp->g_itedev  = (dev_t)-1;
 		gp->g_flags   = GF_ALIVE;
@@ -237,9 +226,10 @@ void		*auxp;
 	}
 
 	printf(": %dx%d", gp->g_display.gd_dwidth, gp->g_display.gd_dheight);
-	if(gp->g_display.gd_colors == 2)
+	if (gp->g_display.gd_colors == 2)
 		printf(" monochrome\n");
-	else printf(" colors %d\n", gp->g_display.gd_colors);
+	else
+		printf(" colors %d\n", gp->g_display.gd_colors);
 	
 	/*
 	 * try and attach an ite
@@ -259,21 +249,19 @@ void		*auxp;
 }
 
 int
-grfetprint(auxp, pnp)
-void *auxp;
-const char *pnp;
+grfetprint(void *auxp, const char *pnp)
 {
-	if(pnp) /* XXX */
+
+	if (pnp) /* XXX */
 		aprint_normal("ite at %s", pnp);
-	return(UNCONF);
+	return UNCONF;
 }
 
 /*
  * Init ite portion of grf_softc struct
  */
 static void
-grfet_iteinit(gp)
-struct grf_softc *gp;
+grfet_iteinit(struct grf_softc *gp)
 {
 
 	gp->g_itecursor = et_cursor;
@@ -285,22 +273,20 @@ struct grf_softc *gp;
 }
 
 static void
-view_deinit(ip)
-struct ite_softc	*ip;
+view_deinit(struct ite_softc *ip)
 {
 	ip->flags &= ~ITE_INITED;
 }
 
 static void
-view_init(ip)
-register struct ite_softc *ip;
+view_init(register struct ite_softc *ip)
 {
 	struct itewinsize	wsz;
 	ipriv_t			*cci;
 	view_t			*view;
 	save_area_t		*et_save;
 
-	if((cci = ip->priv) != NULL)
+	if ((cci = ip->priv) != NULL)
 		return;
 
 	ip->itexx_ioctl = iteet_ioctl;
@@ -312,15 +298,16 @@ register struct ite_softc *ip;
 #endif
 
 	/* Find the correct set of rendering routines for this font.  */
-	if(ip->font.width != 8)
+	if (ip->font.width != 8)
 		panic("kernel font size not supported");
 
-	if(!atari_realconfig)
+	if (!atari_realconfig)
 		ip->priv = cci = &con_ipriv;
-	else ip->priv = cci = (ipriv_t*)malloc(sizeof(*cci), M_DEVBUF,M_WAITOK);
-	if(cci == NULL)
+	else
+		ip->priv = cci = malloc(sizeof(*cci), M_DEVBUF, M_WAITOK);
+	if (cci == NULL)
 		panic("No memory for ite-view");
-	bzero(cci, sizeof(*cci));
+	memset(cci, 0, sizeof(*cci));
 
 	wsz.x      = ite_default_x;
 	wsz.y      = ite_default_y;
@@ -336,7 +323,7 @@ register struct ite_softc *ip;
 	/*
 	 * Only console will be turned on by default..
 	 */
-	if(ip->flags & ITE_ISCONS)
+	if (ip->flags & ITE_ISCONS)
 		ip->grf->g_mode(ip->grf, GM_GRFON, NULL, 0, 0);
 
 	/*
@@ -352,9 +339,7 @@ register struct ite_softc *ip;
 }
 
 static int
-ite_newsize(ip, winsz)
-struct ite_softc	*ip;
-struct itewinsize	*winsz;
+ite_newsize(struct ite_softc *ip, struct itewinsize *winsz)
 {
 	struct view_size	vs;
 	int			error = 0;
@@ -390,23 +375,20 @@ struct itewinsize	*winsz;
 
 	et_save = (save_area_t *)view->save_area;
 	if (et_save == NULL)
-	    et_inittextmode(ip, NULL, view->flags & VF_DISPLAY);
+		et_inittextmode(ip, NULL, view->flags & VF_DISPLAY);
 	else {
-	    et_inittextmode(ip, &et_save->sv_regs, view->flags & VF_DISPLAY);
-	    et_save->fb_size = ip->cols * ip->rows;
+		et_inittextmode(ip, &et_save->sv_regs,
+		    view->flags & VF_DISPLAY);
+		et_save->fb_size = ip->cols * ip->rows;
 	}
 	et_clear(ip, 0, 0, ip->rows, ip->cols);
 
-	return(error);
+	return error;
 }
 
 int
-iteet_ioctl(ip, cmd, addr, flag, l)
-struct ite_softc	*ip;
-u_long			cmd;
-void *			addr;
-int			flag;
-struct lwp		*l;
+iteet_ioctl(struct ite_softc *ip, u_long cmd, void * addr, int flag,
+    struct lwp *l)
 {
 	struct winsize		ws;
 	struct itewinsize	*is;
@@ -419,7 +401,7 @@ struct lwp		*l;
 	case ITEIOCSWINSZ:
 		is = (struct itewinsize *)addr;
 
-		if(ite_newsize(ip, is))
+		if (ite_newsize(ip, is))
 			error = ENOMEM;
 		else {
 			view         = viewview(ip->grf->g_viewdev);
@@ -450,13 +432,11 @@ struct lwp		*l;
 		error = EPASSTHROUGH;
 		break;
 	}
-	return (error);
+	return error;
 }
 
 void
-et_cursor(ip, flag)
-	struct ite_softc *ip;
-	int flag;
+et_cursor(struct ite_softc *ip, int flag)
 {
 	volatile u_char	*ba;
 		 view_t	*v;
@@ -495,12 +475,7 @@ et_cursor(ip, flag)
 }
 
 void
-et_putc(ip, c, dy, dx, mode)
-	struct ite_softc *ip;
-	int c;
-	int dy;
-	int dx;
-	int mode;
+et_putc(struct ite_softc *ip, int c, int dy, int dx, int mode)
 {
 	view_t	*v   = viewview(ip->grf->g_viewdev);
 	u_char	attr;
@@ -516,12 +491,7 @@ et_putc(ip, c, dy, dx, mode)
 }
 
 void
-et_clear(ip, sy, sx, h, w)
-	struct ite_softc *ip;
-	int sy;
-	int sx;
-	int h;
-	int w;
+et_clear(struct ite_softc *ip, int sy, int sx, int h, int w)
 {
 	/* et_clear and et_scroll both rely on ite passing arguments
 	 * which describe continuous regions.  For a VT200 terminal,
@@ -532,17 +502,12 @@ et_clear(ip, sy, sx, h, w)
 	int		len;
 
 	dest = (u_short *)v->bitmap->plane + (sy * ip->cols) + sx;
-	for(len = w * h; len-- ;)
+	for (len = w * h; len-- ;)
 		*dest++ = 0x2007;
 }
 
 void
-et_scroll(ip, sy, sx, count, dir)
-	struct ite_softc *ip;
-	int	sy;
-	int	sx;
-	int	count;
-	int	dir;
+et_scroll(struct ite_softc *ip, int sy, int sx, int count, int dir)
 {
 	view_t	*v   = viewview(ip->grf->g_viewdev);
 	u_short	*fb;
@@ -577,8 +542,7 @@ et_scroll(ip, sy, sx, count, dir)
 	if (src > dst) {
 		while (len--)
 			*dst++ = *src++;
-	}
-	else {
+	} else {
 		src = &src[len];
 		dst = &dst[len];
 		while (len--)
@@ -587,10 +551,7 @@ et_scroll(ip, sy, sx, count, dir)
 }
 
 static void
-et_inittextmode(ip, etregs, loadfont)
-	struct ite_softc *ip;
-	et_sv_reg_t	 *etregs;
-	int		 loadfont;
+et_inittextmode(struct ite_softc *ip, et_sv_reg_t *etregs, int loadfont)
 {
 	volatile u_char *ba;
 	font_info	*fd;

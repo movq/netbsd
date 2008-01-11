@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.c,v 1.28 2007/04/06 19:21:09 cube Exp $	*/
+/*	$NetBSD: sem.c,v 1.38 2010/05/02 15:35:00 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -83,9 +83,9 @@ static char *extend(char *, const char *);
 static int split(const char *, size_t, char *, size_t, int *);
 static void selectbase(struct devbase *, struct deva *);
 static const char **fixloc(const char *, struct attr *, struct nvlist *);
-static const char *makedevstr(int, int);
-static const char *major2name(int);
-static int dev2major(struct devbase *);
+static const char *makedevstr(devmajor_t, devminor_t);
+static const char *major2name(devmajor_t);
+static devmajor_t dev2major(struct devbase *);
 
 extern const char *yyfile;
 extern int vflag;
@@ -362,8 +362,17 @@ defdev(struct devbase *dev, struct nvlist *loclist, struct nvlist *attrs,
 		for (nv = attrs; nv != NULL; nv = nv->nv_next)
 			if (((struct attr *)(nv->nv_ptr))->a_iattr)
 				break;
-		if (nv != NULL)
+		if (nv != NULL) {
+			if (ispseudo < 2) {
+				if (version >= 20080610)
+					cfgerror("interface attribute on "
+					 "non-device pseudo `%s'", dev->d_name);
+				else {
+					ispseudo = 2;
+				}
+			}
 			ht_insert(devroottab, dev->d_name, dev);
+		}
 	}
 
 	/* Committed!  Set up fields. */
@@ -427,7 +436,7 @@ getdevbase(const char *name)
 		dev = ecalloc(1, sizeof *dev);
 		dev->d_name = name;
 		dev->d_isdef = 0;
-		dev->d_major = NODEV;
+		dev->d_major = NODEVMAJOR;
 		dev->d_attrs = NULL;
 		dev->d_ihead = NULL;
 		dev->d_ipp = &dev->d_ihead;
@@ -622,10 +631,10 @@ expandattr(struct attr *a, void (*callback)(struct attr *))
  * as a root/dumps "on" device in a configuration.
  */
 void
-setmajor(struct devbase *d, int n)
+setmajor(struct devbase *d, devmajor_t n)
 {
 
-	if (d != &errdev && d->d_major != NODEV)
+	if (d != &errdev && d->d_major != NODEVMAJOR)
 		cfgerror("device `%s' is already major %d",
 		    d->d_name, d->d_major);
 	else
@@ -633,7 +642,7 @@ setmajor(struct devbase *d, int n)
 }
 
 const char *
-major2name(int maj)
+major2name(devmajor_t maj)
 {
 	struct devbase *dev;
 	struct devm *dm;
@@ -652,7 +661,7 @@ major2name(int maj)
 	return (NULL);
 }
 
-int
+devmajor_t
 dev2major(struct devbase *dev)
 {
 	struct devm *dm;
@@ -664,14 +673,14 @@ dev2major(struct devbase *dev)
 		if (strcmp(dm->dm_name, dev->d_name) == 0)
 			return (dm->dm_bmajor);
 	}
-	return (NODEV);
+	return (NODEVMAJOR);
 }
 
 /*
  * Make a string description of the device at maj/min.
  */
 static const char *
-makedevstr(int maj, int min)
+makedevstr(devmajor_t maj, devminor_t min)
 {
 	const char *devicename;
 	char buf[32];
@@ -698,11 +707,13 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 	struct nvlist *nv;
 	struct devbase *dev;
 	const char *cp;
-	int maj, min, i, l;
+	devmajor_t maj;
+	devminor_t min;
+	int i, l;
 	int unit;
 	char buf[NAMESIZE];
 
-	if ((u_int)(part -= 'a') >= maxpartitions)
+	if ((part -= 'a') >= maxpartitions || part < 0)
 		panic("resolve");
 	if ((nv = *nvp) == NULL) {
 		dev_t	d = NODEV;
@@ -710,9 +721,9 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 		 * Apply default.  Easiest to do this by number.
 		 * Make sure to retain NODEVness, if this is dflt's disposition.
 		 */
-		if (dflt->nv_int != NODEV) {
-			maj = major(dflt->nv_int);
-			min = ((minor(dflt->nv_int) / maxpartitions) *
+		if ((dev_t)dflt->nv_num != NODEV) {
+			maj = major(dflt->nv_num);
+			min = ((minor(dflt->nv_num) / maxpartitions) *
 			    maxpartitions) + part;
 			d = makedev(maj, min);
 			cp = makedevstr(maj, min);
@@ -720,13 +731,13 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 			cp = NULL;
 		*nvp = nv = newnv(NULL, cp, NULL, d, NULL);
 	}
-	if (nv->nv_int != NODEV) {
+	if ((dev_t)nv->nv_num != NODEV) {
 		/*
 		 * By the numbers.  Find the appropriate major number
 		 * to make a name.
 		 */
-		maj = major(nv->nv_int);
-		min = minor(nv->nv_int);
+		maj = major(nv->nv_num);
+		min = minor(nv->nv_num);
 		nv->nv_str = makedevstr(maj, min);
 		return (0);
 	}
@@ -765,16 +776,16 @@ resolve(struct nvlist **nvp, const char *name, const char *what,
 	 * don't bother making a device number.
 	 */
 	if (has_attr(dev->d_attrs, s_ifnet)) {
-		nv->nv_int = NODEV;
+		nv->nv_num = NODEV;
 		nv->nv_ifunit = unit;	/* XXX XXX XXX */
 	} else {
 		maj = dev2major(dev);
-		if (maj == NODEV) {
+		if (maj == NODEVMAJOR) {
 			cfgerror("%s: can't make %s device from `%s'",
 			    name, what, nv->nv_str);
 			return (1);
 		}
-		nv->nv_int = makedev(maj, unit * maxpartitions + part);
+		nv->nv_num = makedev(maj, unit * maxpartitions + part);
 	}
 
 	nv->nv_name = dev->d_name;
@@ -911,6 +922,7 @@ newdevi(const char *name, int unit, struct devbase *d)
 	i->i_srcfile = yyfile;
 	i->i_active = DEVI_ORPHAN; /* Proper analysis comes later */
 	i->i_level = devilevel;
+	i->i_pseudoroot = 0;
 	if (unit >= d->d_umax)
 		d->d_umax = unit + 1;
 	return (i);
@@ -1395,6 +1407,89 @@ deldev(const char *name)
 	nvfreel(stack);
 }
 
+/*
+ * Insert given device "name" into devroottab.  In case "name"
+ * designates a pure interface attribute, create a fake device
+ * instance for the attribute and insert that into the roottab
+ * (this scheme avoids mucking around with the orphanage analysis).
+ */
+void
+addpseudoroot(const char *name)
+{
+	char buf[NAMESIZE];
+	int unit;
+	struct attr *attr;
+	struct devi *i;
+	struct deva *iba;
+	struct devbase *ib;
+
+	fprintf(stderr, "WARNING: pseudo-root is an experimental feature\n");
+
+	if (split(name, strlen(name), buf, sizeof(buf), &unit)) {
+		cfgerror("invalid pseudo-root name `%s'", name);
+		return;
+	}
+
+	/*
+	 * Prefer device because devices with locators define an
+	 * implicit interface attribute.  However, if a device is
+	 * not available, try to attach to the interface attribute.
+	 * This makes sure adddev() doesn't get confused when we
+	 * are really attaching to a device (alternatively we maybe
+	 * could specify a non-NULL atlist to defdevattach() below).
+	 */
+	ib = ht_lookup(devbasetab, intern(buf));
+	if (ib == NULL) {
+		struct devbase *fakedev;
+		char fakename[NAMESIZE];
+
+		attr = ht_lookup(attrtab, intern(buf));
+		if (!(attr && attr->a_iattr)) {
+			cfgerror("pseudo-root `%s' not available", name);
+			return;
+		}
+
+		/*
+		 * here we cheat a bit: create a fake devbase with the
+		 * interface attribute and instantiate it.  quick, cheap,
+		 * dirty & bad for you, much like the stuff in the fridge.
+		 * and, it works, since the pseudoroot device is not included
+		 * in ioconf, just used by config to make sure we start from
+		 * the right place.
+		 */ 
+		snprintf(fakename, sizeof(fakename), "%s_devattrs", buf);
+		fakedev = getdevbase(intern(fakename));
+		fakedev->d_isdef = 1;
+		fakedev->d_ispseudo = 0;
+		fakedev->d_attrs = newnv(NULL, NULL, attr, 0, NULL);
+		defdevattach(NULL, fakedev, NULL, NULL);
+
+		if (unit == STAR)
+			snprintf(buf, sizeof(buf), "%s*", fakename);
+		else
+			snprintf(buf, sizeof(buf), "%s%d", fakename, unit);
+		name = buf;
+	}
+
+	/* ok, everything should be set up, so instantiate a fake device */
+	i = getdevi(name);
+	if (i == NULL)
+		panic("device `%s' expected to be present", name);
+	ib = i->i_base;
+	iba = ib->d_ahead;
+
+	i->i_atdeva = iba;
+	i->i_cfflags = 0;
+	i->i_locs = fixloc(name, &errattr, NULL);
+	i->i_pseudoroot = 1;
+	i->i_active = DEVI_ORPHAN; /* set active by kill_orphans() */
+
+	*iba->d_ipp = i;
+	iba->d_ipp = &i->i_asame;
+
+	ht_insert(devroottab, ib->d_name, ib);
+}
+
 void
 addpseudo(const char *name, int number)
 {
@@ -1452,24 +1547,28 @@ delpseudo(const char *name)
 }
 
 void
-adddevm(const char *name, int cmajor, int bmajor, struct nvlist *options)
+adddevm(const char *name, devmajor_t cmajor, devmajor_t bmajor,
+	struct nvlist *nv_opts, struct nvlist *nv_nodes)
 {
 	struct devm *dm;
 
-	if (cmajor < -1 || cmajor >= 4096) {
+	if (cmajor != NODEVMAJOR && (cmajor < 0 || cmajor >= 4096)) {
 		cfgerror("character major %d is invalid", cmajor);
-		nvfreel(options);
+		nvfreel(nv_opts);
+		nvfreel(nv_nodes);
 		return;
 	}
 
-	if (bmajor < -1 || bmajor >= 4096) {
+	if (bmajor != NODEVMAJOR && (bmajor < 0 || bmajor >= 4096)) {
 		cfgerror("block major %d is invalid", bmajor);
-		nvfreel(options);
+		nvfreel(nv_opts);
+		nvfreel(nv_nodes);
 		return;
 	}
-	if (cmajor == -1 && bmajor == -1) {
+	if (cmajor == NODEVMAJOR && bmajor == NODEVMAJOR) {
 		cfgerror("both character/block majors are not specified");
-		nvfreel(options);
+		nvfreel(nv_opts);
+		nvfreel(nv_nodes);
 		return;
 	}
 
@@ -1479,7 +1578,8 @@ adddevm(const char *name, int cmajor, int bmajor, struct nvlist *options)
 	dm->dm_name = name;
 	dm->dm_cmajor = cmajor;
 	dm->dm_bmajor = bmajor;
-	dm->dm_opts = options;
+	dm->dm_opts = nv_opts;
+	dm->dm_devnodes = nv_nodes;
 
 	TAILQ_INSERT_TAIL(&alldevms, dm, dm_next);
 
@@ -1735,18 +1835,18 @@ fixloc(const char *name, struct attr *attr, struct nvlist *got)
 	else
 		lp = emalloc((attr->a_loclen + 1) * sizeof(const char *));
 	for (n = got; n != NULL; n = n->nv_next)
-		n->nv_int = -1;
+		n->nv_num = -1;
 	nmissing = 0;
 	mp = missing;
 	/* yes, this is O(mn), but m and n should be small */
 	for (ord = 0, m = attr->a_locs; m != NULL; m = m->nv_next, ord++) {
 		for (n = got; n != NULL; n = n->nv_next) {
 			if (n->nv_name == m->nv_name) {
-				n->nv_int = ord;
+				n->nv_num = ord;
 				break;
 			}
 		}
-		if (n == NULL && m->nv_int == 0) {
+		if (n == NULL && m->nv_num == 0) {
 			nmissing++;
 			mp = extend(mp, m->nv_name);
 		}
@@ -1760,10 +1860,10 @@ fixloc(const char *name, struct attr *attr, struct nvlist *got)
 	nnodefault = 0;
 	ndp = nodefault;
 	for (n = got; n != NULL; n = n->nv_next) {
-		if (n->nv_int >= 0) {
+		if (n->nv_num >= 0) {
 			if (n->nv_str != NULL)
-				lp[n->nv_int] = n->nv_str;
-			else if (lp[n->nv_int] == NULL) {
+				lp[n->nv_num] = n->nv_str;
+			else if (lp[n->nv_num] == NULL) {
 				nnodefault++;
 				ndp = extend(ndp, n->nv_name);
 			}

@@ -1,7 +1,7 @@
-/*	$NetBSD: process_machdep.c,v 1.65 2007/10/17 19:54:46 garbled Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.72 2009/11/21 03:11:00 rmind Exp $	*/
 
 /*-
- * Copyright (c) 1998, 2000, 2001 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2000, 2001, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,11 +52,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.65 2007/10/17 19:54:46 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.72 2009/11/21 03:11:00 rmind Exp $");
 
 #include "opt_vm86.h"
 #include "opt_ptrace.h"
-#include "opt_coredump.h"
 #include "npx.h"
 
 #include <sys/param.h>
@@ -71,7 +63,6 @@ __KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.65 2007/10/17 19:54:46 garbled
 #include <sys/time.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/ptrace.h>
 
@@ -85,7 +76,6 @@ __KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.65 2007/10/17 19:54:46 garbled
 #include <machine/vm86.h>
 #endif
 
-#if defined(PTRACE) || defined(COREDUMP)
 static inline struct trapframe *
 process_frame(struct lwp *l)
 {
@@ -96,10 +86,10 @@ process_frame(struct lwp *l)
 static inline union savefpu *
 process_fpframe(struct lwp *l)
 {
+	struct pcb *pcb = lwp_getpcb(l);
 
-	return (&l->l_addr->u_pcb.pcb_savefpu);
+	return &pcb->pcb_savefpu;
 }
-#endif /* defined(PTRACE) || defined(COREDUMP) */
 
 static int
 xmm_to_s87_tag(const uint8_t *fpac, int regno, uint8_t tw)
@@ -215,7 +205,6 @@ process_s87_to_xmm(const struct save87 *s87, struct savexmm *sxmm)
 #endif
 }
 
-#if defined(PTRACE) || defined(COREDUMP)
 int
 process_read_regs(struct lwp *l, struct reg *regs)
 {
@@ -259,7 +248,7 @@ process_read_fpregs(struct lwp *l, struct fpreg *regs)
 
 	if (l->l_md.md_flags & MDL_USEDFPU) {
 #if NNPX > 0
-		npxsave_lwp(l, 1);
+		npxsave_lwp(l, true);
 #endif
 	} else {
 		/*
@@ -298,7 +287,6 @@ process_read_fpregs(struct lwp *l, struct fpreg *regs)
 		memcpy(regs, &frame->sv_87, sizeof(*regs));
 	return (0);
 }
-#endif /* defined(PTRACE) || defined(COREDUMP) */
 
 #ifdef PTRACE
 int
@@ -363,7 +351,7 @@ process_write_fpregs(struct lwp *l, const struct fpreg *regs)
 
 	if (l->l_md.md_flags & MDL_USEDFPU) {
 #if NNPX > 0
-		npxsave_lwp(l, 0);
+		npxsave_lwp(l, false);
 #endif
 	} else {
 		l->l_md.md_flags |= MDL_USEDFPU;
@@ -414,8 +402,11 @@ process_machdep_read_xmmregs(struct lwp *l, struct xmmregs *regs)
 
 	if (l->l_md.md_flags & MDL_USEDFPU) {
 #if NNPX > 0
-		if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-			npxsave_lwp(l, 1);
+		struct pcb *pcb = lwp_getpcb(l);
+
+		if (pcb->pcb_fpcpu != NULL) {
+			npxsave_lwp(l, true);
+		}
 #endif
 	} else {
 		/*
@@ -450,9 +441,12 @@ process_machdep_write_xmmregs(struct lwp *l, struct xmmregs *regs)
 
 	if (l->l_md.md_flags & MDL_USEDFPU) {
 #if NNPX > 0
+		struct pcb *pcb = lwp_getpcb(l);
+
 		/* If we were using the FPU, drop it. */
-		if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-			npxsave_lwp(l, 0);
+		if (pcb->pcb_fpcpu != NULL) {
+			npxsave_lwp(l, false);
+		}
 #endif
 	} else {
 		l->l_md.md_flags |= MDL_USEDFPU;
@@ -517,10 +511,9 @@ ptrace_machdep_dorequest(
  */
 
 int
-process_machdep_doxmmregs(curl, l, uio)
-	struct lwp *curl;		/* tracer */
-	struct lwp *l;			/* traced */
-	struct uio *uio;
+process_machdep_doxmmregs(struct lwp *curl, struct lwp *l, struct uio *uio)
+	/* curl:		 tracer */
+	/* l:			 traced */
 {
 	int error;
 	struct xmmregs r;
@@ -535,8 +528,6 @@ process_machdep_doxmmregs(curl, l, uio)
 	if (kl > uio->uio_resid)
 		kl = uio->uio_resid;
 
-	uvm_lwp_hold(l);
-
 	if (kl < 0)
 		error = EINVAL;
 	else
@@ -550,15 +541,12 @@ process_machdep_doxmmregs(curl, l, uio)
 			error = process_machdep_write_xmmregs(l, &r);
 	}
 
-	uvm_lwp_rele(l);
-
 	uio->uio_offset = 0;
 	return (error);
 }
 
 int
-process_machdep_validxmmregs(p)
-	struct proc *p;
+process_machdep_validxmmregs(struct proc *p)
 {
 
 	if (p->p_flag & PK_SYSTEM)

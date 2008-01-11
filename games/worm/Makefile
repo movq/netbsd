@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile,v 1.6 1998/02/18 22:37:32 jtc Exp $
+#	$NetBSD: Makefile,v 1.9 2010/02/06 23:45:26 he Exp $
 #	@(#)Makefile	8.1 (Berkeley) 5/31/93
 
 PROG=	worm
 MAN=	worm.6
-DPADD=	${LIBCURSES}
-LDADD=	-lcurses
+DPADD=	${LIBCURSES} ${LIBTERMINFO}
+LDADD=	-lcurses -lterminfo
 HIDEGAME=hidegame
 
 .include <bsd.prog.mk>

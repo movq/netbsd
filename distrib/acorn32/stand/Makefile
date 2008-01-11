@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.24 2006/07/23 13:33:53 bjh21 Exp $
+#	$NetBSD: Makefile,v 1.26 2008/10/19 22:05:19 apb Exp $
 #
 
 .include <bsd.own.mk>
@@ -18,11 +18,11 @@ NBFS=		${DESTDIR}/usr/mdec/nbfs,ffa
 all: ${ARCHIVE}
 
 release: check_RELEASEDIR .WAIT ${ARCHIVE}
-	${RELEASE_INSTALL} splug.bas ${RELEASEDIR}/${MACHINE}/installation/misc
+	${RELEASE_INSTALL} splug.bas ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/misc
 	${RELEASE_INSTALL} ${DISTRIBDIR}/notes/acorn32/prep.RISCOS \
-	    ${RELEASEDIR}/${MACHINE}/
+	    ${RELEASEDIR}/${RELEASEMACHINEDIR}/
 	${RELEASE_INSTALL} ${ARCHIVE} \
-	    ${RELEASEDIR}/${MACHINE}/installation/misc/
+	    ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/misc/
 
 ${ARCHIVE}: tmp/BtNetBSD
 	TOOL_MKTEMP=${TOOL_MKTEMP}; export TOOL_MKTEMP; \
@@ -100,7 +100,7 @@ setup_tmp:
 settypes: setup_tmp
 .for file in ${SETTYPE_FILES}
 . if ${SETTYPE_FILE_${file}} == ffb
-	${AWK} '{ printf "%5d %s\n", FNR * 10, $$0 }' \
+	${TOOL_AWK} '{ printf "%5d %s\n", FNR * 10, $$0 }' \
 	    < tmp/BtNetBSD/${file} > tmp/BtNetBSD/${file}.tmp
 	mv tmp/BtNetBSD/${file}.tmp tmp/BtNetBSD/${file}
 . endif

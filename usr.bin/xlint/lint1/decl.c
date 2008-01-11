@@ -1,4 +1,4 @@
-/* $NetBSD: decl.c,v 1.38 2006/11/08 18:31:15 christos Exp $ */
+/* $NetBSD: decl.c,v 1.52 2011/05/24 12:49:11 joerg Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: decl.c,v 1.38 2006/11/08 18:31:15 christos Exp $");
+__RCSID("$NetBSD: decl.c,v 1.52 2011/05/24 12:49:11 joerg Exp $");
 #endif
 
 #include <sys/param.h>
@@ -117,6 +117,10 @@ initdecl(void)
 	typetab[FLOAT].t_tspec = FLOAT;
 	typetab[DOUBLE].t_tspec = DOUBLE;
 	typetab[LDOUBLE].t_tspec = LDOUBLE;
+	typetab[FCOMPLEX].t_tspec = FCOMPLEX;
+	typetab[DCOMPLEX].t_tspec = DCOMPLEX;
+	typetab[LCOMPLEX].t_tspec = LCOMPLEX;
+	typetab[COMPLEX].t_tspec = COMPLEX;
 	typetab[VOID].t_tspec = VOID;
 	/*
 	 * Next two are not real types. They are only used by the parser
@@ -250,7 +254,10 @@ void
 addtype(type_t *tp)
 {
 	tspec_t	t;
-
+#ifdef DEBUG
+	char buf[1024];
+	printf("addtype %s\n", tyname(buf, sizeof(buf), tp));
+#endif
 	if (tp->t_typedef) {
 		if (dcs->d_type != NULL || dcs->d_atyp != NOTSPEC ||
 		    dcs->d_lmod != NOTSPEC || dcs->d_smod != NOTSPEC) {
@@ -293,6 +300,16 @@ addtype(type_t *tp)
 		return;
 	}
 
+	if (t == COMPLEX) {
+		if (dcs->d_cmod == FLOAT)
+			t = FCOMPLEX;
+		else if (dcs->d_cmod == DOUBLE) {
+			t = DCOMPLEX;
+		} else
+			error(308, basictyname(dcs->d_cmod));
+		dcs->d_cmod = NOTSPEC;
+	}
+
 	if (t == LONG && dcs->d_lmod == LONG) {
 		/* "long long" or "long ... long" */
 		t = QUAD;
@@ -310,7 +327,7 @@ addtype(type_t *tp)
 
 	/* now it can be only a combination of arithmetic types and void */
 	if (t == SIGNED || t == UNSIGN) {
-		/* remeber specifiers "signed" and "unsigned" in dcs->d_smod */
+		/* remember specifiers "signed" & "unsigned" in dcs->d_smod */
 		if (dcs->d_smod != NOTSPEC)
 			/*
 			 * more than one "signed" and/or "unsigned"; print
@@ -327,10 +344,21 @@ addtype(type_t *tp)
 			/* more than one, print error in deftyp() */
 			dcs->d_terr = 1;
 		dcs->d_lmod = t;
+	} else if (t == FLOAT || t == DOUBLE) {
+		if (dcs->d_lmod == NOTSPEC || dcs->d_lmod == LONG) {
+			if (dcs->d_cmod != NOTSPEC
+			    || (t == FLOAT && dcs->d_lmod == LONG))
+				dcs->d_terr = 1;
+			dcs->d_cmod = t;
+		} else {
+			if (dcs->d_atyp != NOTSPEC)
+				dcs->d_terr = 1;
+			dcs->d_atyp = t;
+		}
 	} else {
 		/*
-		 * remember specifiers "void", "char", "int", "float" or
-		 * "double" int dcs->d_atyp
+		 * remember specifiers "void", "char", "int",
+		 * or "_Complex" int dcs->d_atyp
 		 */
 		if (dcs->d_atyp != NOTSPEC)
 			/* more than one, print error in deftyp() */
@@ -374,7 +402,7 @@ tdeferr(type_t *td, tspec_t t)
 		break;
 	case LONG:
 		if (t2 == INT || t2 == UINT || t2 == LONG || t2 == ULONG ||
-		    t2 == FLOAT || t2 == DOUBLE) {
+		    t2 == FLOAT || t2 == DOUBLE || t2 == DCOMPLEX) {
 			/* modifying typedef with ... */
 			warning(5, "long");
 			if (t2 == INT) {
@@ -389,6 +417,8 @@ tdeferr(type_t *td, tspec_t t)
 				td = gettyp(DOUBLE);
 			} else if (t2 == DOUBLE) {
 				td = gettyp(LDOUBLE);
+			} else if (t2 == DCOMPLEX) {
+				td = gettyp(LCOMPLEX);
 			}
 			td = duptyp(td);
 			td->t_typedef = 1;
@@ -410,13 +440,17 @@ tdeferr(type_t *td, tspec_t t)
 	case STRUCT:
 	case VOID:
 	case LDOUBLE:
-	case DOUBLE:
 	case FLOAT:
+	case DOUBLE:
 	case UQUAD:
 	case QUAD:
 	case ULONG:
 	case UINT:
 	case INT:
+	case FCOMPLEX:
+	case DCOMPLEX:
+	case LCOMPLEX:
+	case COMPLEX:
 		break;
 
 	case NTSPEC:	/* this value unused */
@@ -450,6 +484,53 @@ settdsym(type_t *tp, sym_t *sym)
 		if (tp->t_enum->etdef == NULL)
 			tp->t_enum->etdef = sym;
 	}
+}
+
+static void
+setpackedsize(type_t *tp)
+{
+	str_t *sp;
+	sym_t *mem;
+	char buf[256];
+
+	switch (tp->t_tspec) {
+	case STRUCT:
+	case UNION:
+		sp = tp->t_str;
+		sp->size = 0;
+		for (mem = sp->memb; mem != NULL; mem = mem->s_nxt) {
+			if (mem->s_type->t_isfield) {
+				size_t len = mem->s_type->t_flen;
+				while (mem && mem->s_type->t_isfield) {
+					len += mem->s_type->t_flen;
+					mem = mem->s_nxt;
+				}
+				len = ((len + INT_SIZE - 1) /
+				    INT_SIZE) * INT_SIZE;
+				sp->size += len;
+				if (mem == NULL)
+					break;
+			}
+			size_t x = (size_t)tsize(mem->s_type);
+			if (tp->t_tspec == STRUCT)
+				sp->size += x;
+			else if (x > sp->size)
+				sp->size = x;
+		}
+		break;
+	default:
+		warning(326, "packed", tyname(buf, sizeof(buf), tp));
+		break;
+	}
+}
+
+void
+addpacked(void)
+{
+	if (dcs->d_type == NULL)
+		dcs->d_ispacked = 1;
+	else
+		setpackedsize(dcs->d_type);
 }
 
 /*
@@ -490,15 +571,15 @@ pushdecl(scl_t sc)
 {
 	dinfo_t	*di;
 
-	if (dflag)
-		(void)printf("pushdecl(%d)\n", (int)sc);
-
 	/* put a new element on the declaration stack */
 	di = xcalloc(1, sizeof (dinfo_t));
 	di->d_nxt = dcs;
 	dcs = di;
 	di->d_ctx = sc;
 	di->d_ldlsym = &di->d_dlsyms;
+	if (dflag)
+		(void)printf("pushdecl(%p %d)\n", dcs, (int)sc);
+
 }
 
 /*
@@ -510,7 +591,7 @@ popdecl(void)
 	dinfo_t	*di;
 
 	if (dflag)
-		(void)printf("popdecl(%d)\n", (int)dcs->d_ctx);
+		(void)printf("popdecl(%p %d)\n", dcs, (int)dcs->d_ctx);
 
 	if (dcs->d_nxt == NULL)
 		LERROR("popdecl()");
@@ -606,7 +687,7 @@ void
 clrtyp(void)
 {
 
-	dcs->d_atyp = dcs->d_smod = dcs->d_lmod = NOTSPEC;
+	dcs->d_atyp = dcs->d_cmod = dcs->d_smod = dcs->d_lmod = NOTSPEC;
 	dcs->d_scl = NOSCL;
 	dcs->d_type = NULL;
 	dcs->d_const = dcs->d_volatile = 0;
@@ -625,18 +706,23 @@ clrtyp(void)
 void
 deftyp(void)
 {
-	tspec_t	t, s, l;
+	tspec_t	t, s, l, c;
 	type_t	*tp;
 	scl_t	scl;
 
-	t = dcs->d_atyp;	/* BOOL, CHAR, INT, FLOAT, DOUBLE, VOID */
+	t = dcs->d_atyp;	/* BOOL, CHAR, INT, COMPLEX, VOID */
 	s = dcs->d_smod;	/* SIGNED, UNSIGNED */
 	l = dcs->d_lmod;	/* SHORT, LONG, QUAD */
+	c = dcs->d_cmod;	/* FLOAT, DOUBLE */
 	tp = dcs->d_type;
 	scl = dcs->d_scl;
 
-	if (t == NOTSPEC && s == NOTSPEC && l == NOTSPEC && tp == NULL)
+	if (t == NOTSPEC && s == NOTSPEC && l == NOTSPEC && c == NOTSPEC &&
+	    tp == NULL)
 		dcs->d_notyp = 1;
+	if (t == NOTSPEC && s == NOTSPEC && (l == NOTSPEC || l == LONG) &&
+	    tp == NULL)
+		t = c;
 
 	if (tp != NULL && (t != NOTSPEC || s != NOTSPEC || l != NOTSPEC)) {
 		/* should never happen */
@@ -678,7 +764,18 @@ deftyp(void)
 					warning(266);
 			}
 			break;
+		case DCOMPLEX:
+			if (l == LONG) {
+				l = NOTSPEC;
+				t = LCOMPLEX;
+				if (tflag)
+					/* 'long double' is illegal in ... */
+					warning(266);
+			}
+			break;
 		case VOID:
+		case FCOMPLEX:
+		case LCOMPLEX:
 			break;
 		default:
 			LERROR("deftyp()");
@@ -784,7 +881,7 @@ length(type_t *tp, const char *name)
 	switch (tp->t_tspec) {
 	case FUNC:
 		/* compiler takes size of function */
-		LERROR(msgs[12]);
+		LERROR("%s", msgs[12]);
 		/* NOTREACHED */
 	case STRUCT:
 	case UNION:
@@ -815,7 +912,7 @@ length(type_t *tp, const char *name)
 int
 getbound(type_t *tp)
 {
-	int	a;
+	size_t	a;
 	tspec_t	t;
 
 	while (tp && tp->t_tspec == ARRAY)
@@ -1031,7 +1128,7 @@ decl1str(sym_t *dsym)
 					tp->t_flen = size(t);
 			}
 		}
-		if ((len = tp->t_flen) < 0 || len > size(t)) {
+		if ((len = tp->t_flen) < 0 || len > (ssize_t)size(t)) {
 			/* illegal bit-field size */
 			error(36);
 			tp->t_flen = size(t);
@@ -1541,6 +1638,7 @@ mktag(sym_t *tag, tspec_t kind, int decl, int semi)
 		if (tag->s_scl == NOSCL) {
 			tag->s_scl = scl;
 			tag->s_type = tp = getblk(sizeof (type_t));
+			tp->t_ispacked = dcs->d_ispacked;
 		} else {
 			tp = tag->s_type;
 		}
@@ -1552,6 +1650,7 @@ mktag(sym_t *tag, tspec_t kind, int decl, int semi)
 		tag->s_scl = scl;
 		tag->s_blklev = -1;
 		tag->s_type = tp = getblk(sizeof (type_t));
+		tp->t_ispacked = dcs->d_ispacked;
 		dcs->d_nxt->d_nedecl = 1;
 	}
 
@@ -1569,7 +1668,6 @@ mktag(sym_t *tag, tspec_t kind, int decl, int semi)
 		/* ist unvollstaendiger Typ */
 		setcompl(tp, 1);
 	}
-
 	return (tp);
 }
 
@@ -1651,7 +1749,6 @@ scltoa(scl_t sc)
 }
 
 /*
- * Completes the type of a tag in a struct/union/enum declaration.
  * tp points to the type of the, tag, fmem to the list of members/enums.
  */
 type_t *
@@ -1669,8 +1766,11 @@ compltag(type_t *tp, sym_t *fmem)
 		align(dcs->d_stralign, 0);
 		sp = tp->t_str;
 		sp->align = dcs->d_stralign;
-		sp->size = dcs->d_offset;
 		sp->memb = fmem;
+		if (tp->t_ispacked)
+			setpackedsize(tp);
+		else
+			sp->size = dcs->d_offset;
 		if (sp->size == 0) {
 			/* zero sized %s */
 			(void)c99ism(47, ttab[t].tt_name);
@@ -1745,7 +1845,7 @@ ename(sym_t *sym, int val, int impl)
 void
 decl1ext(sym_t *dsym, int initflg)
 {
-	int	warn, rval, redec;
+	int	dowarn, rval, redec;
 	sym_t	*rdsym;
 
 	chkfdef(dsym, 1);
@@ -1798,9 +1898,9 @@ decl1ext(sym_t *dsym, int initflg)
 			redec = 0;
 		}
 
-		if (!redec && !isredec(dsym, (warn = 0, &warn))) {
+		if (!redec && !isredec(dsym, (dowarn = 0, &dowarn))) {
 
-			if (warn) {
+			if (dowarn) {
 				/* redeclaration of %s */
 				(*(sflag ? error : warning))(27, dsym->s_name);
 				prevdecl(-1, rdsym);
@@ -1877,7 +1977,7 @@ cpuinfo(sym_t *sym, sym_t *rdsym)
  * a warning.
  */
 int
-isredec(sym_t *dsym, int *warn)
+isredec(sym_t *dsym, int *dowarn)
 {
 	sym_t	*rsym;
 
@@ -1905,7 +2005,7 @@ isredec(sym_t *dsym, int *warn)
 		prevdecl(-1, rsym);
 		return(1);
 	}
-	if (!eqtype(rsym->s_type, dsym->s_type, 0, 0, warn)) {
+	if (!eqtype(rsym->s_type, dsym->s_type, 0, 0, dowarn)) {
 		/* redeclaration of %s */
 		error(27, dsym->s_name);
 		prevdecl(-1, rsym);
@@ -1946,17 +2046,42 @@ isredec(sym_t *dsym, int *warn)
 	return (0);
 }
 
+static int
+chkqual(type_t *tp1, type_t *tp2, int ignqual)
+{
+	if (tp1->t_const != tp2->t_const && !ignqual && !tflag)
+		return 0;
+
+	if (tp1->t_volatile != tp2->t_volatile && !ignqual && !tflag)
+		return 0;
+
+	return 1;
+}
+
+int
+eqptrtype(type_t *tp1, type_t *tp2, int ignqual)
+{
+	if (tp1->t_tspec != VOID && tp2->t_tspec != VOID)
+		return 0;
+
+	if (!chkqual(tp1, tp2, ignqual))
+		return 0;
+
+	return 1;
+}
+
+
 /*
  * Checks if two types are compatible. Returns 0 if not, otherwise 1.
  *
  * ignqual	ignore qualifiers of type; used for function params
  * promot	promote left type; used for comparison of params of
  *		old style function definitions with params of prototypes.
- * *warn	set to 1 if an old style function declaration is not
+ * *dowarn	set to 1 if an old style function declaration is not
  *		compatible with a prototype
  */
 int
-eqtype(type_t *tp1, type_t *tp2, int ignqual, int promot, int *warn)
+eqtype(type_t *tp1, type_t *tp2, int ignqual, int promot, int *dowarn)
 {
 	tspec_t	t;
 
@@ -1981,11 +2106,8 @@ eqtype(type_t *tp1, type_t *tp2, int ignqual, int promot, int *warn)
 		if (t != tp2->t_tspec)
 			return (0);
 
-		if (tp1->t_const != tp2->t_const && !ignqual && !tflag)
-			return (0);
-
-		if (tp1->t_volatile != tp2->t_volatile && !ignqual && !tflag)
-			return (0);
+		if (!chkqual(tp1, tp2, ignqual))
+			return 0;
 
 		if (t == STRUCT || t == UNION)
 			return (tp1->t_str == tp2->t_str);
@@ -1998,13 +2120,13 @@ eqtype(type_t *tp1, type_t *tp2, int ignqual, int promot, int *warn)
 		/* dont check prototypes for traditional */
 		if (t == FUNC && !tflag) {
 			if (tp1->t_proto && tp2->t_proto) {
-				if (!eqargs(tp1, tp2, warn))
+				if (!eqargs(tp1, tp2, dowarn))
 					return (0);
 			} else if (tp1->t_proto) {
-				if (!mnoarg(tp1, warn))
+				if (!mnoarg(tp1, dowarn))
 					return (0);
 			} else if (tp2->t_proto) {
-				if (!mnoarg(tp2, warn))
+				if (!mnoarg(tp2, dowarn))
 					return (0);
 			}
 		}
@@ -2022,7 +2144,7 @@ eqtype(type_t *tp1, type_t *tp2, int ignqual, int promot, int *warn)
  * Compares the parameter types of two prototypes.
  */
 static int
-eqargs(type_t *tp1, type_t *tp2, int *warn)
+eqargs(type_t *tp1, type_t *tp2, int *dowarn)
 {
 	sym_t	*a1, *a2;
 
@@ -2034,7 +2156,7 @@ eqargs(type_t *tp1, type_t *tp2, int *warn)
 
 	while (a1 != NULL && a2 != NULL) {
 
-		if (eqtype(a1->s_type, a2->s_type, 1, 0, warn) == 0)
+		if (eqtype(a1->s_type, a2->s_type, 1, 0, dowarn) == 0)
 			return (0);
 
 		a1 = a1->s_nxt;
@@ -2056,21 +2178,21 @@ eqargs(type_t *tp1, type_t *tp2, int *warn)
  *	   is applied on it
  */
 static int
-mnoarg(type_t *tp, int *warn)
+mnoarg(type_t *tp, int *dowarn)
 {
 	sym_t	*arg;
 	tspec_t	t;
 
 	if (tp->t_vararg) {
-		if (warn != NULL)
-			*warn = 1;
+		if (dowarn != NULL)
+			*dowarn = 1;
 	}
 	for (arg = tp->t_args; arg != NULL; arg = arg->s_nxt) {
 		if ((t = arg->s_type->t_tspec) == FLOAT ||
 		    t == CHAR || t == SCHAR || t == UCHAR ||
 		    t == SHORT || t == USHORT) {
-			if (warn != NULL)
-				*warn = 1;
+			if (dowarn != NULL)
+				*dowarn = 1;
 		}
 	}
 	return (1);
@@ -2085,7 +2207,7 @@ chkosdef(sym_t *rdsym, sym_t *dsym)
 {
 	sym_t	*args, *pargs, *arg, *parg;
 	int	narg, nparg, n;
-	int	warn, msg;
+	int	dowarn, msg;
 
 	args = rdsym->s_args;
 	pargs = dsym->s_type->t_args;
@@ -2108,12 +2230,12 @@ chkosdef(sym_t *rdsym, sym_t *dsym)
 	parg = pargs;
 	n = 1;
 	while (narg--) {
-		warn = 0;
+		dowarn = 0;
 		/*
 		 * If it does not match due to promotion and sflag is
 		 * not set we print only a warning.
 		 */
-		if (!eqtype(arg->s_type, parg->s_type, 1, 1, &warn) || warn) {
+		if (!eqtype(arg->s_type, parg->s_type, 1, 1, &dowarn) || dowarn) {
 			/* prototype does not match old-style def., arg #%d */
 			error(299, n);
 			msg = 1;
@@ -2368,16 +2490,16 @@ static int
 chkptdecl(sym_t *arg, sym_t *parg)
 {
 	type_t	*tp, *ptp;
-	int	warn, msg;
+	int	dowarn, msg;
 
 	tp = arg->s_type;
 	ptp = parg->s_type;
 
 	msg = 0;
-	warn = 0;
+	dowarn = 0;
 
-	if (!eqtype(tp, ptp, 1, 1, &warn)) {
-		if (eqtype(tp, ptp, 1, 0, &warn)) {
+	if (!eqtype(tp, ptp, 1, 1, &dowarn)) {
+		if (eqtype(tp, ptp, 1, 0, &dowarn)) {
 			/* type does not match prototype: %s */
 			msg = gnuism(58, arg->s_name);
 		} else {
@@ -2385,7 +2507,7 @@ chkptdecl(sym_t *arg, sym_t *parg)
 			error(58, arg->s_name);
 			msg = 1;
 		}
-	} else if (warn) {
+	} else if (dowarn) {
 		/* type does not match prototype: %s */
 		(*(sflag ? error : warning))(58, arg->s_name);
 		msg = 1;
@@ -2541,7 +2663,7 @@ decl1loc(sym_t *dsym, int initflg)
 static void
 ledecl(sym_t *dsym)
 {
-	int	eqt, warn;
+	int	eqt, dowarn;
 	sym_t	*esym;
 
 	/* look for a symbol with the same name */
@@ -2564,10 +2686,10 @@ ledecl(sym_t *dsym)
 		return;
 	}
 
-	warn = 0;
-	eqt = eqtype(esym->s_type, dsym->s_type, 0, 0, &warn);
+	dowarn = 0;
+	eqt = eqtype(esym->s_type, dsym->s_type, 0, 0, &dowarn);
 
-	if (!eqt || warn) {
+	if (!eqt || dowarn) {
 		if (esym->s_scl == EXTERN) {
 			/* inconsistent redeclaration of extern: %s */
 			warning(90, dsym->s_name);
@@ -2596,29 +2718,29 @@ ledecl(sym_t *dsym)
 static int
 chkinit(sym_t *sym)
 {
-	int	err;
+	int	erred;
 
-	err = 0;
+	erred = 0;
 
 	if (sym->s_type->t_tspec == FUNC) {
 		/* cannot initialize function: %s */
 		error(24, sym->s_name);
-		err = 1;
+		erred = 1;
 	} else if (sym->s_scl == TYPEDEF) {
 		/* cannot initialize typedef: %s */
 		error(25, sym->s_name);
-		err = 1;
+		erred = 1;
 	} else if (sym->s_scl == EXTERN && sym->s_def == DECL) {
 		/* cannot initialize "extern" declaration: %s */
 		if (dcs->d_ctx == EXTERN) {
 			warning(26, sym->s_name);
 		} else {
 			error(26, sym->s_name);
-			err = 1;
+			erred = 1;
 		}
 	}
 
-	return (err);
+	return (erred);
 }
 
 /*

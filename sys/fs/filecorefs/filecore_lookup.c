@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_lookup.c,v 1.10 2007/11/26 19:01:44 pooka Exp $	*/
+/*	$NetBSD: filecore_lookup.c,v 1.13 2010/06/24 13:03:09 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_lookup.c,v 1.10 2007/11/26 19:01:44 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_lookup.c,v 1.13 2010/06/24 13:03:09 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/namei.h>
@@ -118,8 +118,7 @@ struct	nchstats filecore_nchstats;
  * NOTE: (LOOKUP | LOCKPARENT) currently returns the parent inode unlocked.
  */
 int
-filecore_lookup(v)
-	void *v;
+filecore_lookup(void *v)
 {
 	struct vop_lookup_args /* {
 		struct vnode *a_dvp;
@@ -293,7 +292,7 @@ found:
 	if (flags & ISDOTDOT) {
 		ino_t pin = filecore_getparent(dp);
 
-		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
+		VOP_UNLOCK(pdp);	/* race to get the inode */
 		error = VFS_VGET(vdp->v_mount, pin, &tdp);
 		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
@@ -301,7 +300,7 @@ found:
 		}
 		*vpp = tdp;
 	} else if (name[0] == '.' && namelen == 1) {
-		VREF(vdp);	/* we want ourself, ie "." */
+		vref(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
 #ifdef FILECORE_DEBUG_BR

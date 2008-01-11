@@ -1,4 +1,4 @@
-/*	$NetBSD: subr.S,v 1.18 2007/10/17 19:58:00 garbled Exp $	   */
+/*	$NetBSD: subr.S,v 1.33 2010/12/20 00:25:45 matt Exp $	   */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -47,6 +47,11 @@
 #endif
 
 #define JSBENTRY(x)	.globl x ; .align 2 ; x :
+#define SCBENTRY(name) \
+	.text			; \
+	.align 2		; \
+	.globl __CONCAT(X,name)	; \
+__CONCAT(X,name):
 
 		.text
 
@@ -117,18 +122,20 @@ to:	movw	$0xfff,_C_LABEL(panic)		# Save all regs in panic
 	bisl3	$0x80000000,%r9,_C_LABEL(symtab_end)
 						#   save end of symtab
 3:	addl3	_C_LABEL(esym),$0x3ff,%r0	# Round symbol table end
-	bicl3	$0x3ff,%r0,_C_LABEL(proc0paddr)	# save proc0 uarea pointer
-	bicl3	$0x80000000,_C_LABEL(proc0paddr),%r0 # get phys proc0 uarea addr
+	bicl3	$0x3ff,%r0,%r1			# 
+	movl	%r1,_C_LABEL(lwp0)+L_PCB	# lwp0 pcb, XXXuvm_lwp_getuarea
+	bicl3	$0x80000000,%r1,%r0		# get phys lwp0 uarea addr
 	mtpr	%r0,$PR_PCBB			# Save in IPR PCBB
-	addl3	$USPACE,_C_LABEL(proc0paddr),%r0	# Get kernel stack top
+	addl3	$USPACE,%r1,%r0			# Get kernel stack top
 	mtpr	%r0,$PR_KSP			# put in IPR KSP
 	movl	%r0,_C_LABEL(Sysmap)		# SPT start addr after KSP
-	movl	_C_LABEL(proc0paddr),%r0		# get PCB virtual address
-	movab	IFTRAP(%r0),4(%r0)		# Save trap address in ESP
+	movl	_C_LABEL(lwp0)+L_PCB,%r0	# get PCB virtual address
+	mfpr	$PR_PCBB,PCB_PADDR(%r0)		# save PCB physical address
+	movab	PCB_ONFAULT(%r0),ESP(%r0)	# Save trap address in ESP
 	mtpr	4(%r0),$PR_ESP			# Put it in ESP also
 
 # Set some registers in known state
-	movl	_C_LABEL(proc0paddr),%r0
+	movl	%r1,%r0				# get lwp0 pcb
 	clrl	P0LR(%r0)
 	clrl	P1LR(%r0)
 	mtpr	$0,$PR_P0LR
@@ -138,7 +145,7 @@ to:	movw	$0xfff,_C_LABEL(panic)		# Save all regs in panic
 	movl	%r1,P1BR(%r0)
 	mtpr	%r1,$PR_P0BR
 	mtpr	%r1,$PR_P1BR
-	clrl	IFTRAP(%r0)
+	clrl	PCB_ONFAULT(%r0)
 	mtpr	$0,$PR_SCBB
 
 # Copy the RPB to its new position
@@ -220,11 +227,15 @@ _C_LABEL(cmn_idsptch):
 	calls	$0,_C_LABEL(krnlock)
 #endif
 	movl	(%sp)+,%r0	# get pointer to idspvec
+	mtpr	$IPL_VM,$PR_IPL	# Make sure we are at IPL_VM
 	movl	8(%r0),%r1	# get evcnt pointer
 	beql	1f		# no ptr, skip increment
 	incl	EV_COUNT(%r1)	# increment low longword
 	adwc	$0,EV_COUNT+4(%r1) # add any carry to hi longword
-1:	incl	_C_LABEL(uvmexp)+UVME_INTRS	# increment uvmexp.intrs
+1:	mfpr	$PR_SSP, %r2	# get curlwp
+	movl	L_CPU(%r2), %r2 # get curcpu
+	incl	CI_NINTR(%r2)	# increment ci_data.cpu_nintr
+	adwc	$0,(CI_NINTR+4)(%r2)
 #if 0
 	pushl	%r0
 	movq	(%r0),-(%sp)
@@ -303,6 +314,93 @@ _C_LABEL(vax_mp_tramp):
 	rei
 #endif
 
+	.globl	softint_cleanup,softint_exit,softint_process
+	.type	softint_cleanup@function
+	.type	softint_exit@function
+	.type	softint_process@function
+softint_cleanup:
+	movl    L_CPU(%r0),%r1		/* get cpu_info */
+	incl    CI_MTX_COUNT(%r1)	/* increment mutex count */
+	clrl    L_CTXSWTCH(%r0)		/* clear l_ctxswtch of old lwp */
+	movl	L_PCB(%r0),%r1		/* get PCB of softint LWP */
+softint_exit:
+	popr	$0x3			/* restore r0 and r1 */
+	rei				/* return from interrupt */
+
+softint_process:
+	/*
+	 * R6 contains pinned LWP
+	 * R7 contains ipl to dispatch with
+	 */
+	movq	%r6,-(%sp)		/* push old lwp and ipl onto stack */
+	calls	$2,_C_LABEL(softint_dispatch) /* dispatch it */
+
+	/* We can use any register because ldpctx will overwrite them */
+	movl	L_PCB(%r6),%r3		/* get pcb */
+	movab	softint_exit,PCB_PC(%r3)/* do a quick exit */
+#ifdef MULTIPROCESSOR
+	movl	L_CPU(%r6),%r8
+	movl	%r6,CI_CURLWP(%r8)
+#endif
+
+	mtpr	PCB_PADDR(%r3),$PR_PCBB	/* restore PA of interrupted pcb */
+	ldpctx				/* implictily updates curlwp */
+	rei
+
+
+softint_common:
+	mfpr	$PR_IPL,%r1
+	mtpr	$IPL_HIGH,$PR_IPL	/* we need to be at IPL_HIGH */
+	movpsl	-(%sp)			/* add cleanup hook */
+	pushab	softint_cleanup
+	svpctx
+
+	/* We can use any register because ldpctx will overwrite them */
+	mfpr	$PR_SSP,%r6		/* Get curlwp */
+	movl	L_CPU(%r6),%r8		/* get cpu_info */
+	movl	CI_SOFTLWPS(%r8)[%r0],%r2 /* get softlwp to switch to */
+	movl	L_PCB(%r2),%r3		/* Get pointer to its pcb. */
+	movl	%r6,PCB_R6(%r3)		/* move old lwp into new pcb */
+	movl	%r1,PCB_R7(%r3)		/* move IPL into new pcb */
+#ifdef MULTIPROCESSOR
+	movl	%r2,CI_CURLWP(%r8)	/* update ci_curlwp */
+#endif
+
+	/*
+	 * Now reset the PCB since we no idea what state it was last in
+	 */
+	movab	(USPACE-TRAPFRAMELEN-CALLSFRAMELEN)(%r3),%r0
+					/* calculate where KSP should be */
+	movl	%r0,KSP(%r3)		/* save it as SP */
+	movl	%r0,PCB_FP(%r3)		/* and as the FP too */
+	movab	CA_ARGNO(%r0),PCB_AP(%r3) /* update the AP as well */
+	movab	softint_process,PCB_PC(%r3) /* and where we will start */
+	movl	$PSL_HIGHIPL,PCB_PSL(%r3) /* Needs to be running at IPL_HIGH */
+
+	mtpr	PCB_PADDR(%r3),$PR_PCBB	/* set PA of new pcb */
+	ldpctx				/* load it */
+	rei				/* get off interrupt stack */
+
+SCBENTRY(softclock)
+	pushr	$0x3			/* save r0 and r1 */
+	movl	$SOFTINT_CLOCK,%r0
+	brb	softint_common
+
+SCBENTRY(softbio)
+	pushr	$0x3			/* save r0 and r1 */
+	movl	$SOFTINT_BIO,%r0
+	brb	softint_common
+
+SCBENTRY(softnet)
+	pushr	$0x3			/* save r0 and r1 */
+	movl	$SOFTINT_NET,%r0
+	brb	softint_common
+
+SCBENTRY(softserial)
+	pushr	$0x3			/* save r0 and r1 */
+	movl	$SOFTINT_SERIAL,%r0
+	brb	softint_common
+
 /*
  * Helper routine for cpu_lwp_fork.  It get invoked by Swtchto.
  * It let's the kernel know the lwp is alive and then calls func(arg)
@@ -326,19 +424,16 @@ JSBENTRY(Swtchto)
 
 	/* We can know use any register because ldpctx will overwrite them */
 	/* New LWP already in %r1 */
-	mfpr	$PR_SSP,%r4		# Get curcpu
-	movl	%r1,CI_CURLWP(%r4)	# update ci_curlwp
-	movl	L_ADDR(%r1),%r3		# Get pointer to new pcb.
+	movl	L_PCB(%r1),%r3		# Get pointer to new pcb.
 	movl	%r0,PCB_R0(%r3)		# move r0 into new pcb (return value)
-	movl	%r4,SSP(%r3)		# Put curcpu into new PCB
-	addl3	%r3,$IFTRAP,%r4		# Save for copy* functions.
-	mtpr	%r4,$PR_ESP		# Use ESP as CPU-specific pointer
-	movl	%r4,ESP(%r3)		# Must save in PCB also.
+#ifdef MULTIPROCESSOR
+	movl	L_CPU(%r0), %r8		/* get cpu_info of old lwp */
+	movl	%r8, L_CPU(%r1)		/* update cpu_info of new lwp */
+	movl	%r1,CI_CURLWP(%r8)	/* update ci_curlwp */
+#endif
 
-	extzv	$9,$21,%r3,%r1		# extract offset of PCB
-	ashl	$9,*_C_LABEL(Sysmap)[%r1],%r4
-
-	mtpr	%r4,$PR_PCBB		# set PA of new pcb
+	mtpr	PCB_PADDR(%r3),$PR_PCBB	# set PA of new pcb
+	mtpr	$IPL_HIGH,$PR_IPL	/* we need to be at IPL_HIGH */
 	ldpctx				# load it
 	/* r0 already has previous lwp */
 	/* r1 already has this lwp */
@@ -350,7 +445,7 @@ JSBENTRY(Swtchto)
 #
 
 ENTRY(copyout, 0)
-	movl	8(%ap),%r2
+	movl	8(%ap),%r3
 	blss	3f		# kernel space
 	movl	4(%ap),%r1
 	brb	2f
@@ -358,28 +453,33 @@ ENTRY(copyout, 0)
 ENTRY(copyin, 0)
 	movl	4(%ap),%r1
 	blss	3f		# kernel space
-	movl	8(%ap),%r2
-2:	mfpr	$PR_ESP,%r3
-	movab	1f,(%r3)
-	movc3	12(%ap),(%r1),(%r2)
-1:	mfpr	$PR_ESP,%r3
-	clrl	(%r3)
+	movl	8(%ap),%r3
+2:	mfpr	$PR_ESP,%r2
+	movab	1f,(%r2)	# set pcb_onfault
+4:	tstw	14(%ap)		# check if >= 64K
+	bneq	5f
+	movc3	12(%ap),(%r1),(%r3)
+	clrl	%r0
+1:	mfpr	$PR_ESP,%r2
+	clrl	(%r2)		# clear pcb_onfault
 	ret
+5:	movc3	$0xfffc,(%r1),(%r3)
+	subl2	$0xfffc,12(%ap)
+	brb	4b
 
-3:	mnegl	$1,%r0
+3:	movl	$EFAULT,%r0
 	ret
 
 ENTRY(kcopy,0)
 	mfpr	$PR_ESP,%r3
-	movl	(%r3),-(%sp)
-	movab	1f,(%r3)
+	movl	(%r3),-(%sp)	# save current pcb_onfault
+	movab	1f,(%r3)	# set pcb_onfault
 	movl	4(%ap),%r1
 	movl	8(%ap),%r2
 	movc3	12(%ap),(%r1), (%r2)
-	clrl	%r1
+	clrl	%r0
 1:	mfpr	$PR_ESP,%r3
-	movl	(%sp)+,(%r3)
-	movl	%r1,%r0
+	movl	(%sp)+,(%r3)	# restore pcb_onfault
 	ret
 
 /*
@@ -409,14 +509,16 @@ ENTRY(copystr,0)
 	movl	16(%ap),%r2	# copied
 	clrl	%r0
 	mfpr	$PR_ESP,%r1
-	movab	3f,(%r1)
+	movab	2f,(%r1)	# set pcb_onfault
 
 	tstl	%r3		# any chars to copy?
 	bneq	1f		# yes, jump for more
 0:	tstl	%r2		# save copied len?
 	beql	2f		# no
 	subl3	4(%ap),%r5,(%r2)	# save copied len
-2:	ret
+2:	mfpr	$PR_ESP,%r1
+	clrl	(%r1)		# clear pcb_onfault
+	ret
 
 1:	movb	(%r5)+,(%r4)+	# copy one char
 	beql	0b		# jmp if last char
@@ -424,63 +526,53 @@ ENTRY(copystr,0)
 	movl	$ENAMETOOLONG,%r0 # inform about too long string
 	brb	0b		# out of chars
 
-3:	mfpr	$PR_ESP,%r1
-	clrl	(%r1)
-	brb	0b
-
 ENTRY(subyte,0)
 	movl	4(%ap),%r0
 	blss	3f		# illegal space
 	mfpr	$PR_ESP,%r1
-	movab	1f,(%r1)
+	movab	1f,(%r1)	# set pcb_onfault
 	movb	8(%ap),(%r0)
-	clrl	%r1
-1:	mfpr	$PR_ESP,%r2
-	clrl	(%r2)
-	movl	%r1,%r0
+	clrl	%r0
+1:	mfpr	$PR_ESP,%r1
+	clrl	(%r1)		# clear pcb_onfault
 	ret
 
 ENTRY(suword,0)
 	movl	4(%ap),%r0
 	blss	3f		# illegal space
 	mfpr	$PR_ESP,%r1
-	movab	1f,(%r1)
+	movab	3f,(%r1)	# set pcb_onfault
 	movl	8(%ap),(%r0)
-	clrl	%r1
-1:	mfpr	$PR_ESP,%r2
-	clrl	(%r2)
-	movl	%r1,%r0
+	clrl	%r0
+1:	mfpr	$PR_ESP,%r1
+	clrl	(%r1)		# clear pcb_onfault
 	ret
 
 ENTRY(suswintr,0)
 	movl	4(%ap),%r0
 	blss	3f		# illegal space
 	mfpr	$PR_ESP,%r1
-	movab	1f,(%r1)
+	movab	3f,(%r1)	# set pcb_onfault
 	movw	8(%ap),(%r0)
-	clrl	%r1
-1:	mfpr	$PR_ESP,%r2
-	clrl	(%r2)
-	movl	%r1,%r0
+	clrl	%r0
+1:	mfpr	$PR_ESP,%r1
+	clrl	(%r1)		# clear pcb_onfault
 	ret
 
 3:	mnegl	$1,%r0
-	ret
+	brb	1b
 
 	.align	2
 ALTENTRY(fusword)
 ENTRY(fuswintr,0)
-	movl	4(%ap),%r0
+	movl	4(%ap),%r2
 	blss	3b
 	mfpr	$PR_ESP,%r1
-	movab	1f,(%r1)
-	movzwl	(%r0),%r1
-1:	mfpr	$PR_ESP,%r2
-	clrl	(%r2)
-	movl	%r1,%r0
+	movab	3b,(%r1)	# set pcb_onfault
+	movzwl	(%r2),%r0
+1:	mfpr	$PR_ESP,%r1
+	clrl	(%r1)		# clear pcb_onfault
 	ret
-
-#if defined(MULTIPROCESSOR) || defined(DEBUG) || defined(DIAGNOSTIC) || defined(LOCKDEBUG)
 
 JSBENTRY(Slock)
 1:	bbssi	$0,(%r1),1b
@@ -496,8 +588,6 @@ JSBENTRY(Sunlock)
 	bbcci	$0,(%r1),1f
 1:	rsb
 
-#endif
-
 #
 # data department
 #
@@ -506,8 +596,3 @@ JSBENTRY(Sunlock)
 	.globl _C_LABEL(memtest)
 _C_LABEL(memtest):		# memory test in progress
 	.long 0
-
-#ifdef __ELF__
-	.section	.rodata
-#endif
-noque:	.asciz	"swtch"

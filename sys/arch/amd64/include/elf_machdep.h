@@ -1,4 +1,6 @@
-/*	$NetBSD: elf_machdep.h,v 1.1 2003/04/26 18:39:40 fvdl Exp $	*/
+/*	$NetBSD: elf_machdep.h,v 1.4 2010/03/18 08:28:33 cegger Exp $	*/
+
+#if !defined __i386__
 
 #define	ELF32_MACHDEP_ENDIANNESS	ELFDATA2LSB
 #define	ELF32_MACHDEP_ID_CASES						\
@@ -34,4 +36,20 @@
 #define R_X86_64_8		14
 #define R_X86_64_PC8		15
 
+/* TLS relocations */
+#define R_X86_64_DTPMOD64	16
+#define R_X86_64_DTPOFF64	17
+#define R_X86_64_TPOFF64	18
+#define R_X86_64_TLSGD		19
+#define R_X86_64_TLSLD		20
+#define R_X86_64_DTPOFF32	21
+#define R_X86_64_GOTTPOFF	22
+#define R_X86_64_TPOFF32	23
+
 #define	R_TYPE(name)	__CONCAT(R_X86_64_,name)
+
+#else	/*	!__i386__	*/
+
+#include <i386/elf_machdep.h>
+
+#endif	/*	!__i386__	*/

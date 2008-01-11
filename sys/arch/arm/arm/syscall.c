@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.38 2008/01/05 12:53:53 dsl Exp $	*/
+/*	$NetBSD: syscall.c,v 1.51 2010/12/20 00:25:26 matt Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -78,7 +71,9 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.38 2008/01/05 12:53:53 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.51 2010/12/20 00:25:26 matt Exp $");
+
+#include "opt_sa.h"
 
 #include <sys/device.h>
 #include <sys/errno.h>
@@ -86,12 +81,13 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.38 2008/01/05 12:53:53 dsl Exp $");
 #include <sys/reboot.h>
 #include <sys/signalvar.h>
 #include <sys/syscall.h>
+#include <sys/syscallvar.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <sys/ktrace.h>
 
 #include <uvm/uvm_extern.h>
 
+#include <sys/savar.h>
 #include <machine/cpu.h>
 #include <machine/frame.h>
 #include <machine/pcb.h>
@@ -104,9 +100,9 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.38 2008/01/05 12:53:53 dsl Exp $");
 void
 swi_handler(trapframe_t *frame)
 {
-	struct lwp *l = curlwp;
-	struct proc *p = l->l_proc;
-	u_int32_t insn;
+	lwp_t *l = curlwp;
+	struct pcb *pcb;
+	uint32_t insn;
 
 	/*
 	 * Enable interrupts if they were enabled before the exception.
@@ -117,12 +113,18 @@ swi_handler(trapframe_t *frame)
 	if ((frame->tf_r15 & R15_IRQ_DISABLE) == 0)
 		int_on();
 #else
-	if (!(frame->tf_spsr & I32_bit))
-		enable_interrupts(I32_bit);
+	KASSERT((frame->tf_spsr & IF32_bits) == 0);
+	restore_interrupts(frame->tf_spsr & IF32_bits);
 #endif
 
 #ifdef acorn26
 	frame->tf_pc += INSN_SIZE;
+#endif
+
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
 #endif
 
 #ifndef THUMB_CODE
@@ -136,15 +138,13 @@ swi_handler(trapframe_t *frame)
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_code = ILL_ILLOPC;
-		ksi.ksi_addr = (u_int32_t *)(intptr_t) (frame->tf_pc-INSN_SIZE);
-		KERNEL_LOCK(1, l);
+		ksi.ksi_addr = (uint32_t *)(intptr_t) (frame->tf_pc-INSN_SIZE);
 #if 0
 		/* maybe one day we'll do emulations */
 		(*l->l_proc->p_emul->e_trapsignal)(l, &ksi);
 #else
 		trapsignal(l, &ksi);
 #endif
-		KERNEL_UNLOCK_LAST(l);
 		userret(l);
 		return;
 	}
@@ -154,20 +154,24 @@ swi_handler(trapframe_t *frame)
 	if (frame->tf_spsr & PSR_T_bit) {
 		/* Map a Thumb SWI onto the bottom 256 ARM SWIs.  */
 		insn = fusword((void *)(frame->tf_pc - THUMB_INSN_SIZE));
-		insn = (insn & 0x00ff) | 0xef000000;
+		if (insn & 0x00ff)
+			insn = (insn & 0x00ff) | 0xef000000;
+		else
+			insn = frame->tf_ip | 0xef000000;
 	}
 	else
 #endif
 	{
 	/* XXX fuword? */
 #ifdef __PROG32
-		insn = *(u_int32_t *)(frame->tf_pc - INSN_SIZE);
+		insn = *(uint32_t *)(frame->tf_pc - INSN_SIZE);
 #else
-		insn = *(u_int32_t *)((frame->tf_r15 & R15_PC) - INSN_SIZE);
+		insn = *(uint32_t *)((frame->tf_r15 & R15_PC) - INSN_SIZE);
 #endif
 	}
 
-	l->l_addr->u_pcb.pcb_tf = frame;
+	pcb = lwp_getpcb(l);
+	pcb->pcb_tf = frame;
 
 #ifdef CPU_ARM7
 	/*
@@ -194,130 +198,84 @@ swi_handler(trapframe_t *frame)
 	}
 #endif	/* CPU_ARM7 */
 
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 
-	LWP_CACHE_CREDS(l, p);
-	(*(void(*)(struct trapframe *, struct lwp *, u_int32_t))
-	    (p->p_md.md_syscall))(frame, l, insn);
+	LWP_CACHE_CREDS(l, l->l_proc);
+	(*l->l_proc->p_md.md_syscall)(frame, l, insn);
 }
 
-#define MAXARGS 8
-
-void syscall_plain(struct trapframe *, struct lwp *, u_int32_t);
-void syscall_fancy(struct trapframe *, struct lwp *, u_int32_t);
+void syscall(struct trapframe *, lwp_t *, uint32_t);
 
 void
 syscall_intern(struct proc *p)
 {
-
-	if (trace_is_enabled(p))
-		p->p_md.md_syscall = syscall_fancy;
-	else
-		p->p_md.md_syscall = syscall_plain;
+	p->p_md.md_syscall = syscall;
 }
 
 void
-syscall_plain(struct trapframe *frame, struct lwp *l, u_int32_t insn)
+syscall(struct trapframe *frame, lwp_t *l, uint32_t insn)
 {
-	struct proc *p = l->l_proc;
+	struct proc * const p = l->l_proc;
 	const struct sysent *callp;
-	int code, error;
-	u_int nap, nargs;
-	register_t *ap, *args, copyargs[MAXARGS], rval[2];
+	int error;
+	u_int nargs;
+	register_t *args;
+	register_t copyargs[2+SYS_MAXSYSARGS];
+	register_t rval[2];
 	ksiginfo_t ksi;
+	const uint32_t os_mask = insn & SWI_OS_MASK;
+	uint32_t code = insn & 0x000fffff;
 
-	KERNEL_LOCK(1, l);
-
-	switch (insn & SWI_OS_MASK) { /* Which OS is the SWI from? */
-	case SWI_OS_ARM: /* ARM-defined SWIs */
-		code = insn & 0x00ffffff;
-		switch (code) {
-		case SWI_IMB:
-		case SWI_IMBrange:
-			/*
-			 * Do nothing as there is no prefetch unit that needs
-			 * flushing
-			 */
-			break;
-		default:
-			/* Undefined so illegal instruction */
-			KSI_INIT_TRAP(&ksi);
-			ksi.ksi_signo = SIGILL;
-			/* XXX get an ILL_ILLSYSCALL assigned */
-			ksi.ksi_code = 0;
-#ifdef THUMB_CODE
-			if (frame->tf_spsr & PSR_T_bit) 
-				ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-				    THUMB_INSN_SIZE);
-			else
-#endif
-				ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-				    INSN_SIZE);
-			ksi.ksi_trap = insn;
-			trapsignal(l, &ksi);
-			break;
+	/* test new official and old unofficial NetBSD ranges */
+	if (__predict_false(os_mask != SWI_OS_NETBSD)
+	    && __predict_false(os_mask != 0)) {
+		if (os_mask == SWI_OS_ARM
+		    && (code == SWI_IMB || code == SWI_IMBrange)) {
+			userret(l);
+			return;
 		}
 
-		userret(l);
-		return;
-	case 0x000000: /* Old unofficial NetBSD range. */
-	case SWI_OS_NETBSD: /* New official NetBSD range. */
-		nap = 4;
-		break;
-	default:
 		/* Undefined so illegal instruction */
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGILL;
-		/* XXX get an ILL_ILLSYSCALL assigned */
-		ksi.ksi_code = 0;
+		ksi.ksi_code = ILL_ILLTRP;
 #ifdef THUMB_CODE
 		if (frame->tf_spsr & PSR_T_bit) 
-			ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-			    THUMB_INSN_SIZE);
+			ksi.ksi_addr = (void *)(frame->tf_pc - THUMB_INSN_SIZE);
 		else
 #endif
-			ksi.ksi_addr = (u_int32_t *)(frame->tf_pc - INSN_SIZE);
+			ksi.ksi_addr = (void *)(frame->tf_pc - INSN_SIZE);
 		ksi.ksi_trap = insn;
 		trapsignal(l, &ksi);
 		userret(l);
 		return;
 	}
 
-	code = insn & 0x000fffff;
-
-	ap = &frame->tf_r0;
-	callp = p->p_emul->e_sysent;
-
-	switch (code) {	
-	case SYS_syscall:
-		code = *ap++;
-		nap--;
-		break;
-        case SYS___syscall:
-		code = ap[_QUAD_LOWWORD];
-		ap += 2;
-		nap -= 2;
-		break;
-	}
-
 	code &= (SYS_NSYSENT - 1);
-	callp += code;
-	nargs = callp->sy_argsize / sizeof(register_t);
-	if (nargs <= nap)
-		args = ap;
-	else {
-		KASSERT(nargs <= MAXARGS);
-		memcpy(copyargs, ap, nap * sizeof(register_t));
-		error = copyin((void *)frame->tf_usr_sp, copyargs + nap,
-		    (nargs - nap) * sizeof(register_t));
+	callp = p->p_emul->e_sysent + code;
+	nargs = callp->sy_narg;
+	if (nargs > 4) {
+		args = copyargs;
+		memcpy(args, &frame->tf_r0, 4 * sizeof(register_t));
+		error = copyin((void *)frame->tf_usr_sp, args + 4,
+		    (nargs - 4) * sizeof(register_t));
 		if (error)
 			goto bad;
-		args = copyargs;
+	} else {
+		args = &frame->tf_r0;
 	}
 
-	rval[0] = 0;
-	rval[1] = 0;
-	error = (*callp->sy_call)(l, args, rval);
+	if (!__predict_false(p->p_trace_enabled)
+	    || __predict_false(callp->sy_flags & SYCALL_INDIRECT)
+	    || (error = trace_enter(code, args, nargs)) == 0) {
+		rval[0] = 0;
+		rval[1] = 0;
+		error = (*callp->sy_call)(l, args, rval);
+	}
+
+	if (__predict_false(p->p_trace_enabled)
+	    || !__predict_false(callp->sy_flags & SYCALL_INDIRECT))
+		trace_exit(code, rval, error);
 
 	switch (error) {
 	case 0:
@@ -358,166 +316,15 @@ syscall_plain(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 		break;
 	}
 
-	KERNEL_UNLOCK_LAST(l);
 	userret(l);
 }
 
 void
-syscall_fancy(struct trapframe *frame, struct lwp *l, u_int32_t insn)
+child_return(void *arg)
 {
-	struct proc *p = l->l_proc;
-	const struct sysent *callp;
-	int code, error;
-	u_int nap, nargs;
-	register_t *ap, *args, copyargs[MAXARGS], rval[2];
-	ksiginfo_t ksi;
-
-	KERNEL_LOCK(1, l);
-
-	switch (insn & SWI_OS_MASK) { /* Which OS is the SWI from? */
-	case SWI_OS_ARM: /* ARM-defined SWIs */
-		code = insn & 0x00ffffff;
-		switch (code) {
-		case SWI_IMB:
-		case SWI_IMBrange:
-			/*
-			 * Do nothing as there is no prefetch unit that needs
-			 * flushing
-			 */
-			break;
-		default:
-			/* Undefined so illegal instruction */
-			KSI_INIT_TRAP(&ksi);
-			ksi.ksi_signo = SIGILL;
-			/* XXX get an ILL_ILLSYSCALL assigned */
-			ksi.ksi_code = 0;
-#ifdef THUMB_CODE
-			if (frame->tf_spsr & PSR_T_bit) 
-				ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-				    THUMB_INSN_SIZE);
-			else
-#endif
-				ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-				    INSN_SIZE);
-			ksi.ksi_trap = insn;
-			trapsignal(l, &ksi);
-			break;
-		}
-
-		userret(l);
-		return;
-	case 0x000000: /* Old unofficial NetBSD range. */
-	case SWI_OS_NETBSD: /* New official NetBSD range. */
-		nap = 4;
-		break;
-	default:
-		/* Undefined so illegal instruction */
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_signo = SIGILL;
-		/* XXX get an ILL_ILLSYSCALL assigned */
-		ksi.ksi_code = 0;
-#ifdef THUMB_CODE
-		if (frame->tf_spsr & PSR_T_bit) 
-			ksi.ksi_addr = (u_int32_t *)(frame->tf_pc -
-			    THUMB_INSN_SIZE);
-		else
-#endif
-			ksi.ksi_addr = (u_int32_t *)(frame->tf_pc - INSN_SIZE);
-		ksi.ksi_trap = insn;
-		trapsignal(l, &ksi);
-		userret(l);
-		return;
-	}
-
-	code = insn & 0x000fffff;
-
-	ap = &frame->tf_r0;
-	callp = p->p_emul->e_sysent;
-
-	switch (code) {	
-	case SYS_syscall:
-		code = *ap++;
-		nap--;
-		break;
-        case SYS___syscall:
-		code = ap[_QUAD_LOWWORD];
-		ap += 2;
-		nap -= 2;
-		break;
-	}
-
-	code &= (SYS_NSYSENT - 1);
-	callp += code;
-	nargs = callp->sy_argsize / sizeof(register_t);
-	if (nargs <= nap)
-		args = ap;
-	else {
-		KASSERT(nargs <= MAXARGS);
-		memcpy(copyargs, ap, nap * sizeof(register_t));
-		args = copyargs;
-		error = copyin((void *)frame->tf_usr_sp, copyargs + nap,
-		    (nargs - nap) * sizeof(register_t));
-		if (error)
-			goto bad;
-	}
-
-	if ((error = trace_enter(code, code, NULL, args)) != 0)
-		goto out;
-
-	rval[0] = 0;
-	rval[1] = 0;
-	error = (*callp->sy_call)(l, args, rval);
-out:
-	switch (error) {
-	case 0:
-		frame->tf_r0 = rval[0];
-		frame->tf_r1 = rval[1];
-
-#ifdef __PROG32
-		frame->tf_spsr &= ~PSR_C_bit;	/* carry bit */
-#else
-		frame->tf_r15 &= ~R15_FLAG_C;	/* carry bit */
-#endif
-		break;
-
-	case ERESTART:
-		/*
-		 * Reconstruct the pc to point at the swi.
-		 */
-#ifdef THUMB_CODE
-		if (frame->tf_spsr & PSR_T_bit)
-			frame->tf_pc -= THUMB_INSN_SIZE;
-		else
-#endif
-			frame->tf_pc -= INSN_SIZE;
-		break;
-
-	case EJUSTRETURN:
-		/* nothing to do */
-		break;
-
-	default:
-	bad:
-		frame->tf_r0 = error;
-#ifdef __PROG32
-		frame->tf_spsr |= PSR_C_bit;	/* carry bit */
-#else
-		frame->tf_r15 |= R15_FLAG_C;	/* carry bit */
-#endif
-		break;
-	}
-
-	trace_exit(code, args, rval, error);
-	KERNEL_UNLOCK_LAST(l);
-	userret(l);
-}
-
-void
-child_return(arg)
-	void *arg;
-{
-	struct lwp *l = arg;
-	struct trapframe *frame = l->l_addr->u_pcb.pcb_tf;
+	lwp_t *l = arg;
+	struct pcb *pcb = lwp_getpcb(l);
+	struct trapframe *frame = pcb->pcb_tf;
 
 	frame->tf_r0 = 0;
 #ifdef __PROG32
@@ -526,7 +333,6 @@ child_return(arg)
 	frame->tf_r15 &= ~R15_FLAG_C;	/* carry bit */
 #endif
 
-	KERNEL_UNLOCK_LAST(l);
 	userret(l);
 	ktrsysret(SYS_fork, 0, 0);
 }

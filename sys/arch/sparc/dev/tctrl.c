@@ -1,4 +1,4 @@
-/*	$NetBSD: tctrl.c,v 1.44 2007/11/16 08:00:12 xtraeme Exp $	*/
+/*	$NetBSD: tctrl.c,v 1.50 2009/11/21 04:16:51 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2005, 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tctrl.c,v 1.44 2007/11/16 08:00:12 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tctrl.c,v 1.50 2009/11/21 04:16:51 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: tctrl.c,v 1.44 2007/11/16 08:00:12 xtraeme Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -235,7 +227,7 @@ tctrl_match(struct device *parent, struct cfdata *cf, void *aux)
 static void
 tctrl_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct tctrl_softc *sc = (void *)self;
+	struct tctrl_softc *sc = device_private(self);
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;
 	unsigned int i, v;
@@ -310,6 +302,7 @@ tctrl_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_ext_pending = 0;
 
 	mutex_init(&sc->sc_requestlock, MUTEX_DEFAULT, IPL_NONE);
+	selinit(&sc->sc_rsel);
 
 	/* setup sensors and register the power button */
 	tctrl_sensor_setup(sc);
@@ -473,7 +466,7 @@ tctrl_setup_bitport_nop(void)
 	struct tctrl_req req;
 	int s;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	req.cmdbuf[0] = TS102_OP_CTL_BITPORT;
 	req.cmdbuf[1] = 0xff;
 	req.cmdbuf[2] = 0x00;
@@ -492,7 +485,7 @@ tctrl_setup_bitport(void)
 	struct tctrl_req req;
 	int s;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	s = splts102();
 	req.cmdbuf[2] = 0;
 	if ((sc->sc_ext_status & TS102_EXT_STATUS_LID_DOWN)
@@ -686,7 +679,7 @@ tadpole_set_lcd(int what, unsigned short which)
 	struct tctrl_softc *sc;
 	int s;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 
 	s = splhigh();
 	switch (what) {
@@ -710,7 +703,7 @@ tctrl_read_ext_status(void)
 	struct tctrl_req req;
 	int s;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	req.cmdbuf[0] = TS102_OP_RD_EXT_STATUS;
 	req.cmdlen = 1;
 	req.rsplen = 3;
@@ -743,7 +736,7 @@ tctrl_apm_record_event(struct tctrl_softc *sc, u_int event_type)
 		sc->sc_event_ptr %= APM_NEVENTS;
 		evp->type = event_type;
 		evp->index = ++tctrl_apm_evindex;
-		selnotify(&sc->sc_rsel, 0);
+		selnotify(&sc->sc_rsel, 0, 0);
 		return(sc->sc_flags & TCTRL_APM_CTLOPEN) ? 0 : 1;
 	}
 	return(1);
@@ -857,13 +850,10 @@ tadpole_request(struct tctrl_req *req, int spin, int sleep)
 	struct tctrl_softc *sc;
 	int i, s;
 
-	if (tctrl_cd.cd_devs == NULL
-	    || tctrl_cd.cd_ndevs == 0
-	    || tctrl_cd.cd_devs[TCTRL_STD_DEV] == NULL) {
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
+	if (!sc)
 		return ENODEV;
-	}
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
 	tctrl_lock(sc);
 
 	if (spin)
@@ -957,7 +947,7 @@ tadpole_set_video(int enabled)
 	struct tctrl_req req;
 	int s;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	while (sc->sc_wantdata != 0)
 		DELAY(1);
 	s = splts102();
@@ -1040,7 +1030,7 @@ tctrlopen(dev_t dev, int flags, int mode, struct lwp *l)
 
 	if (unit >= tctrl_cd.cd_ndevs)
 		return(ENXIO);
-	sc = tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	if (!sc)
 		return(ENXIO);
 
@@ -1068,7 +1058,7 @@ tctrlclose(dev_t dev, int flags, int mode, struct lwp *l)
 	int ctl = (minor(dev)&0x0f);
 	struct tctrl_softc *sc;
 
-	sc = tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	if (!sc)
 		return(ENXIO);
 
@@ -1093,12 +1083,10 @@ tctrlioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 	int i;
 	uint8_t c;
 
-	if (tctrl_cd.cd_devs == NULL
-	    || tctrl_cd.cd_ndevs == 0
-	    || tctrl_cd.cd_devs[TCTRL_STD_DEV] == NULL) {
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
+	if (!sc)
 		return ENXIO;
-	}
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+
         switch (cmd) {
 
 	case APM_IOC_STANDBY:
@@ -1198,7 +1186,8 @@ tctrlioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 int
 tctrlpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct tctrl_softc *sc = tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	struct tctrl_softc *sc = device_lookup_private(&tctrl_cd,
+						       TCTRL_STD_DEV);
 	int revents = 0;
 
 	if (events & (POLLIN | POLLRDNORM)) {
@@ -1237,7 +1226,8 @@ static const struct filterops tctrlread_filtops =
 int
 tctrlkqfilter(dev_t dev, struct knote *kn)
 {
-	struct tctrl_softc *sc = tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	struct tctrl_softc *sc = device_lookup_private(&tctrl_cd,
+						       TCTRL_STD_DEV);
 	struct klist *klist;
 	int s;
 
@@ -1451,19 +1441,16 @@ tctrl_event_thread(void *v)
 	int s;
 	
 	while (sd == NULL) {
-		for (dv = alldevs.tqh_first; dv; dv = dv->dv_list.tqe_next) {
-			if (strcmp(dv->dv_xname, "sd0") == 0) {
-			    	sd = (struct sd_softc *)dv;
-			}
-			if (le == NULL) {
-				if (strcmp(dv->dv_xname, "le0") == 0)
-					le = (struct lance_softc *)dv;
-			}
-		}
-		if (sd == NULL)
+		dv = device_find_by_xname("sd0");
+		if (dv != NULL)
+			sd = device_private(dv);
+		else
 			tsleep(&sc->sc_events, PWAIT, "probe_disk", hz);
 	}			
-	printf("found %s\n", sd->sc_dev.dv_xname);
+	dv = device_find_by_xname("le0");
+	if (dv != NULL)
+		le = device_private(dv);
+	printf("found %s\n", device_xname(sd->sc_dev));
 	rcount = sd->sc_dk.dk_stats->io_rxfer;
 	wcount = sd->sc_dk.dk_stats->io_wxfer;
 
@@ -1497,7 +1484,7 @@ tadpole_register_callback(void (*callback)(void *, int), void *cookie)
 {
 	struct tctrl_softc *sc;
 
-	sc = (struct tctrl_softc *) tctrl_cd.cd_devs[TCTRL_STD_DEV];
+	sc = device_lookup_private(&tctrl_cd, TCTRL_STD_DEV);
 	sc->sc_video_callback = callback;
 	sc->sc_video_callback_cookie = cookie;
 	if (sc->sc_video_callback != NULL) {

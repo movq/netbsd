@@ -1,4 +1,4 @@
-/*	$NetBSD: err.c,v 1.31 2006/10/23 00:15:58 christos Exp $	*/
+/*	$NetBSD: err.c,v 1.43 2009/10/02 15:03:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: err.c,v 1.31 2006/10/23 00:15:58 christos Exp $");
+__RCSID("$NetBSD: err.c,v 1.43 2009/10/02 15:03:45 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -166,8 +166,8 @@ const	char *msgs[] = {
 	"left operand of '->' must be pointer to struct/union",	      /* 104 */
 	"non-unique member requires struct/union %s",		      /* 105 */
 	"left operand of '->' must be pointer",			      /* 106 */
-	"operands of '%s' have incompatible types",		      /* 107 */
-	"operand of '%s' has incompatible type",		      /* 108 */
+	"operands of '%s' have incompatible types (%s != %s)",		      /* 107 */
+	"operand of '%s' has incompatible type (%s != %s)",		      /* 108 */
 	"void type illegal in expression",			      /* 109 */
 	"pointer to function is not allowed here",		      /* 110 */
 	"unacceptable operand of '%s'",				      /* 111 */
@@ -187,7 +187,7 @@ const	char *msgs[] = {
 	"ANSI C forbids ordered comparisons of pointers to functions",/* 125 */
 	"incompatible types in conditional",			      /* 126 */
 	"'&' before array or function: ignored",		      /* 127 */
-	"operands have incompatible pointer types, op %s",	      /* 128 */
+	"operands have incompatible pointer types, op %s (%s != %s)", /* 128 */
 	"expression has null effect",				      /* 129 */
 	"enum type mismatch, op %s",				      /* 130 */
 	"conversion to '%s' may sign-extend incorrectly",	      /* 131 */
@@ -202,17 +202,17 @@ const	char *msgs[] = {
 	"modulus by 0",						      /* 140 */
 	"integer overflow detected, op %s",			      /* 141 */
 	"floating point overflow detected, op %s",		      /* 142 */
-	"cannot take size of incomplete type",			      /* 143 */
-	"cannot take size of function",				      /* 144 */
-	"cannot take size of bit-field",			      /* 145 */
-	"cannot take size of void",				      /* 146 */
+	"cannot take size/alignment of incomplete type",	      /* 143 */
+	"cannot take size/alignment of function",		      /* 144 */
+	"cannot take size/alignment of bit-field",		      /* 145 */
+	"cannot take size/alignment of void",			      /* 146 */
 	"invalid cast expression",				      /* 147 */
 	"improper cast of void expression",			      /* 148 */
 	"illegal function",					      /* 149 */
 	"argument mismatch: %d arg%s passed, %d expected",	      /* 150 */
 	"void expressions may not be arguments, arg #%d",	      /* 151 */
 	"argument cannot have unknown size, arg #%d",		      /* 152 */
-	"argument has incompatible pointer type, arg #%d",	      /* 153 */
+	"argument has incompatible pointer type, arg #%d (%s != %s)", /* 153 */
 	"illegal combination of pointer and integer, arg #%d",	      /* 154 */
 	"argument is incompatible with prototype, arg #%d",	      /* 155 */
 	"enum type mismatch, arg #%d",			       	      /* 156 */
@@ -230,9 +230,9 @@ const	char *msgs[] = {
 	"array subscript cannot be > %d: %ld",			      /* 168 */
 	"precedence confusion possible: parenthesize!",		      /* 169 */
 	"first operand must have scalar type, op ? :",		      /* 170 */
-	"assignment type mismatch",				      /* 171 */
+	"assignment type mismatch (%s != %s)",			      /* 171 */
 	"too many struct/union initializers",			      /* 172 */
-	"too many array initializers",				      /* 173 */
+	"too many array initializers, expected %d",		      /* 173 */
 	"too many initializers",				      /* 174 */
 	"initialisation of an incomplete type",			      /* 175 */
 	"invalid initializer type %s",				      /* 176 */
@@ -241,7 +241,7 @@ const	char *msgs[] = {
 	"cannot initialize struct/union with no named member",	      /* 179 */
 	"bit-field initializer does not fit",			      /* 180 */
 	"{}-enclosed initializer required",			      /* 181 */
-	"incompatible pointer types",				      /* 182 */
+	"incompatible pointer types (%s != %s)",		      /* 182 */
 	"illegal combination of pointer and integer",		      /* 183 */
 	"illegal pointer combination",				      /* 184 */
 	"initialisation type mismatch",				      /* 185 */
@@ -299,7 +299,7 @@ const	char *msgs[] = {
 	"redeclaration of formal parameter %s",			      /* 237 */
 	"initialisation of union is illegal in traditional C",	      /* 238 */
 	"constant argument to NOT",				      /* 239 */
-	"assignment of different structures",			      /* 240 */
+	"assignment of different structures (%s != %s)",	      /* 240 */
 	"dubious operation on enum, op %s",			      /* 241 */
 	"combination of '%s' and '%s', op %s",			      /* 242 */
 	"dubious comparison of enums, op %s",			      /* 243 */
@@ -308,7 +308,7 @@ const	char *msgs[] = {
 	"dubious conversion of enum to '%s'",			      /* 246 */
 	"pointer casts may be troublesome",			      /* 247 */
 	"floating-point constant out of range",			      /* 248 */
-	"syntax error",						      /* 249 */
+	"syntax error '%s'",					      /* 249 */
 	"unknown character \\%o",				      /* 250 */
 	"malformed integer constant",				      /* 251 */
 	"integer constant out of range",			      /* 252 */
@@ -335,7 +335,7 @@ const	char *msgs[] = {
 	"bit-field type '%s' invalid in ANSI C",		      /* 273 */
 	"ANSI C forbids comparison of %s with %s",		      /* 274 */
 	"cast discards 'const' from pointer target type",	      /* 275 */
-	"",							      /* 276 */
+	"__%s__ is illegal for type %s",			      /* 276 */
 	"initialisation of '%s' with '%s'",			      /* 277 */
 	"combination of '%s' and '%s', arg #%d",		      /* 278 */
 	"combination of '%s' and '%s' in return",		      /* 279 */
@@ -367,7 +367,7 @@ const	char *msgs[] = {
 	"ANSI C forbids conversion of %s to %s, op %s",		      /* 305 */
 	"constant truncated by conversion, op %s",		      /* 306 */
 	"static variable %s set but not used",			      /* 307 */
-	"",							      /* 308 */
+	"Invalid type %s for _Complex",				      /* 308 */
 	"extra bits set to 0 in conversion of '%s' to '%s', op %s",   /* 309 */
 	"symbol renaming can't be used on function arguments",	      /* 310 */
 	"symbol renaming can't be used on automatic variables",	      /* 311 */
@@ -377,11 +377,15 @@ const	char *msgs[] = {
 	"GCC style struct or union member name in initializer",	      /* 315 */
 	"__FUNCTION__ is a GCC extension",			      /* 316 */
 	"__func__ is a C9X feature",				      /* 317 */
-	"variable array dimension is a GCC extension",		      /* 318 */
+	"variable array dimension is a C99/GCC extension",	      /* 318 */
 	"compound literals are a C9X/GCC extension",		      /* 319 */
 	"({ }) is a GCC extension",				      /* 320 */
 	"array initializer with designators is a C9X feature",	      /* 321 */
 	"zero sized array is a C99 extension",			      /* 322 */
+	"continue in 'do ... while (0)' loop",			      /* 323 */
+	"suggest cast from '%s' to '%s' on op %s to avoid overflow",  /* 324 */
+	"variable declaration in for loop", 			      /* 325 */
+	"%s attribute ignored for %s",				      /* 326 */
 };
 
 /*
@@ -390,10 +394,10 @@ const	char *msgs[] = {
 void
 msglist(void)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < sizeof(msgs) / sizeof(msgs[0]); i++)
-		printf("%d\t%s\n", i, msgs[i]);
+		printf("%zu\t%s\n", i, msgs[i]);
 }
 
 /*

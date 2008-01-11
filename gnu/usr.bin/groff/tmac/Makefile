@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.23 2006/02/06 18:29:48 wiz Exp $
+# $NetBSD: Makefile,v 1.25 2009/04/12 17:56:35 joerg Exp $
 
 # $FreeBSD: src/gnu/usr.bin/groff/tmac/Makefile,v 1.41 2003/05/01 13:22:21 ru Exp $
 
@@ -26,7 +26,7 @@ NORMALFILES=	mandoc.tmac andoc.tmac an-old.tmac \
 		ps.tmac psold.tmac pspic.tmac psatk.tmac \
 		dvi.tmac \
 		tty.tmac tty-char.tmac \
-		latin1.tmac latin2.tmac latin9.tmac cp1047.tmac \
+		latin1.tmac latin2.tmac latin9.tmac cp1047.tmac ascii.tmac \
 		unicode.tmac \
 		X.tmac Xps.tmac \
 		lj4.tmac \
@@ -54,7 +54,7 @@ FILES+= $f-s
 FILESNAME_$f-s=mdoc/$f
 $f-s: $f
 	${_MKTARGET_CREATE}
-	sed -f ${DIST_DIR}/strip.sed ${.ALLSRC} > ${.TARGET}
+	${TOOL_SED} -f ${DIST_DIR}/strip.sed ${.ALLSRC} > ${.TARGET}
 .endfor
 
 .for f in ${STRIPFILES}
@@ -62,7 +62,7 @@ FILES+= $f-s
 FILESNAME_$f-s=$f
 $f-s: $f
 	${_MKTARGET_CREATE}
-	sed -f ${DIST_DIR}/strip.sed ${.ALLSRC} > ${.TARGET}
+	${TOOL_SED} -f ${DIST_DIR}/strip.sed ${.ALLSRC} > ${.TARGET}
 .endfor
 
 .for f in ${SPECIALFILES}
@@ -70,7 +70,7 @@ FILES+= $f-s
 FILESNAME_$f-s=$f
 $f-s: $f
 	${_MKTARGET_CREATE}
-	sed -e "s;@TMAC_AN_PREFIX@;${tmac_an_prefix};g" \
+	${TOOL_SED} -e "s;@TMAC_AN_PREFIX@;${tmac_an_prefix};g" \
 	    -e "s;@TMAC_S_PREFIX@;${tmac_s_prefix};g" \
 	    -e "s;@PNMTOPS_NOSETPAGE@;pnmtops -nosetpage;g" \
 		${.ALLSRC} > ${.TARGET}

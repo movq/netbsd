@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.3 2006/04/06 11:50:20 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.5 2009/12/17 15:29:47 matt Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -28,8 +28,9 @@
 #include <machine/bus.h>
 
 struct mainbus_attach_args {
-	char		*ma_name;
-	unsigned long	ma_addr;
+	const char	*ma_name;
+	bus_addr_t	ma_addr;
 	bus_space_tag_t	ma_iot;
 	int		ma_level;
+	int		ma_irq;
 };

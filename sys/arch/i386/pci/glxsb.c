@@ -1,4 +1,4 @@
-/*	$NetBSD: glxsb.c,v 1.4 2008/01/04 21:17:41 ad Exp $	*/
+/*	$NetBSD: glxsb.c,v 1.9 2009/05/16 16:52:03 cegger Exp $	*/
 /* $OpenBSD: glxsb.c,v 1.7 2007/02/12 14:31:45 tom Exp $ */
 
 /*
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: glxsb.c,v 1.4 2008/01/04 21:17:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: glxsb.c,v 1.9 2009/05/16 16:52:03 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -154,7 +154,7 @@ struct glxsb_session {
 };
 
 struct glxsb_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	struct callout		sc_co;
@@ -168,12 +168,12 @@ struct glxsb_softc {
 	rndsource_element_t	sc_rnd_source;
 };
 
-int	glxsb_match(struct device *, struct cfdata *, void *);
-void	glxsb_attach(struct device *, struct device *, void *);
+int	glxsb_match(device_t, cfdata_t, void *);
+void	glxsb_attach(device_t, device_t, void *);
 void	glxsb_rnd(void *);
 
-CFATTACH_DECL(glxsb, sizeof(struct glxsb_softc), glxsb_match, glxsb_attach,
-    NULL, NULL);
+CFATTACH_DECL_NEW(glxsb, sizeof(struct glxsb_softc),
+    glxsb_match, glxsb_attach, NULL, NULL);
 
 #define GLXSB_SESSION(sid)		((sid) & 0x0fffffff)
 #define	GLXSB_SID(crd,ses)		(((crd) << 28) | ((ses) & 0x0fffffff))
@@ -191,7 +191,7 @@ void glxsb_dma_post_op(struct glxsb_softc *, struct glxsb_dma_map *);
 void glxsb_dma_free(struct glxsb_softc *, struct glxsb_dma_map *);
 
 int
-glxsb_match(struct device *parent, struct cfdata *match, void *aux)
+glxsb_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -203,9 +203,9 @@ glxsb_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-glxsb_attach(struct device *parent, struct device *self, void *aux)
+glxsb_attach(device_t parent, device_t self, void *aux)
 {
-	struct glxsb_softc *sc = (void *) self;
+	struct glxsb_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	bus_addr_t membase;
 	bus_size_t memsize;
@@ -228,6 +228,8 @@ glxsb_attach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
+	sc->sc_dev = self;
+
 	/*
 	 * Configure the Security Block.
 	 *
@@ -244,7 +246,7 @@ glxsb_attach(struct device *parent, struct device *self, void *aux)
 #endif
 	wrmsr(SB_GLD_MSR_CTRL, msr);
 
-	rnd_attach_source(&sc->sc_rnd_source, sc->sc_dev.dv_xname,
+	rnd_attach_source(&sc->sc_rnd_source, device_xname(self),
 			  RND_TYPE_RNG, RND_FLAG_NO_ESTIMATE);
 
 	/* Install a periodic collector for the "true" (AMD's word) RNG */
@@ -329,8 +331,8 @@ glxsb_crypto_newsession(void *aux, uint32_t *sidp, struct cryptoini *cri)
 		if (ses == NULL)
 			return (ENOMEM);
 		if (sesn != 0) {
-			bcopy(sc->sc_sessions, ses, sesn * sizeof(*ses));
-			bzero(sc->sc_sessions, sesn * sizeof(*ses));
+			memcpy(ses, sc->sc_sessions, sesn * sizeof(*ses));
+			memset(sc->sc_sessions, 0, sesn * sizeof(*ses));
 			free(sc->sc_sessions, M_DEVBUF);
 		}
 		sc->sc_sessions = ses;
@@ -338,14 +340,14 @@ glxsb_crypto_newsession(void *aux, uint32_t *sidp, struct cryptoini *cri)
 		sc->sc_nsessions++;
 	}
 
-	bzero(ses, sizeof(*ses));
+	memset(ses, 0, sizeof(*ses));
 	ses->ses_used = 1;
 
 	arc4randbytes(ses->ses_iv, sizeof(ses->ses_iv));
 	ses->ses_klen = cri->cri_klen;
 
 	/* Copy the key (Geode LX wants the primary key only) */
-	bcopy(cri->cri_key, ses->ses_key, sizeof(ses->ses_key));
+	memcpy(ses->ses_key, cri->cri_key, sizeof(ses->ses_key));
 
 	*sidp = GLXSB_SID(0, sesn);
 	return (0);
@@ -363,7 +365,7 @@ glxsb_crypto_freesession(void *aux, uint64_t tid)
 	sesn = GLXSB_SESSION(sid);
 	if (sesn >= sc->sc_nsessions)
 		return (EINVAL);
-	bzero(&sc->sc_sessions[sesn], sizeof(sc->sc_sessions[sesn]));
+	memset(&sc->sc_sessions[sesn], 0, sizeof(sc->sc_sessions[sesn]));
 	return (0);
 }
 
@@ -379,7 +381,7 @@ glxsb_aes(struct glxsb_softc *sc, uint32_t control, uint32_t psrc,
 
 	if (len & 0xF) {
 		printf("%s: len must be a multiple of 16 (not %d)\n",
-		    sc->sc_dev.dv_xname, len);
+		    device_xname(sc->sc_dev), len);
 		return;
 	}
 
@@ -434,7 +436,7 @@ glxsb_aes(struct glxsb_softc *sc, uint32_t control, uint32_t psrc,
 			return;
 	}
 
-	printf("%s: operation failed to complete\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(sc->sc_dev, "operation failed to complete\n");
 }
 
 int
@@ -490,9 +492,9 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 	if (crd->crd_flags & CRD_F_ENCRYPT) {
 		control = SB_CTL_ENC;
 		if (crd->crd_flags & CRD_F_IV_EXPLICIT)
-			bcopy(crd->crd_iv, op_iv, sizeof(op_iv));
+			memcpy(op_iv, crd->crd_iv, sizeof(op_iv));
 		else
-			bcopy(ses->ses_iv, op_iv, sizeof(op_iv));
+			memcpy(op_iv, ses->ses_iv, sizeof(op_iv));
 
 		if ((crd->crd_flags & CRD_F_IV_PRESENT) == 0) {
 			if (crp->crp_flags & CRYPTO_F_IMBUF)
@@ -509,7 +511,7 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 	} else {
 		control = SB_CTL_DEC;
 		if (crd->crd_flags & CRD_F_IV_EXPLICIT)
-			bcopy(crd->crd_iv, op_iv, sizeof(op_iv));
+			memcpy(op_iv, crd->crd_iv, sizeof(op_iv));
 		else {
 			if (crp->crp_flags & CRYPTO_F_IMBUF)
 				m_copydata((struct mbuf *)crp->crp_buf,
@@ -555,7 +557,7 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 			cuio_copyback((struct uio *)crp->crp_buf,
 			    crd->crd_skip + offset, len, op_dst);
 		else
-			bcopy(op_dst, (char *)crp->crp_buf + crd->crd_skip + offset,
+			memcpy((char *)crp->crp_buf + crd->crd_skip + offset, op_dst,
 			    len);
 
 		offset += len;
@@ -574,11 +576,11 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 		 * time.
 		 */
 		if (crd->crd_flags & CRD_F_ENCRYPT) {
-			bcopy(op_dst + len - sizeof(op_iv), piv, sizeof(op_iv));
+			memcpy(piv, op_dst + len - sizeof(op_iv), sizeof(op_iv));
 		} else {
 			/* Decryption, only need this if another iteration */
 			if (tlen > 0) {
-				bcopy(op_src + len - sizeof(op_iv), piv,
+				memcpy(piv, op_src + len - sizeof(op_iv),
 				    sizeof(op_iv));
 			}
 		}
@@ -586,7 +588,7 @@ glxsb_crypto_process(void *aux, struct cryptop *crp, int hint)
 
 	/* All AES processing has now been done. */
 
-	bzero(sc->sc_dma.dma_vaddr, xlen * 2);
+	memset(sc->sc_dma.dma_vaddr, 0, xlen * 2);
 out:
 	crp->crp_etype = err;
 	crypto_done(crp);
@@ -605,8 +607,8 @@ glxsb_dma_alloc(struct glxsb_softc *sc, int size, struct glxsb_dma_map *dma)
 	rc = bus_dmamap_create(sc->sc_dmat, size, dma->dma_nsegs, size,
 	    0, BUS_DMA_NOWAIT, &dma->dma_map);
 	if (rc != 0) {
-		printf("%s: couldn't create DMA map for %d bytes (%d)\n",
-		    sc->sc_dev.dv_xname, size, rc);
+		aprint_error_dev(sc->sc_dev, "couldn't create DMA map for %d bytes (%d)\n",
+		    size, rc);
 
 		goto fail0;
 	}
@@ -614,8 +616,8 @@ glxsb_dma_alloc(struct glxsb_softc *sc, int size, struct glxsb_dma_map *dma)
 	rc = bus_dmamem_alloc(sc->sc_dmat, size, SB_AES_ALIGN, 0,
 	    &dma->dma_seg, dma->dma_nsegs, &dma->dma_nsegs, BUS_DMA_NOWAIT);
 	if (rc != 0) {
-		printf("%s: couldn't allocate DMA memory of %d bytes (%d)\n",
-		    sc->sc_dev.dv_xname, size, rc);
+		aprint_error_dev(sc->sc_dev, "couldn't allocate DMA memory of %d bytes (%d)\n",
+		    size, rc);
 
 		goto fail1;
 	}
@@ -623,8 +625,8 @@ glxsb_dma_alloc(struct glxsb_softc *sc, int size, struct glxsb_dma_map *dma)
 	rc = bus_dmamem_map(sc->sc_dmat, &dma->dma_seg, 1, size,
 	    &dma->dma_vaddr, BUS_DMA_NOWAIT);
 	if (rc != 0) {
-		printf("%s: couldn't map DMA memory for %d bytes (%d)\n",
-		    sc->sc_dev.dv_xname, size, rc);
+		aprint_error_dev(sc->sc_dev, "couldn't map DMA memory for %d bytes (%d)\n",
+		    size, rc);
 
 		goto fail2;
 	}
@@ -632,8 +634,8 @@ glxsb_dma_alloc(struct glxsb_softc *sc, int size, struct glxsb_dma_map *dma)
 	rc = bus_dmamap_load(sc->sc_dmat, dma->dma_map, dma->dma_vaddr,
 	    size, NULL, BUS_DMA_NOWAIT);
 	if (rc != 0) {
-		printf("%s: couldn't load DMA memory for %d bytes (%d)\n",
-		    sc->sc_dev.dv_xname, size, rc);
+		aprint_error_dev(sc->sc_dev, "couldn't load DMA memory for %d bytes (%d)\n",
+		    size, rc);
 
 		goto fail3;
 	}

@@ -1,9 +1,9 @@
-# $NetBSD: GENERIC,v 1.252 2007/12/31 15:31:48 ad Exp $
+# $NetBSD: GENERIC,v 1.266 2011/03/06 17:08:19 bouyer Exp $
 #
 # This file was automatically created.
 # Changes will be lost when make is run in this directory.
 #
-# Created from: # NetBSD: GENERIC.in,v 1.62 2007/08/20 07:40:29 is Exp $
+# Created from: # NetBSD: GENERIC.in,v 1.77 2011/01/14 10:01:12 phx Exp $
 #
 # GENERIC machine description file
 #
@@ -28,7 +28,7 @@ include "arch/amiga/conf/std.amiga"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.252 $"
+#ident 		"GENERIC-$Revision: 1.266 $"
 
 
 maxusers	8
@@ -81,6 +81,7 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 
 #options 	ALTQ		# Manipulate network interfaces' output queues
@@ -113,21 +114,21 @@ file-system 	KERNFS		# kernel data-structure filesystem
 file-system 	FDESC		# user file descriptor filesystem
 file-system 	NULLFS		# loopback filesystem
 file-system 	OVERLAY		# overlay filesystem
-#file-system 	PORTAL		# Portal filesystem
 file-system 	PROCFS		# /proc filesystem
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union filesystem
 file-system	SMBFS		# experimental - CIFS; also needs nsmb (below)
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # Filesystem options
 
 #options 	FFS_EI		# FFS Endian Independant support
+options 	WAPBL		# File system journaling support - Experimental
 
-options 	QUOTA		# User and group quotas in FFS
-options 	SOFTDEP		# FFS soft updates support.
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server side code
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -151,6 +152,7 @@ options 	COMPAT_16	# compatibility with NetBSD 1.6
 options 	COMPAT_20	# compatibility with NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_SUNOS	# Support to run Sun (m68k) executables
 options 	COMPAT_SVR4	# Support to run SVR4 (m68k) executables
 options 	COMPAT_NOMID	# allow nonvalid machine id executables
@@ -166,10 +168,6 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVSHM		# System V-like shared memory
 options 	SYSVMSG		# System V-like messages
 options 	SYSVSEM		# System V-like semaphores
-#options 	SEMMNI=10	# number of semaphore identifiers
-#options 	SEMMNS=60	# number of semaphores in system
-#options 	SEMUME=10	# max number of undo entries per process
-#options 	SEMMNU=30	# number of undo structures in system
 options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 #
@@ -177,7 +175,6 @@ options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 #
 
 options 	KTRACE		# system call tracing support
-options 	LKM		# Loadable kernel modules
 #options 	INSECURE	# disable kernel security levels
 options 	SCSIVERBOSE	# human readable SCSI error messages
 options 	USERCONF	# userconf(4) support
@@ -404,6 +401,8 @@ mgnsc0		at zbus0		# Magnum scsi
 scsibus*	at mgnsc0
 wesc0		at zbus0		# Warp Engine scsi
 scsibus*	at wesc0
+bppcsc0		at zbus0		# BlizzardPPC 603e+ scsi
+scsibus*	at bppcsc0
 afsc0		at zbus0		# A4091 scsi
 scsibus*	at afsc0
 aftsc0		at mainbus0		# A4000T scsi
@@ -463,6 +462,11 @@ ch*	at scsibus? target ? lun ?	# scsi autochangers
 ss*	at scsibus? target ? lun ?	# scsi scanner
 uk*	at scsibus? target ? lun ?	# scsi unknown
 
+#
+# accept filters
+pseudo-device	accf_data		# "dataready" accept filter
+pseudo-device	accf_http		# "httpready" accept filter
+
 pseudo-device	loop			# loopback network interface
 pseudo-device	sl			# SLIP network interfaces
 pseudo-device	ppp			# PPP network interfaces
@@ -482,7 +486,7 @@ pseudo-device	bridge			# simple inter-network bridging
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 
 pseudo-device	view		4	# views (needed for grfcc)
 pseudo-device	pty			# pseudo-terminals

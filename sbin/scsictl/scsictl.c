@@ -1,4 +1,4 @@
-/*	$NetBSD: scsictl.c,v 1.29 2007/01/22 20:56:46 bouyer Exp $	*/
+/*	$NetBSD: scsictl.c,v 1.32 2011/05/24 12:04:18 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: scsictl.c,v 1.29 2007/01/22 20:56:46 bouyer Exp $");
+__RCSID("$NetBSD: scsictl.c,v 1.32 2011/05/24 12:04:18 joerg Exp $");
 #endif
 
 
@@ -517,7 +510,7 @@ device_format(int argc, char *argv[])
 	    (mode_page.format_page.bytes_s[1]);
 
 	if (j != DEV_BSIZE)
-		printf("current disk sector size: %hd\n", j);
+		printf("current disk sector size: %d\n", j);
 
 	memset(&cmd, 0, sizeof(cmd));
 
@@ -627,7 +620,7 @@ device_format(int argc, char *argv[])
 				    req.retsts);
 				break;
 			}
-			memcpy(&sense, req.sense, SENSEBUFLEN);
+			memcpy(&sense, req.sense, sizeof(sense));
 			if (sense.sks.sks_bytes[0] & SSD_SKSV) {
 				j = (sense.sks.sks_bytes[1] << 8) |
 				    (sense.sks.sks_bytes[2]);

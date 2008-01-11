@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.es,v 1.20 2007/11/12 15:07:33 jmmv Exp $	*/
+/*	$NetBSD: msg.mi.es,v 1.35 2011/04/17 12:33:42 martin Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -42,8 +38,15 @@ message usage
 {uso: sysinst [-r versión] [-f fichero-definición]
 }
 
+/*
+ * We can not use non ascii characters in this message - it is displayed
+ * before the locale is set up!
+ */
 message sysinst_message_language
-{Mensajes de instalación en castellano}
+{Mensajes de instalacion en castellano}
+
+message sysinst_message_locale
+{es_ES.ISO8859-15}
 
 message Yes {Sí}
 message No {No}
@@ -71,25 +74,23 @@ message hello
 {Bienvenido a sysinst, la herramienta de instalación de NetBSD-@@VERSION@@.
 Esta herramienta guiada por menús está diseñada para ayudarle a instalar
 NetBSD en un disco duro, o actualizar un sistema NetBSD existente con
-un trabajo mínimo. 
+un trabajo mínimo.
 En los siguientes menús teclee la letra de referencia (a, b, c, ...) para
 seleccionar una opción, o teclee CTRL+N/CTRL+P para seleccionar la opción
-siguiente/anterior. 
-Las teclas de cursor y AvPág/RePág puede que también funcionen. 
+siguiente/anterior.
+Las teclas de cursor y AvPág/RePág puede que también funcionen.
 Active la selección actual desde el menú pulsando la tecla Intro.
-
 }
 
 message thanks
 {¡Gracias por usar NetBSD!
-
 }
 
 message installusure
 {Ha escogido instalar NetBSD en su disco duro.  Esto cambiará información
 de su disco duro.  ¡Debería haber hecho una copia de seguridad completa
 antes de este procedimiento!  Este procedimiento realizará las siguientes
-operaciones: 
+operaciones:
 	a) Particionar su disco
 	b) Crear nuevos sistemas de ficheros BSD
 	c) Cargar e instalar los conjuntos de distribución
@@ -130,7 +131,7 @@ Se le volverá a llevar al menú original.
 }
 
 message onedisk
-{Solamente se ha encontrado un disco, %s. 
+{Solamente se ha encontrado un disco, %s.
 Por tanto se entiende que quiere %s NetBSD en él.
 }
 
@@ -163,7 +164,7 @@ message megname
 
 message layout
 {NetBSD usa una etiqueta de BSD para dividir la porción NetBSD del disco
-en varias particiones BSD.  Ahora debería configurar su etiqueta BSD. 
+en varias particiones BSD.  Ahora debería configurar su etiqueta BSD.
 
 Puede usar un simple editor para establecer los tamaños de las particiones
 NetBSD, o mantener los tamaños de partición y contenidos actuales.
@@ -183,7 +184,7 @@ Seleccionar sectores le permitirá especificar los tamaños de manera
 más precisa.  En discos ZBR modernos, el tamaño real del cilindro varía
 a lo largo del disco y no hay mucha ventaja real en el alineamiento de
 cilindros.  En discos más viejos, lo más eficiente es seleccionar
-tamaños de partición que sean multiples exactos del tamaño real del 
+tamaños de partición que sean multiples exactos del tamaño real del
 cilindro.
 
 Escoja su especificador de tamaño}
@@ -227,7 +228,7 @@ message fssizesok
 {Aceptar los tamaños de las particiones.  Espacio libre %d %s, %d particiones libres.}
 
 message fssizesbad
-{Reducir los tamaños de las particiones en %d %s (%d sectores).}
+{Reducir los tamaños de las particiones en %d %s (%u sectores).}
 
 message startoutsidedisk
 {El valor del comienzo que ha especificado está mas allá del final del disco.
@@ -240,6 +241,13 @@ El tamaño de la partición se ha truncado a %d %s.
 Presione Intro para continuar
 }
 
+message toobigdisklabel
+{
+This disk is too large for a disklabel partition table to be used
+and hence cannot be used as a bootable disk or to hold the root
+partition.
+}
+
 message fspart
 {Sus particiones con etiquetas BSD están ahora así.
 Ésta es su última oportunidad para cambiarlas.
@@ -247,12 +255,12 @@ message fspart
 }
 
 message fspart_header
-{   Inicio %3s Fin %3s   Tamaño %3s Tipo FS    Newfs Mont. Punto mont. 
+{   Inicio %3s Fin %3s   Tamaño %3s Tipo FS    Newfs Mont. Punto mont.
    ---------- --------- ---------- ---------- ----- ----- -----------
 }
 
 message fspart_row
-{%10d %9d %10d %-10s %-5s %-5s %s}
+{%10lu %9lu %10lu %-10s %-5s %-5s %s}
 
 message show_all_unused_partitions
 {Mostrar todas las particiones no usadas}
@@ -261,7 +269,7 @@ message partition_sizes_ok
 {Tamaños de partición ok}
 
 message edfspart
-{Los valores actuales de la particion `%c' son, 
+{Los valores actuales de la particion `%c' son,
 Seleccione el campo que desee cambiar:
 
                           MB cilindros  sectores
@@ -347,7 +355,7 @@ message packname
 message lastchance
 {Bien, todo está preparado para instalar NetBSD en su disco duro (%s).
 Todavía no se ha escrito nada.  Ésta es su última oportunidad para salir
-del proceso antes de que se cambie nada.  
+del proceso antes de que se cambie nada.
 
 ¿Desea continuar?
 }
@@ -470,9 +478,19 @@ Recuerde, el directorio debe contener los archivos .tgz.
 
 }
 
+message Available_cds
+{Available CDs}
+
+message ask_cd
+{Multiple CDs found, please select the one containing the install CD.}
+
+message cd_path_not_found
+{The installation sets have not been found at the default location on this
+CD. Please check device and path name.}
+
 message localfssource
 {Introduzca el dispositivo local desmontado y el directorio de ese
-dispositivo donde se encuentre la distribución. 
+dispositivo donde se encuentre la distribución.
 Recuerde, el directorio debe contener los archivos .tgz.
 
 }
@@ -540,33 +558,33 @@ message net_media
 message netok
 {Ha introducido los siguientes valores.
 
-Dominio DNS: 		%s 
-Nombre de máquina:	%s 
-Interfaz primaria:	%s 
-IP de la máquina:	%s 
-Máscara de red:		%s 
-Serv de nombres IPv4:	%s 
-Pasarela IPv4:		%s 
-Tipo de medio:		%s 
+Dominio DNS: 		%s
+Nombre de máquina:	%s
+Interfaz primaria:	%s
+IP de la máquina:	%s
+Máscara de red:		%s
+Serv de nombres IPv4:	%s
+Pasarela IPv4:		%s
+Tipo de medio:		%s
 }
 
 message netok_slip
 {Ha introducido los siguientes valores. ¿Son correctos?
 
-Dominio DNS: 		%s 
-Nombre de la máquina:	%s 
-Interfaz primaria:	%s 
-IP de la máquina:	%s 
-IP del servidor:	%s 
-Máscara de red:		%s 
-Serv de nombres IPv4:	%s 
-Pasarela IPv4:		%s 
-Tipo de medio:		%s 
+Dominio DNS: 		%s
+Nombre de la máquina:	%s
+Interfaz primaria:	%s
+IP de la máquina:	%s
+IP del servidor:	%s
+Máscara de red:		%s
+Serv de nombres IPv4:	%s
+Pasarela IPv4:		%s
+Tipo de medio:		%s
 }
 
 message netokv6
-{IPv6 autoconf:		%s 
-Serv de nombres IPv6:	%s 
+{IPv6 autoconf:		%s
+Serv de nombres IPv6:	%s
 }
 
 message netok_ok
@@ -594,15 +612,6 @@ interrumpida.
 
 message delete_xfer_file
 {A eliminar después de la instalación}
-
-message verboseextract
-{
-El siguiente paso es descargar y desempaquetar los conjuntos de
-ficheros de la distribución.
-
-Durante el proceso de extracción, ¿qué desea ver según se vaya
-extrayendo cada uno de los ficheros?
-}
 
 message notarfile
 {El conjunto %s no existe.}
@@ -639,7 +648,7 @@ a mano.  Instalación interrumpida.
 }
 
 message abortunpack
-{El desempaquetamiento de los conjuntos adicionales no ha sido satisfactorio. 
+{El desempaquetamiento de los conjuntos adicionales no ha sido satisfactorio.
 Necesitará proceder a mano, o escoger una fuente diferente para los conjuntos
 de esta distribución y volver a intentarlo.
 }
@@ -701,7 +710,7 @@ message rootmissing
 
 message badroot
 {El nuevo sistema de archivos raíz no ha pasado la comprobación básica.
- ¿Está seguro de que ha instalado todos los conjuntos requeridos? 
+ ¿Está seguro de que ha instalado todos los conjuntos requeridos?
 
 }
 
@@ -756,6 +765,9 @@ message set_man_pages
 message set_misc
 {Varios}
 
+message set_modules
+{Kernel Modules}
+
 message set_tests
 {Programas de prueba}
 
@@ -805,6 +817,13 @@ message must_be_one_root
 message partitions_overlap
 {las particiones %c y %c se solapan.}
 
+message No_Bootcode
+{No hay código de arranque para la partición root}
+
+message cannot_ufs2_root
+{Sorry, the root file system can't be FFSv2 due to lack of bootloader support
+on this port.}
+
 message edit_partitions_again
 {
 
@@ -817,39 +836,22 @@ message config_open_error
 {No se ha podido abrir el fichero de configuración %s\n}
 
 message choose_timezone
-{Por favor, escoja de la siguiente lista la zona horaria que le convenga.  
-Presione RETURN para seleccionar una entrada. 
+{Por favor, escoja de la siguiente lista la zona horaria que le convenga.
+Presione RETURN para seleccionar una entrada.
 Presione «x» seguido de RETURN para salir de la selección de la
 zona horaria.
 
- Predefinida:	%s 
- Seleccionada:	%s 
- Hora local: 	%s %s 
+ Predefinida:	%s
+ Seleccionada:	%s
+ Hora local: 	%s %s
 }
 
 message tz_back
 { Volver a la lista principal de zonas horarias}
 
-message choose_crypt
-{Por favor, seleccione el algoritmo de cifrado de contraseñas a usar.
-NetBSD puede ser configurado para usar los esquemas DES, MD5 o Blowfish.
-
-El esquema tradicional DES es compatible con la mayoría de los demás
-sistemas operativos de tipo Unix, pero sólo se reconocerán los primeros 8
-carácteres de cualquier contraseña.
-Los esquemas MD5 y Blowfish permiten contraseñas más largas, y algunos
-aseguran que es más seguro.
-
-Si tiene una red y pretende usar NIS, por favor considere las capacidades
-de otras máquinas en su red.
-
-Si está actualizando y le gustaria mantener la configuración sin cambios,
-escoja la última opción «no cambiar».
-}
-
 message swapactive
 {El disco que ha seleccionado tiene una partición de intercambio (swap) que
-puede que esté en uso actualmente si su sistema tiene poca memoria.  Como 
+puede que esté en uso actualmente si su sistema tiene poca memoria.  Como
 se dispone a reparticionar este disco, esta partición swap será desactivada
 ahora.  Se advierte de que esto puede conducir a problemas de swap.
 Si obtuviera algun error, reinicie el sistema e inténtelo de nuevo.}
@@ -897,6 +899,7 @@ message Upgrade_NetBSD_on_a_hard_disk {Actualizar NetBSD en un disco duro}
 message Re_install_sets_or_install_additional_sets {Reinstalar conjuntos o instalar conjuntos adicionales}
 message Reboot_the_computer {Reiniciar la computadora}
 message Utility_menu {Menú de utilidades}
+message exit_utility_menu {Exit}
 message NetBSD_VERSION_Utilities {Utilidades de NetBSD-@@VERSION@@}
 message Run_bin_sh {Ejecutar /bin/sh}
 message Set_timezone {Establecer la zona horaria}
@@ -922,6 +925,7 @@ message local_fs {Sistema de archivos desmontado}
 message local_dir {Directorio Local}
 message Select_your_distribution {Seleccione su distribución}
 message Full_installation {Instalación completa}
+message Full_installation_nox {Instalación sin X11}
 message Minimal_installation {Instalación mínima}
 message Custom_installation {Instalación personalizada}
 message hidden {** oculto **}
@@ -941,11 +945,6 @@ message Skip_set {Omitir conjunto}
 message Skip_group {Omitir grupo de conjuntos}
 message Abandon {Abandonar instalación}
 message Abort_fetch {Abortar lectura}
-message Password_cipher {Cifrado de las contraseñas}
-message DES {DES}
-message MD5 {MD5}
-message Blowfish_2_7_round {Blowfish 2^7 round}
-message do_not_change {no cambiar}
 message Device {Dispositivo}
 message File_system {Sistema de archivos}
 message Select_IPv6_DNS_server {  Seleccione servidor DNS de IPv6}
@@ -953,10 +952,6 @@ message other {otro }
 message Perform_IPv6_autoconfiguration {¿Realizar autoconfiguración IPv6?}
 message Perform_DHCP_autoconfiguration {¿Realizar autoconfiguración DHCP ?}
 message Root_shell {Shell de root}
-message Select_set_extraction_verbosity {Seleccione la prolijidad de la extracción de conjuntos}
-message Progress_bar {Barra de progreso (recomendado)}
-message Silent {Silencioso}
-message Verbose {Listado de nombres de ficheros detallado (lento)}
 
 .if AOUT2ELF
 message aoutfail
@@ -992,3 +987,9 @@ el sendmail eliminado.  ¿Desea actualizar el fichero /etc/mailer.conf
 automáticamente para que apunte a postfix?  Si escoge "No" tendrá que
 actualizar /etc/mailer.conf usted mismo para asegurarse de que los mensajes
 de correo electrónico se envíen correctamente.}
+
+message license
+{To use the network interface %s, you must agree to the license in
+file %s.
+To view this file now, you can type ^Z, look at the contents of
+the file and then type "fg" to resume.}

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.19 2008/01/06 01:37:58 matt Exp $	*/
+/*	$NetBSD: intr.h,v 1.22 2010/11/13 14:07:06 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 2001, 2003 Wasabi Systems, Inc.
@@ -41,7 +41,6 @@
 #ifdef _KERNEL
 
 /* Interrupt priority "levels". */
-#ifdef __HAVE_FAST_SOFTINTS
 #define	IPL_NONE	0		/* nothing */
 #define	IPL_SOFTCLOCK	1		/* clock */
 #define	IPL_SOFTBIO	2		/* block I/O */
@@ -52,18 +51,6 @@
 #define	IPL_HIGH	7		/* everything */
 
 #define	NIPL		8
-#else
-#define	IPL_NONE	0		/* nothing */
-#define	IPL_SOFTCLOCK	IPL_NONE	/* clock */
-#define	IPL_SOFTBIO	IPL_NONE	/* block I/O */
-#define	IPL_SOFTNET	IPL_NONE	/* software network interrupt */
-#define	IPL_SOFTSERIAL	IPL_NONE	/* software serial interrupt */
-#define	IPL_VM		1		/* memory allocation */
-#define	IPL_SCHED	2		/* clock interrupt */
-#define	IPL_HIGH	3		/* everything */
-
-#define	NIPL		4
-#endif
 
 /* Interrupt sharing types. */
 #define	IST_NONE	0	/* none */
@@ -71,11 +58,12 @@
 #define	IST_EDGE	2	/* edge-triggered */
 #define	IST_LEVEL	3	/* level-triggered */
 
-#define IST_LEVEL_LOW	 IST_LEVEL
-#define IST_LEVEL_HIGH   4
+#define IST_LEVEL_LOW	IST_LEVEL
+#define IST_LEVEL_HIGH	4
 #define IST_EDGE_FALLING IST_EDGE
-#define IST_EDGE_RISING  5
-#define IST_EDGE_BOTH    6
+#define IST_EDGE_RISING	5
+#define IST_EDGE_BOTH	6
+#define IST_SOFT	7
 
 #ifdef __OLD_INTERRUPT_CODE	/* XXX XXX XXX */
 
@@ -98,7 +86,6 @@
 
 #ifndef _LOCORE
 
-#include <sys/device.h>
 #include <sys/queue.h>
 
 #if defined(_LKM)

@@ -1,4 +1,4 @@
-.\" $NetBSD: secmodel.9,v 1.11 2007/04/13 00:36:21 plunky Exp $
+.\" $NetBSD: secmodel.9,v 1.17 2010/12/02 12:54:13 wiz Exp $
 .\"
 .\" Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
 .\" All rights reserved.
@@ -25,7 +25,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 31, 2007
+.Dd May 10, 2009
 .Dt SECMODEL 9
 .Os
 .Sh NAME
@@ -77,8 +77,8 @@ It allows us to maintain the existing security model (based on a single
 superuser and above-superuser restrictions known as securelevel) but easily
 decouple it from the system, given we want to use a different one.
 .Pp
-The different security model can be implemented in the kernel or loaded as an
-LKM, base its decisions on available information, dispatch the decision to a
+The different security model can be implemented in the kernel or loaded as a
+module, base its decisions on available information, dispatch the decision to a
 userspace daemon, or even to a centralized network authorization server.
 .Ss The kauth(9) KPI
 Before writing a new security model, one should be familiar with the
@@ -126,7 +126,7 @@ This is a requirement from kernel code, to allow designing security models
 where the request should be dispatched to userspace or a different host.
 .It
 Private listener data -- such as internal data-structures -- is entirely
-under the resonsibility of the developer.
+under the responsibility of the developer.
 Locking, synchronization, and garbage collection are all things that
 .Xr kauth 9
 does
@@ -148,7 +148,7 @@ compiled in it, a function called
 .Fn secmodel_start
 can be added to call the model's start routine.
 .Pp
-If the security model is to be built and used as an LKM, another function
+If the security model is to be built and used as a module, another function
 called
 .Fn secmodel_\*[Lt]model\*[Gt]_stop ,
 to stop the security model in case the module is to be unloaded.
@@ -162,7 +162,7 @@ All "knobs" for the model should be located under the new node, as well
 as a mandatory "name" variable, indicating a descriptive human-readable
 name for the model.
 .Pp
-If the module is to be used as an LKM, explicit calls to the setup
+If the module is to be used as a module, explicit calls to the setup
 routine and
 .Fn sysctl_teardown
 are to be used to create and destroy the
@@ -174,15 +174,15 @@ the credentials scope,
 .Dv KAUTH_SCOPE_CRED ,
 is required.
 .It
-Optionally, internal data-structures used by the model. These must all
-be prefixed with "secmodel_\*[Lt]model\*[Gt]_".
+Optionally, internal data-structures used by the model.
+These must all be prefixed with "secmodel_\*[Lt]model\*[Gt]_".
 .It
 A set of listeners, attached to various scopes, used to enforce the policy
 the model intends to implement.
 .It
 Finally, a security model should register itself when loaded using
 .Fn secmodel_register
-and deregister it when unloaded (if used as an LKM) using
+and deregister it when unloaded (if used as a module) using
 .Fn secmodel_deregister .
 .El
 .Pp
@@ -287,7 +287,7 @@ secmodel_jenna_start(void)
 	kauth_listen_scope(JENNA_ISCOPE_NETWORK,
 	    secmodel_bsd44_suser_network_cb, NULL);
 	kauth_listen_scope(JENNA_ISCOPE_NETWORK,
-	    secmodel_bsd44_securelevel_network_cb, NULL);
+	    secmodel_securelevel_network_cb, NULL);
 }
 
 /*
@@ -382,8 +382,8 @@ The following is a list of security models available in the default
 .Nx
 distribution.
 To choose, one should edit
-.Pa /usr/src/sys/conf/std .
-.Bl -tag
+.Pa sys/conf/std .
+.Bl -tag -width secmodel_overlay
 .It secmodel_bsd44
 Traditional
 .Nx

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.184 2007/10/17 19:57:46 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.201 2011/05/16 13:22:55 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -78,10 +78,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.184 2007/10/17 19:57:46 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.201 2011/05/16 13:22:55 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,13 +99,14 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.184 2007/10/17 19:57:46 garbled Exp $"
 #include <sys/ioctl.h>
 #include <sys/tty.h>
 #include <sys/mount.h>
-#include <sys/user.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/vnode.h>
 #include <sys/syscallargs.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 #ifdef	KGDB
 #include <sys/kgdb.h>
 #endif
@@ -120,6 +122,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.184 2007/10/17 19:57:46 garbled Exp $"
 #include <machine/idprom.h>
 #include <machine/kcore.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 
@@ -138,11 +141,13 @@ extern char kernel_text[];
 /* Defined by the linker */
 extern char etext[];
 
+/* kernel_arch specific values required by module(9) */
+const vaddr_t kernbase = KERNBASE3;
+const vaddr_t kern_end = KERN_END3;
+
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-struct vm_map *exec_map = NULL;  
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	physmem;
@@ -180,12 +185,12 @@ consinit(void)
 	 */
 	cninit();
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	{
 		extern int nsym;
 		extern char *ssym, *esym;
 
-		ksyms_init(nsym, ssym, esym);
+		ksyms_addsyms_elf(nsym, ssym, esym);
 	}
 #endif /* DDB */
 
@@ -227,7 +232,7 @@ cpu_startup(void)
 	 * Its mapping was prepared in pmap_bootstrap().
 	 * Also, offset some to avoid PROM scribbles.
 	 */
-	v = (char *)KERNBASE;
+	v = (char *)KERNBASE3;
 	msgbufaddr = v + MSGBUFOFF;
 	initmsgbuf(msgbufaddr, MSGBUFSIZE);
 
@@ -250,25 +255,12 @@ cpu_startup(void)
 
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				   VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -290,41 +282,6 @@ cpu_startup(void)
 	 * Set up CPU-specific registers, cache, etc.
 	 */
 	initcpu();
-}
-
-/*
- * Set registers on exec.
- */
-void 
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct trapframe *tf = (struct trapframe *)l->l_md.md_regs;
-
-	tf->tf_sr = PSL_USERSET;
-	tf->tf_pc = pack->ep_entry & ~1;
-	tf->tf_regs[D0] = 0;
-	tf->tf_regs[D1] = 0;
-	tf->tf_regs[D2] = 0;
-	tf->tf_regs[D3] = 0;
-	tf->tf_regs[D4] = 0;
-	tf->tf_regs[D5] = 0;
-	tf->tf_regs[D6] = 0;
-	tf->tf_regs[D7] = 0;
-	tf->tf_regs[A0] = 0;
-	tf->tf_regs[A1] = 0;
-	tf->tf_regs[A2] = (int)l->l_proc->p_psstr;
-	tf->tf_regs[A3] = 0;
-	tf->tf_regs[A4] = 0;
-	tf->tf_regs[A5] = 0;
-	tf->tf_regs[A6] = 0;
-	tf->tf_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
-
-	l->l_md.md_flags = 0;
 }
 
 /*
@@ -465,6 +422,8 @@ cpu_reboot(int howto, char *user_boot_string)
 	/* run any shutdown hooks */
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	if (howto & RB_HALT) {
 	haltsys:
 		printf("halted.\n");
@@ -601,8 +560,8 @@ dumpsys(void)
 	if (dumpsize == 0)
 		cpu_dumpconf();
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
-		    minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n",
+		    major(dumpdev), minor(dumpdev));
 		return;
 	}
 	savectx(&dumppcb);
@@ -613,8 +572,8 @@ dumpsys(void)
 		return;
 	}
 
-	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
-	    minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n",
+	    major(dumpdev), minor(dumpdev), dumplo);
 
 	/*
 	 * Prepare the dump header, including MMU state.
@@ -636,7 +595,7 @@ dumpsys(void)
 	/* Fill in cpu_kcore_hdr_t part. */
 	strncpy(chdr_p->name, kernel_arch, sizeof(chdr_p->name));
 	chdr_p->page_size = PAGE_SIZE;
-	chdr_p->kernbase = KERNBASE;
+	chdr_p->kernbase = KERNBASE3;
 
 	/* Fill in the sun3_kcore_hdr part (MMU state). */
 	pmap_kcore_hdr(sh);
@@ -679,8 +638,8 @@ dumpsys(void)
 		chunk = todo;
 	do {
 		if ((todo & 0xf) == 0)
-			printf("\r%4d", todo);
-		vaddr = (char*)(paddr + KERNBASE);
+			printf_nolog("\r%4d", todo);
+		vaddr = (char*)(paddr + KERNBASE3);
 		error = (*dsw->d_dump)(dumpdev, blkno, vaddr, PAGE_SIZE);
 		if (error)
 			goto fail;
@@ -693,8 +652,8 @@ dumpsys(void)
 	vaddr = (char*)vmmap;	/* Borrow /dev/mem VA */
 	do {
 		if ((todo & 0xf) == 0)
-			printf("\r%4d", todo);
-		pmap_kenter_pa(vmmap, paddr | PMAP_NC, VM_PROT_READ);
+			printf_nolog("\r%4d", todo);
+		pmap_kenter_pa(vmmap, paddr | PMAP_NC, VM_PROT_READ, 0);
 		pmap_update(pmap_kernel());
 		error = (*dsw->d_dump)(dumpdev, blkno, vaddr, PAGE_SIZE);
 		pmap_kremove(vmmap, PAGE_SIZE);
@@ -742,3 +701,13 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	return ENOEXEC;
 }
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif

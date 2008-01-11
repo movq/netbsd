@@ -1,4 +1,4 @@
-/*	$NetBSD: xen_machdep.c,v 1.2 2007/11/22 16:17:09 bouyer Exp $	*/
+/*	$NetBSD: xen_machdep.c,v 1.7 2009/10/23 02:32:34 snj Exp $	*/
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -43,11 +38,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Christian Limpach.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -63,7 +53,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xen_machdep.c,v 1.2 2007/11/22 16:17:09 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xen_machdep.c,v 1.7 2009/10/23 02:32:34 snj Exp $");
 
 #include "opt_xen.h"
 
@@ -72,7 +62,13 @@ __KERNEL_RCSID(0, "$NetBSD: xen_machdep.c,v 1.2 2007/11/22 16:17:09 bouyer Exp $
 #include <sys/boot_flag.h>
 #include <sys/mount.h>
 #include <sys/reboot.h>
+#include <sys/timetc.h>
+
 #include <xen/hypervisor.h>
+
+u_int	tsc_get_timecount(struct timecounter *);
+
+uint64_t tsc_freq;	/* XXX */
 
 void
 xen_parse_cmdline(int what, union xen_cmdline_parseinfo *xcp)
@@ -190,9 +186,21 @@ xen_parse_cmdline(int what, union xen_cmdline_parseinfo *xcp)
 				}
 			}
 			break;
+		case XEN_PARSE_PCIBACK:
+			if (strncasecmp(opt, "pciback.hide=", 13) == 0)
+				strncpy(xcp->xcp_pcidevs, opt + 13,
+				    sizeof(xcp->xcp_pcidevs));
+			break;
 		}
 
 		if (cmd_line)
 			*cmd_line++ = ' ';
 	}
+}
+
+u_int
+tsc_get_timecount(struct timecounter *tc)
+{
+
+	panic("xen: tsc_get_timecount");
 }

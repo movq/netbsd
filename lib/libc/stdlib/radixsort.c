@@ -1,4 +1,4 @@
-/*	$NetBSD: radixsort.c,v 1.16 2005/12/24 21:11:16 perry Exp $	*/
+/*	$NetBSD: radixsort.c,v 1.19 2009/09/05 08:53:06 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)radixsort.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: radixsort.c,v 1.16 2005/12/24 21:11:16 perry Exp $");
+__RCSID("$NetBSD: radixsort.c,v 1.19 2009/09/05 08:53:06 dsl Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -71,11 +71,10 @@ typedef struct {
 	int sn, si;
 } stack;
 
-static inline void simplesort
-	    __P((const u_char **, int, int, const u_char *, u_int));
-static void r_sort_a __P((const u_char **, int, int, const u_char *, u_int));
-static void r_sort_b __P((const u_char **,
-	    const u_char **, int, int, const u_char *, u_int));
+static inline void simplesort(const u_char **, int, int, const u_char *, u_int);
+static void r_sort_a(const u_char **, int, int, const u_char *, u_int);
+static void r_sort_b(const u_char **,
+	    const u_char **, int, int, const u_char *, u_int);
 
 #define	THRESHOLD	20		/* Divert to simplesort(). */
 #define	SIZE		512		/* Default stack size. */
@@ -100,17 +99,13 @@ static void r_sort_b __P((const u_char **,
 }
 
 int
-radixsort(a, n, tab, endch)
-	const u_char **a, *tab;
-	int n;
-	u_int endch;
+radixsort(const u_char **a, int n, const u_char *tab, u_int endch)
 {
 	const u_char *tr;
-	int c;
+	u_int c;
 	u_char tr0[256];
 
 	_DIAGASSERT(a != NULL);
-	_DIAGASSERT(tab != NULL);
 
 	SETUP;
 	r_sort_a(a, n, 0, tr, endch);
@@ -118,18 +113,14 @@ radixsort(a, n, tab, endch)
 }
 
 int
-sradixsort(a, n, tab, endch)
-	const u_char **a, *tab;
-	int n;
-	u_int endch;
+sradixsort(const u_char **a, int n, const u_char *tab, u_int endch)
 {
 	const u_char *tr, **ta;
-	int c;
+	u_int c;
 	u_char tr0[256];
 
 	_DIAGASSERT(a != NULL);
-	_DIAGASSERT(tab != NULL);
-	if (a == NULL || tab == NULL) {
+	if (a == NULL) {
 		errno = EFAULT;
 		return (-1);
 	}
@@ -153,17 +144,13 @@ sradixsort(a, n, tab, endch)
 
 /* Unstable, in-place sort. */
 static void
-r_sort_a(a, n, i, tr, endch)
-	const u_char **a;
-	int n, i;
-	const u_char *tr;
-	u_int endch;
+r_sort_a(const u_char **a, int n, int i, const u_char *tr, u_int endch)
 {
-	static int count[256], nc, bmin;
-	int c;
+	static u_int count[256], nc, bmin;
+	u_int c;
 	const u_char **ak, *r;
 	stack s[SIZE], *sp, *sp0, *sp1, temp;
-	int *cp, bigc;
+	u_int *cp, bigc;
 	const u_char **an, *t, **aj, **top[256];
 
 	_DIAGASSERT(a != NULL);
@@ -247,18 +234,15 @@ r_sort_a(a, n, i, tr, endch)
 
 /* Stable sort, requiring additional memory. */
 static void
-r_sort_b(a, ta, n, i, tr, endch)
-	const u_char **a, **ta;
-	int n, i;
-	const u_char *tr;
-	u_int endch;
+r_sort_b(const u_char **a, const u_char **ta, int n, int i, const u_char *tr,
+    u_int endch)
 {
-	static int count[256], nc, bmin;
-	int c;
+	static u_int count[256], nc, bmin;
+	u_int c;
 	const u_char **ak, **ai;
 	stack s[512], *sp, *sp0, *sp1, temp;
 	const u_char **top[256];
-	int *cp, bigc;
+	u_int *cp, bigc;
 
 	_DIAGASSERT(a != NULL);
 	_DIAGASSERT(ta != NULL);
@@ -321,13 +305,10 @@ r_sort_b(a, ta, n, i, tr, endch)
 			*--top[tr[(*ak)[i]]] = *ak;
 	}
 }
-		
+
+/* insertion sort */
 static inline void
-simplesort(a, n, b, tr, endch)	/* insertion sort */
-	const u_char **a;
-	int n, b;
-	const u_char *tr;
-	u_int endch;
+simplesort(const u_char **a, int n, int b, const u_char *tr, u_int endch)
 {
 	u_char ch;
 	const u_char  **ak, **ai, *s, *t;

@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.13 2006/05/20 20:38:39 mrg Exp $ */
+/*	$NetBSD: bootxx.c,v 1.16 2009/08/22 10:02:21 he Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -50,6 +43,7 @@
 #include <sys/time.h>
 #include <sys/exec.h>
 #include <sys/exec_elf.h>
+#include <sys/exec_aout.h>
 #include <machine/prom.h>
 
 #include <lib/libsa/stand.h>
@@ -76,15 +70,15 @@ int main(void);
 int
 main(void)
 {
-	struct open_file	f;
-	u_long	addr;
+	struct open_file f;
+	u_long addr;
 	char *foo;
 	int error;
 
 	printf("Boot: bug device: ctrl=%d, dev=%d\n",
-		bugargs.ctrl_lun, bugargs.dev_lun);
+	    bugargs.ctrl_lun, bugargs.dev_lun);
 	printf("\nbootxx: %s first level bootstrap program [%s]\n\n",
-		bootprog_name, bootprog_rev);
+	    bootprog_name, bootprog_rev);
 
 	f.f_flags = F_RAW;
 	if (devopen(&f, 0, &foo)) {
@@ -95,7 +89,7 @@ main(void)
 	addr = LOADADDR;
 	error = copyboot(&f, &addr);
 	f.f_dev->dv_close(&f);
-	if (!error)
+	if (error == 0)
 		bugexec((void *)addr);
 
 	/* copyboot had a problem... */
@@ -127,8 +121,7 @@ copyboot(struct open_file *fp, u_long *addr)
 		printf("bootxx: read block # %d = %d\n", i, blknum);
 #endif
 		if ((fp->f_dev->dv_strategy)(fp->f_devdata, F_READ,
-					   blknum, block_size, laddr, &n))
-		{
+		    blknum, block_size, laddr, &n)) {
 			printf("bootxx: read failed\n");
 			return -1;
 		}

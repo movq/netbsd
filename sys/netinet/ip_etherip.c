@@ -1,4 +1,4 @@
-/*      $NetBSD: ip_etherip.c,v 1.7 2007/12/20 19:53:32 dyoung Exp $        */
+/*      $NetBSD: ip_etherip.c,v 1.13 2010/04/05 07:22:50 joerg Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_etherip.c,v 1.7 2007/12/20 19:53:32 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_etherip.c,v 1.13 2010/04/05 07:22:50 joerg Exp $");
 
 #include "opt_inet.h"
 
@@ -87,6 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip_etherip.c,v 1.7 2007/12/20 19:53:32 dyoung Exp $"
 #include <net/if_ether.h>
 #include <net/if_media.h>
 #include <net/if_etherip.h>
+#include <net/bpf.h>
 
 #include <machine/stdarg.h>
 
@@ -183,7 +184,7 @@ ip_etherip_input(struct mbuf *m, ...)
 	const struct ip *ip;
 	struct sockaddr_in *src, *dst;
 	struct ifnet *ifp = NULL;
-	int off, proto;
+	int off, proto, s;
 	va_list ap;
 
 	va_start(ap, m);
@@ -193,7 +194,7 @@ ip_etherip_input(struct mbuf *m, ...)
 
 	if (proto != IPPROTO_ETHERIP) {
 		m_freem(m);
-		ipstat.ips_noproto++;
+		ip_statinc(IP_STAT_NOPROTO);
 		return;
 	}
 
@@ -222,7 +223,7 @@ ip_etherip_input(struct mbuf *m, ...)
 	/* no matching device found */
 	if (!ifp) {
 		m_freem(m);
-		ipstat.ips_odropped++;
+		ip_statinc(IP_STAT_ODROPPED);
 		return;
 	}
 
@@ -253,13 +254,13 @@ ip_etherip_input(struct mbuf *m, ...)
 	m->m_pkthdr.rcvif = ifp;
 	m->m_flags &= ~(M_BCAST|M_MCAST);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	ifp->if_ipackets++;
+
+	s = splnet();
 	(ifp->if_input)(ifp, m);
+	splx(s);
 
 	return;
 }

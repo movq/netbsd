@@ -1,9 +1,8 @@
-/*	$NetBSD: mem.c,v 1.15 2007/12/06 17:00:32 ad Exp $	*/
+/*	$NetBSD: mem.c,v 1.27 2011/01/04 10:42:33 skrll Exp $	*/
 
-/*	$OpenBSD: mem.c,v 1.5 2001/05/05 20:56:36 art Exp $	*/
-
+/*	$OpenBSD: mem.c,v 1.30 2007/09/22 16:21:32 krw Exp $	*/
 /*
- * Copyright (c) 1998,1999 Michael Shalayeff
+ * Copyright (c) 1998-2004 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -14,22 +13,18 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Michael Shalayeff.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
  * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF MIND,
- * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+ * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * THE POSSIBILITY OF SUCH DAMAGE.
  */
 /*
  * Copyright (c) 1991,1992,1994, The University of Utah and
@@ -51,34 +46,34 @@
  *
  * 	Utah $Hdr: mem.c 1.9 94/12/16$
  */
-/* 
+/*
  * Mach Operating System
  * Copyright (c) 1992 Carnegie Mellon University
  * All Rights Reserved.
- * 
+ *
  * Permission to use, copy, modify and distribute this software and its
  * documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- * 
+ *
  * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
  * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND FOR
  * ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- * 
+ *
  * Carnegie Mellon requests users of this software to return to
- * 
+ *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
  *  School of Computer Science
  *  Carnegie Mellon University
  *  Pittsburgh PA 15213-3890
- * 
- * any improvements or extensions that they make and grant Carnegie Mellon 
+ *
+ * any improvements or extensions that they make and grant Carnegie Mellon
  * the rights to redistribute these changes.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.15 2007/12/06 17:00:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.27 2011/01/04 10:42:33 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -145,17 +140,17 @@ struct l2_mioc {
 };
 
 struct mem_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	volatile struct vi_trs *sc_vp;
 	volatile struct l2_mioc *sc_l2;
 };
 
-int	memmatch(struct device *, struct cfdata *, void *);
-void	memattach(struct device *, struct device *, void *);
+int	memmatch(device_t, cfdata_t, void *);
+void	memattach(device_t, device_t, void *);
 
-CFATTACH_DECL(mem, sizeof(struct mem_softc),
-    memmatch, memattach, NULL, NULL);
+CFATTACH_DECL_NEW(mem, sizeof(struct mem_softc), memmatch, memattach,
+    NULL, NULL);
 
 extern struct cfdriver mem_cd;
 
@@ -174,7 +169,7 @@ static void *zeropage;
 kmutex_t vmmap_lock;
 
 int
-memmatch(struct device *parent, struct cfdata *cf, void *aux)
+memmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -185,15 +180,17 @@ memmatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-memattach(struct device *parent, struct device *self, void *aux)
+memattach(device_t parent, device_t self, void *aux)
 {
-	struct pdc_iodc_minit pdc_minit PDC_ALIGNMENT;
+	struct pdc_iodc_minit pdc_minit;
 	struct confargs *ca = aux;
-	struct mem_softc *sc = (struct mem_softc *)self;
-	int s, err, pagezero_cookie;
+	struct mem_softc *sc = device_private(self);
+	int err, pagezero_cookie;
 	char bits[128];
 
-	printf (":");
+	sc->sc_dev = self;
+
+	aprint_normal(":");
 
 	pagezero_cookie = hp700_pagezero_map();
 
@@ -205,23 +202,52 @@ memattach(struct device *parent, struct device *self, void *aux)
 
 		/* XXX other values seem to blow it up */
 		if (sc->sc_vp->vi_status.hw_rev == 0) {
-			bitmask_snprintf(VI_CTRL, VIPER_BITS, bits, 
-			    sizeof(bits));
-			printf (" viper rev %x, ctrl %s",
-			    sc->sc_vp->vi_status.hw_rev,
-			    bits);
+			uint32_t vic;
+			int s, settimeout;
+
+			switch (cpu_modelno) {
+			case HPPA_BOARD_HP715_33:
+			case HPPA_BOARD_HP715S_33:
+			case HPPA_BOARD_HP715T_33:
+			case HPPA_BOARD_HP715_50:
+			case HPPA_BOARD_HP715S_50:
+			case HPPA_BOARD_HP715T_50:
+			case HPPA_BOARD_HP715_75:
+			case HPPA_BOARD_HP725_50:
+			case HPPA_BOARD_HP725_75:
+				settimeout = 1;
+				break;
+			default:
+				settimeout = 0;
+				break;
+			}
+			if (device_cfdata(self)->cf_flags & 1)
+				settimeout = !settimeout;
+
+			snprintb(bits, sizeof(bits), VIPER_BITS, VI_CTRL);
+			aprint_normal(" viper rev %x, ctrl %s",
+			    sc->sc_vp->vi_status.hw_rev, bits);
 
 			s = splhigh();
-			VI_CTRL |= VI_CTRL_ANYDEN;
-			((struct vi_ctrl *)&VI_CTRL)->core_den = 0;
-			((struct vi_ctrl *)&VI_CTRL)->sgc0_den = 0;
-			((struct vi_ctrl *)&VI_CTRL)->sgc1_den = 0;
-			((struct vi_ctrl *)&VI_CTRL)->core_prf = 1;
-			sc->sc_vp->vi_control = VI_CTRL;
+			vic = VI_CTRL;
+			((struct vi_ctrl *)&vic)->core_den = 0;
+			((struct vi_ctrl *)&vic)->sgc0_den = 0;
+			((struct vi_ctrl *)&vic)->sgc1_den = 0;
+			((struct vi_ctrl *)&vic)->eisa_den = 1;
+			((struct vi_ctrl *)&vic)->core_prf = 1;
+
+			if (settimeout &&
+			    ((struct vi_ctrl *)&vic)->vsc_tout == 0)
+				/* clks */
+				((struct vi_ctrl *)&vic)->vsc_tout = 850;
+
+			sc->sc_vp->vi_control = vic;
+
+			__asm __volatile("stwas %1, 0(%0)"
+			    :: "r" (&VI_CTRL), "r" (vic) : "memory");
 			splx(s);
 #ifdef DEBUG
-			bitmask_snprintf(VI_CTRL, VIPER_BITS, bits, 
-			    sizeof(bits));
+			snprintb(bits, sizeof(bits), VIPER_BITS, VI_CTRL);
 			printf (" >> %s", bits);
 #endif
 		} else
@@ -229,34 +255,31 @@ memattach(struct device *parent, struct device *self, void *aux)
 	} else
 		sc->sc_vp = NULL;
 
-	if ((err = pdc_call((iodcio_t)pdc, 0, PDC_IODC, PDC_IODC_NINIT,
-			    &pdc_minit, ca->ca_hpa, PAGE0->imm_spa_size)) < 0)
+	err = pdcproc_iodc_ninit(&pdc_minit, ca->ca_hpa, PAGE0->imm_spa_size);
+	if (err < 0)
 		pdc_minit.max_spa = PAGE0->imm_max_mem;
 
 	hp700_pagezero_unmap(pagezero_cookie);
 
-	printf (" size %d", pdc_minit.max_spa / (1024*1024));
+	aprint_normal(" size %d", pdc_minit.max_spa / (1024*1024));
 	if (pdc_minit.max_spa % (1024*1024))
-		printf (".%d", pdc_minit.max_spa % (1024*1024));
-	printf ("MB");
+		aprint_normal(".%d", pdc_minit.max_spa % (1024*1024));
+	aprint_normal("MB");
 
 	/* L2 cache controller is a part of the memory controller on PCXL2 */
-	if (HPPA_PA_SPEC_MAJOR(hppa_cpu_info->hppa_cpu_info_pa_spec) == 1 &&
-	    HPPA_PA_SPEC_MINOR(hppa_cpu_info->hppa_cpu_info_pa_spec) == 1 &&
-	    HPPA_PA_SPEC_LETTER(hppa_cpu_info->hppa_cpu_info_pa_spec) == 'e') {
+	if (hppa_cpu_info->hci_cputype == hpcxl2) {
 		sc->sc_l2 = (struct l2_mioc *)ca->ca_hpa;
 #ifdef DEBUG
-		bitmask_snprintf(sc->sc_l2->sltcv, SLTCV_BITS, bits,
-				 sizeof(bits));
+		snprintb(bits, sizeof(bits), SLTCV_BITS, sc->sc_l2->sltcv);
 		printf(", sltcv %s", bits);
 #endif
 		/* sc->sc_l2->sltcv |= SLTCV_UP4COUT; */
 		if (sc->sc_l2->sltcv & SLTCV_ENABLE) {
 			uint32_t tagmask = sc->sc_l2->tagmask >> 20;
-			printf(", %dMB L2 cache", tagmask + 1);
+			aprint_normal(", %dMB L2 cache", tagmask + 1);
 		}
 	}
-	printf("\n");
+	aprint_normal("\n");
 }
 
 void
@@ -264,7 +287,7 @@ viper_setintrwnd(uint32_t mask)
 {
 	struct mem_softc *sc;
 
-	sc = mem_cd.cd_devs[0];
+	sc = device_lookup_private(&mem_cd,0);
 
 	if (sc->sc_vp)
 		sc->sc_vp->vi_intrwd;
@@ -274,14 +297,24 @@ void
 viper_eisa_en(void)
 {
 	struct mem_softc *sc;
-	int pagezero_cookie;
 
-	sc = mem_cd.cd_devs[0];
+	sc = device_lookup_private(&mem_cd, 0);
 
-	pagezero_cookie = hp700_pagezero_map();
-	if (sc->sc_vp)
-		((struct vi_ctrl *)&VI_CTRL)->eisa_den = 0;
-	hp700_pagezero_unmap(pagezero_cookie);
+	if (sc->sc_vp) {
+		int pagezero_cookie;
+		uint32_t vic;
+		int s;
+
+		pagezero_cookie = hp700_pagezero_map();
+		s = splhigh();
+		vic = VI_CTRL;
+		((struct vi_ctrl *)&vic)->eisa_den = 0;
+		sc->sc_vp->vi_control = vic;
+		__asm __volatile("stwas %1, 0(%0)"
+		   :: "r" (&VI_CTRL), "r" (vic) : "memory");
+		splx(s);
+		hp700_pagezero_unmap(pagezero_cookie);
+	}
 }
 
 int
@@ -289,7 +322,6 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 {
 	struct iovec *iov;
 	vaddr_t	v, o;
-	vm_prot_t prot;
 	u_int c;
 	int error = 0;
 	int rw;
@@ -309,46 +341,23 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 
 			/* If the address isn't in RAM, bail. */
 			v = uio->uio_offset;
-			if (btoc(v) > totalphysmem) {
+			if (atop(v) > physmem) {
 				error = EFAULT;
 				/* this will break us out of the loop */
 				continue;
 			}
 
-			/*
-			 * If the address is inside our large 
-			 * directly-mapped kernel BTLB entries, 
-			 * use kmem instead.
-			 */
-			if (v < virtual_start) {
-				goto use_kmem;
-			}
-
-			mutex_enter(&vmmap_lock);
-
-			/* Temporarily map the memory at vmmap. */
-			prot = uio->uio_rw == UIO_READ ? VM_PROT_READ :
-			    VM_PROT_WRITE;
-			pmap_enter(pmap_kernel(), (vaddr_t)vmmap,
-			    trunc_page(v), prot, prot|PMAP_WIRED);
-			pmap_update(pmap_kernel());
-			o = v & PGOFSET;
-			c = min(uio->uio_resid, (int)(PAGE_SIZE - o));
-			error = uiomove((char *)vmmap + o, c, uio);
-			pmap_remove(pmap_kernel(), (vaddr_t)vmmap,
-			    (vaddr_t)vmmap + PAGE_SIZE);
-			pmap_update(pmap_kernel());
-
-			mutex_exit(&vmmap_lock);
+			c = ptoa(physmem) - v;
+			c = min(c, uio->uio_resid);
+			error = uiomove((char *)v, c, uio);
 			break;
 
 		case DEV_KMEM:				/*  /dev/kmem  */
 			v = uio->uio_offset;
-use_kmem:
 			o = v & PGOFSET;
 			c = min(uio->uio_resid, (int)(PAGE_SIZE - o));
 			rw = (uio->uio_rw == UIO_READ) ? B_READ : B_WRITE;
-			if (!uvm_kernacc((void *)v, c, rw)) {
+			if (atop(v) > physmem && !uvm_kernacc((void *)v, c, rw)) {
 				error = EFAULT;
 				/* this will break us out of the loop */
 				continue;
@@ -359,15 +368,15 @@ use_kmem:
 		case DEV_NULL:				/*  /dev/null  */
 			if (uio->uio_rw == UIO_WRITE)
 				uio->uio_resid = 0;
-			return (0);
+			return 0;
 
 		case DEV_ZERO:			/*  /dev/zero  */
 			/* Write to /dev/zero is ignored. */
 			if (uio->uio_rw == UIO_WRITE) {
 				uio->uio_resid = 0;
-				return (0);
-			} 
-			/* 
+				return 0;
+			}
+			/*
 			 * On the first call, allocate and zero a page
 			 * of memory for use with /dev/zero.
 			 */
@@ -381,26 +390,33 @@ use_kmem:
 			break;
 
 		default:
-			return (ENXIO);
+			return ENXIO;
 		}
 	}
-	return (error);
+	return error;
 }
 
 paddr_t
 mmmmap(dev_t dev, off_t off, int prot)
 {
 
-	if (minor(dev) != 0)
-		return (-1);
+        /*
+         * /dev/mem is the only one that makes sense through this
+         * interface.  For /dev/kmem any physaddr we return here
+         * could be transient and hence incorrect or invalid at
+         * a later time.  /dev/null just doesn't make any sense
+         * and /dev/zero is a hack that is handled via the default
+         * pager in mmap().
+         */
+
+	if (minor(dev) != DEV_MEM)
+		return -1;
 
 	/*
 	 * Allow access only in RAM.
 	 */
-#if 0
-	if (off < ctob(firstusablepage) ||
-	    off >= ctob(lastusablepage + 1))
-		return (-1);
-#endif
-	return (btop(off));
+	if (off > ptoa(physmem))
+		return -1;
+
+	return btop(off);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: nextdma.c,v 1.42 2006/05/14 21:55:39 elad Exp $	*/
+/*	$NetBSD: nextdma.c,v 1.47 2010/06/06 02:51:46 mrg Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Darrin B. Jewell
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nextdma.c,v 1.42 2006/05/14 21:55:39 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nextdma.c,v 1.47 2010/06/06 02:51:46 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -137,17 +132,22 @@ static int attached = 0;
 struct nextdma_softc *
 nextdma_findchannel(const char *name)
 {
-	struct device *dev = TAILQ_FIRST(&alldevs);
+	device_t dev;
+	deviter_t di;
 
-	while (dev != NULL) {
-		if (!strncmp(dev->dv_xname, "nextdma", 7)) {
-			struct nextdma_softc *nsc = (struct nextdma_softc *)dev;
-			if (!strcmp (nsc->sc_chan->nd_name, name))
-				return (nsc);
+	for (dev = deviter_first(&di, DEVITER_F_ROOT_FIRST);
+	     dev != NULL;
+	     dev = deviter_next(&di)) {
+		if (strncmp(dev->dv_xname, "nextdma", 7) == 0) {
+			struct nextdma_softc *nsc = device_private(dev);
+			if (strcmp(nsc->sc_chan->nd_name, name) == 0)
+				break;
 		}
-		dev = TAILQ_NEXT(dev, dv_list);
 	}
-	return (NULL);
+	deviter_release(&di);
+	if (dev == NULL)
+		return NULL;
+	return device_private(dev);
 }
 
 int
@@ -203,8 +203,8 @@ nextdma_init(struct nextdma_softc *nsc)
 	if (NEXTDMA_DEBUG) {
 		char sbuf[256];
 
-		bitmask_snprintf(NEXT_I_BIT(nsc->sc_chan->nd_intr), NEXT_INTR_BITS,
-				 sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS,
+		    NEXT_I_BIT(nsc->sc_chan->nd_intr));
 		printf("DMA init ipl (%ld) intr(0x%s)\n",
 			NEXT_I_IPL(nsc->sc_chan->nd_intr), sbuf);
 	}
@@ -487,8 +487,8 @@ nextdma_enet_intr(void *arg)
 	if (NEXTDMA_DEBUG) {
 		char sbuf[256];
 
-		bitmask_snprintf(NEXT_I_BIT(nsc->sc_chan->nd_intr), NEXT_INTR_BITS,
-				 sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS,
+		    NEXT_I_BIT(nsc->sc_chan->nd_intr));
 		printf("DMA interrupt ipl (%ld) intr(0x%s)\n",
 		       NEXT_I_IPL(nsc->sc_chan->nd_intr), sbuf);
 	}
@@ -511,7 +511,7 @@ nextdma_enet_intr(void *arg)
 	if (/* (state & DMACSR_READ) || */ !(state & DMACSR_COMPLETE)) {
 		char sbuf[256];
 		nextdma_print(nsc);
-		bitmask_snprintf(state, DMACSR_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), DMACSR_BITS, state);
 		printf("DMA: state 0x%s\n",sbuf);
 		panic("DMA complete not set in interrupt");
 	}
@@ -572,7 +572,7 @@ nextdma_enet_intr(void *arg)
 	{
 		char sbuf[256];
 		printf("DMA: please send this output to port-next68k-maintainer@NetBSD.org:\n");
-		bitmask_snprintf(state, DMACSR_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), DMACSR_BITS, state);
 		printf("DMA: state 0x%s\n",sbuf);
 		nextdma_print(nsc);
 		panic("DMA: condition 0x%02x not yet documented to occur",result);
@@ -593,7 +593,7 @@ nextdma_enet_intr(void *arg)
 			  (state & DMACSR_READ) ? "read" : "write"));
 	if ((slimit < onext) || (slimit > olimit)) {
 		char sbuf[256];
-		bitmask_snprintf(state, DMACSR_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), DMACSR_BITS, state);
 		printf("DMA: state 0x%s\n",sbuf);
 		nextdma_print(nsc);
 		panic("DMA: Unexpected limit register (0x%08lx) in finish_xfer",slimit);
@@ -604,7 +604,7 @@ nextdma_enet_intr(void *arg)
 	if ((state & DMACSR_ENABLE) && ((stat->nd_idx+1) != stat->nd_map->dm_nsegs)) {
 		if (slimit != olimit) {
 			char sbuf[256];
-			bitmask_snprintf(state, DMACSR_BITS, sbuf, sizeof(sbuf));
+			snprintb(sbuf, sizeof(sbuf), DMACSR_BITS, state);
 			printf("DMA: state 0x%s\n",sbuf);
 			nextdma_print(nsc);
 			panic("DMA: short limit register (0x%08lx) w/o finishing map.",slimit);
@@ -635,7 +635,7 @@ nextdma_enet_intr(void *arg)
 #if (defined(ND_DEBUG))
 	if (NEXTDMA_DEBUG) {
 		char sbuf[256];
-		bitmask_snprintf(state, DMACSR_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), DMACSR_BITS, state);
 		printf("CLNDMAP: dd->dd_csr          = 0x%s\n",   sbuf);
 	}
 #endif
@@ -682,8 +682,8 @@ nextdma_enet_intr(void *arg)
 	if (NEXTDMA_DEBUG) {
 		char sbuf[256];
 
-		bitmask_snprintf(NEXT_I_BIT(nsc->sc_chan->nd_intr), NEXT_INTR_BITS,
-				 sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf),
+		    NEXT_INTR_BITS, NEXT_I_BIT(nsc->sc_chan->nd_intr));
 		printf("DMA exiting interrupt ipl (%ld) intr(0x%s)\n",
 		       NEXT_I_IPL(nsc->sc_chan->nd_intr), sbuf);
 	}
@@ -719,8 +719,8 @@ nextdma_start(struct nextdma_softc *nsc, u_long dmadir)
 	if (!nextdma_finished(nsc)) {
 		char sbuf[256];
 
-		bitmask_snprintf(NEXT_I_BIT(nsc->sc_chan->nd_intr), NEXT_INTR_BITS,
-				 sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf),
+		    NEXT_INTR_BITS, NEXT_I_BIT(nsc->sc_chan->nd_intr));
 		panic("DMA trying to start before previous finished on intr(0x%s)", sbuf);
 	}
 #endif
@@ -729,8 +729,8 @@ nextdma_start(struct nextdma_softc *nsc, u_long dmadir)
 	if (NEXTDMA_DEBUG) {
 		char sbuf[256];
 
-		bitmask_snprintf(NEXT_I_BIT(nsc->sc_chan->nd_intr), NEXT_INTR_BITS,
-				 sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf),
+		    NEXT_INTR_BITS, NEXT_I_BIT(nsc->sc_chan->nd_intr));
 		printf("DMA start (%ld) intr(0x%s)\n",
 		       NEXT_I_IPL(nsc->sc_chan->nd_intr), sbuf);
 	}
@@ -772,8 +772,8 @@ nextdma_start(struct nextdma_softc *nsc, u_long dmadir)
 	if (NEXTDMA_DEBUG) {
 		char sbuf[256];
 
-		bitmask_snprintf(NEXT_I_BIT(nsc->sc_chan->nd_intr), NEXT_INTR_BITS,
-				 sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf),
+		    NEXT_INTR_BITS, NEXT_I_BIT(nsc->sc_chan->nd_intr));
 		printf("DMA initiating DMA %s of %d segments on intr(0x%s)\n",
 		       (dmadir == DMACSR_SETREAD ? "read" : "write"), stat->nd_map->dm_nsegs, sbuf);
 	}
@@ -828,12 +828,12 @@ nextdma_print(struct nextdma_softc *nsc)
 	dd_saved_start  = nd_bsr4 (DD_SAVED_START);
 	dd_saved_stop   = nd_bsr4 (DD_SAVED_STOP);
 
-	bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRSTAT)),
-			 NEXT_INTR_BITS, sbuf, sizeof(sbuf));
+	snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS,
+	    *(volatile u_long *)IIOV(NEXT_P_INTRSTAT));
 	printf("NDMAP: *intrstat = 0x%s\n", sbuf);
 
-	bitmask_snprintf((*(volatile u_long *)IIOV(NEXT_P_INTRMASK)),
-			 NEXT_INTR_BITS, sbuf, sizeof(sbuf));
+	snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS,
+	    *(volatile u_long *)IIOV(NEXT_P_INTRMASK));
 	printf("NDMAP: *intrmask = 0x%s\n", sbuf);
 
 	/* NDMAP is Next DMA Print (really!) */
@@ -887,7 +887,7 @@ nextdma_print(struct nextdma_softc *nsc)
 		printf("NDMAP: nd_map_cont = NULL\n");
 	}
 
-	bitmask_snprintf(dd_csr, DMACSR_BITS, sbuf, sizeof(sbuf));
+	snprintb(sbuf, sizeof(sbuf), DMACSR_BITS, dd_csr);
 	printf("NDMAP: dd->dd_csr          = 0x%s\n",   sbuf);
 
 	printf("NDMAP: dd->dd_saved_next   = 0x%08lx\n", dd_saved_next);
@@ -900,8 +900,8 @@ nextdma_print(struct nextdma_softc *nsc)
 	printf("NDMAP: dd->dd_start        = 0x%08lx\n", dd_start);
 	printf("NDMAP: dd->dd_stop         = 0x%08lx\n", dd_stop);
 
-	bitmask_snprintf(NEXT_I_BIT(nsc->sc_chan->nd_intr), NEXT_INTR_BITS,
-			 sbuf, sizeof(sbuf));
+	snprintb(sbuf, sizeof(sbuf), NEXT_INTR_BITS,
+	    NEXT_I_BIT(nsc->sc_chan->nd_intr));
 	printf("NDMAP: interrupt ipl (%ld) intr(0x%s)\n",
 			NEXT_I_IPL(nsc->sc_chan->nd_intr), sbuf);
 }
@@ -945,7 +945,7 @@ nextdma_debug_enetr_dumpstate(void)
 	do {
 		char sbuf[256];
 		if (nextdma_debug_enetr_state[i]) {
-			bitmask_snprintf(nextdma_debug_enetr_state[i], DMACSR_BITS, sbuf, sizeof(sbuf));
+			snprintb(sbuf, sizeof(sbuf), DMACSR_BITS, nextdma_debug_enetr_state[i]);
 			printf("DMA: 0x%02x state 0x%s\n",i,sbuf);
 		}
 		i++;
@@ -964,7 +964,7 @@ nextdma_debug_scsi_dumpstate(void)
 	do {
 		char sbuf[256];
 		if (nextdma_debug_scsi_state[i]) {
-			bitmask_snprintf(nextdma_debug_scsi_state[i], DMACSR_BITS, sbuf, sizeof(sbuf));
+			snprintb(sbuf, sizeof(sbuf), DMACSR_BITS, nextdma_debug_scsi_state[i]);
 			printf("DMA: 0x%02x state 0x%s\n",i,sbuf);
 		}
 		i++;

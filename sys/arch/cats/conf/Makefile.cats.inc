@@ -1,9 +1,7 @@
-#	$NetBSD: Makefile.cats.inc,v 1.19 2007/11/17 09:07:42 skrll Exp $
+#	$NetBSD: Makefile.cats.inc,v 1.23 2010/07/06 05:59:59 mrg Exp $
 
 MACHINE_ARCH=	arm
 CPPFLAGS+=	-D${MACHINE}
-
-.if (${OBJECT_FMT} == "ELF")
 
 .if defined(ABLEELF) && (${ABLEELF} == "1")
 # use a standard ELF format, adjusted to align areas
@@ -23,7 +21,16 @@ SYSTEM_LD_HEAD_EXTRA+=; \
 
 SYSTEM_LD_TAIL_EXTRA+=; \
 	echo \
-	 "${OBJCOPY} -O a.out-arm-netbsd -R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident $@ $@.aout"; \
-	${OBJCOPY} -O a.out-arm-netbsd -R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident $@ $@.aout
-.endif
+	 "${OBJCOPY} -O a.out-arm-netbsd \
+		-R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident \
+		-R .debug_abbrev -R .debug_info -R .debug_line -R .debug_str \
+		-R .debug_frame -R .debug_loc -R .debug_pubnames \
+		-R .debug_aranges -R .ARM.attributes \
+		$@ $@.aout"; \
+	${OBJCOPY} -O a.out-arm-netbsd \
+		-R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident \
+		-R .debug_abbrev -R .debug_info -R .debug_line -R .debug_str \
+		-R .debug_frame -R .debug_loc -R .debug_pubnames \
+		-R .debug_aranges -R .ARM.attributes \
+		$@ $@.aout
 .endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: ahcivar.h,v 1.1 2007/03/20 08:52:01 dyoung Exp $	*/
+/*	$NetBSD: ahcivar.h,v 1.3 2011/04/04 19:58:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -45,13 +45,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -78,7 +71,7 @@
 
 struct ahci_xfer {
 	usbd_xfer_handle sx_xfer;
-	usb_callout_t sx_callout_t;
+	callout_t sx_callout_t;
 };
 
 struct ahci_softc {
@@ -98,7 +91,7 @@ struct ahci_softc {
 #define INTR_ON 	(1)
 #define INTR_OFF	(0)
 
-	device_ptr_t		 sc_child;
+	device_t		 sc_child;
 
 	struct device		*sc_parent;	/* parent device */
 
@@ -109,7 +102,7 @@ struct ahci_softc {
 	/* Information for the root hub interrupt pipe */
 	int			 sc_interval;
 	usbd_xfer_handle	 sc_intr_xfer;
-	usb_callout_t		 sc_poll_handle;
+	callout_t		 sc_poll_handle;
 
 	int				 sc_flags;
 #define AHCDF_RESET	(0x01)

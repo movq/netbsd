@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_pcmcia.c,v 1.33 2007/10/19 12:01:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_pcmcia.c,v 1.40 2009/12/06 23:05:06 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -83,12 +76,12 @@ __KERNEL_RCSID(0, "$NetBSD: isic_pcmcia.c,v 1.33 2007/10/19 12:01:05 ad Exp $");
 
 extern const struct isdn_layer1_isdnif_driver isic_std_driver;
 
-static int isic_pcmcia_match(struct device *, struct cfdata *, void *);
-static void isic_pcmcia_attach(struct device *, struct device *, void *);
+static int isic_pcmcia_match(device_t, cfdata_t, void *);
+static void isic_pcmcia_attach(device_t, device_t, void *);
 static const struct isic_pcmcia_card_entry * find_matching_card(struct pcmcia_attach_args *pa);
 static int isic_pcmcia_isdn_attach(struct isic_softc *sc, const char*);
-static int isic_pcmcia_detach(struct device *self, int flags);
-static int isic_pcmcia_activate(struct device *self, enum devact act);
+static int isic_pcmcia_detach(device_t self, int flags);
+static int isic_pcmcia_activate(device_t self, enum devact act);
 
 CFATTACH_DECL(isic_pcmcia, sizeof(struct pcmcia_isic_softc),
     isic_pcmcia_match, isic_pcmcia_attach,
@@ -146,8 +139,7 @@ static const struct isic_pcmcia_card_entry card_list[] = {
 #define	NUM_MATCH_ENTRIES	(sizeof(card_list)/sizeof(card_list[0]))
 
 static const struct isic_pcmcia_card_entry *
-find_matching_card(pa)
-	struct pcmcia_attach_args *pa;
+find_matching_card(struct pcmcia_attach_args *pa)
 {
 	int i, j;
 
@@ -179,8 +171,8 @@ find_matching_card(pa)
  * Match card
  */
 static int
-isic_pcmcia_match(struct device *parent,
-	struct cfdata *match, void *aux)
+isic_pcmcia_match(device_t parent,
+	cfdata_t match, void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -194,8 +186,8 @@ isic_pcmcia_match(struct device *parent,
  * Attach the card
  */
 static void
-isic_pcmcia_attach(struct device *parent,
-	struct device *self, void *aux)
+isic_pcmcia_attach(device_t parent,
+	device_t self, void *aux)
 {
 	struct pcmcia_isic_softc *psc = (void*) self;
 	struct isic_softc *sc = &psc->sc_isic;
@@ -210,11 +202,10 @@ isic_pcmcia_attach(struct device *parent,
 	/* Which card is it? */
 	cde = find_matching_card(pa);
 	if (cde == NULL) {
-		printf("%s: attach failed, couldn't find matching card\n",
-		    psc->sc_isic.sc_dev.dv_xname);
+		aprint_error_dev(&psc->sc_isic.sc_dev, "attach failed, couldn't find matching card\n");
 		return;
 	}
-	printf("%s: %s\n", cde->name, self->dv_xname);
+	printf("%s: %s\n", cde->name, device_xname(self));
 
 	/* Enable the card */
 	pcmcia_function_init(pa->pf, cfe);
@@ -222,16 +213,14 @@ isic_pcmcia_attach(struct device *parent,
 	pcmcia_function_enable(pa->pf);
 
 	if (!cde->attach(psc, cfe, pa)) {
-		printf("%s: attach failed, card-specific attach unsuccesful\n",
-		    psc->sc_isic.sc_dev.dv_xname);
+		aprint_error_dev(&psc->sc_isic.sc_dev, "attach failed, card-specific attach unsuccesful\n");
 		goto fail;
 	}
 
 	/* MI initilization */
 	sc->sc_cardtyp = cde->card_type;
 	if (isic_pcmcia_isdn_attach(sc, cde->name)) {
-		printf("%s: attach failed, generic attach unsuccesful\n",
-		    psc->sc_isic.sc_dev.dv_xname);
+		aprint_error_dev(&psc->sc_isic.sc_dev, "attach failed, generic attach unsuccesful\n");
 		goto fail;
 	}
 
@@ -243,7 +232,7 @@ fail:
 }
 
 static int
-isic_pcmcia_detach(struct device *self, int flags)
+isic_pcmcia_detach(device_t self, int flags)
 {
 	struct pcmcia_isic_softc *psc = (struct pcmcia_isic_softc *)self;
 
@@ -257,25 +246,19 @@ isic_pcmcia_detach(struct device *self, int flags)
 }
 
 int
-isic_pcmcia_activate(struct device *self, enum devact act)
+isic_pcmcia_activate(device_t self, enum devact act)
 {
-	struct pcmcia_isic_softc *psc = (struct pcmcia_isic_softc *)self;
-	int error = 0, s;
+	struct pcmcia_isic_softc *psc = device_private(self);
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
 		psc->sc_isic.sc_intr_valid = ISIC_INTR_DYING;
 		if (psc->sc_isic.sc_l3token != NULL)
 			isic_detach_bri(&psc->sc_isic);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-	return (error);
 }
 
 /*---------------------------------------------------------------------------*
@@ -290,7 +273,7 @@ isic_pcmcia_activate(struct device *self, enum devact act)
 #define	TERMFMT	" "
 #else
 #define	ISIC_FMT	"%s: "
-#define	ISIC_PARM	sc->sc_dev.dv_xname
+#define	ISIC_PARM	device_xname(&sc->sc_dev)
 #define	TERMFMT	"\n"
 #endif
 

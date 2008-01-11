@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_input.c,v 1.66 2007/03/04 07:54:11 christos Exp $	*/
+/*	$NetBSD: ieee80211_input.c,v 1.70 2010/04/05 07:22:24 joerg Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -36,13 +36,12 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_input.c,v 1.81 2005/08/10 16:22:29 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_input.c,v 1.66 2007/03/04 07:54:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_input.c,v 1.70 2010/04/05 07:22:24 joerg Exp $");
 #endif
 
 #include "opt_inet.h"
 
 #ifdef __NetBSD__
-#include "bpfilter.h"
 #endif /* __NetBSD__ */
 
 #include <sys/param.h>
@@ -68,9 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_input.c,v 1.66 2007/03/04 07:54:11 christo
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h> 
@@ -455,11 +452,8 @@ ieee80211_input(struct ieee80211com *ic, struct mbuf *m,
 			goto out;
 		}
 
-#if NBPFILTER > 0
 		/* copy to listener after decrypt */
-		if (ic->ic_rawbpf)
-			bpf_mtap(ic->ic_rawbpf, m);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m);
 
 		/*
 		 * Finally, strip the 802.11 header.
@@ -572,10 +566,7 @@ ieee80211_input(struct ieee80211com *ic, struct mbuf *m,
 			wh = mtod(m, struct ieee80211_frame *);
 			wh->i_fc[1] &= ~IEEE80211_FC1_WEP;
 		}
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf)
-			bpf_mtap(ic->ic_rawbpf, m);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m);
 		(*ic->ic_recv_mgmt)(ic, m, ni, subtype, rssi, rstamp);
 		m_freem(m);
 		return type;
@@ -603,10 +594,7 @@ err:
 	ifp->if_ierrors++;
 out:
 	if (m != NULL) {
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf)
-			bpf_mtap(ic->ic_rawbpf, m);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m);
 		m_freem(m);
 	}
 	return type;
@@ -710,6 +698,7 @@ ieee80211_deliver_data(struct ieee80211com *ic,
 	struct ether_header *eh = mtod(m, struct ether_header *);
 	struct ifnet *ifp = ic->ic_ifp;
 	ALTQ_DECL(struct altq_pktattr pktattr;)
+	int error;
 
 	/* perform as a bridge within the AP */
 	if (ic->ic_opmode == IEEE80211_M_HOSTAP &&
@@ -756,21 +745,20 @@ ieee80211_deliver_data(struct ieee80211com *ic,
 			}
 #endif
 			len = m1->m_pkthdr.len;
-			IF_ENQUEUE(&ifp->if_snd, m1);
-			if (m != NULL)
+			IFQ_ENQUEUE(&ifp->if_snd, m1, &pktattr, error);
+			if (error) {
 				ifp->if_omcasts++;
+				m = NULL;
+			}
 			ifp->if_obytes += len;
 		}
 	}
 	if (m != NULL) {
-#if NBPFILTER > 0
 		/*
 		 * XXX If we forward packet into transmitter of the AP,
 		 * we don't need to duplicate for DLT_EN10MB.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		if (ni->ni_vlan != 0) {
 			/* attach vlan tag */
@@ -782,10 +770,7 @@ ieee80211_deliver_data(struct ieee80211com *ic,
 	return;
   out:
 	if (m != NULL) {
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf)
-			bpf_mtap(ic->ic_rawbpf, m);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m);
 		m_freem(m);
 	}
 }
@@ -1040,7 +1025,7 @@ static int
 alloc_challenge(struct ieee80211com *ic, struct ieee80211_node *ni)
 {
 	if (ni->ni_challenge == NULL)
-		MALLOC(ni->ni_challenge, u_int32_t*, IEEE80211_CHALLENGE_LEN,
+		ni->ni_challenge = malloc(IEEE80211_CHALLENGE_LEN,
 		    M_DEVBUF, M_NOWAIT);
 	if (ni->ni_challenge == NULL) {
 		IEEE80211_DPRINTF(ic, IEEE80211_MSG_DEBUG | IEEE80211_MSG_AUTH,
@@ -1231,7 +1216,7 @@ ieee80211_auth_shared(struct ieee80211com *ic, struct ieee80211_frame *wh,
 		switch (seq) {
 		case IEEE80211_AUTH_SHARED_PASS:
 			if (ni->ni_challenge != NULL) {
-				FREE(ni->ni_challenge, M_DEVBUF);
+				free(ni->ni_challenge, M_DEVBUF);
 				ni->ni_challenge = NULL;
 			}
 			if (status != 0) {
@@ -1779,7 +1764,7 @@ ieee80211_saveie(u_int8_t **iep, const u_int8_t *ie)
 	 */
 	if (*iep == NULL || (*iep)[1] != ie[1]) {
 		if (*iep != NULL)
-			FREE(*iep, M_DEVBUF);
+			free(*iep, M_DEVBUF);
 		*iep = malloc(ielen, M_DEVBUF, M_NOWAIT);
 	}
 	if (*iep != NULL)
@@ -2398,7 +2383,7 @@ ieee80211_recv_mgmt(struct ieee80211com *ic, struct mbuf *m0,
 		}
 		/* discard challenge after association */
 		if (ni->ni_challenge != NULL) {
-			FREE(ni->ni_challenge, M_DEVBUF);
+			free(ni->ni_challenge, M_DEVBUF);
 			ni->ni_challenge = NULL;
 		}
 		/* NB: 802.11 spec says to ignore station's privacy bit */
@@ -2453,7 +2438,7 @@ ieee80211_recv_mgmt(struct ieee80211com *ic, struct mbuf *m0,
 			/*
 			 * Flush any state from a previous association.
 			 */
-			FREE(ni->ni_wpa_ie, M_DEVBUF);
+			free(ni->ni_wpa_ie, M_DEVBUF);
 			ni->ni_wpa_ie = NULL;
 		}
 		if (wme != NULL) {
@@ -2468,7 +2453,7 @@ ieee80211_recv_mgmt(struct ieee80211com *ic, struct mbuf *m0,
 			/*
 			 * Flush any state from a previous association.
 			 */
-			FREE(ni->ni_wme_ie, M_DEVBUF);
+			free(ni->ni_wme_ie, M_DEVBUF);
 			ni->ni_wme_ie = NULL;
 			ni->ni_flags &= ~IEEE80211_NODE_QOS;
 		}

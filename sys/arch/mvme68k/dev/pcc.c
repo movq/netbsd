@@ -1,6 +1,6 @@
-/*	$NetBSD: pcc.c,v 1.28 2007/12/03 15:33:58 ad Exp $	*/
+/*	$NetBSD: pcc.c,v 1.31 2011/02/01 20:19:31 chuck Exp $	*/
 
-/*-
+/*
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,11 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -71,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcc.c,v 1.28 2007/12/03 15:33:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcc.c,v 1.31 2011/02/01 20:19:31 chuck Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -86,22 +74,23 @@ __KERNEL_RCSID(0, "$NetBSD: pcc.c,v 1.28 2007/12/03 15:33:58 ad Exp $");
 #include <mvme68k/dev/pccreg.h>
 #include <mvme68k/dev/pccvar.h>
 
+#include "ioconf.h"
+
 /*
  * Autoconfiguration stuff for the PCC chip on mvme147
  */
 
-void pccattach __P((struct device *, struct device *, void *));
-int pccmatch __P((struct device *, struct cfdata *, void *));
-int pccprint __P((void *, const char *));
+void pccattach(struct device *, struct device *, void *);
+int pccmatch(struct device *, struct cfdata *, void *);
+int pccprint(void *, const char *);
 
 CFATTACH_DECL(pcc, sizeof(struct pcc_softc),
     pccmatch, pccattach, NULL, NULL);
 
-extern struct cfdriver pcc_cd;
-static int pccintr __P((void *));
-static int pccsoftintr __P((void *));
+static int pccintr(void *);
+static int pccsoftintr(void *);
 #ifdef notyet
-static void pccsoftintrassert __P((void));
+static void pccsoftintrassert(void);
 #endif
 
 /*
@@ -150,10 +139,7 @@ bus_addr_t pcc_slave_base_addr;
 
 /* ARGSUSED */
 int
-pccmatch(parent, cf, args)
-	struct device *parent;
-	struct cfdata *cf;
-	void *args;
+pccmatch(struct device *parent, struct cfdata *cf, void *args)
 {
 	struct mainbus_attach_args *ma;
 
@@ -161,26 +147,23 @@ pccmatch(parent, cf, args)
 
 	/* Only attach one PCC. */
 	if (sys_pcc)
-		return (0);
+		return 0;
 
-	return (strcmp(ma->ma_name, pcc_cd.cd_name) == 0);
+	return strcmp(ma->ma_name, pcc_cd.cd_name) == 0;
 }
 
 /* ARGSUSED */
 void
-pccattach(parent, self, args)
-	struct device *parent;
-	struct device *self;
-	void *args;
+pccattach(struct device *parent, struct device *self, void *args)
 {
 	struct mainbus_attach_args *ma;
 	struct pcc_attach_args npa;
 	struct pcc_softc *sc;
-	u_int8_t reg;
+	uint8_t reg;
 	int i;
 
 	ma = args;
-	sc = sys_pcc = (struct pcc_softc *) self;
+	sc = sys_pcc = (struct pcc_softc *)self;
 
 	/* Get a handle to the PCC's registers. */
 	sc->sc_bust = ma->ma_bust;
@@ -237,14 +220,12 @@ pccattach(parent, self, args)
 		npa.pa_offset = pcc_devices[i].pcc_offset + ma->ma_offset;
 
 		/* Attach the device if configured. */
-		(void) config_found(self, &npa, pccprint);
+		(void)config_found(self, &npa, pccprint);
 	}
 }
 
 int
-pccprint(aux, cp)
-	void *aux;
-	const char *cp;
+pccprint(void *aux, const char *cp)
 {
 	struct pcc_attach_args *pa;
 
@@ -257,18 +238,15 @@ pccprint(aux, cp)
 	if (pa->pa_ipl != -1)
 		aprint_normal(" ipl %d", pa->pa_ipl);
 
-	return (UNCONF);
+	return UNCONF;
 }
 
 /*
  * pccintr_establish: establish pcc interrupt
  */
 void
-pccintr_establish(pccvec, hand, lvl, arg, evcnt)
-	int pccvec;
-	int (*hand) __P((void *)), lvl;
-	void *arg;
-	struct evcnt *evcnt;
+pccintr_establish(int pccvec, int (*hand)(void *), int lvl, void *arg,
+    struct evcnt *evcnt)
 {
 
 #ifdef DEBUG
@@ -286,8 +264,7 @@ pccintr_establish(pccvec, hand, lvl, arg, evcnt)
 }
 
 void
-pccintr_disestablish(pccvec)
-	int pccvec;
+pccintr_disestablish(int pccvec)
 {
 
 #ifdef DEBUG
@@ -306,15 +283,14 @@ pccintr_disestablish(pccvec)
  * Handle NMI from abort switch.
  */
 static int
-pccintr(frame)
-	void *frame;
+pccintr(void *frame)
 {
 
 	/* XXX wait until button pops out */
 	pcc_reg_write(sys_pcc, PCCREG_ABORT_INTR_CTRL,
 	    PCC_ABORT_IEN | PCC_ABORT_ACK);
 
-	return (nmihand(frame));
+	return nmihand(frame);
 }
 
 #ifdef notyet
@@ -331,8 +307,7 @@ pccsoftintrassert(void)
  * Handle PCC soft interrupt #1
  */
 static int
-pccsoftintr(arg)
-	void *arg;
+pccsoftintr(void *arg)
 {
 	struct pcc_softc *sc = arg;
 
@@ -344,5 +319,5 @@ pccsoftintr(arg)
 	softintr_dispatch();
 #endif
 
-	return (1);
+	return 1;
 }

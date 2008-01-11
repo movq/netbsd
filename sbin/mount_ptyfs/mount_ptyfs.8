@@ -1,4 +1,4 @@
-.\"	$NetBSD: mount_ptyfs.8,v 1.5 2005/01/31 05:19:19 erh Exp $
+.\"	$NetBSD: mount_ptyfs.8,v 1.8 2009/03/18 10:46:58 wiz Exp $
 .\"
 .\"
 .\" Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 24, 2004
+.Dd March 15, 2009
 .Dt MOUNT_PTYFS 8
 .Os
 .Sh NAME
@@ -43,6 +36,7 @@
 .Nd mount the /dev/pts file system
 .Sh SYNOPSIS
 .Nm
+.Op Fl c
 .Op Fl g Ar group|gid
 .Op Fl m Ar mode
 .Op Fl o Ar options
@@ -69,6 +63,10 @@ or they are already open via traditional BSD style ptys.
 .Pp
 The options are as follows:
 .Bl -tag -width indent
+.It Fl c
+Allows
+.Ar ptyfs
+to be mounted inside a chrooted environment.
 .It Fl g Ar group|gid
 Specify the group ownership of the slave pseudo-tty.
 .It Fl m Ar mode
@@ -82,6 +80,9 @@ flag followed by a comma separated string of options.
 .Pp
 .Nm
 specific options are
+.Dv chroot
+which corresponds to
+.Fl c ,
 .Dv group
 which corresponds to
 .Fl g ,

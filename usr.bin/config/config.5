@@ -1,4 +1,4 @@
-.\" $NetBSD: config.5,v 1.13 2007/11/10 00:15:43 cube Exp $
+.\" $NetBSD: config.5,v 1.21 2010/03/03 13:53:22 pooka Exp $
 .\"
 .\"  Copyright (c) 2006, 2007 The NetBSD Foundation.
 .\"  All rights reserved.
@@ -11,9 +11,6 @@
 .\"  2. Redistributions in binary form must reproduce the above copyright
 .\"     notice, this list of conditions and the following disclaimer in the
 .\"     documentation and/or other materials provided with the distribution.
-.\"  3. Neither the name of The NetBSD Foundation nor the names of its
-.\"     contributors may be used to endorse or promote products derived
-.\"     from this software without specific prior written permission.
 .\"
 .\"  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\"  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -27,7 +24,7 @@
 .\"  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\"  POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 9, 2007
+.Dd March 3, 2010
 .Dt CONFIG 5
 .Os
 .Sh NAME
@@ -83,7 +80,7 @@ with the value of a space character.
 .Xr config 1
 is a rather complicated piece of software that tries to comply with any
 configuration the user might think of.
-Quite a few different objets are manipulated through the kernel configuration
+Quite a few different objects are manipulated through the kernel configuration
 file, therefore some definitions are needed.
 .Ss Options and attributes
 The basic objects driving the kernel compilation are
@@ -358,7 +355,7 @@ is specified,
 will use it as a value when generating a lint configuration with
 .Fl L ,
 and ignore it in all other cases.
-.It Ic deffs Oo Ar file Oc Ar name Op Ar name Op Ar ...
+.It Ic deffs Ar name Op Ar name Op Ar ...
 Defines a file-system name.
 It is no more than a regular option, as defined by
 .Ic defflag ,
@@ -367,9 +364,7 @@ file-systems to be compiled in the kernel with the
 .Ic file-system
 statement instead of the
 .Ic options
-statement, and
-.Xr config 1
-will enforce the rule that the user must select at least one file-system.
+statement.
 .It Ic obsolete defflag Oo Ar file Oc Ar option Op Ar option Op Ar ...
 .It Ic obsolete defparam Oo Ar file Oc Ar option Op Ar option Op Ar ...
 Those two statements are identical and mark the listed option names as
@@ -456,13 +451,25 @@ It is then possible to use the associated
 as a conditional element in a
 .Ic file
 statement.
-.It Ic defpseudo Ar base Oo Bro Ar locators Brc Oc Oo : dependencies Oc
+.It Ic defpseudo Ar base Oo : dependencies Oc
 Declares a pseudo-device.
 Those devices don't need an attachment to be declared, they will always be
 attached if they were selected by the user.
-As normal devices, an optional list of
+.It Ic defpseudodev Ar base Oo Bro Ar locators Brc Oc Oo : dependencies Oc
+Declares a pseudo-device.
+Those devices don't need an attachment to be declared, they will always be
+attached if they were selected by the user.
+This declaration should be used if the pseudodevice uses
+.Xr autoconf 9
+functions to manage its instances or attach children.
+As for normal devices, an optional list of
 .Ar locators
-can be defined, allowing the pseudo-device to have children.
+can be defined, which implies an interface attribute named
+.Ar base ,
+allowing the pseudo-device to have children.
+Interface attributes can also be defined in the
+.Ar dependencies
+list.
 .It Ic file Ar path Oo Ar condition Oc Oo Ic needs-count Oc \
     Oo Ic needs-flag Oc Op Ic compile with Ar rule
 Adds a source file to the list of files to be compiled into the kernel, if the
@@ -613,7 +620,6 @@ If option
 has not been previously selected, the statement produces an error.
 .It Oo Ic no Oc Ic file-system Ar name Op , Ar name Op , Ar ...
 Adds or removes support for all the listed file-systems.
-A kernel must have support for at least one file-system.
 .It Ic config Ar name Ic root on Ar device Oo Ic type Ar fs Oc Op Ic dumps on \
     Ar device
 Adds

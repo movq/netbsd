@@ -1,4 +1,4 @@
-/*	$NetBSD: usb.h,v 1.78 2007/12/25 18:33:43 perry Exp $	*/
+/*	$NetBSD: usb.h,v 1.91 2011/01/18 08:29:24 matt Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb.h,v 1.14 1999/11/17 22:33:46 n_hibma Exp $	*/
 
 /*
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,18 +38,61 @@
 #include <sys/types.h>
 #include <sys/time.h>
 
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/ioctl.h>
-#endif
-#if defined(__FreeBSD__)
-/* These two defines are used by usbd to autoload the usb kld */
-#define USB_KLD		"usb"           /* name of usb module */
-#define USB_UHUB	"usb/uhub"      /* root hub */
-#endif
 
 #if defined(_KERNEL)
-#include <dev/usb/usb_port.h>
-#endif /* _KERNEL */
+#include <sys/mallocvar.h>
+
+MALLOC_DECLARE(M_USB);
+MALLOC_DECLARE(M_USBDEV);
+MALLOC_DECLARE(M_USBHC);
+
+#include <sys/device.h>
+
+#endif
+
+#define USB_USE_SOFTINTR
+
+#ifdef USB_DEBUG
+#define UKBD_DEBUG 1
+#define UHIDEV_DEBUG 1
+#define UHID_DEBUG 1
+#define OHCI_DEBUG 1
+#define UGEN_DEBUG 1
+#define UHCI_DEBUG 1
+#define UHUB_DEBUG 1
+#define ULPT_DEBUG 1
+#define UCOM_DEBUG 1
+#define UPLCOM_DEBUG 1
+#define UMCT_DEBUG 1
+#define UMODEM_DEBUG 1
+#define UAUDIO_DEBUG 1
+#define AUE_DEBUG 1
+#define CUE_DEBUG 1
+#define KUE_DEBUG 1
+#define URL_DEBUG 1
+#define UMASS_DEBUG 1
+#define UVISOR_DEBUG 1
+#define UPL_DEBUG 1
+#define UZCOM_DEBUG 1
+#define URIO_DEBUG 1
+#define UFTDI_DEBUG 1
+#define USCANNER_DEBUG 1
+#define USSCANNER_DEBUG 1
+#define EHCI_DEBUG 1
+#define UIRDA_DEBUG 1
+#define USTIR_DEBUG 1
+#define UISDATA_DEBUG 1
+#define UDSBR_DEBUG 1
+#define UBT_DEBUG 1
+#define AXE_DEBUG 1
+#define UIPAQ_DEBUG 1
+#define UCYCOM_DEBUG 1
+#define UHSO_DEBUG 1
+#define Static
+#else
+#define Static static
+#endif
 
 #define USB_STACK_VERSION 2
 
@@ -67,6 +103,7 @@
 #define USB_MAX_ENDPOINTS 16
 
 #define USB_FRAMES_PER_SECOND 1000
+#define USB_UFRAMES_PER_FRAME 8
 
 /*
  * The USB records contain some unaligned little-endian word
@@ -157,6 +194,8 @@ typedef struct {
 #define  UDESC_OTHER_SPEED_CONFIGURATION 0x07
 #define  UDESC_INTERFACE_POWER	0x08
 #define  UDESC_OTG		0x09
+#define  UDESC_DEBUG		0x0a
+#define  UDESC_INTERFACE_ASSOC	0x0b
 #define  UDESC_CS_DEVICE	0x21	/* class specific */
 #define  UDESC_CS_CONFIG	0x22
 #define  UDESC_CS_STRING	0x23
@@ -238,6 +277,18 @@ typedef struct {
 typedef struct {
 	uByte		bLength;
 	uByte		bDescriptorType;
+	uByte		bFirstInterface;
+	uByte		bInterfaceCount;
+	uByte		bFunctionClass;
+	uByte		bFunctionSubClass;
+	uByte		bFunctionProtocol;
+	uByte		iFunction;
+} UPACKED usb_interface_assoc_descriptor_t;
+#define USB_INTERFACE_ASSOC_DESCRIPTOR_SIZE 8
+
+typedef struct {
+	uByte		bLength;
+	uByte		bDescriptorType;
 	uByte		bEndpointAddress;
 #define UE_GET_DIR(a)	((a) & 0x80)
 #define UE_SET_DIR(a,d)	((a) | (((d)&1) << 7))
@@ -258,6 +309,8 @@ typedef struct {
 #define  UE_ISO_SYNC	0x0c
 #define UE_GET_ISO_TYPE(a)	((a) & UE_ISO_TYPE)
 	uWord		wMaxPacketSize;
+#define UE_GET_TRANS(a)		(((a) >> 11) & 0x3)
+#define UE_GET_SIZE(a)		((a) & 0x7ff)
 	uByte		bInterval;
 } UPACKED usb_endpoint_descriptor_t;
 #define USB_ENDPOINT_DESCRIPTOR_SIZE 7
@@ -353,6 +406,13 @@ typedef struct {
 #define UOTG_A_ALT_HNP_SUPPORT	5
 
 typedef struct {
+	uByte		bLength;
+	uByte		bDescriptorType;
+	uByte		bDebugInEndpoint;
+	uByte		bDebugOutEndpoint;
+} UPACKED usb_debug_descriptor_t;
+
+typedef struct {
 	uWord		wStatus;
 /* Device status flags */
 #define UDS_SELF_POWERED		0x0001
@@ -376,6 +436,7 @@ typedef struct {
 #define UPS_OVERCURRENT_INDICATOR	0x0008
 #define UPS_RESET			0x0010
 #define UPS_PORT_POWER			0x0100
+#define UPS_FULL_SPEED			0x0000	/* for completeness */
 #define UPS_LOW_SPEED			0x0200
 #define UPS_HIGH_SPEED			0x0400
 #define UPS_PORT_TEST			0x0800
@@ -410,6 +471,11 @@ typedef struct {
 #define  UISUBCLASS_AUDIOSTREAM		2
 #define  UISUBCLASS_MIDISTREAM		3
 
+#define UICLASS_VIDEO		0x0E
+#define  UISUBCLASS_VIDEOCONTROL	1
+#define  UISUBCLASS_VIDEOSTREAMING	2
+#define  UISUBCLASS_VIDEOCOLLECTION	3
+
 #define UICLASS_CDC		0x02 /* communication */
 #define	 UISUBCLASS_DIRECT_LINE_CONTROL_MODEL	1
 #define  UISUBCLASS_ABSTRACT_CONTROL_MODEL	2
@@ -423,6 +489,7 @@ typedef struct {
 #define UICLASS_HID		0x03
 #define  UISUBCLASS_BOOT	1
 #define  UIPROTO_BOOT_KEYBOARD	1
+#define  UIPROTO_MOUSE		2
 
 #define UICLASS_PHYSICAL	0x05
 
@@ -529,6 +596,27 @@ typedef struct {
 
 #define USB_UNCONFIG_NO 0
 #define USB_UNCONFIG_INDEX (-1)
+
+
+/* Packet IDs */
+#define UPID_RESERVED	0xf0
+#define UPID_OUT	0xe1
+#define UPID_ACK	0xd2
+#define UPID_DATA0	0xc3
+#define UPID_PING	0xb4
+#define UPID_SOF	0xa5
+#define UPID_NYET	0x96
+#define UPID_DATA2	0x87
+#define UPID_SPLIT	0x78
+#define UPID_IN		0x69
+#define UPID_NAK	0x5a
+#define UPID_DATA1	0x4b
+#define UPID_ERR	0x3c
+#define UPID_PREAMBLE	0x3c
+#define UPID_SETUP	0x2d
+#define UPID_STALL	0x1e
+#define UPID_MDATA	0x0f
+
 
 /*** ioctl() related stuff ***/
 

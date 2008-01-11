@@ -1,4 +1,4 @@
-/*	$NetBSD: pcb.h,v 1.16 2007/10/17 19:53:41 garbled Exp $	*/
+/*	pcb.h,v 1.14.22.2 2007/11/06 23:15:05 matt Exp	*/
 
 /*
  * Copyright (c) 2001 Matt Thomas <matt@3am-software.com>.
@@ -40,6 +40,7 @@
 #include <machine/fp.h>
 
 #include <arm/arm32/pte.h>
+#include <arm/reg.h>
 
 struct trapframe;
 
@@ -57,13 +58,20 @@ struct pcb_arm32 {
 	u_int	pcb32_sp;			/* used */
 	u_int	pcb32_lr;
 	u_int	pcb32_pc;
-	u_int	pcb32_und_sp;
+
+	/*
+	 * ARMv6 has two user thread/process id registers which can hold
+	 * any 32bit quanttiies.
+	 */
+	u_int	pcb32_user_pid_rw;		/* p15, 0, Rd, c13, c0, 2 */
+	u_int	pcb32_user_pid_ro;		/* p15, 0, Rd, c13, c0, 3 */
 };
 #define	pcb_pagedir	pcb_un.un_32.pcb32_pagedir
 #define	pcb_pl1vec	pcb_un.un_32.pcb32_pl1vec
 #define	pcb_l1vec	pcb_un.un_32.pcb32_l1vec
 #define	pcb_dacr	pcb_un.un_32.pcb32_dacr
 #define	pcb_cstate	pcb_un.un_32.pcb32_cstate
+#define	pcb_user_pid_rw	pcb_un.un_32.pcb32_user_pid_rw
 
 struct pcb_arm26 {
 	struct	switchframe *pcb26_sf;
@@ -84,7 +92,9 @@ struct pcb {
 		struct	pcb_arm32 un_32;
 		struct	pcb_arm26 un_26;
 	} pcb_un;
-	struct	fpe_sp_state pcb_fpstate;	/* Floating Point state */
+	struct	fpe_sp_state pcb_fpstate;	/* FPA Floating Point state */
+	struct	vfpreg pcb_vfp;			/* VFP registers */
+	struct	cpu_info *pcb_vfpcpu;		/* CPU holding VFP state */
 };
 #define	pcb_ff	pcb_fpstate			/* for arm26 */
 

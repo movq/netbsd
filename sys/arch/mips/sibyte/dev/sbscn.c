@@ -1,4 +1,4 @@
-/* $NetBSD: sbscn.c,v 1.25 2007/11/26 23:29:37 ad Exp $ */
+/* $NetBSD: sbscn.c,v 1.35 2011/04/24 16:26:56 rmind Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -49,13 +49,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -116,11 +109,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbscn.c,v 1.25 2007/11/26 23:29:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbscn.c,v 1.35 2011/04/24 16:26:56 rmind Exp $");
 
 #define	SBSCN_DEBUG
 
 #include "opt_ddb.h"
+#include "ioconf.h"
 
 #include "rnd.h"
 #if NRND > 0 && defined(RND_SBSCN)
@@ -133,7 +127,6 @@ __KERNEL_RCSID(0, "$NetBSD: sbscn.c,v 1.25 2007/11/26 23:29:37 ad Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -177,13 +170,11 @@ void	sbscn_iflush(struct sbscn_channel *);
 int	sbscn_init(u_long addr, int chan, int rate, tcflag_t cflag);
 int	sbscn_common_getc(u_long addr, int chan);
 void	sbscn_common_putc(u_long addr, int chan, int c);
-void	sbscn_intr(void *arg, uint32_t status, uint32_t pc);
+void	sbscn_intr(void *arg, uint32_t status, vaddr_t pc);
 
 int	sbscn_cngetc(dev_t dev);
 void	sbscn_cnputc(dev_t dev, int c);
 void	sbscn_cnpollc(dev_t dev, int on);
-
-extern struct cfdriver sbscn_cd;
 
 dev_type_open(sbscnopen);
 dev_type_close(sbscnclose);
@@ -236,14 +227,14 @@ int	sbscn_kgdb_getc(void *);
 void	sbscn_kgdb_putc(void *, int);
 #endif /* KGDB */
 
-static int	sbscn_match(struct device *, struct cfdata *, void *);
-static void	sbscn_attach(struct device *, struct device *, void *);
+static int	sbscn_match(device_t, cfdata_t, void *);
+static void	sbscn_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(sbscn, sizeof(struct sbscn_softc),
+CFATTACH_DECL_NEW(sbscn, sizeof(struct sbscn_softc),
     sbscn_match, sbscn_attach, NULL, NULL);
 
-#define	READ_REG(rp)		(mips3_ld((int64_t *)__UNVOLATILE(rp)))
-#define	WRITE_REG(rp, val)	(mips3_sd((uint64_t *)__UNVOLATILE(rp), (val)))
+#define	READ_REG(rp)		(mips3_ld((volatile uint64_t *)(rp)))
+#define	WRITE_REG(rp, val)	(mips3_sd((volatile uint64_t *)(rp), (val)))
 
 /*
  * input and output signals are actually the _inverse_ of the bits in the
@@ -266,28 +257,29 @@ CFATTACH_DECL(sbscn, sizeof(struct sbscn_softc),
     } while (0)
 
 static int
-sbscn_match(struct device *parent, struct cfdata *match, void *aux)
+sbscn_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct sbobio_attach_args *sap = aux;
+	struct sbobio_attach_args *sa = aux;
 
-	if (sap->sa_locs.sa_type != SBOBIO_DEVTYPE_DUART)
+	if (sa->sa_locs.sa_type != SBOBIO_DEVTYPE_DUART)
 		return (0);
 
 	return 1;
 }
 
 static void
-sbscn_attach(struct device *parent, struct device *self, void *aux)
+sbscn_attach(device_t parent, device_t self, void *aux)
 {
-	struct sbscn_softc *sc = (struct sbscn_softc *)self;
-	struct sbobio_attach_args *sap = aux;
+	struct sbscn_softc *sc = device_private(self);
+	struct sbobio_attach_args *sa = aux;
 	int i;
 
-	sc->sc_addr = sap->sa_base + sap->sa_locs.sa_offset;
+	sc->sc_dev = self;
+	sc->sc_addr = sa->sa_base + sa->sa_locs.sa_offset;
 
-	printf("\n");
+	aprint_normal("\n");
 	for (i = 0; i < 2; i++)
-		sbscn_attach_channel(sc, i, sap->sa_locs.sa_intr[i]);
+		sbscn_attach_channel(sc, i, sa->sa_locs.sa_intr[i]);
 
 	/* init duart_opcr */
 	WRITE_REG(MIPS_PHYS_TO_KSEG1(sc->sc_addr + 0x270), 0);
@@ -343,7 +335,7 @@ sbscn_attach_channel(struct sbscn_softc *sc, int chan, int intr)
 		SET(ch->ch_swflags, TIOCFLAG_SOFTCAR);
 	}
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = sbscn_start;
 	tp->t_param = sbscn_param;
 	tp->t_hwiflow = sbscn_hwiflow;
@@ -351,8 +343,9 @@ sbscn_attach_channel(struct sbscn_softc *sc, int chan, int intr)
 	ch->ch_tty = tp;
 	ch->ch_rbuf = malloc(sbscn_rbuf_size << 1, M_DEVBUF, M_NOWAIT);
 	if (ch->ch_rbuf == NULL) {
-		printf("%s: channel %d: unable to allocate ring buffer\n",
-		    sc->sc_dev.dv_xname, chan);
+		aprint_error_dev(sc->sc_dev,
+		    "channel %d: unable to allocate ring buffer\n",
+		    chan);
 		return;
 	}
 	ch->ch_ebuf = ch->ch_rbuf + (sbscn_rbuf_size << 1);
@@ -366,9 +359,10 @@ sbscn_attach_channel(struct sbscn_softc *sc, int chan, int intr)
 		maj = cdevsw_lookup_major(&sbscn_cdevsw);
 
 		cn_tab->cn_dev = makedev(maj,
-		    (device_unit(&sc->sc_dev) << 1) + chan);
+		    (device_unit(sc->sc_dev) << 1) + chan);
 
-		printf("%s: channel %d: console\n", sc->sc_dev.dv_xname, chan);
+		aprint_normal_dev(sc->sc_dev, "channel %d: %s\n",
+		    chan, "console");
 	}
 
 #ifdef KGDB
@@ -381,14 +375,15 @@ sbscn_attach_channel(struct sbscn_softc *sc, int chan, int intr)
 		sbscn_kgdb_attached = 1;
 
 		SET(sc->sc_hwflags, SBSCN_HW_KGDB);
-		printf("%s: channel %d: kgdb\n", sc->sc_dev.dv_xname, chan);
+		aprint_normal_dev(sc->sc_dev, "channel %d: %s\n",
+		    chan, "kgdb");
 	}
 #endif
 
 	ch->ch_si = softint_establish(SOFTINT_SERIAL, sbscn_soft, ch);
 
 #if NRND > 0 && defined(RND_SBSCN)
-	rnd_attach_source(&ch->ch_rnd_source, sc->sc_dev.dv_xname,
+	rnd_attach_source(&ch->ch_rnd_source, device_xname(sc->sc_dev),
 			  RND_TYPE_TTY, 0);
 #endif
 
@@ -434,16 +429,18 @@ sbscn_status(struct sbscn_channel *ch, const char *str)
 	struct sbscn_softc *sc = ch->ch_sc;
 	struct tty *tp = ch->ch_tty;
 
-	printf("%s: chan %d: %s %sclocal  %sdcd %sts_carr_on %sdtr %stx_stopped\n",
-	    sc->sc_dev.dv_xname, ch->ch_num, str,
+	aprint_normal_dev(sc->sc_dev,
+	    "chan %d: %s %sclocal  %sdcd %sts_carr_on %sdtr %stx_stopped\n",
+	    ch->ch_num, str,
 	    ISSET(tp->t_cflag, CLOCAL) ? "+" : "-",
 	    ISSET(ch->ch_iports, ch->ch_i_dcd) ? "+" : "-",
 	    ISSET(tp->t_state, TS_CARR_ON) ? "+" : "-",
 	    ISSET(ch->ch_oports, ch->ch_o_dtr) ? "+" : "-",
 	    ch->ch_tx_stopped ? "+" : "-");
 
-	printf("%s: chan %d: %s %scrtscts %scts %sts_ttstop  %srts %xrx_flags\n",
-	    sc->sc_dev.dv_xname, ch->ch_num, str,
+	aprint_normal_dev(sc->sc_dev,
+	    "chan %d: %s %scrtscts %scts %sts_ttstop  %srts %xrx_flags\n",
+	    ch->ch_num, str,
 	    ISSET(tp->t_cflag, CRTSCTS) ? "+" : "-",
 	    ISSET(ch->ch_iports, ch->ch_i_cts) ? "+" : "-",
 	    ISSET(tp->t_state, TS_TTSTOP) ? "+" : "-",
@@ -544,7 +541,6 @@ sbscn_shutdown(struct sbscn_channel *ch)
 int
 sbscnopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	int unit = SBSCN_UNIT(dev);
 	int chan = SBSCN_CHAN(dev);
 	struct sbscn_softc *sc;
 	struct sbscn_channel *ch;
@@ -552,10 +548,8 @@ sbscnopen(dev_t dev, int flag, int mode, struct lwp *l)
 	int s, s2;
 	int error;
 
-	if (unit >= sbscn_cd.cd_ndevs)
-		return (ENXIO);
-	sc = sbscn_cd.cd_devs[unit];
-	if (sc == 0)
+	sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(dev));
+	if (sc == NULL)
 		return (ENXIO);
 	ch = &sc->sc_channels[chan];
 	if (!ISSET(ch->ch_hwflags, SBSCN_HW_DEV_OK) || ch->ch_rbuf == NULL)
@@ -679,7 +673,7 @@ bad:
 int
 sbscnclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(dev)];
+	struct sbscn_softc *sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(dev));
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(dev)];
 	struct tty *tp = ch->ch_tty;
 
@@ -705,7 +699,7 @@ sbscnclose(dev_t dev, int flag, int mode, struct lwp *l)
 int
 sbscnread(dev_t dev, struct uio *uio, int flag)
 {
-	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(dev)];
+	struct sbscn_softc *sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(dev));
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(dev)];
 	struct tty *tp = ch->ch_tty;
 
@@ -715,7 +709,7 @@ sbscnread(dev_t dev, struct uio *uio, int flag)
 int
 sbscnwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(dev)];
+	struct sbscn_softc *sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(dev));
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(dev)];
 	struct tty *tp = ch->ch_tty;
 
@@ -725,7 +719,7 @@ sbscnwrite(dev_t dev, struct uio *uio, int flag)
 int
 sbscnpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(dev)];
+	struct sbscn_softc *sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(dev));
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(dev)];
 	struct tty *tp = ch->ch_tty;
 
@@ -735,7 +729,7 @@ sbscnpoll(dev_t dev, int events, struct lwp *l)
 struct tty *
 sbscntty(dev_t dev)
 {
-	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(dev)];
+	struct sbscn_softc *sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(dev));
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(dev)];
 	struct tty *tp = ch->ch_tty;
 
@@ -745,7 +739,7 @@ sbscntty(dev_t dev)
 int
 sbscnioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(dev)];
+	struct sbscn_softc *sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(dev));
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(dev)];
 	struct tty *tp = ch->ch_tty;
 	int error;
@@ -935,10 +929,7 @@ sbscn_to_tiocm(struct sbscn_channel *ch)
 }
 
 static int
-cflag2modes(cflag, mode1p, mode2p)
-	tcflag_t cflag;
-	u_char *mode1p;
-	u_char *mode2p;
+cflag2modes(tcflag_t cflag, u_char *mode1p, u_char *mode2p)
 {
 	u_char mode1;
 	u_char mode2;
@@ -981,7 +972,7 @@ cflag2modes(cflag, mode1p, mode2p)
 int
 sbscn_param(struct tty *tp, struct termios *t)
 {
-	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(tp->t_dev)];
+	struct sbscn_softc *sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(tp->t_dev));
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(tp->t_dev)];
 	long brc;
 	u_char mode1, mode2;
@@ -1149,8 +1140,8 @@ sbscn_iflush(struct sbscn_channel *ch)
 		    READ_REG(ch->ch_base + 0x60);
 #ifdef DIAGNOSTIC
 	if (!timo)
-		printf("%s: sbscn_iflush timeout %02x\n",
-		    ch->ch_sc->sc_dev.dv_xname, reg & 0xff);
+		aprint_debug_dev(ch->ch_sc->sc_dev,
+		    "sbscn_iflush timeout %02x\n", reg & 0xff);
 #endif
 }
 
@@ -1177,7 +1168,7 @@ sbscn_loadchannelregs(struct sbscn_channel *ch)
 int
 sbscn_hwiflow(struct tty *tp, int block)
 {
-	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(tp->t_dev)];
+	struct sbscn_softc *sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(tp->t_dev));
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(tp->t_dev)];
 	int s;
 
@@ -1227,7 +1218,7 @@ sbscn_dohwiflow(struct sbscn_channel *ch)
 void
 sbscn_start(struct tty *tp)
 {
-	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(tp->t_dev)];
+	struct sbscn_softc *sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(tp->t_dev));
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(tp->t_dev)];
 	int s;
 
@@ -1283,7 +1274,7 @@ out:
 void
 sbscnstop(struct tty *tp, int flag)
 {
-	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(tp->t_dev)];
+	struct sbscn_softc *sc = device_lookup_private(&sbscn_cd, SBSCN_UNIT(tp->t_dev));
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(tp->t_dev)];
 	int s;
 
@@ -1299,8 +1290,7 @@ sbscnstop(struct tty *tp, int flag)
 }
 
 void
-sbscn_diag(arg)
-	void *arg;
+sbscn_diag(void *arg)
 {
 	struct sbscn_channel *ch = arg;
 	struct sbscn_softc *sc = ch->ch_sc;
@@ -1316,7 +1306,7 @@ sbscn_diag(arg)
 	splx(s);
 
 	log(LOG_WARNING, "%s: channel %d: %d fifo overflow%s, %d ibuf flood%s\n",
-	    sc->sc_dev.dv_xname, ch->ch_num,
+	    device_xname(sc->sc_dev), ch->ch_num,
 	    overflows, overflows == 1 ? "" : "s",
 	    floods, floods == 1 ? "" : "s");
 }
@@ -1482,7 +1472,7 @@ sbscn_soft(void *arg)
 }
 
 void
-sbscn_intr(void *arg, uint32_t status, uint32_t pc)
+sbscn_intr(void *arg, uint32_t status, vaddr_t pc)
 {
 	struct sbscn_channel *ch = arg;
 	u_char *put, *end;
@@ -1867,8 +1857,7 @@ sbscn_kgdb_attach(u_long addr, int chan, int rate, tcflag_t cflag)
 
 /* ARGSUSED */
 int
-sbscn_kgdb_getc(arg)
-	void *arg;
+sbscn_kgdb_getc(void *arg)
 {
 
 	return (sbscn_common_getc(sbscn_kgdb_addr, sbscn_kgdb_chan));
@@ -1876,9 +1865,7 @@ sbscn_kgdb_getc(arg)
 
 /* ARGSUSED */
 void
-sbscn_kgdb_putc(arg, c)
-	void *arg;
-	int c;
+sbscn_kgdb_putc(void *arg, int c)
 {
 
 	sbscn_common_getc(sbscn_kgdb_addr, sbscn_kgdb_chan, c);

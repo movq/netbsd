@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isapnp.c,v 1.27 2007/10/19 12:00:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isapnp.c,v 1.31 2009/05/12 10:16:35 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -80,8 +73,8 @@ __KERNEL_RCSID(0, "$NetBSD: isic_isapnp.c,v 1.27 2007/10/19 12:00:32 ad Exp $");
 
 extern const struct isdn_layer1_isdnif_driver isic_std_driver;
 
-static int isic_isapnp_probe(struct device *, struct cfdata *, void *);
-static void isic_isapnp_attach(struct device *, struct device *, void *);
+static int isic_isapnp_probe(device_t, cfdata_t, void *);
+static void isic_isapnp_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(isic_isapnp, sizeof(struct isic_softc),
     isic_isapnp_probe, isic_isapnp_attach, NULL, NULL);
@@ -161,8 +154,8 @@ isic_isapnp_descriptions[] =
  * Probe card
  */
 static int
-isic_isapnp_probe(struct device *parent,
-	struct cfdata *cf, void *aux)
+isic_isapnp_probe(device_t parent,
+	cfdata_t cf, void *aux)
 {
 	struct isapnp_attach_args *ipa = aux;
 	const struct isic_isapnp_card_desc *desc = isic_isapnp_descriptions;
@@ -187,13 +180,13 @@ isic_isapnp_probe(struct device *parent,
 #define	TERMFMT	" "
 #else
 #define	ISIC_FMT	"%s: "
-#define	ISIC_PARM	sc->sc_dev.dv_xname
+#define	ISIC_PARM	device_xname(&sc->sc_dev)
 #define	TERMFMT	"\n"
 #endif
 
 static void
-isic_isapnp_attach(struct device *parent,
-	struct device *self, void *aux)
+isic_isapnp_attach(device_t parent,
+	device_t self, void *aux)
 {
   	static const char *ISACversion[] = {
   		"2085 Version A1/A2 or 2086/2186 Version 1.1",
@@ -219,8 +212,7 @@ isic_isapnp_attach(struct device *parent,
 	int i;
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: error in region allocation\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "error in region allocation\n");
 		return;
 	}
 
@@ -241,8 +233,7 @@ isic_isapnp_attach(struct device *parent,
 	/* establish interrupt handler */
 	if (isa_intr_establish(ipa->ipa_ic, ipa->ipa_irq[0].num, ipa->ipa_irq[0].type,
 		IPL_NET, isicintr, sc) == NULL)
-		printf("%s: couldn't establish interrupt handler\n",
-			sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt handler\n");
 
 	/* init card */
 	desc->attach(sc);

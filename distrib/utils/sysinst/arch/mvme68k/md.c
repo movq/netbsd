@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.19 2006/09/04 00:11:00 hubertf Exp $	*/
+/*	$NetBSD: md.c,v 1.25 2011/04/04 08:30:36 mbalmer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -36,7 +32,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* md.c -- Machine specific code for mvme68k */
+/* md.c -- mvme68k machine specific routines */
 /* This file is in close sync with hp300, pmax, sparc, vax and x68k md.c */
 
 #include <stdio.h>
@@ -50,6 +46,17 @@
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
+
+void
+md_init(void)
+{
+}
+
+void
+md_init_set_status(int flags)
+{
+	(void)flags;
+}
 
 int
 md_get_info(void)
@@ -104,64 +111,7 @@ md_get_info(void)
 
 	close(fd);
 
-	return (1);
-}
-
-/*
- * hook called before writing new disklabel.
- */
-int
-md_pre_disklabel(void)
-{
-
-	return (0);
-}
-
-/*
- * hook called after writing disklabel to new target disk.
- */
-int
-md_post_disklabel(void)
-{
-
-	if (get_ramsize() < 6)
-		set_swap(diskdev, bsdlabel);
-
-	return (0);
-}
-
-/*
- * MD hook called after upgrade() or install() has finished setting
- * up the target disk but immediately before the user is given the
- * ``disks are now set up'' message, so that if power fails, they can
- * continue installation by booting the target disk and doing an
- * `upgrade'.
- *
- * On mvme68k, we use this opportunity to install the boot blocks.
- */
-int
-md_post_newfs(void)
-{
-
-	/* boot blocks ... */
-	msg_display(MSG_dobootblks, diskdev);
-	cp_to_target("/usr/mdec/bootsd", "/.bootsd");
-	if (run_program(RUN_DISPLAY | RUN_NO_CLEAR,
-	    "/usr/mdec/installboot %s /usr/mdec/bootxx /dev/r%sa",
-	    target_expand("/.bootsd"), diskdev))
-		process_menu(MENU_ok,
-			deconst("Warning: disk is probably not bootable"));
-	return (0);
-}
-
-/*
- * some ports use this to copy the MD filesystem, we do not.
- */
-int
-md_copy_filesystem(void)
-{
-
-	return (0);
+	return 1;
 }
 
 /*
@@ -181,7 +131,8 @@ int
 md_check_partitions(void)
 {
 	/* mvme68k partitions must be in order of the range. */
-	int part, start = 0, last = PART_A-1;
+	int part, last = PART_A-1;
+	uint32_t start = 0;
 
 	for (part = PART_A; part < 8; part++) {
 		if (part == PART_C)
@@ -189,7 +140,7 @@ md_check_partitions(void)
 		if (last >= PART_A && bsdlabel[part].pi_size > 0) {
 			msg_display(MSG_emptypart, part+'a');
 			process_menu(MENU_ok, NULL);
-			return (0);
+			return 0;
 		}
 		if (bsdlabel[part].pi_size == 0) {
 			if (last < PART_A)
@@ -199,58 +150,84 @@ md_check_partitions(void)
 				msg_display(MSG_ordering, part+'a');
 				process_menu(MENU_yesno, NULL);
 				if (yesno)
-					return (0);
+					return 0;
 			}
 			start = bsdlabel[part].pi_offset;
 		}
 	}
 
-	return (1);
+	return 1;
 }
 
-/* Upgrade support */
+/*
+ * hook called before writing new disklabel.
+ */
 int
-md_update(void)
+md_pre_disklabel(void)
 {
-
-	endwin();
-	md_copy_filesystem();
-	md_post_newfs();
-	wrefresh(curscr);
-	wmove(stdscr, 0, 0);
-	wclear(stdscr);
-	wrefresh(stdscr);
-	return (1);
+	return 0;
 }
 
-void
-md_cleanup_install(void)
-{
-  
-#ifdef notyet			/* sed is too large for ramdisk */
-	enable_rc_conf();
-#endif
-	run_program(0, "rm -f %s", target_expand("/sysinst"));
-	run_program(0, "rm -f %s", target_expand("/.termcap"));
-	run_program(0, "rm -f %s", target_expand("/.profile"));
-}
-
+/*
+ * hook called after writing disklabel to new target disk.
+ */
 int
-md_pre_update()
+md_post_disklabel(void)
 {
-
 	if (get_ramsize() < 6)
-		set_swap(diskdev, NULL);
-	return (1);
+		set_swap(diskdev, bsdlabel);
+
+	return 0;
 }
 
-void
-md_init()
+/*
+ * hook called after upgrade() or install() has finished setting
+ * up the target disk but immediately before the user is given the
+ * ``disks are now set up'' message..
+ *
+ * On mvme68k, we use this opportunity to install the boot blocks.
+ */
+int
+md_post_newfs(void)
 {
+
+	/* boot blocks ... */
+	msg_display(MSG_dobootblks, diskdev);
+	cp_to_target("/usr/mdec/bootsd", "/.bootsd");
+	if (run_program(RUN_DISPLAY | RUN_NO_CLEAR,
+	    "/usr/mdec/installboot %s /usr/mdec/bootxx /dev/r%sa",
+	    target_expand("/.bootsd"), diskdev))
+		process_menu(MENU_ok,
+			deconst("Warning: disk is probably not bootable"));
+	return 0;
 }
 
 int
 md_post_extract(void)
 {
 	return 0;
+}
+
+void
+md_cleanup_install(void)
+{
+#ifdef notyet			/* sed is too large for ramdisk */
+	enable_rc_conf();
+#endif
+}
+
+int
+md_pre_update(void)
+{
+	if (get_ramsize() < 6)
+		set_swap(diskdev, NULL);
+	return 1;
+}
+
+/* Upgrade support */
+int
+md_update(void)
+{
+	md_post_newfs();
+	return 1;
 }

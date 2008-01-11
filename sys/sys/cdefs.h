@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.66 2007/11/26 14:52:34 joerg Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.84 2011/02/19 02:21:21 matt Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -61,16 +61,6 @@
 #include <sys/cdefs_elf.h>
 #else
 #include <sys/cdefs_aout.h>
-#endif
-
-#if defined(__cplusplus)
-#define	__BEGIN_DECLS		extern "C" {
-#define	__END_DECLS		}
-#define	__static_cast(x,y)	static_cast<x>(y)
-#else
-#define	__BEGIN_DECLS
-#define	__END_DECLS
-#define	__static_cast(x,y)	(x)y
 #endif
 
 /*
@@ -136,6 +126,17 @@
 #endif
 
 /*
+ * Compile Time Assertion.
+ */
+#ifdef __COUNTER__
+#define	__CTASSERT(x)		__CTASSERT0(x, __ctassert, __COUNTER__)
+#else
+#define	__CTASSERT(x)		__CTASSERT0(x, __ctassert, __LINE__)
+#endif
+#define	__CTASSERT0(x, y, z)	__CTASSERT1(x, y, z)
+#define	__CTASSERT1(x, y, z)	typedef char y ## z[(x) ? 1 : -1];
+
+/*
  * The following macro is used to remove const cast-away warnings
  * from gcc -Wcast-qual; it should be used with caution because it
  * can hide valid errors; in particular most valid uses are in
@@ -170,6 +171,19 @@
  * GCC2 uses a new, peculiar __attribute__((attrs)) style.  All of
  * these work for GNU C++ (modulo a slight glitch in the C++ grammar
  * in the distribution version of 2.5.5).
+ *
+ * GCC defines a pure function as depending only on its arguments and
+ * global variables.  Typical examples are strlen and sqrt.
+ *
+ * GCC defines a const function as depending only on its arguments.
+ * Therefore calling a const function again with identical arguments
+ * will always produce the same result.
+ *
+ * Rounding modes for floating point operations are considered global
+ * variables and prevent sqrt from being a const function.
+ *
+ * Calls to const functions can be optimised away and moved around
+ * without limitations.
  */
 #if !__GNUC_PREREQ__(2, 0)
 #define __attribute__(x)
@@ -191,6 +205,18 @@
 #define	__pure
 #endif
 
+#if __GNUC_PREREQ__(2, 5)
+#define	__constfunc	__attribute__((__const__))
+#else
+#define	__constfunc
+#endif
+
+#if __GNUC_PREREQ__(3, 0)
+#define	__noinline	__attribute__((__noinline__))
+#else
+#define	__noinline	/* nothing */
+#endif
+
 #if __GNUC_PREREQ__(2, 7)
 #define	__unused	__attribute__((__unused__))
 #else
@@ -203,18 +229,72 @@
 #define	__used		__unused
 #endif
 
-#if __GNUC_PREREQ__(2, 7)
+#if __GNUC_PREREQ__(3, 1)
+#define	__noprofile	__attribute__((__no_instrument_function__))
+#else
+#define	__noprofile	/* nothing */
+#endif
+
+#if defined(__cplusplus)
+#define	__BEGIN_EXTERN_C	extern "C" {
+#define	__END_EXTERN_C		}
+#define	__static_cast(x,y)	static_cast<x>(y)
+#else
+#define	__BEGIN_EXTERN_C
+#define	__END_EXTERN_C
+#define	__static_cast(x,y)	(x)y
+#endif
+
+#if __GNUC_PREREQ__(4, 0)
+#  define __dso_public	__attribute__((__visibility__("default")))
+#  define __dso_hidden	__attribute__((__visibility__("hidden")))
+#  define __BEGIN_PUBLIC_DECLS	\
+	_Pragma("GCC visibility push(default)") __BEGIN_EXTERN_C
+#  define __END_PUBLIC_DECLS	__END_EXTERN_C _Pragma("GCC visibility pop")
+#  define __BEGIN_HIDDEN_DECLS	\
+	_Pragma("GCC visibility push(hidden)") __BEGIN_EXTERN_C
+#  define __END_HIDDEN_DECLS	__END_EXTERN_C _Pragma("GCC visibility pop")
+#else
+#  define __dso_public
+#  define __dso_hidden
+#  define __BEGIN_PUBLIC_DECLS	__BEGIN_EXTERN_C
+#  define __END_PUBLIC_DECLS	__END_EXTERN_C
+#  define __BEGIN_HIDDEN_DECLS	__BEGIN_EXTERN_C
+#  define __END_HIDDEN_DECLS	__END_EXTERN_C
+#endif
+
+#define	__BEGIN_DECLS		__BEGIN_PUBLIC_DECLS
+#define	__END_DECLS		__END_PUBLIC_DECLS
+
+/*
+ * Non-static C99 inline functions are optional bodies.  They don't
+ * create global symbols if not used, but can be replaced if desirable.
+ * This differs from the behavior of GCC before version 4.3.  The nearest
+ * equivalent for older GCC is `extern inline'.  For newer GCC, use the
+ * gnu_inline attribute additionally to get the old behavior.
+ *
+ * For C99 compilers other than GCC, the C99 behavior is expected.
+ */
+#if defined(__GNUC__) && defined(__GNUC_STDC_INLINE__)
+#define	__c99inline	extern __attribute__((__gnu_inline__)) __inline
+#elif defined(__GNUC__)
+#define	__c99inline	extern __inline
+#elif defined(__STDC_VERSION__)
+#define	__c99inline	__inline
+#endif
+
+#if defined(__lint__)
+#define	__packed	__packed
+#define	__aligned(x)	/* delete */
+#define	__section(x)	/* delete */
+#elif __GNUC_PREREQ__(2, 7)
 #define	__packed	__attribute__((__packed__))
 #define	__aligned(x)	__attribute__((__aligned__(x)))
 #define	__section(x)	__attribute__((__section__(x)))
 #elif defined(__PCC__)
-#define	__packed	/* XXX ignore for now */
-#define	__aligned(x)   	/* XXX ignore for now */
-#define	__section(x)   	/* XXX ignore for now */
-#elif defined(__lint__)
-#define	__packed	/* delete */
-#define	__aligned(x)	/* delete */
-#define	__section(x)	/* delete */
+#define	__packed	_Pragma("packed 1")
+#define	__aligned(x)   	_Pragma("aligned " __STRING(x))
+#define	__section(x)   	_Pragma("section " ## x)
 #else
 #define	__packed	error: no __packed for this compiler
 #define	__aligned(x)	error: no __aligned for this compiler
@@ -225,12 +305,12 @@
  * C99 defines the restrict type qualifier keyword, which was made available
  * in GCC 2.92.
  */
-#if __STDC_VERSION__ >= 199901L
-#define	__restrict	restrict
-#else
-#if !__GNUC_PREREQ__(2, 92)
+#if defined(__lint__)
 #define	__restrict	/* delete __restrict when not supported */
-#endif
+#elif __STDC_VERSION__ >= 199901L
+#define	__restrict	restrict
+#elif !__GNUC_PREREQ__(2, 92)
+#define	__restrict	/* delete __restrict when not supported */
 #endif
 
 /*
@@ -316,6 +396,24 @@
 #endif
 
 /*
+ * Compiler-dependent macros to declare that functions take printf-like
+ * or scanf-like arguments.  They are null except for versions of gcc
+ * that are known to support the features properly (old versions of gcc-2
+ * didn't permit keeping the keywords out of the application namespace).
+ */
+#if __GNUC_PREREQ__(2, 7)
+#define __printflike(fmtarg, firstvararg)	\
+	    __attribute__((__format__ (__printf__, fmtarg, firstvararg)))
+#define __scanflike(fmtarg, firstvararg)	\
+	    __attribute__((__format__ (__scanf__, fmtarg, firstvararg)))
+#define __format_arg(fmtarg)    __attribute__((__format_arg__ (fmtarg)))
+#else
+#define __printflike(fmtarg, firstvararg)	/* nothing */
+#define __scanflike(fmtarg, firstvararg)	/* nothing */
+#define __format_arg(fmtarg)			/* nothing */
+#endif
+
+/*
  * Macros for manipulating "link sets".  Link sets are arrays of pointers
  * to objects, which are gathered up by the linker.
  *
@@ -372,7 +470,7 @@
 
 /* __BIT(n): nth bit, where __BIT(0) == 0x1. */
 #define	__BIT(__n)	\
-	(((__n) >= NBBY * sizeof(uintmax_t)) ? 0 : ((uintmax_t)1 << (__n)))
+    (((uintmax_t)(__n) >= NBBY * sizeof(uintmax_t)) ? 0 : ((uintmax_t)1 << (uintmax_t)(__n)))
 
 /* __BITS(m, n): bits m through n, m < n. */
 #define	__BITS(__m, __n)	\
@@ -390,5 +488,15 @@
 #define	__SHIFTOUT(__x, __mask)	(((__x) & (__mask)) / __LOWEST_SET_BIT(__mask))
 #define	__SHIFTIN(__x, __mask) ((__x) * __LOWEST_SET_BIT(__mask))
 #define	__SHIFTOUT_MASK(__mask) __SHIFTOUT((__mask), (__mask))
+
+/*
+ * Only to be used in other headers that are included from both c or c++
+ * NOT to be used in code.
+ */
+#ifdef __cplusplus
+#define __CAST(__dt, __st)	static_cast<__dt>(__st)
+#else
+#define __CAST(__dt, __st)	((__dt)(__st))
+#endif
 
 #endif /* !_SYS_CDEFS_H_ */

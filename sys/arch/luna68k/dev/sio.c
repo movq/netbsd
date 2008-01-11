@@ -1,4 +1,4 @@
-/* $NetBSD: sio.c,v 1.4 2007/03/04 06:00:03 christos Exp $ */
+/* $NetBSD: sio.c,v 1.8 2009/03/14 21:04:11 dsl Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.4 2007/03/04 06:00:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.8 2009/03/14 21:04:11 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,22 +43,19 @@ __KERNEL_RCSID(0, "$NetBSD: sio.c,v 1.4 2007/03/04 06:00:03 christos Exp $");
 #include <luna68k/luna68k/isr.h>
 #include <luna68k/dev/siovar.h>
 
-static int  sio_match __P((struct device *, struct cfdata *, void *));
-static void sio_attach __P((struct device *, struct device *, void *));
-static int  sio_print __P((void *, const char *));
+static int  sio_match(struct device *, struct cfdata *, void *);
+static void sio_attach(struct device *, struct device *, void *);
+static int  sio_print(void *, const char *);
 
 CFATTACH_DECL(sio, sizeof(struct sio_softc),
     sio_match, sio_attach, NULL, NULL);
 extern struct cfdriver sio_cd;
 
-static void nullintr __P((int));
-static int xsiointr __P((void *));
+static void nullintr(int);
+static int xsiointr(void *);
 
 static int
-sio_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+sio_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -77,9 +67,7 @@ sio_match(parent, cf, aux)
 }
 
 static void
-sio_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+sio_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct sio_softc *sc = (void *)self;
 	struct mainbus_attach_args *ma = aux;
@@ -101,9 +89,7 @@ sio_attach(parent, self, aux)
 }
 
 static int
-sio_print(aux, name)
-	void *aux;
-	const char *name;
+sio_print(void *aux, const char *name)
 {
 	struct sio_attach_args *args = aux;
 
@@ -117,8 +103,7 @@ sio_print(aux, name)
 }
 
 static int
-xsiointr(arg)
-	void *arg;
+xsiointr(void *arg)
 {
 	struct sio_softc *sc = arg;
 

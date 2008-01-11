@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.22 2007/10/25 09:43:24 he Exp $ */
+/* $NetBSD: machdep.c,v 1.33 2010/02/08 19:02:25 joerg Exp $ */
 
 /*-
  * Copyright (c) 1998 Ben Harris
@@ -32,7 +32,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.22 2007/10/25 09:43:24 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.33 2010/02/08 19:02:25 joerg Exp $");
 
 #include <sys/buf.h>
 #include <sys/kernel.h>
@@ -42,36 +42,26 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.22 2007/10/25 09:43:24 he Exp $");
 #include <sys/sysctl.h>
 #include <sys/systm.h>
 #include <sys/cpu.h>
+#include <sys/device.h>
 
 #include <dev/i2c/i2cvar.h>
 #include <dev/i2c/pcf8583var.h>
+
+#include <arch/acorn26/ioc/iociicvar.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/machdep.h>
 #include <machine/memcreg.h>
 
-int physmem;
-char machine[] = MACHINE;
-char machine_arch[] = MACHINE_ARCH;
 char cpu_model[] = "Archimedes";
 
-/* Our exported CPU info; we can have only one. */
-struct cpu_info cpu_info_store;
-
-/* For reading NVRAM during bootstrap. */
-i2c_tag_t acorn26_i2c_tag;
-
-struct vm_map *exec_map = NULL;
 struct vm_map *phys_map = NULL;
-struct vm_map *mb_map = NULL; /* and ever more shall be so */
 
 int waittime = -1;
 
 void
-cpu_reboot(howto, b)
-	int howto;
-	char *b;
+cpu_reboot(int howto, char *b)
 {
 
 	/* If "always halt" was specified as a boot flag, obey. */
@@ -107,6 +97,8 @@ cpu_reboot(howto, b)
 
 	/* run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 haltsys:
 	if (howto & RB_HALT) {
@@ -145,7 +137,7 @@ haltsys:
  * initialize CPU, and do autoconfiguration.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
 	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
@@ -159,13 +151,6 @@ cpu_startup()
 
 	/* Various boilerplate memory allocations. */
 	minaddr = 0;
-
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
@@ -182,7 +167,7 @@ cpu_startup()
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
 
-	curpcb = &lwp0.l_addr->u_pcb;
+	curpcb = lwp_getpcb(&lwp0);
 
 #if 0
 	/* Test exception handlers */
@@ -200,7 +185,8 @@ cmos_read(int location)
 {
 	uint8_t val;
 
-	if (pcfrtc_bootstrap_read(acorn26_i2c_tag, 0x50,
+	KASSERT(iociic_bootstrap_cookie() != NULL);
+	if (pcfrtc_bootstrap_read(iociic_bootstrap_cookie(), 0x50,
 	    location, &val, 1) != 0)
 		return (-1);
 	return (val);
@@ -212,19 +198,7 @@ cmos_write(int location, int value)
 {
 	uint8_t val = value;
 
-	return (pcfrtc_bootstrap_write(acorn26_i2c_tag, 0x50,
+	KASSERT(iociic_bootstrap_cookie() != NULL);
+	return (pcfrtc_bootstrap_write(iociic_bootstrap_cookie(), 0x50,
 	    location, &val, 1));
-}
-
-void
-cpu_need_resched(struct cpu_info *ci, int flags)
-{
-	bool immed = (flags & RESCHED_IMMED) != 0;
-
-	if (ci->ci_want_resched && !immed)
-		return;
-
-	ci->ci_want_resched = 1;
-	if (curlwp != ci->ci_data.cpu_idlelwp)
-		setsoftast();
 }

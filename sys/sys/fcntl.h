@@ -1,4 +1,4 @@
-/*	$NetBSD: fcntl.h,v 1.34 2006/10/05 14:48:33 chs Exp $	*/
+/*	$NetBSD: fcntl.h,v 1.37 2011/04/10 15:45:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1990, 1993
@@ -98,6 +98,9 @@
 #define	O_TRUNC		0x00000400	/* truncate to zero length */
 #define	O_EXCL		0x00000800	/* error if already exists */
 
+/* defined by POSIX 1003.1; BSD default, but required to be bitwise distinct */
+#define	O_NOCTTY	0x00008000	/* don't assign controlling terminal */
+
 #if (_POSIX_C_SOURCE - 0) >= 199309L || (_XOPEN_SOURCE - 0) >= 500 || \
     defined(_NETBSD_SOURCE)
 #define	O_DSYNC		0x00010000	/* write: I/O data completion */
@@ -109,8 +112,8 @@
 #define	O_DIRECT	0x00080000	/* direct I/O hint */
 #endif
 
-/* defined by POSIX 1003.1; BSD default, but required to be bitwise distinct */
-#define	O_NOCTTY	0x00008000	/* don't assign controlling terminal */
+#define	O_DIRECTORY	0x00200000	/* fail if not a directory */
+#define	O_CLOEXEC	0x00400000	/* set close on exec */
 
 #ifdef _KERNEL
 /* convert from open() flags to/from fflags; convert O_RD/WR to FREAD/FWRITE */
@@ -120,11 +123,13 @@
 /* all bits settable during open(2) */
 #define	O_MASK		(O_ACCMODE|O_NONBLOCK|O_APPEND|O_SHLOCK|O_EXLOCK|\
 			 O_ASYNC|O_SYNC|O_CREAT|O_TRUNC|O_EXCL|O_DSYNC|\
-			 O_RSYNC|O_NOCTTY|O_ALT_IO|O_NOFOLLOW|O_DIRECT)
+			 O_RSYNC|O_NOCTTY|O_ALT_IO|O_NOFOLLOW|O_DIRECT|\
+			 O_DIRECTORY|O_CLOEXEC)
 
 #define	FMARK		0x00001000	/* mark during gc() */
 #define	FDEFER		0x00002000	/* defer for next gc pass */
 #define	FHASLOCK	0x00004000	/* descriptor holds advisory lock */
+#define	FSCAN		0x00100000	/* scan during gc passes */
 #define	FKIOCTL		0x80000000	/* kernel originated ioctl */
 /* bits settable by fcntl(F_SETFL, ...) */
 #define	FCNTLFLAGS	(FAPPEND|FASYNC|FFSYNC|FNONBLOCK|FDSYNC|FRSYNC|FALTIO|\

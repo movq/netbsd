@@ -1,4 +1,4 @@
-/*	$NetBSD: pool.h,v 1.62 2007/12/26 16:01:38 ad Exp $	*/
+/*	$NetBSD: pool.h,v 1.70 2010/06/03 10:40:17 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2000, 2007 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,6 +42,7 @@
 #endif
 
 #ifdef __POOL_EXPOSE
+#include <sys/param.h>
 #include <sys/mutex.h>
 #include <sys/condvar.h>
 #include <sys/queue.h>
@@ -70,8 +64,7 @@ struct pool_allocator {
 	/* The following fields are for internal use only. */
 	kmutex_t	pa_lock;
 	TAILQ_HEAD(, pool) pa_list;	/* list of pools using this allocator */
-	int		pa_flags;
-#define	PA_INITIALIZED	0x01
+	uint32_t	pa_refcnt;	/* number of pools using this allocator */
 	int		pa_pagemask;
 	int		pa_pageshift;
 	struct vm_map *pa_backingmap;
@@ -232,6 +225,7 @@ struct pool_cache {
 	pcg_t		*pc_emptygroups;/* list of empty cache groups */
 	pcg_t		*pc_fullgroups;	/* list of full cache groups */
 	pcg_t		*pc_partgroups;	/* groups for reclamation */
+	struct pool	*pc_pcgpool;	/* Pool of cache groups */
 	int		pc_pcgsize;	/* Use large cache groups? */
 	int		pc_ncpu;	/* number cpus set up */
 	int		(*pc_ctor)(void *, void *, int);
@@ -271,23 +265,6 @@ extern struct pool_allocator pool_allocator_kmem_fullpage;
 extern struct pool_allocator pool_allocator_nointr_fullpage;
 #endif
 
-struct link_pool_init {	/* same as args to pool_init() */
-	struct pool *pp;
-	size_t size;
-	u_int align;
-	u_int align_offset;
-	int flags;
-	const char *wchan;
-	struct pool_allocator *palloc;
-	int ipl;
-};
-#define	POOL_INIT(pp, size, align, align_offset, flags, wchan, palloc, ipl)\
-struct pool pp;								\
-static const struct link_pool_init _link_ ## pp[1] = {			\
-	{ &pp, size, align, align_offset, flags, wchan, palloc, ipl }	\
-};									\
-__link_set_add_rodata(pools, _link_ ## pp)
-
 void		pool_subsystem_init(void);
 
 void		pool_init(struct pool *, size_t, u_int, u_int,
@@ -318,7 +295,7 @@ void		pool_setlowat(struct pool *, int);
 void		pool_sethiwat(struct pool *, int);
 void		pool_sethardlimit(struct pool *, int, const char *, int);
 void		pool_drain_start(struct pool **, uint64_t *);
-void		pool_drain_end(struct pool *, uint64_t);
+bool		pool_drain_end(struct pool *, uint64_t);
 
 /*
  * Debugging and diagnostic aides.

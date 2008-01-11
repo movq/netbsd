@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_map.c,v 1.34 2007/12/15 23:52:00 christos Exp $	*/
+/*	$NetBSD: procfs_map.c,v 1.39 2010/09/15 21:37:35 jym Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.34 2007/12/15 23:52:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.39 2010/09/15 21:37:35 jym Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,6 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.34 2007/12/15 23:52:00 christos Exp
 #include <uvm/uvm.h>
 
 #define BUFFERSIZE (64 * 1024)
+#define MAXBUFFERSIZE (256 * 1024)
 
 /*
  * The map entries can *almost* be read with programs like cat.  However,
@@ -111,7 +112,8 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 	struct vmspace *vm;
 	struct vm_map *map;
 	struct vm_map_entry *entry;
-	char *buffer;
+	char *buffer = NULL;
+	size_t bufsize = BUFFERSIZE;
 	char *path;
 	struct vnode *vp;
 	struct vattr va;
@@ -133,7 +135,6 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 
 	error = 0;
 
-	buffer = malloc(BUFFERSIZE, M_TEMP, M_WAITOK);
 	if (linuxmode != 0)
 		path = malloc(MAXPATHLEN * 4, M_TEMP, M_WAITOK);
 	else
@@ -145,6 +146,8 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 	map = &vm->vm_map;
 	vm_map_lock_read(map);
 
+again:
+	buffer = malloc(bufsize, M_TEMP, M_WAITOK);
 	pos = 0;
 	for (entry = map->header.next; entry != &map->header;
 	    entry = entry->next) {
@@ -167,20 +170,23 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 					    MAXPATHLEN * 4, vp, curl, p);
 				}
 			}
-			pos += snprintf(buffer + pos, BUFFERSIZE - pos,
-			    "%0*lx-%0*lx %c%c%c%c %0*lx %02x:%02x %ld     %s\n",
-			    (int)sizeof(void *) * 2,(unsigned long)entry->start,
-			    (int)sizeof(void *) * 2,(unsigned long)entry->end,
+			pos += snprintf(buffer + pos, bufsize - pos,
+			    "%#0*"PRIxVADDR"-%#0*"PRIxVADDR" %c%c%c%c "
+			    "%0*lx %llx:%llx %ld     %s\n",
+			    (int)sizeof(void *) * 2,entry->start,
+			    (int)sizeof(void *) * 2,entry->end,
 			    (entry->protection & VM_PROT_READ) ? 'r' : '-',
 			    (entry->protection & VM_PROT_WRITE) ? 'w' : '-',
 			    (entry->protection & VM_PROT_EXECUTE) ? 'x' : '-',
 			    (entry->etype & UVM_ET_COPYONWRITE) ? 'p' : 's',
 			    (int)sizeof(void *) * 2,
 			    (unsigned long)entry->offset,
-			    major(dev), minor(dev), fileid, path);
+			    (unsigned long long)major(dev),
+			    (unsigned long long)minor(dev), fileid, path);
 		} else {
-			pos += snprintf(buffer + pos, BUFFERSIZE - pos,
-			    "0x%lx 0x%lx %c%c%c %c%c%c %s %s %d %d %d\n",
+			pos += snprintf(buffer + pos, bufsize - pos,
+			    "%#"PRIxVADDR"x %#"PRIxVADDR"x "
+			    "%c%c%c %c%c%c %s %s %d %d %d\n",
 			    entry->start, entry->end,
 			    (entry->protection & VM_PROT_READ) ? 'r' : '-',
 			    (entry->protection & VM_PROT_WRITE) ? 'w' : '-',
@@ -194,6 +200,15 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 			    (entry->etype & UVM_ET_NEEDSCOPY) ? "NC" : "NNC",
 			    entry->inheritance, entry->wired_count,
 			    entry->advice);
+		}
+		if (pos >= bufsize) {
+			bufsize <<= 1;
+			if (bufsize > MAXBUFFERSIZE) {
+				error = ENOMEM;
+				goto out;
+			}
+			free(buffer, M_TEMP);
+			goto again;
 		}
 	}
 

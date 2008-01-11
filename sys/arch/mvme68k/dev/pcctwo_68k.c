@@ -1,4 +1,4 @@
-/*	$NetBSD: pcctwo_68k.c,v 1.7 2007/12/03 15:33:58 ad Exp $	*/
+/*	$NetBSD: pcctwo_68k.c,v 1.9 2008/04/28 20:23:29 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	      This product includes software developed by the NetBSD
- *	      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcctwo_68k.c,v 1.7 2007/12/03 15:33:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcctwo_68k.c,v 1.9 2008/04/28 20:23:29 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -57,6 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: pcctwo_68k.c,v 1.7 2007/12/03 15:33:58 ad Exp $");
 #include <dev/mvme/pcctworeg.h>
 #include <dev/mvme/pcctwovar.h>
 
+#include "ioconf.h"
+
 /*
  * Autoconfiguration stuff.
  */
@@ -65,8 +60,6 @@ int pcctwomatch(struct device *, struct cfdata *, void *);
 
 CFATTACH_DECL(pcctwo, sizeof(struct pcctwo_softc),
     pcctwomatch, pcctwoattach, NULL, NULL);
-
-extern struct cfdriver pcctwo_cd;
 
 
 #if defined(MVME167) || defined(MVME177)
@@ -150,20 +143,17 @@ static struct evcnt *pcctwoisrevcnt(void *, int);
 
 /* ARGSUSED */
 int
-pcctwomatch(parent, cf, args)
-	struct device *parent;
-	struct cfdata *cf;
-	void *args;
+pcctwomatch(struct device *parent, struct cfdata *cf, void *args)
 {
 	struct mainbus_attach_args *ma;
 	bus_space_handle_t bh;
-	u_int8_t cid;
+	uint8_t cid;
 
 	ma = args;
 
 	/* There can be only one. */
 	if (sys_pcctwo || strcmp(ma->ma_name, pcctwo_cd.cd_name))
-		return (0);
+		return 0;
 
 	/*
 	 * Grab the Chip's ID
@@ -176,31 +166,28 @@ pcctwomatch(parent, cf, args)
 #if defined(MVME167) || defined(MVME177)
 	if ((machineid == MVME_167 || machineid == MVME_177) &&
 	    cid == PCCTWO_CHIP_ID_PCC2)
-		return (1);
+		return 1;
 #endif
 #if defined(MVME162) || defined(MVME172)
 	if ((machineid == MVME_162 || machineid == MVME_172) &&
 	    cid == PCCTWO_CHIP_ID_MCCHIP)
-		return (1);
+		return 1;
 #endif
 
-	return (0);
+	return 0;
 }
 
 /* ARGSUSED */
 void
-pcctwoattach(parent, self, args)
-	struct device *parent;
-	struct device *self;
-	void *args;
+pcctwoattach(struct device *parent, struct device *self, void *args)
 {
 	struct mainbus_attach_args *ma;
 	struct pcctwo_softc *sc;
 	const struct pcctwo_device *pd = NULL;
-	u_int8_t cid;
+	uint8_t cid;
 
 	ma = args;
-	sc = sys_pcctwo = (struct pcctwo_softc *) self;
+	sc = sys_pcctwo = (struct pcctwo_softc *)self;
 
 	/* Get a handle to the PCCChip2's registers */
 	sc->sc_bust = ma->ma_bust;
@@ -243,12 +230,8 @@ pcctwoattach(parent, self, args)
 
 /* ARGSUSED */
 static void
-pcctwoisrlink(cookie, fn, arg, ipl, vec, evcnt)
-	void *cookie;
-	int (*fn)(void *);
-	void *arg;
-	int ipl, vec;
-	struct evcnt *evcnt;
+pcctwoisrlink(void *cookie, int (*fn)(void *), void *arg, int ipl, int vec,
+    struct evcnt *evcnt)
 {
 
 	isrlink_vectored(fn, arg, ipl, vec, evcnt);
@@ -256,9 +239,7 @@ pcctwoisrlink(cookie, fn, arg, ipl, vec, evcnt)
 
 /* ARGSUSED */
 static void
-pcctwoisrunlink(cookie, vec)
-	void *cookie;
-	int vec;
+pcctwoisrunlink(void *cookie, int vec)
 {
 
 	isrunlink_vectored(vec);
@@ -266,12 +247,10 @@ pcctwoisrunlink(cookie, vec)
 
 /* ARGSUSED */
 static struct evcnt *
-pcctwoisrevcnt(cookie, ipl)
-	void *cookie;
-	int ipl;
+pcctwoisrevcnt(void *cookie, int ipl)
 {
 
-	return (isrlink_evcnt(ipl));
+	return isrlink_evcnt(ipl);
 }
 
 #if defined(MVME162) || defined(MVME172)
@@ -282,7 +261,7 @@ pcctwoabortintr(void *frame)
 	pcc2_reg_write(sys_pcctwo, MCCHIPREG_ABORT_ICSR, PCCTWO_ICR_ICLR |
 	    pcc2_reg_read(sys_pcctwo, MCCHIPREG_ABORT_ICSR));
 
-	return (nmihand(frame));
+	return nmihand(frame);
 }
 
 void
@@ -323,7 +302,7 @@ pcctwosoftintr(void *arg)
 	softintr_dispatch();
 #endif
 
-	return (1);
+	return 1;
 }
 
 #ifdef notyet

@@ -1,4 +1,4 @@
-/*	$NetBSD: bat.h,v 1.8 2006/08/05 21:26:49 sanjayl Exp $	*/
+/*	$NetBSD: bat.h,v 1.13 2009/07/21 07:08:57 nisimura Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,7 +63,7 @@
 #ifndef	_POWERPC_OEA_BAT_H_
 #define	_POWERPC_OEA_BAT_H_
 
-#ifndef _LOCORE
+#if defined(_KERNEL) && !defined(_LOCORE)
 struct bat {
 	register_t batu;
 	register_t batl;
@@ -85,6 +78,7 @@ struct bat {
 #define	BAT_M		0x00000010	/* memory coherency enable */
 #define	BAT_G		0x00000008	/* guarded region (not on 601) */
 #define	BAT_X		0x00000004	/* eXtended physical page number (3) */
+#define	BAT_WIMG	0x00000078	/* WIMG mask */
 
 /*
  * BAT_XPN and BAT_X are only used when HID0[XAEN] == 1 and are used
@@ -124,6 +118,11 @@ struct bat {
 #define	BAT_BL_64M	0x000007fc
 #define	BAT_BL_128M	0x00000ffc
 #define	BAT_BL_256M	0x00001ffc
+/* Extended Block Lengths (7455+) */
+#define	BAT_BL_512M	0x00003ffc
+#define	BAT_BL_1G	0x00007ffc
+#define	BAT_BL_2G	0x0000fffc
+#define	BAT_BL_4G	0x0001fffc
 
 #define	BATU(va, len, v)						\
 	(((va) & BAT_EPI) | ((len) & BAT_BL) | ((v) & BAT_V))
@@ -195,16 +194,16 @@ struct bat {
 #define	BAT601_VALID_P(batl) \
 	((batl) & BAT601_V)
 
-#ifdef	_KERNEL
-#ifndef _LOCORE
+#define	BAT_VA2IDX(va)	((va) >> ADDR_SR_SHFT)
+
+#if defined(_KERNEL) && !defined(_LOCORE)
 void oea_batinit(paddr_t, ...);
 void oea_iobat_add(paddr_t, register_t);
 void oea_iobat_remove(paddr_t);
 
-#if defined (PPC_OEA) && !defined (PPC_OEA64) && !defined (PPC_OEA64_BRIDGE)
+#if !defined (PPC_OEA64)
 extern struct bat battable[];
 #endif /* PPC_OEA */
-#endif
 #endif
 
 #endif	/* _POWERPC_OEA_BAT_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: cmdide.c,v 1.27 2007/02/09 21:55:27 ad Exp $	*/
+/*	$NetBSD: cmdide.c,v 1.32 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cmdide.c,v 1.27 2007/02/09 21:55:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cmdide.c,v 1.32 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,23 +38,25 @@ __KERNEL_RCSID(0, "$NetBSD: cmdide.c,v 1.27 2007/02/09 21:55:27 ad Exp $");
 #include <dev/pci/pciide_cmd_reg.h>
 
 
-static int  cmdide_match(struct device *, struct cfdata *, void *);
-static void cmdide_attach(struct device *, struct device *, void *);
+static int  cmdide_match(device_t, cfdata_t, void *);
+static void cmdide_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(cmdide, sizeof(struct pciide_softc),
-    cmdide_match, cmdide_attach, NULL, NULL);
+CFATTACH_DECL_NEW(cmdide, sizeof(struct pciide_softc),
+    cmdide_match, cmdide_attach, pciide_detach, NULL);
 
-static void cmd_chip_map(struct pciide_softc*, struct pci_attach_args*);
-static void cmd0643_9_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void cmd_chip_map(struct pciide_softc*, const struct pci_attach_args*);
+static void cmd0643_9_chip_map(struct pciide_softc*,
+			       const struct pci_attach_args*);
 static void cmd0643_9_setup_channel(struct ata_channel*);
-static void cmd_channel_map(struct pci_attach_args *, struct pciide_softc *,
-			    int);
+static void cmd_channel_map(const struct pci_attach_args *,
+			    struct pciide_softc *, int);
 static int  cmd_pci_intr(void *);
 static void cmd646_9_irqack(struct ata_channel *);
-static void cmd680_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void cmd680_chip_map(struct pciide_softc*,
+			    const struct pci_attach_args*);
 static void cmd680_setup_channel(struct ata_channel*);
-static void cmd680_channel_map(struct pci_attach_args *, struct pciide_softc *,
-			       int);
+static void cmd680_channel_map(const struct pci_attach_args *,
+			       struct pciide_softc *, int);
 
 static const struct pciide_product_desc pciide_cmd_products[] =  {
 	{ PCI_PRODUCT_CMDTECH_640,
@@ -100,8 +97,7 @@ static const struct pciide_product_desc pciide_cmd_products[] =  {
 };
 
 static int
-cmdide_match(struct device *parent, struct cfdata *match,
-    void *aux)
+cmdide_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -113,10 +109,12 @@ cmdide_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-cmdide_attach(struct device *parent, struct device *self, void *aux)
+cmdide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_cmd_products));
@@ -124,11 +122,10 @@ cmdide_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static void
-cmd_channel_map(struct pci_attach_args *pa, struct pciide_softc *sc,
+cmd_channel_map(const struct pci_attach_args *pa, struct pciide_softc *sc,
     int channel)
 {
 	struct pciide_channel *cp = &sc->pciide_channels[channel];
-	bus_size_t cmdsize, ctlsize;
 	u_int8_t ctrl = pciide_pci_read(sc->sc_pc, sc->sc_tag, CMD_CTRL);
 	int interface, one_channel;
 
@@ -174,13 +171,13 @@ cmd_channel_map(struct pci_attach_args *pa, struct pciide_softc *sc,
 	if (cp->ata_channel.ch_queue == NULL) {
 		aprint_error("%s %s channel: "
 		    "can't allocate memory for command queue",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+		    device_xname(sc->sc_wdcdev.sc_atac.atac_dev), cp->name);
 		    return;
 	}
 	cp->ata_channel.ch_ndrive = 2;
 
-	aprint_normal("%s: %s channel %s to %s mode\n",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name,
+	aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "%s channel %s to %s mode\n", cp->name,
 	    (interface & PCIIDE_INTERFACE_SETTABLE(channel)) ?
 	    "configured" : "wired",
 	    (interface & PCIIDE_INTERFACE_PCI(channel)) ?
@@ -192,13 +189,13 @@ cmd_channel_map(struct pci_attach_args *pa, struct pciide_softc *sc,
 	 * the whole device
 	 */
 	if (channel != 0 && (ctrl & CMD_CTRL_2PORT) == 0) {
-		aprint_normal("%s: %s channel ignored (disabled)\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+		aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "%s channel ignored (disabled)\n", cp->name);
 		cp->ata_channel.ch_flags |= ATACH_DISABLED;
 		return;
 	}
 
-	pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize, cmd_pci_intr);
+	pciide_mapchan(pa, cp, interface, cmd_pci_intr);
 }
 
 static int
@@ -223,8 +220,9 @@ cmd_pci_intr(void *arg)
 		    (i == 1 && (secirq & CMD_ARTTIM23_IRQ))) {
 			crv = wdcintr(wdc_cp);
 			if (crv == 0) {
-				printf("%s:%d: bogus intr\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, i);
+				aprint_error("%s:%d: bogus intr\n",
+				    device_xname(
+				      sc->sc_wdcdev.sc_atac.atac_dev), i);
 				sc->sc_wdcdev.irqack(wdc_cp);
 			} else
 				rv = 1;
@@ -234,7 +232,7 @@ cmd_pci_intr(void *arg)
 }
 
 static void
-cmd_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+cmd_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	int channel;
 
@@ -253,8 +251,8 @@ cmd_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		return;
 #endif
 
-	aprint_normal("%s: hardware does not support DMA\n",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "hardware does not support DMA\n");
 	sc->sc_dma_ok = 0;
 
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
@@ -270,7 +268,7 @@ cmd_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 }
 
 static void
-cmd0643_9_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+cmd0643_9_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	int channel;
 	pcireg_t rev = PCI_REVISION(pa->pa_class);
@@ -290,8 +288,8 @@ cmd0643_9_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		return;
 #endif
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 	sc->sc_wdcdev.sc_atac.atac_cap = ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
@@ -460,15 +458,15 @@ cmd646_9_irqack(struct ata_channel *chp)
 }
 
 static void
-cmd680_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+cmd680_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	int channel;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 	sc->sc_wdcdev.sc_atac.atac_cap = ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
@@ -498,11 +496,10 @@ cmd680_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 }
 
 static void
-cmd680_channel_map(struct pci_attach_args *pa, struct pciide_softc *sc,
+cmd680_channel_map(const struct pci_attach_args *pa, struct pciide_softc *sc,
     int channel)
 {
 	struct pciide_channel *cp = &sc->pciide_channels[channel];
-	bus_size_t cmdsize, ctlsize;
 	int interface, i, reg;
 	static const u_int8_t init_val[] =
 	    {             0x8a, 0x32, 0x8a, 0x32, 0x8a, 0x32,
@@ -527,7 +524,7 @@ cmd680_channel_map(struct pci_attach_args *pa, struct pciide_softc *sc,
 	if (cp->ata_channel.ch_queue == NULL) {
 		aprint_error("%s %s channel: "
 		    "can't allocate memory for command queue",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+		    device_xname(sc->sc_wdcdev.sc_atac.atac_dev), cp->name);
 		    return;
 	}
 	cp->ata_channel.ch_ndrive = 2;
@@ -537,14 +534,14 @@ cmd680_channel_map(struct pci_attach_args *pa, struct pciide_softc *sc,
 	for (i = 0; i < sizeof(init_val); i++)
 		pciide_pci_write(sc->sc_pc, sc->sc_tag, reg + i, init_val[i]);
 
-	aprint_normal("%s: %s channel %s to %s mode\n",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name,
+	aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "%s channel %s to %s mode\n", cp->name,
 	    (interface & PCIIDE_INTERFACE_SETTABLE(channel)) ?
 	    "configured" : "wired",
 	    (interface & PCIIDE_INTERFACE_PCI(channel)) ?
 	    "native-PCI" : "compatibility");
 
-	pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize, pciide_pci_intr);
+	pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 }
 
 static void

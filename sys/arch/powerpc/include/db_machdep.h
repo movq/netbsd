@@ -1,5 +1,5 @@
 /*	$OpenBSD: db_machdep.h,v 1.2 1997/03/21 00:48:48 niklas Exp $	*/
-/*	$NetBSD: db_machdep.h,v 1.19 2006/05/14 21:56:32 elad Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.23 2011/05/26 15:34:13 joerg Exp $	*/
 
 /* 
  * Mach Operating System
@@ -45,6 +45,7 @@
 #define	DB_ELFSIZE	32
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 struct powerpc_saved_state {
 	u_int32_t	r[32];		/* data registers */
@@ -118,7 +119,7 @@ extern	db_regs_t	ddb_regs;		/* register state */
 				 ((ins)&M_BCTR) == I_BCTR )
 #define inst_load(ins)		0
 #define inst_store(ins)		0
-#ifdef PPC_IBM4XX
+#if defined(PPC_IBM4XX) || defined(PPC_BOOKE)
 #define next_instr_address(v, b) ((db_addr_t) ((b) ? (v) : ((v) + 4)))
 extern db_addr_t branch_taken(int, db_addr_t, db_regs_t *);
 #endif
@@ -147,15 +148,13 @@ typedef long	kgdb_reg_t;
 
 #ifdef _KERNEL
 
-void	kdb_kintr __P((void *));
-int	kdb_trap __P((int, void *));
+void	kdb_kintr(void *);
+int	kdb_trap(int, void *);
 
-#ifdef PPC_IBM4XX
 /*
  * We have machine-dependent commands.
  */
 #define	DB_MACHINE_COMMANDS
-#endif
 
 #endif /* _KERNEL */
 

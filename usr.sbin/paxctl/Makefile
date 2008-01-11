@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.4 2007/02/08 05:54:25 elad Exp $
+# $NetBSD: Makefile,v 1.6 2009/04/22 15:23:06 lukem Exp $
 
 PROG=	paxctl
 MAN=	paxctl.8

@@ -1,4 +1,33 @@
-/*	$NetBSD: ffs_vfsops.c,v 1.218 2008/01/09 18:20:54 ad Exp $	*/
+/*	$NetBSD: ffs_vfsops.c,v 1.266 2011/04/27 07:24:53 hannken Exp $	*/
+
+/*-
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Wasabi Systems, Inc, and by Andrew Doran.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1994
@@ -32,12 +61,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.218 2008/01/09 18:20:54 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.266 2011/04/27 07:24:53 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
 #include "opt_quota.h"
-#include "opt_softdep.h"
+#include "opt_wapbl.h"
 #endif
 
 #include <sys/param.h>
@@ -61,8 +90,11 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.218 2008/01/09 18:20:54 ad Exp $");
 #include <sys/sysctl.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
+#include <sys/wapbl.h>
 #include <sys/fstrans.h>
+#include <sys/module.h>
 
+#include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h>
 
 #include <ufs/ufs/quota.h>
@@ -71,14 +103,19 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.218 2008/01/09 18:20:54 ad Exp $");
 #include <ufs/ufs/dir.h>
 #include <ufs/ufs/ufs_extern.h>
 #include <ufs/ufs/ufs_bswap.h>
+#include <ufs/ufs/ufs_wapbl.h>
 
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 
+MODULE(MODULE_CLASS_VFS, ffs, NULL);
+
+static int	ffs_vfs_fsync(vnode_t *, int);
+
+static struct sysctllog *ffs_sysctl_log;
+
 /* how many times ffs_init() was called */
 int ffs_initcount = 0;
-
-extern kmutex_t ufs_hashlock;
 
 extern const struct vnodeopv_desc ffs_vnodeop_opv_desc;
 extern const struct vnodeopv_desc ffs_specop_opv_desc;
@@ -111,11 +148,13 @@ struct vfsops ffs_vfsops = {
 	ffs_snapshot,
 	ffs_extattrctl,
 	ffs_suspendctl,
+	genfs_renamelock_enter,
+	genfs_renamelock_exit,
+	ffs_vfs_fsync,
 	ffs_vnodeopv_descs,
 	0,
 	{ NULL, NULL },
 };
-VFS_ATTACH(ffs_vfsops);
 
 static const struct genfs_ops ffs_genfsops = {
 	.gop_size = ffs_gop_size,
@@ -131,7 +170,83 @@ static const struct ufs_ops ffs_ufsops = {
 	.uo_valloc = ffs_valloc,
 	.uo_vfree = ffs_vfree,
 	.uo_balloc = ffs_balloc,
+	.uo_unmark_vnode = (void (*)(vnode_t *))nullop,
 };
+
+static int
+ffs_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+#if 0
+	extern int doasyncfree;
+#endif
+	extern int ffs_log_changeopt;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&ffs_vfsops);
+		if (error != 0)
+			break;
+
+		sysctl_createv(&ffs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "vfs", NULL,
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, CTL_EOL);
+		sysctl_createv(&ffs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "ffs",
+			       SYSCTL_DESCR("Berkeley Fast File System"),
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, 1, CTL_EOL);
+
+		/*
+		 * @@@ should we even bother with these first three?
+		 */
+		sysctl_createv(&ffs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+			       CTLTYPE_INT, "doclusterread", NULL,
+			       sysctl_notavail, 0, NULL, 0,
+			       CTL_VFS, 1, FFS_CLUSTERREAD, CTL_EOL);
+		sysctl_createv(&ffs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+			       CTLTYPE_INT, "doclusterwrite", NULL,
+			       sysctl_notavail, 0, NULL, 0,
+			       CTL_VFS, 1, FFS_CLUSTERWRITE, CTL_EOL);
+		sysctl_createv(&ffs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+			       CTLTYPE_INT, "doreallocblks", NULL,
+			       sysctl_notavail, 0, NULL, 0,
+			       CTL_VFS, 1, FFS_REALLOCBLKS, CTL_EOL);
+#if 0
+		sysctl_createv(&ffs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+			       CTLTYPE_INT, "doasyncfree",
+			       SYSCTL_DESCR("Release dirty blocks asynchronously"),
+			       NULL, 0, &doasyncfree, 0,
+			       CTL_VFS, 1, FFS_ASYNCFREE, CTL_EOL);
+#endif
+		sysctl_createv(&ffs_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+			       CTLTYPE_INT, "log_changeopt",
+			       SYSCTL_DESCR("Log changes in optimization strategy"),
+			       NULL, 0, &ffs_log_changeopt, 0,
+			       CTL_VFS, 1, FFS_LOG_CHANGEOPT, CTL_EOL);
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&ffs_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&ffs_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}
 
 pool_cache_t ffs_inode_cache;
 pool_cache_t ffs_dinode1_cache;
@@ -160,12 +275,17 @@ ffs_mountroot(void)
 		vrele(rootvp);
 		return (error);
 	}
+
+	/*
+	 * We always need to be able to mount the root file system.
+	 */
+	mp->mnt_flag |= MNT_FORCE;
 	if ((error = ffs_mountfs(rootvp, mp, l)) != 0) {
-		mp->mnt_op->vfs_refcount--;
-		vfs_unbusy(mp);
+		vfs_unbusy(mp, false, NULL);
 		vfs_destroy(mp);
 		return (error);
 	}
+	mp->mnt_flag &= ~MNT_FORCE;
 	mutex_enter(&mountlist_lock);
 	CIRCLEQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 	mutex_exit(&mountlist_lock);
@@ -174,7 +294,7 @@ ffs_mountroot(void)
 	memset(fs->fs_fsmnt, 0, sizeof(fs->fs_fsmnt));
 	(void)copystr(mp->mnt_stat.f_mntonname, fs->fs_fsmnt, MNAMELEN - 1, 0);
 	(void)ffs_statvfs(mp, &mp->mnt_stat);
-	vfs_unbusy(mp);
+	vfs_unbusy(mp, false, NULL);
 	setrootfstime((time_t)fs->fs_time);
 	return (0);
 }
@@ -188,8 +308,7 @@ int
 ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
-	struct nameidata nd;
-	struct vnode *vp, *devvp = NULL;
+	struct vnode *devvp = NULL;
 	struct ufs_args *args = data;
 	struct ufsmount *ump = NULL;
 	struct fs *fs;
@@ -208,10 +327,6 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		return 0;
 	}
 
-#if !defined(SOFTDEP)
-	mp->mnt_flag &= ~MNT_SOFTDEP;
-#endif
-
 	update = mp->mnt_flag & MNT_UPDATE;
 
 	/* Check arguments */
@@ -219,10 +334,10 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		/*
 		 * Look up the name and verify that it's sane.
 		 */
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec);
-		if ((error = namei(&nd)) != 0)
+		error = namei_simple_user(args->fspec,
+					NSM_FOLLOW_NOEMULROOT, &devvp);
+		if (error != 0)
 			return (error);
-		devvp = nd.ni_vp;
 
 		if (!update) {
 			/*
@@ -261,34 +376,22 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	}
 
 	/*
-	 * Mark the device and any existing vnodes as involved in
-	 * softdep processing.
-	 */
-	if ((mp->mnt_flag & MNT_SOFTDEP) != 0) {
-		devvp->v_uflag |= VU_SOFTDEP;
-		mutex_enter(&mntvnode_lock);
-		TAILQ_FOREACH(vp, &mp->mnt_vnodelist, v_mntvnodes) {
-			if (vp->v_mount != mp || vismarker(vp))
-				continue;
-			vp->v_uflag |= VU_SOFTDEP;
-		}
-		mutex_exit(&mntvnode_lock);
-	}
-
-	/*
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
+	 *
+	 * Permission to update a mount is checked higher, so here we presume
+	 * updating the mount is okay (for example, as far as securelevel goes)
+	 * which leaves us with the normal check.
 	 */
-	if (error == 0 && kauth_authorize_generic(l->l_cred,
-	    KAUTH_GENERIC_ISSUSER, NULL) != 0) {
+	if (error == 0) {
 		accessmode = VREAD;
 		if (update ?
 		    (mp->mnt_iflag & IMNT_WANTRDWR) != 0 :
 		    (mp->mnt_flag & MNT_RDONLY) == 0)
 			accessmode |= VWRITE;
 		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-		error = VOP_ACCESS(devvp, accessmode, l->l_cred);
-		VOP_UNLOCK(devvp, 0);
+		error = genfs_can_mount(devvp, accessmode, l->l_cred);
+		VOP_UNLOCK(devvp);
 	}
 
 	if (error) {
@@ -296,26 +399,22 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		return (error);
 	}
 
+#ifdef WAPBL
+	/* WAPBL can only be enabled on a r/w mount. */
+	if ((mp->mnt_flag & MNT_RDONLY) && !(mp->mnt_iflag & IMNT_WANTRDWR)) {
+		mp->mnt_flag &= ~MNT_LOG;
+	}
+#else /* !WAPBL */
+	mp->mnt_flag &= ~MNT_LOG;
+#endif /* !WAPBL */
+
 	if (!update) {
 		int xflags;
 
-		/*
-		 * Disallow multiple mounts of the same device.
-		 * Disallow mounting of a device that is currently in use
-		 * (except for root, which might share swap device for
-		 * miniroot).
-		 */
-		error = vfs_mountedon(devvp);
-		if (error)
-			goto fail;
-		if (vcount(devvp) > 1 && devvp != rootvp) {
-			error = EBUSY;
-			goto fail;
-		}
 		if (mp->mnt_flag & MNT_RDONLY)
 			xflags = FREAD;
 		else
-			xflags = FREAD|FWRITE;
+			xflags = FREAD | FWRITE;
 		error = VOP_OPEN(devvp, xflags, FSCRED);
 		if (error)
 			goto fail;
@@ -323,19 +422,12 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		if (error) {
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void)VOP_CLOSE(devvp, xflags, NOCRED);
-			VOP_UNLOCK(devvp, 0);
+			VOP_UNLOCK(devvp);
 			goto fail;
 		}
 
 		ump = VFSTOUFS(mp);
 		fs = ump->um_fs;
-		if ((mp->mnt_flag & (MNT_SOFTDEP | MNT_ASYNC)) ==
-		    (MNT_SOFTDEP | MNT_ASYNC)) {
-			printf("%s fs uses soft updates, "
-			    "ignoring async mode\n",
-			    fs->fs_fsmnt);
-			mp->mnt_flag &= ~MNT_ASYNC;
-		}
 	} else {
 		/*
 		 * Update the mount.
@@ -357,19 +449,9 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			flags = WRITECLOSE;
 			if (mp->mnt_flag & MNT_FORCE)
 				flags |= FORCECLOSE;
-			if (mp->mnt_flag & MNT_SOFTDEP)
-				error = softdep_flushfiles(mp, flags, l);
-			else
-				error = ffs_flushfiles(mp, flags, l);
-			if (fs->fs_pendingblocks != 0 ||
-			    fs->fs_pendinginodes != 0) {
-				printf("%s: update error: blocks %" PRId64
-				       " files %d\n",
-				    fs->fs_fsmnt, fs->fs_pendingblocks,
-				    fs->fs_pendinginodes);
-				fs->fs_pendingblocks = 0;
-				fs->fs_pendinginodes = 0;
-			}
+			error = ffs_flushfiles(mp, flags, l);
+			if (error == 0)
+				error = UFS_WAPBL_BEGIN(mp);
 			if (error == 0 &&
 			    ffs_cgupdate(ump, MNT_WAIT) == 0 &&
 			    fs->fs_clean & FS_WASCLEAN) {
@@ -378,46 +460,26 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 				fs->fs_clean = FS_ISCLEAN;
 				(void) ffs_sbupdate(ump, MNT_WAIT);
 			}
+			if (error == 0)
+				UFS_WAPBL_END(mp);
 			if (error)
 				return (error);
+		}
+
+#ifdef WAPBL
+		if ((mp->mnt_flag & MNT_LOG) == 0) {
+			error = ffs_wapbl_stop(mp, mp->mnt_flag & MNT_FORCE);
+			if (error)
+				return error;
+		}
+#endif /* WAPBL */
+
+		if (fs->fs_ronly == 0 && (mp->mnt_flag & MNT_RDONLY)) {
+			/*
+			 * Finish change from r/w to r/o
+			 */
 			fs->fs_ronly = 1;
 			fs->fs_fmod = 0;
-		}
-
-		/*
-		 * Flush soft dependencies if disabling it via an update
-		 * mount. This may leave some items to be processed,
-		 * so don't do this yet XXX.
-		 */
-		if ((fs->fs_flags & FS_DOSOFTDEP) &&
-		    !(mp->mnt_flag & MNT_SOFTDEP) && fs->fs_ronly == 0) {
-#ifdef notyet
-			flags = WRITECLOSE;
-			if (mp->mnt_flag & MNT_FORCE)
-				flags |= FORCECLOSE;
-			error = softdep_flushfiles(mp, flags, l);
-			if (error == 0 && ffs_cgupdate(ump, MNT_WAIT) == 0)
-				fs->fs_flags &= ~FS_DOSOFTDEP;
-				(void) ffs_sbupdate(ump, MNT_WAIT);
-#elif defined(SOFTDEP)
-			mp->mnt_flag |= MNT_SOFTDEP;
-#endif
-		}
-
-		/*
-		 * When upgrading to a softdep mount, we must first flush
-		 * all vnodes. (not done yet -- see above)
-		 */
-		if (!(fs->fs_flags & FS_DOSOFTDEP) &&
-		    (mp->mnt_flag & MNT_SOFTDEP) && fs->fs_ronly == 0) {
-#ifdef notyet
-			flags = WRITECLOSE;
-			if (mp->mnt_flag & MNT_FORCE)
-				flags |= FORCECLOSE;
-			error = ffs_flushfiles(mp, flags, l);
-#else
-			mp->mnt_flag &= ~MNT_SOFTDEP;
-#endif
 		}
 
 		if (mp->mnt_flag & MNT_RELOAD) {
@@ -430,26 +492,53 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			/*
 			 * Changing from read-only to read/write
 			 */
+#ifndef QUOTA2
+			if (fs->fs_flags & FS_DOQUOTA2) {
+				ump->um_flags |= UFS_QUOTA2;
+				uprintf("%s: options QUOTA2 not enabled%s\n",
+				    mp->mnt_stat.f_mntonname,
+				    (mp->mnt_flag & MNT_FORCE) ? "" :
+				    ", not mounting");
+				return EINVAL;
+			}
+#endif
 			fs->fs_ronly = 0;
 			fs->fs_clean <<= 1;
 			fs->fs_fmod = 1;
-			if ((fs->fs_flags & FS_DOSOFTDEP)) {
-				error = softdep_mount(devvp, mp, fs,
-				    l->l_cred);
-				if (error)
-					return (error);
+#ifdef WAPBL
+			if (fs->fs_flags & FS_DOWAPBL) {
+				printf("%s: replaying log to disk\n",
+				    fs->fs_fsmnt);
+				KDASSERT(mp->mnt_wapbl_replay);
+				error = wapbl_replay_write(mp->mnt_wapbl_replay,
+							   devvp);
+				if (error) {
+					return error;
+				}
+				wapbl_replay_stop(mp->mnt_wapbl_replay);
+				fs->fs_clean = FS_WASCLEAN;
 			}
+#endif /* WAPBL */
 			if (fs->fs_snapinum[0] != 0)
 				ffs_snapshot_mount(mp);
 		}
-		if (args->fspec == NULL)
-			return EINVAL;
-		if ((mp->mnt_flag & (MNT_SOFTDEP | MNT_ASYNC)) ==
-		    (MNT_SOFTDEP | MNT_ASYNC)) {
-			printf("%s fs uses soft updates, ignoring async mode\n",
-			    fs->fs_fsmnt);
-			mp->mnt_flag &= ~MNT_ASYNC;
+
+#ifdef WAPBL
+		error = ffs_wapbl_start(mp);
+		if (error)
+			return error;
+#endif /* WAPBL */
+
+#ifdef QUOTA2
+		if (!fs->fs_ronly) {
+			error = ffs_quota2_mount(mp);
+			if (error) {
+				return error;
+			}
 		}
+#endif
+		if (args->fspec == NULL)
+			return 0;
 	}
 
 	error = set_statvfs_info(path, UIO_USERSPACE, args->fspec,
@@ -457,23 +546,33 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	if (error == 0)
 		(void)strncpy(fs->fs_fsmnt, mp->mnt_stat.f_mntonname,
 		    sizeof(fs->fs_fsmnt));
-	if (mp->mnt_flag & MNT_SOFTDEP)
-		fs->fs_flags |= FS_DOSOFTDEP;
-	else
-		fs->fs_flags &= ~FS_DOSOFTDEP;
+	fs->fs_flags &= ~FS_DOSOFTDEP;
 	if (fs->fs_fmod != 0) {	/* XXX */
+		int err;
+
 		fs->fs_fmod = 0;
 		if (fs->fs_clean & FS_WASCLEAN)
 			fs->fs_time = time_second;
 		else {
-			printf("%s: file system not clean (fs_clean=%x); please fsck(8)\n",
-			    mp->mnt_stat.f_mntfromname, fs->fs_clean);
+			printf("%s: file system not clean (fs_clean=%#x); "
+			    "please fsck(8)\n", mp->mnt_stat.f_mntfromname,
+			    fs->fs_clean);
 			printf("%s: lost blocks %" PRId64 " files %d\n",
 			    mp->mnt_stat.f_mntfromname, fs->fs_pendingblocks,
 			    fs->fs_pendinginodes);
 		}
-		(void) ffs_cgupdate(ump, MNT_WAIT);
+		err = UFS_WAPBL_BEGIN(mp);
+		if (err == 0) {
+			(void) ffs_cgupdate(ump, MNT_WAIT);
+			UFS_WAPBL_END(mp);
+		}
 	}
+	if ((mp->mnt_flag & MNT_SOFTDEP) != 0) {
+		printf("%s: `-o softdep' is no longer supported, "
+		    "consider `-o log'\n", mp->mnt_stat.f_mntfromname);
+		mp->mnt_flag &= ~MNT_SOFTDEP;
+	}
+
 	return (error);
 
 fail:
@@ -503,7 +602,7 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 	struct buf *bp;
 	struct fs *fs, *newfs;
 	struct partinfo dpart;
-	int i, blks, size, error;
+	int i, bsize, blks, error;
 	int32_t *lp;
 	struct ufsmount *ump;
 	daddr_t sblockloc;
@@ -518,20 +617,17 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 	devvp = ump->um_devvp;
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = vinvalbuf(devvp, 0, cred, l, 0, 0);
-	VOP_UNLOCK(devvp, 0);
+	VOP_UNLOCK(devvp);
 	if (error)
 		panic("ffs_reload: dirty1");
 	/*
 	 * Step 2: re-read superblock from disk.
 	 */
 	fs = ump->um_fs;
-	if (VOP_IOCTL(devvp, DIOCGPART, &dpart, FREAD, NOCRED) != 0)
-		size = DEV_BSIZE;
-	else
-		size = dpart.disklab->d_secsize;
+
 	/* XXX we don't handle possibility that superblock moved. */
-	error = bread(devvp, fs->fs_sblockloc / size, fs->fs_sbsize,
-		      NOCRED, &bp);
+	error = bread(devvp, fs->fs_sblockloc / DEV_BSIZE, fs->fs_sbsize,
+		      NOCRED, 0, &bp);
 	if (error) {
 		brelse(bp, 0);
 		return (error);
@@ -582,17 +678,22 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 	else {
 		/* Manually look for an apple ufs label, and if a valid one
 		 * is found, then treat it like an Apple UFS filesystem anyway
+		 *
+		 * EINVAL is most probably a blocksize or alignment problem,
+		 * it is unlikely that this is an Apple UFS filesystem then.
 		 */
-		error = bread(devvp, (daddr_t)(APPLEUFS_LABEL_OFFSET / size),
-			APPLEUFS_LABEL_SIZE, cred, &bp);
-		if (error) {
+		error = bread(devvp, (daddr_t)(APPLEUFS_LABEL_OFFSET / DEV_BSIZE),
+			APPLEUFS_LABEL_SIZE, cred, 0, &bp);
+		if (error && error != EINVAL) {
 			brelse(bp, 0);
 			return (error);
 		}
-		error = ffs_appleufs_validate(fs->fs_fsmnt,
-			(struct appleufslabel *)bp->b_data,NULL);
-		if (error == 0)
-			ump->um_flags |= UFS_ISAPPLEUFS;
+		if (error == 0) {
+			error = ffs_appleufs_validate(fs->fs_fsmnt,
+				(struct appleufslabel *)bp->b_data, NULL);
+			if (error == 0)
+				ump->um_flags |= UFS_ISAPPLEUFS;
+		}
 		brelse(bp, 0);
 		bp = NULL;
 	}
@@ -615,8 +716,18 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 			mp->mnt_iflag &= ~IMNT_DTYPE;
 	}
 	ffs_oldfscompat_read(fs, ump, sblockloc);
+
 	mutex_enter(&ump->um_lock);
 	ump->um_maxfilesize = fs->fs_maxfilesize;
+	if (fs->fs_flags & ~(FS_KNOWN_FLAGS | FS_INTERNAL)) {
+		uprintf("%s: unknown ufs flags: 0x%08"PRIx32"%s\n",
+		    mp->mnt_stat.f_mntonname, fs->fs_flags,
+		    (mp->mnt_flag & MNT_FORCE) ? "" : ", not mounting");
+		if ((mp->mnt_flag & MNT_FORCE) == 0) {
+			mutex_exit(&ump->um_lock);
+			return (EINVAL);
+		}
+	}
 	if (fs->fs_pendingblocks != 0 || fs->fs_pendinginodes != 0) {
 		fs->fs_pendingblocks = 0;
 		fs->fs_pendinginodes = 0;
@@ -630,11 +741,11 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 	blks = howmany(fs->fs_cssize, fs->fs_fsize);
 	space = fs->fs_csp;
 	for (i = 0; i < blks; i += fs->fs_frag) {
-		size = fs->fs_bsize;
+		bsize = fs->fs_bsize;
 		if (i + fs->fs_frag > blks)
-			size = (blks - i) * fs->fs_fsize;
-		error = bread(devvp, fsbtodb(fs, fs->fs_csaddr + i), size,
-			      NOCRED, &bp);
+			bsize = (blks - i) * fs->fs_fsize;
+		error = bread(devvp, fsbtodb(fs, fs->fs_csaddr + i), bsize,
+			      NOCRED, 0, &bp);
 		if (error) {
 			brelse(bp, 0);
 			return (error);
@@ -642,15 +753,13 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 #ifdef FFS_EI
 		if (UFS_FSNEEDSWAP(fs))
 			ffs_csum_swap((struct csum *)bp->b_data,
-			    (struct csum *)space, size);
+			    (struct csum *)space, bsize);
 		else
 #endif
-			memcpy(space, bp->b_data, (size_t)size);
-		space = (char *)space + size;
+			memcpy(space, bp->b_data, (size_t)bsize);
+		space = (char *)space + bsize;
 		brelse(bp, 0);
 	}
-	if ((fs->fs_flags & FS_DOSOFTDEP))
-		softdep_mount(devvp, mp, fs, cred);
 	if (fs->fs_snapinum[0] != 0)
 		ffs_snapshot_mount(mp);
 	/*
@@ -688,7 +797,7 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 		 */
 		mutex_enter(&vp->v_interlock);
 		mutex_exit(&mntvnode_lock);
-		if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK)) {
+		if (vget(vp, LK_EXCLUSIVE)) {
 			(void)vunmark(mvp);
 			goto loop;
 		}
@@ -699,7 +808,7 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 		 */
 		ip = VTOI(vp);
 		error = bread(devvp, fsbtodb(fs, ino_to_fsba(fs, ip->i_number)),
-			      (int)fs->fs_bsize, NOCRED, &bp);
+			      (int)fs->fs_bsize, NOCRED, 0, &bp);
 		if (error) {
 			brelse(bp, 0);
 			vput(vp);
@@ -707,7 +816,6 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 			break;
 		}
 		ffs_load_inode(bp, ip, fs, ip->i_number);
-		ip->i_ffs_effnlink = ip->i_nlink;
 		brelse(bp, 0);
 		vput(vp);
 		mutex_enter(&mntvnode_lock);
@@ -736,13 +844,14 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	void *space;
 	daddr_t sblockloc, fsblockloc;
 	int blks, fstype;
-	int error, i, size, ronly, bset = 0;
+	int error, i, bsize, ronly, bset = 0;
 #ifdef FFS_EI
 	int needswap = 0;		/* keep gcc happy */
 #endif
 	int32_t *lp;
 	kauth_cred_t cred;
 	u_int32_t sbsize = 8192;	/* keep gcc happy*/
+	int32_t fsbsize;
 
 	dev = devvp->v_rdev;
 	cred = l ? l->l_cred : NOCRED;
@@ -750,15 +859,11 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	/* Flush out any old buffers remaining from a previous use. */
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = vinvalbuf(devvp, V_SAVE, cred, l, 0, 0);
-	VOP_UNLOCK(devvp, 0);
+	VOP_UNLOCK(devvp);
 	if (error)
 		return (error);
 
 	ronly = (mp->mnt_flag & MNT_RDONLY) != 0;
-	if (VOP_IOCTL(devvp, DIOCGPART, &dpart, FREAD, cred) != 0)
-		size = DEV_BSIZE;
-	else
-		size = dpart.disklab->d_secsize;
 
 	bp = NULL;
 	ump = NULL;
@@ -770,6 +875,17 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	if (error)
 		return error;
 
+	ump = malloc(sizeof *ump, M_UFSMNT, M_WAITOK);
+	memset(ump, 0, sizeof *ump);
+	mutex_init(&ump->um_lock, MUTEX_DEFAULT, IPL_NONE);
+	error = ffs_snapshot_init(ump);
+	if (error)
+		goto out;
+	ump->um_ops = &ffs_ufsops;
+
+#ifdef WAPBL
+ sbagain:
+#endif
 	/*
 	 * Try reading the superblock in each of its possible locations.
 	 */
@@ -783,8 +899,8 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 			fs = NULL;
 			goto out;
 		}
-		error = bread(devvp, sblock_try[i] / size, SBLOCKSIZE, cred,
-			      &bp);
+		error = bread(devvp, sblock_try[i] / DEV_BSIZE, SBLOCKSIZE, cred,
+			      0, &bp);
 		if (error) {
 			fs = NULL;
 			goto out;
@@ -794,21 +910,25 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 		if (fs->fs_magic == FS_UFS1_MAGIC) {
 			sbsize = fs->fs_sbsize;
 			fstype = UFS1;
+			fsbsize = fs->fs_bsize;
 #ifdef FFS_EI
 			needswap = 0;
 		} else if (fs->fs_magic == bswap32(FS_UFS1_MAGIC)) {
 			sbsize = bswap32(fs->fs_sbsize);
 			fstype = UFS1;
+			fsbsize = bswap32(fs->fs_bsize);
 			needswap = 1;
 #endif
 		} else if (fs->fs_magic == FS_UFS2_MAGIC) {
 			sbsize = fs->fs_sbsize;
 			fstype = UFS2;
+			fsbsize = fs->fs_bsize;
 #ifdef FFS_EI
 			needswap = 0;
 		} else if (fs->fs_magic == bswap32(FS_UFS2_MAGIC)) {
 			sbsize = bswap32(fs->fs_sbsize);
 			fstype = UFS2;
+			fsbsize = bswap32(fs->fs_bsize);
 			needswap = 1;
 #endif
 		} else
@@ -841,18 +961,20 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 		if (sbsize > MAXBSIZE || sbsize < sizeof(struct fs))
 			continue;
 
+		/* Check that we can handle the file system blocksize */
+		if (fsbsize > MAXBSIZE) {
+			printf("ffs_mountfs: block size (%d) > MAXBSIZE (%d)\n",
+			    fsbsize, MAXBSIZE);
+			continue;
+		}
+
 		/* Ok seems to be a good superblock */
 		break;
 	}
 
 	fs = malloc((u_long)sbsize, M_UFSMNT, M_WAITOK);
 	memcpy(fs, bp->b_data, sbsize);
-
-	ump = malloc(sizeof *ump, M_UFSMNT, M_WAITOK);
-	memset(ump, 0, sizeof *ump);
-	mutex_init(&ump->um_lock, MUTEX_DEFAULT, IPL_NONE);
 	ump->um_fs = fs;
-	ump->um_ops = &ffs_ufsops;
 
 #ifdef FFS_EI
 	if (needswap) {
@@ -862,8 +984,55 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 #endif
 		fs->fs_flags &= ~FS_SWAPPED;
 
+#ifdef WAPBL
+	if ((mp->mnt_wapbl_replay == 0) && (fs->fs_flags & FS_DOWAPBL)) {
+		error = ffs_wapbl_replay_start(mp, fs, devvp);
+		if (error && (mp->mnt_flag & MNT_FORCE) == 0)
+			goto out;
+		if (!error) {
+			if (!ronly) {
+				/* XXX fsmnt may be stale. */
+				printf("%s: replaying log to disk\n",
+				    fs->fs_fsmnt);
+				error = wapbl_replay_write(mp->mnt_wapbl_replay,
+				    devvp);
+				if (error)
+					goto out;
+				wapbl_replay_stop(mp->mnt_wapbl_replay);
+				fs->fs_clean = FS_WASCLEAN;
+			} else {
+				/* XXX fsmnt may be stale */
+				printf("%s: replaying log to memory\n",
+				    fs->fs_fsmnt);
+			}
+
+			/* Force a re-read of the superblock */
+			brelse(bp, BC_INVAL);
+			bp = NULL;
+			free(fs, M_UFSMNT);
+			fs = NULL;
+			goto sbagain;
+		}
+	}
+#else /* !WAPBL */
+	if ((fs->fs_flags & FS_DOWAPBL) && (mp->mnt_flag & MNT_FORCE) == 0) {
+		error = EPERM;
+		goto out;
+	}
+#endif /* !WAPBL */
+
 	ffs_oldfscompat_read(fs, ump, sblockloc);
 	ump->um_maxfilesize = fs->fs_maxfilesize;
+
+	if (fs->fs_flags & ~(FS_KNOWN_FLAGS | FS_INTERNAL)) {
+		uprintf("%s: unknown ufs flags: 0x%08"PRIx32"%s\n",
+		    mp->mnt_stat.f_mntonname, fs->fs_flags,
+		    (mp->mnt_flag & MNT_FORCE) ? "" : ", not mounting");
+		if ((mp->mnt_flag & MNT_FORCE) == 0) {
+			error = EINVAL;
+			goto out;
+		}
+	}
 
 	if (fs->fs_pendingblocks != 0 || fs->fs_pendinginodes != 0) {
 		fs->fs_pendingblocks = 0;
@@ -889,12 +1058,12 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 		/* Manually look for an apple ufs label, and if a valid one
 		 * is found, then treat it like an Apple UFS filesystem anyway
 		 */
-		error = bread(devvp, (daddr_t)(APPLEUFS_LABEL_OFFSET / size),
-			APPLEUFS_LABEL_SIZE, cred, &bp);
+		error = bread(devvp, (daddr_t)(APPLEUFS_LABEL_OFFSET / DEV_BSIZE),
+			APPLEUFS_LABEL_SIZE, cred, 0, &bp);
 		if (error)
 			goto out;
 		error = ffs_appleufs_validate(fs->fs_fsmnt,
-			(struct appleufslabel *)bp->b_data,NULL);
+			(struct appleufslabel *)bp->b_data, NULL);
 		if (error == 0) {
 			ump->um_flags |= UFS_ISAPPLEUFS;
 		}
@@ -908,6 +1077,36 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	}
 #endif
 
+#if 0
+/*
+ * XXX This code changes the behaviour of mounting dirty filesystems, to
+ * XXX require "mount -f ..." to mount them.  This doesn't match what
+ * XXX mount(8) describes and is disabled for now.
+ */
+	/*
+	 * If the file system is not clean, don't allow it to be mounted
+	 * unless MNT_FORCE is specified.  (Note: MNT_FORCE is always set
+	 * for the root file system.)
+	 */
+	if (fs->fs_flags & FS_DOWAPBL) {
+		/*
+		 * wapbl normally expects to be FS_WASCLEAN when the FS_DOWAPBL
+		 * bit is set, although there's a window in unmount where it
+		 * could be FS_ISCLEAN
+		 */
+		if ((mp->mnt_flag & MNT_FORCE) == 0 &&
+		    (fs->fs_clean & (FS_WASCLEAN | FS_ISCLEAN)) == 0) {
+			error = EPERM;
+			goto out;
+		}
+	} else
+		if ((fs->fs_clean & FS_ISCLEAN) == 0 &&
+		    (mp->mnt_flag & MNT_FORCE) == 0) {
+			error = EPERM;
+			goto out;
+		}
+#endif
+
 	/*
 	 * verify that we can access the last block in the fs
 	 * if we're mounting read/write.
@@ -915,7 +1114,7 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 
 	if (!ronly) {
 		error = bread(devvp, fsbtodb(fs, fs->fs_size - 1), fs->fs_fsize,
-		    cred, &bp);
+		    cred, 0, &bp);
 		if (bp->b_bcount != fs->fs_fsize)
 			error = EINVAL;
 		if (error) {
@@ -927,23 +1126,25 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	}
 
 	fs->fs_ronly = ronly;
-	if (ronly == 0) {
-		fs->fs_clean <<= 1;
-		fs->fs_fmod = 1;
-	}
-	size = fs->fs_cssize;
-	blks = howmany(size, fs->fs_fsize);
+	/* Don't bump fs_clean if we're replaying journal */
+	if (!((fs->fs_flags & FS_DOWAPBL) && (fs->fs_clean & FS_WASCLEAN)))
+		if (ronly == 0) {
+			fs->fs_clean <<= 1;
+			fs->fs_fmod = 1;
+		}
+	bsize = fs->fs_cssize;
+	blks = howmany(bsize, fs->fs_fsize);
 	if (fs->fs_contigsumsize > 0)
-		size += fs->fs_ncg * sizeof(int32_t);
-	size += fs->fs_ncg * sizeof(*fs->fs_contigdirs);
-	space = malloc((u_long)size, M_UFSMNT, M_WAITOK);
+		bsize += fs->fs_ncg * sizeof(int32_t);
+	bsize += fs->fs_ncg * sizeof(*fs->fs_contigdirs);
+	space = malloc((u_long)bsize, M_UFSMNT, M_WAITOK);
 	fs->fs_csp = space;
 	for (i = 0; i < blks; i += fs->fs_frag) {
-		size = fs->fs_bsize;
+		bsize = fs->fs_bsize;
 		if (i + fs->fs_frag > blks)
-			size = (blks - i) * fs->fs_fsize;
-		error = bread(devvp, fsbtodb(fs, fs->fs_csaddr + i), size,
-			      cred, &bp);
+			bsize = (blks - i) * fs->fs_fsize;
+		error = bread(devvp, fsbtodb(fs, fs->fs_csaddr + i), bsize,
+			      cred, 0, &bp);
 		if (error) {
 			free(fs->fs_csp, M_UFSMNT);
 			goto out;
@@ -951,12 +1152,12 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 #ifdef FFS_EI
 		if (needswap)
 			ffs_csum_swap((struct csum *)bp->b_data,
-				(struct csum *)space, size);
+				(struct csum *)space, bsize);
 		else
 #endif
-			memcpy(space, bp->b_data, (u_int)size);
+			memcpy(space, bp->b_data, (u_int)bsize);
 
-		space = (char *)space + size;
+		space = (char *)space + bsize;
 		brelse(bp, 0);
 		bp = NULL;
 	}
@@ -966,10 +1167,10 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 			*lp++ = fs->fs_contigsumsize;
 		space = lp;
 	}
-	size = fs->fs_ncg * sizeof(*fs->fs_contigdirs);
+	bsize = fs->fs_ncg * sizeof(*fs->fs_contigdirs);
 	fs->fs_contigdirs = space;
-	space = (char *)space + size;
-	memset(fs->fs_contigdirs, 0, size);
+	space = (char *)space + bsize;
+	memset(fs->fs_contigdirs, 0, bsize);
 		/* Compatibility for old filesystems - XXX */
 	if (fs->fs_avgfilesize <= 0)
 		fs->fs_avgfilesize = AVFILESIZ;
@@ -1011,20 +1212,51 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	ump->um_devvp = devvp;
 	ump->um_nindir = fs->fs_nindir;
 	ump->um_lognindir = ffs(fs->fs_nindir) - 1;
-	ump->um_bptrtodb = fs->fs_fsbtodb;
+	ump->um_bptrtodb = fs->fs_fshift - DEV_BSHIFT;
 	ump->um_seqinc = fs->fs_frag;
 	for (i = 0; i < MAXQUOTAS; i++)
 		ump->um_quotas[i] = NULLVP;
 	devvp->v_specmountpoint = mp;
-	if (ronly == 0 && (fs->fs_flags & FS_DOSOFTDEP)) {
-		error = softdep_mount(devvp, mp, fs, cred);
+	if (ronly == 0 && fs->fs_snapinum[0] != 0)
+		ffs_snapshot_mount(mp);
+#ifdef WAPBL
+	if (!ronly) {
+		KDASSERT(fs->fs_ronly == 0);
+		/*
+		 * ffs_wapbl_start() needs mp->mnt_stat initialised if it
+		 * needs to create a new log file in-filesystem.
+		 */
+		ffs_statvfs(mp, &mp->mnt_stat);
+
+		error = ffs_wapbl_start(mp);
 		if (error) {
 			free(fs->fs_csp, M_UFSMNT);
 			goto out;
 		}
 	}
-	if (ronly == 0 && fs->fs_snapinum[0] != 0)
-		ffs_snapshot_mount(mp);
+#endif /* WAPBL */
+	if (ronly == 0) {
+#ifdef QUOTA2
+		error = ffs_quota2_mount(mp);
+		if (error) {
+			free(fs->fs_csp, M_UFSMNT);
+			goto out;
+		}
+#else
+		if (fs->fs_flags & FS_DOQUOTA2) {
+			ump->um_flags |= UFS_QUOTA2;
+			uprintf("%s: options QUOTA2 not enabled%s\n",
+			    mp->mnt_stat.f_mntonname,
+			    (mp->mnt_flag & MNT_FORCE) ? "" : ", not mounting");
+			if ((mp->mnt_flag & MNT_FORCE) == 0) {
+				error = EINVAL;
+				free(fs->fs_csp, M_UFSMNT);
+				goto out;
+			}
+		}
+#endif
+	}
+
 #ifdef UFS_EXTATTR
 	/*
 	 * Initialize file-backed extended attributes on UFS1 file
@@ -1043,6 +1275,14 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 #endif /* UFS_EXTATTR */
 	return (0);
 out:
+#ifdef WAPBL
+	if (mp->mnt_wapbl_replay) {
+		wapbl_replay_stop(mp->mnt_wapbl_replay);
+		wapbl_replay_free(mp->mnt_wapbl_replay);
+		mp->mnt_wapbl_replay = 0;
+	}
+#endif
+
 	fstrans_unmount(mp);
 	if (fs)
 		free(fs, M_UFSMNT);
@@ -1103,7 +1343,7 @@ ffs_oldfscompat_read(struct fs *fs, struct ufsmount *ump, daddr_t sblockloc)
 	fs->fs_csaddr = fs->fs_old_csaddr;
 	fs->fs_sblockloc = sblockloc;
 
-        fs->fs_flags = fs->fs_old_flags | (fs->fs_flags & FS_INTERNAL);
+	fs->fs_flags = fs->fs_old_flags | (fs->fs_flags & FS_INTERNAL);
 
 	if (fs->fs_old_postblformat == FS_42POSTBLFMT) {
 		fs->fs_old_nrpos = 8;
@@ -1175,7 +1415,7 @@ ffs_oldfscompat_write(struct fs *fs, struct ufsmount *ump)
 }
 
 /*
- * unmount system call
+ * unmount vfs operation
  */
 int
 ffs_unmount(struct mount *mp, int mntflags)
@@ -1183,67 +1423,59 @@ ffs_unmount(struct mount *mp, int mntflags)
 	struct lwp *l = curlwp;
 	struct ufsmount *ump = VFSTOUFS(mp);
 	struct fs *fs = ump->um_fs;
-	int error, flags, penderr;
+	int error, flags;
+#ifdef WAPBL
+	extern int doforce;
+#endif
 
-	penderr = 0;
 	flags = 0;
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
+	if ((error = ffs_flushfiles(mp, flags, l)) != 0)
+		return (error);
+	error = UFS_WAPBL_BEGIN(mp);
+	if (error == 0)
+		if (fs->fs_ronly == 0 &&
+		    ffs_cgupdate(ump, MNT_WAIT) == 0 &&
+		    fs->fs_clean & FS_WASCLEAN) {
+			fs->fs_clean = FS_ISCLEAN;
+			fs->fs_fmod = 0;
+			(void) ffs_sbupdate(ump, MNT_WAIT);
+		}
+	if (error == 0)
+		UFS_WAPBL_END(mp);
+#ifdef WAPBL
+	KASSERT(!(mp->mnt_wapbl_replay && mp->mnt_wapbl));
+	if (mp->mnt_wapbl_replay) {
+		KDASSERT(fs->fs_ronly);
+		wapbl_replay_stop(mp->mnt_wapbl_replay);
+		wapbl_replay_free(mp->mnt_wapbl_replay);
+		mp->mnt_wapbl_replay = 0;
+	}
+	error = ffs_wapbl_stop(mp, doforce && (mntflags & MNT_FORCE));
+	if (error) {
+		return error;
+	}
+#endif /* WAPBL */
 #ifdef UFS_EXTATTR
 	if (ump->um_fstype == UFS1) {
-		error = ufs_extattr_stop(mp, l);
-		if (error) {
-			if (error != EOPNOTSUPP)
-				printf("%s: ufs_extattr_stop returned %d\n",
-				    fs->fs_fsmnt, error);
-		} else
-			ufs_extattr_uepm_destroy(&ump->um_extattr);
+		ufs_extattr_stop(mp, l);
+		ufs_extattr_uepm_destroy(&ump->um_extattr);
 	}
 #endif /* UFS_EXTATTR */
-	if (mp->mnt_flag & MNT_SOFTDEP) {
-		if ((error = softdep_flushfiles(mp, flags, l)) != 0)
-			return (error);
-	} else {
-		if ((error = ffs_flushfiles(mp, flags, l)) != 0)
-			return (error);
-	}
-	mutex_enter(&ump->um_lock);
-	if (fs->fs_pendingblocks != 0 || fs->fs_pendinginodes != 0) {
-		printf("%s: unmount pending error: blocks %" PRId64
-		       " files %d\n",
-		    fs->fs_fsmnt, fs->fs_pendingblocks, fs->fs_pendinginodes);
-		fs->fs_pendingblocks = 0;
-		fs->fs_pendinginodes = 0;
-		penderr = 1;
-	}
-	mutex_exit(&ump->um_lock);
-	if (fs->fs_ronly == 0 &&
-	    ffs_cgupdate(ump, MNT_WAIT) == 0 &&
-	    fs->fs_clean & FS_WASCLEAN) {
-		/*
-		 * XXXX don't mark fs clean in the case of softdep
-		 * pending block errors, until they are fixed.
-		 */
-		if (penderr == 0) {
-			if (mp->mnt_flag & MNT_SOFTDEP)
-				fs->fs_flags &= ~FS_DOSOFTDEP;
-			fs->fs_clean = FS_ISCLEAN;
-		}
-		fs->fs_fmod = 0;
-		(void) ffs_sbupdate(ump, MNT_WAIT);
-	}
+
 	if (ump->um_devvp->v_type != VBAD)
 		ump->um_devvp->v_specmountpoint = NULL;
 	vn_lock(ump->um_devvp, LK_EXCLUSIVE | LK_RETRY);
-	(void)VOP_CLOSE(ump->um_devvp, fs->fs_ronly ? FREAD : FREAD|FWRITE,
+	(void)VOP_CLOSE(ump->um_devvp, fs->fs_ronly ? FREAD : FREAD | FWRITE,
 		NOCRED);
 	vput(ump->um_devvp);
 	free(fs->fs_csp, M_UFSMNT);
 	free(fs, M_UFSMNT);
 	if (ump->um_oldfscompat != NULL)
 		free(ump->um_oldfscompat, M_UFSMNT);
-	softdep_unmount(mp);
 	mutex_destroy(&ump->um_lock);
+	ffs_snapshot_fini(ump);
 	free(ump, M_UFSMNT);
 	mp->mnt_data = NULL;
 	mp->mnt_flag &= ~MNT_LOCAL;
@@ -1265,20 +1497,12 @@ ffs_flushfiles(struct mount *mp, int flags, struct lwp *l)
 		flags &= ~FORCECLOSE;
 	ump = VFSTOUFS(mp);
 #ifdef QUOTA
-	if (mp->mnt_flag & MNT_QUOTA) {
-		int i;
-		if ((error = vflush(mp, NULLVP, SKIPSYSTEM|flags)) != 0)
-			return (error);
-		for (i = 0; i < MAXQUOTAS; i++) {
-			if (ump->um_quotas[i] == NULLVP)
-				continue;
-			quotaoff(l, mp, i);
-		}
-		/*
-		 * Here we fall through to vflush again to ensure
-		 * that we have gotten rid of all the system vnodes.
-		 */
-	}
+	if ((error = quota1_umount(mp, flags)) != 0)
+		return (error);
+#endif
+#ifdef QUOTA2
+	if ((error = quota2_umount(mp, flags)) != 0)
+		return (error);
 #endif
 	if ((error = vflush(mp, 0, SKIPSYSTEM | flags)) != 0)
 		return (error);
@@ -1294,7 +1518,20 @@ ffs_flushfiles(struct mount *mp, int flags, struct lwp *l)
 	 */
 	vn_lock(ump->um_devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_FSYNC(ump->um_devvp, l->l_cred, FSYNC_WAIT, 0, 0);
-	VOP_UNLOCK(ump->um_devvp, 0);
+	VOP_UNLOCK(ump->um_devvp);
+	if (flags & FORCECLOSE) /* XXXDBJ */
+		error = 0;
+
+#ifdef WAPBL
+	if (error)
+		return error;
+	if (mp->mnt_wapbl) {
+		error = wapbl_flush(mp->mnt_wapbl, 1);
+		if (flags & FORCECLOSE)
+			error = 0;
+	}
+#endif
+
 	return (error);
 }
 
@@ -1315,7 +1552,7 @@ ffs_statvfs(struct mount *mp, struct statvfs *sbp)
 	sbp->f_iosize = fs->fs_bsize;
 	sbp->f_blocks = fs->fs_dsize;
 	sbp->f_bfree = blkstofrags(fs, fs->fs_cstotal.cs_nbfree) +
-		fs->fs_cstotal.cs_nffree + dbtofsb(fs, fs->fs_pendingblocks);
+	    fs->fs_cstotal.cs_nffree + dbtofsb(fs, fs->fs_pendingblocks);
 	sbp->f_bresvd = ((u_int64_t) fs->fs_dsize * (u_int64_t)
 	    fs->fs_minfree) / (u_int64_t) 100;
 	if (sbp->f_bfree > sbp->f_bresvd)
@@ -1342,12 +1579,12 @@ ffs_statvfs(struct mount *mp, struct statvfs *sbp)
 int
 ffs_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 {
-	struct lwp *l = curlwp;
-	struct vnode *vp, *mvp;
+	struct vnode *vp, *mvp, *nvp;
 	struct inode *ip;
 	struct ufsmount *ump = VFSTOUFS(mp);
 	struct fs *fs;
-	int error, count, allerror = 0;
+	int error, allerror = 0;
+	bool is_suspending;
 
 	fs = ump->um_fs;
 	if (fs->fs_fmod != 0 && fs->fs_ronly != 0) {		/* XXX */
@@ -1360,6 +1597,7 @@ ffs_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 		return (ENOMEM);
 
 	fstrans_start(mp, FSTRANS_SHARED);
+	is_suspending = (fstrans_getstate(mp) == FSTRANS_SUSPENDING);
 	/*
 	 * Write back each (modified) inode.
 	 */
@@ -1369,76 +1607,103 @@ loop:
 	 * NOTE: not using the TAILQ_FOREACH here since in this loop vgone()
 	 * and vclean() can be called indirectly
 	 */
-	for (vp = TAILQ_FIRST(&mp->mnt_vnodelist); vp; vp = vunmark(mvp)) {
-		vmark(mvp, vp);
+	for (vp = TAILQ_FIRST(&mp->mnt_vnodelist); vp; vp = nvp) {
+		nvp = TAILQ_NEXT(vp, v_mntvnodes);
 		/*
 		 * If the vnode that we are about to sync is no longer
 		 * associated with this mount point, start over.
 		 */
-		if (vp->v_mount != mp || vismarker(vp))
+		if (vp->v_mount != mp)
+			goto loop;
+		/*
+		 * Don't interfere with concurrent scans of this FS.
+		 */
+		if (vismarker(vp))
 			continue;
 		mutex_enter(&vp->v_interlock);
 		ip = VTOI(vp);
-		if (ip == NULL || (vp->v_iflag & (VI_XLOCK|VI_CLEAN)) != 0 ||
-		    vp->v_type == VNON || ((ip->i_flag &
-		    (IN_CHANGE | IN_UPDATE | IN_MODIFIED)) == 0 &&
-		    LIST_EMPTY(&vp->v_dirtyblkhd) &&
-		    UVM_OBJ_IS_CLEAN(&vp->v_uobj)))
-		{
+
+		/*
+		 * Skip the vnode/inode if inaccessible.
+		 */
+		if (ip == NULL || (vp->v_iflag & (VI_XLOCK | VI_CLEAN)) != 0 ||
+		    vp->v_type == VNON) {
 			mutex_exit(&vp->v_interlock);
 			continue;
 		}
-		if (vp->v_type == VBLK &&
-		    fstrans_getstate(mp) == FSTRANS_SUSPENDING) {
+
+		/*
+		 * We deliberately update inode times here.  This will
+		 * prevent a massive queue of updates accumulating, only
+		 * to be handled by a call to unmount.
+		 *
+		 * XXX It would be better to have the syncer trickle these
+		 * out.  Adjustment needed to allow registering vnodes for
+		 * sync when the vnode is clean, but the inode dirty.  Or
+		 * have ufs itself trickle out inode updates.
+		 *
+		 * If doing a lazy sync, we don't care about metadata or
+		 * data updates, because they are handled by each vnode's
+		 * synclist entry.  In this case we are only interested in
+		 * writing back modified inodes.
+		 */
+		if ((ip->i_flag & (IN_ACCESS | IN_CHANGE | IN_UPDATE |
+		    IN_MODIFY | IN_MODIFIED | IN_ACCESSED)) == 0 &&
+		    (waitfor == MNT_LAZY || (LIST_EMPTY(&vp->v_dirtyblkhd) &&
+		    UVM_OBJ_IS_CLEAN(&vp->v_uobj)))) {
 			mutex_exit(&vp->v_interlock);
 			continue;
 		}
+		if (vp->v_type == VBLK && is_suspending) {
+			mutex_exit(&vp->v_interlock);
+			continue;
+		}
+		vmark(mvp, vp);
 		mutex_exit(&mntvnode_lock);
-		error = vget(vp, LK_EXCLUSIVE | LK_NOWAIT | LK_INTERLOCK);
+		error = vget(vp, LK_EXCLUSIVE | LK_NOWAIT);
 		if (error) {
 			mutex_enter(&mntvnode_lock);
+			nvp = vunmark(mvp);
 			if (error == ENOENT) {
-				(void)vunmark(mvp);
 				goto loop;
 			}
 			continue;
 		}
-		if (vp->v_type == VREG && waitfor == MNT_LAZY)
-			error = ffs_update(vp, NULL, NULL, 0);
-		else
-			error = VOP_FSYNC(vp, cred,
-			    waitfor == MNT_WAIT ? FSYNC_WAIT : 0, 0, 0);
+		if (waitfor == MNT_LAZY) {
+			error = UFS_WAPBL_BEGIN(vp->v_mount);
+			if (!error) {
+				error = ffs_update(vp, NULL, NULL,
+				    UPDATE_CLOSE);
+				UFS_WAPBL_END(vp->v_mount);
+			}
+		} else {
+			error = VOP_FSYNC(vp, cred, FSYNC_NOLOG |
+			    (waitfor == MNT_WAIT ? FSYNC_WAIT : 0), 0, 0);
+		}
 		if (error)
 			allerror = error;
 		vput(vp);
 		mutex_enter(&mntvnode_lock);
+		nvp = vunmark(mvp);
 	}
 	mutex_exit(&mntvnode_lock);
 	/*
 	 * Force stale file system control information to be flushed.
 	 */
-	if (waitfor == MNT_WAIT && (ump->um_mountp->mnt_flag & MNT_SOFTDEP)) {
-		if ((error = softdep_flushworklist(ump->um_mountp, &count, l)))
-			allerror = error;
-		/* Flushed work items may create new vnodes to clean */
-		if (allerror == 0 && count) {
-			mutex_enter(&mntvnode_lock);
-			goto loop;
-		}
-	}
 	if (waitfor != MNT_LAZY && (ump->um_devvp->v_numoutput > 0 ||
 	    !LIST_EMPTY(&ump->um_devvp->v_dirtyblkhd))) {
 		vn_lock(ump->um_devvp, LK_EXCLUSIVE | LK_RETRY);
 		if ((error = VOP_FSYNC(ump->um_devvp, cred,
-		    waitfor == MNT_WAIT ? FSYNC_WAIT : 0, 0, 0)) != 0)
+		    (waitfor == MNT_WAIT ? FSYNC_WAIT : 0) | FSYNC_NOLOG,
+		    0, 0)) != 0)
 			allerror = error;
-		VOP_UNLOCK(ump->um_devvp, 0);
-		if (allerror == 0 && waitfor == MNT_WAIT) {
+		VOP_UNLOCK(ump->um_devvp);
+		if (allerror == 0 && waitfor == MNT_WAIT && !mp->mnt_wapbl) {
 			mutex_enter(&mntvnode_lock);
 			goto loop;
 		}
 	}
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	qsync(mp);
 #endif
 	/*
@@ -1447,9 +1712,24 @@ loop:
 	if (fs->fs_fmod != 0) {
 		fs->fs_fmod = 0;
 		fs->fs_time = time_second;
-		if ((error = ffs_cgupdate(ump, waitfor)))
+		error = UFS_WAPBL_BEGIN(mp);
+		if (error)
+			allerror = error;
+		else {
+			if ((error = ffs_cgupdate(ump, waitfor)))
+				allerror = error;
+			UFS_WAPBL_END(mp);
+		}
+	}
+
+#ifdef WAPBL
+	if (mp->mnt_wapbl) {
+		error = wapbl_flush(mp->mnt_wapbl, 0);
+		if (error)
 			allerror = error;
 	}
+#endif
+
 	fstrans_done(mp);
 	vnfree(mvp);
 	return (allerror);
@@ -1499,8 +1779,6 @@ ffs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 	}
 
 	vp->v_vflag |= VV_LOCKSWORK;
-	if ((mp->mnt_flag & MNT_SOFTDEP) != 0)
-		vp->v_uflag |= VU_SOFTDEP;
 
 	/*
 	 * XXX MFS ends up here, too, to allocate an inode.  Should we
@@ -1514,8 +1792,7 @@ ffs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 	ip->i_fs = fs = ump->um_fs;
 	ip->i_dev = dev;
 	ip->i_number = ino;
-	LIST_INIT(&ip->i_pcbufhd);
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	ufsquota_init(ip);
 #endif
 
@@ -1537,7 +1814,7 @@ ffs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 
 	/* Read in the disk contents for the inode, copy into the inode. */
 	error = bread(ump->um_devvp, fsbtodb(fs, ino_to_fsba(fs, ino)),
-		      (int)fs->fs_bsize, NOCRED, &bp);
+		      (int)fs->fs_bsize, NOCRED, 0, &bp);
 	if (error) {
 
 		/*
@@ -1559,10 +1836,6 @@ ffs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 		ip->i_din.ffs2_din = pool_cache_get(ffs_dinode2_cache,
 		    PR_WAITOK);
 	ffs_load_inode(bp, ip, fs, ino);
-	if (DOINGSOFTDEP(vp))
-		softdep_load_inodeblock(ip);
-	else
-		ip->i_ffs_effnlink = ip->i_nlink;
 	brelse(bp, 0);
 
 	/*
@@ -1577,7 +1850,7 @@ ffs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 	 */
 
 	ip->i_devvp = ump->um_devvp;
-	VREF(ip->i_devvp);
+	vref(ip->i_devvp);
 
 	/*
 	 * Ensure that uid and gid are correct. This is a temporary
@@ -1656,15 +1929,13 @@ ffs_init(void)
 	    "ffsdino1", NULL, IPL_NONE, NULL, NULL, NULL);
 	ffs_dinode2_cache = pool_cache_init(sizeof(struct ufs2_dinode), 0, 0, 0,
 	    "ffsdino2", NULL, IPL_NONE, NULL, NULL, NULL);
-	softdep_initialize();
-	ffs_snapshot_init();
 	ufs_init();
 }
 
 void
 ffs_reinit(void)
 {
-	softdep_reinitialize();
+
 	ufs_reinit();
 }
 
@@ -1674,65 +1945,10 @@ ffs_done(void)
 	if (--ffs_initcount > 0)
 		return;
 
-	/* XXX softdep cleanup ? */
-	ffs_snapshot_fini();
 	ufs_done();
 	pool_cache_destroy(ffs_dinode2_cache);
 	pool_cache_destroy(ffs_dinode1_cache);
 	pool_cache_destroy(ffs_inode_cache);
-}
-
-SYSCTL_SETUP(sysctl_vfs_ffs_setup, "sysctl vfs.ffs subtree setup")
-{
-#if 0
-	extern int doasyncfree;
-#endif
-	extern int ffs_log_changeopt;
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "ffs",
-		       SYSCTL_DESCR("Berkeley Fast File System"),
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, 1, CTL_EOL);
-
-	/*
-	 * @@@ should we even bother with these first three?
-	 */
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "doclusterread", NULL,
-		       sysctl_notavail, 0, NULL, 0,
-		       CTL_VFS, 1, FFS_CLUSTERREAD, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "doclusterwrite", NULL,
-		       sysctl_notavail, 0, NULL, 0,
-		       CTL_VFS, 1, FFS_CLUSTERWRITE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "doreallocblks", NULL,
-		       sysctl_notavail, 0, NULL, 0,
-		       CTL_VFS, 1, FFS_REALLOCBLKS, CTL_EOL);
-#if 0
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "doasyncfree",
-		       SYSCTL_DESCR("Release dirty blocks asynchronously"),
-		       NULL, 0, &doasyncfree, 0,
-		       CTL_VFS, 1, FFS_ASYNCFREE, CTL_EOL);
-#endif
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "log_changeopt",
-		       SYSCTL_DESCR("Log changes in optimization strategy"),
-		       NULL, 0, &ffs_log_changeopt, 0,
-		       CTL_VFS, 1, FFS_LOG_CHANGEOPT, CTL_EOL);
 }
 
 /*
@@ -1746,9 +1962,11 @@ ffs_sbupdate(struct ufsmount *mp, int waitfor)
 	int error = 0;
 	u_int32_t saveflag;
 
-	bp = getblk(mp->um_devvp,
-	    fs->fs_sblockloc >> (fs->fs_fshift - fs->fs_fsbtodb),
-	    (int)fs->fs_sbsize, 0, 0);
+	error = ffs_getblk(mp->um_devvp,
+	    fs->fs_sblockloc / DEV_BSIZE, FFS_NOBLK,
+	    fs->fs_sbsize, false, &bp);
+	if (error)
+		return error;
 	saveflag = fs->fs_flags & FS_INTERNAL;
 	fs->fs_flags &= ~FS_INTERNAL;
 
@@ -1784,8 +2002,10 @@ ffs_cgupdate(struct ufsmount *mp, int waitfor)
 		size = fs->fs_bsize;
 		if (i + fs->fs_frag > blks)
 			size = (blks - i) * fs->fs_fsize;
-		bp = getblk(mp->um_devvp, fsbtodb(fs, fs->fs_csaddr + i),
-		    size, 0, 0);
+		error = ffs_getblk(mp->um_devvp, fsbtodb(fs, fs->fs_csaddr + i),
+		    FFS_NOBLK, size, false, &bp);
+		if (error)
+			break;
 #ifdef FFS_EI
 		if (mp->um_flags & UFS_NEEDSWAP)
 			ffs_csum_swap((struct csum*)space,
@@ -1832,6 +2052,10 @@ ffs_suspendctl(struct mount *mp, int cmd)
 		error = ffs_sync(mp, MNT_WAIT, l->l_proc->p_cred);
 		if (error == 0)
 			error = fstrans_setstate(mp, FSTRANS_SUSPENDED);
+#ifdef WAPBL
+		if (error == 0 && mp->mnt_wapbl)
+			error = wapbl_flush(mp->mnt_wapbl, 1);
+#endif
 		if (error != 0) {
 			(void) fstrans_setstate(mp, FSTRANS_NORMAL);
 			return error;
@@ -1844,4 +2068,72 @@ ffs_suspendctl(struct mount *mp, int cmd)
 	default:
 		return EINVAL;
 	}
+}
+
+/*
+ * Synch vnode for a mounted file system.
+ */
+static int
+ffs_vfs_fsync(vnode_t *vp, int flags)
+{
+	int error, i, pflags;
+#ifdef WAPBL
+	struct mount *mp;
+#endif
+
+	KASSERT(vp->v_type == VBLK);
+	KASSERT(vp->v_specmountpoint != NULL);
+
+	/*
+	 * Flush all dirty data associated with the vnode.
+	 */
+	pflags = PGO_ALLPAGES | PGO_CLEANIT;
+	if ((flags & FSYNC_WAIT) != 0)
+		pflags |= PGO_SYNCIO;
+	mutex_enter(&vp->v_interlock);
+	error = VOP_PUTPAGES(vp, 0, 0, pflags);
+	if (error)
+		return error;
+
+#ifdef WAPBL
+	mp = vp->v_specmountpoint;
+	if (mp && mp->mnt_wapbl) {
+		/*
+		 * Don't bother writing out metadata if the syncer is
+		 * making the request.  We will let the sync vnode
+		 * write it out in a single burst through a call to
+		 * VFS_SYNC().
+		 */
+		if ((flags & (FSYNC_DATAONLY | FSYNC_LAZY | FSYNC_NOLOG)) != 0)
+			return 0;
+
+		/*
+		 * Don't flush the log if the vnode being flushed
+		 * contains no dirty buffers that could be in the log.
+		 */
+		if (!LIST_EMPTY(&vp->v_dirtyblkhd)) {
+			error = wapbl_flush(mp->mnt_wapbl, 0);
+			if (error)
+				return error;
+		}
+
+		if ((flags & FSYNC_WAIT) != 0) {
+			mutex_enter(&vp->v_interlock);
+			while (vp->v_numoutput)
+				cv_wait(&vp->v_cv, &vp->v_interlock);
+			mutex_exit(&vp->v_interlock);
+		}
+
+		return 0;
+	}
+#endif /* WAPBL */
+
+	error = vflushbuf(vp, (flags & FSYNC_WAIT) != 0);
+	if (error == 0 && (flags & FSYNC_CACHE) != 0) {
+		i = 1;
+		(void)VOP_IOCTL(vp, DIOCCACHESYNC, &i, FWRITE,
+		    kauth_cred_get());
+	}
+
+	return error;
 }

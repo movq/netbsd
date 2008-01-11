@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic_cas.S,v 1.2 2007/11/28 17:39:07 ad Exp $	*/
+/*	$NetBSD: atomic_cas.S,v 1.5 2008/05/25 15:56:11 chs Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
 
 	.text
 
-LEAF_NOPROFILE(_atomic_cas_32, 3)
+LEAF(_atomic_cas_32, 3)
 1:	mov	a2, t2
 	ldl_l	v0, 0(a0)
 	cmpeq	v0, a1, t1
@@ -50,11 +43,17 @@ LEAF_NOPROFILE(_atomic_cas_32, 3)
 2:	RET
 3:	br	1b
 	END(_atomic_cas_32)
+
 ATOMIC_OP_ALIAS(atomic_cas_32,_atomic_cas_32)
 ATOMIC_OP_ALIAS(atomic_cas_uint,_atomic_cas_32)
 STRONG_ALIAS(_atomic_cas_uint,_atomic_cas_32)
 
-LEAF_NOPROFILE(_atomic_cas_64, 3)
+ATOMIC_OP_ALIAS(atomic_cas_32_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_32_ni,_atomic_cas_32)
+ATOMIC_OP_ALIAS(atomic_cas_uint_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_uint_ni,_atomic_cas_32)
+
+LEAF(_atomic_cas_64, 3)
 1:	mov	a2, t2
 	ldq_l	v0, 0(a0)
 	cmpeq	v0, a1, t1
@@ -64,8 +63,16 @@ LEAF_NOPROFILE(_atomic_cas_64, 3)
 2:	RET
 3:	br	1b
 	END(_atomic_cas_64)
+
 ATOMIC_OP_ALIAS(atomic_cas_64,_atomic_cas_64)
 ATOMIC_OP_ALIAS(atomic_cas_ulong,_atomic_cas_64)
 STRONG_ALIAS(_atomic_cas_ulong,_atomic_cas_64)
 ATOMIC_OP_ALIAS(atomic_cas_ptr,_atomic_cas_64)
 STRONG_ALIAS(_atomic_cas_ptr,_atomic_cas_64)
+
+ATOMIC_OP_ALIAS(atomic_cas_64_ni,_atomic_cas_64)
+STRONG_ALIAS(_atomic_cas_64_ni,_atomic_cas_64)
+ATOMIC_OP_ALIAS(atomic_cas_ulong_ni,_atomic_cas_64)
+STRONG_ALIAS(_atomic_cas_ulong_ni,_atomic_cas_64)
+ATOMIC_OP_ALIAS(atomic_cas_ptr_ni,_atomic_cas_64)
+STRONG_ALIAS(_atomic_cas_ptr_ni,_atomic_cas_64)

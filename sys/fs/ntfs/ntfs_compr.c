@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_compr.c,v 1.3 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: ntfs_compr.c,v 1.5 2009/03/18 16:00:21 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 Semen Ustimenko
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_compr.c,v 1.3 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_compr.c,v 1.5 2009/03/18 16:00:21 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,9 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: ntfs_compr.c,v 1.3 2005/12/11 12:24:29 christos Exp 
 #include <sys/buf.h>
 #include <sys/file.h>
 #include <sys/malloc.h>
-#ifdef __FreeBSD__
-#include <machine/clock.h>
-#endif
 
 #include <miscfs/specfs/specdev.h>
 
@@ -73,7 +70,7 @@ ntfs_uncompblock(
 			    len, 0xfff));
 		}
 		memcpy(dbuf, cbuf + 2, len + 1);
-		bzero(dbuf + len + 1, NTFS_COMPBLOCK_SIZE - 1 - len);
+		memset(dbuf + len + 1, 0, NTFS_COMPBLOCK_SIZE - 1 - len);
 		return len + 3;
 	}
 	cpos = 2;

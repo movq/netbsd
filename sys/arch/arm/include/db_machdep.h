@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.14 2007/01/06 16:14:44 christos Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.17 2011/05/26 15:34:12 joerg Exp $	*/
 
 /*
  * Copyright (c) 1996 Scott K Stevens
@@ -43,6 +43,7 @@
 /* end of mangling */
 
 typedef	vaddr_t		db_addr_t;	/* address - unsigned */
+#define	DDB_EXPR_FMT	"l"		/* expression is long */
 typedef	long		db_expr_t;	/* expression - signed */
 
 typedef trapframe_t db_regs_t;
@@ -108,17 +109,13 @@ extern db_regs_t	ddb_regs;	/* register state */
 
 #define SOFTWARE_SSTEP
 
-u_int branch_taken __P((u_int insn, u_int pc, db_regs_t *db_regs));
-int kdb_trap __P((int, db_regs_t *));
-void db_machine_init __P((void));
+u_int branch_taken(u_int insn, u_int pc, db_regs_t *db_regs);
+int kdb_trap(int, db_regs_t *);
+void db_machine_init(void);
 int db_validate_address(vm_offset_t addr);
 
-#ifdef __ELF__
 #define DB_ELF_SYMBOLS
 #define DB_ELFSIZE 32
-#else
-#define	DB_AOUT_SYMBOLS
-#endif
 
 /*
  * kgdb

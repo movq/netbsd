@@ -1,9 +1,14 @@
-#	$NetBSD: Makefile,v 1.4 2007/07/01 07:39:47 xtraeme Exp $
+#	$NetBSD: Makefile,v 1.6 2010/12/19 22:52:08 pgoyette Exp $
 
 PROG=	powerd
 SRCS=	powerd.c
 
-WARNS?= 4
+RUMPPRG=	powerd
+
+.PATH: ${.CURDIR}/../../common/lib/libprop
+CPPFLAGS+=	-DRUMP_ACTION
+RUMPSRCS+=	prop_kern.c
+
 DPADD+=	${LIBPROP} ${LIBUTIL}
 LDADD+=	-lprop -lutil
 

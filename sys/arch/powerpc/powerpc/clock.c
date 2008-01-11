@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.5 2008/01/08 12:05:49 joerg Exp $	*/
+/*	$NetBSD: clock.c,v 1.10 2011/01/18 01:02:55 matt Exp $	*/
 /*      $OpenBSD: clock.c,v 1.3 1997/10/13 13:42:53 pefo Exp $	*/
 
 /*
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.5 2008/01/08 12:05:49 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.10 2011/01/18 01:02:55 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -44,6 +44,15 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.5 2008/01/08 12:05:49 joerg Exp $");
 #include <uvm/uvm_extern.h>
 
 #include <powerpc/spr.h>
+#if defined (PPC_OEA) || defined(PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
+#include <powerpc/oea/spr.h>
+#elif defined (PPC_BOOKE)
+#include <powerpc/booke/spr.h>
+#elif defined (PPC_IBM4XX)
+#include <powerpc/ibm4xx/spr.h>
+#else
+#error unknown powerpc variant
+#endif
 
 void decr_intr(struct clockframe *);
 void init_powerpc_tc(void);
@@ -76,10 +85,12 @@ cpu_initclocks(void)
 
 	ticks_per_intr = ticks_per_sec / hz;
 	cpu_timebase = ticks_per_sec;
+#ifdef PPC_OEA601
 	if ((mfpvr() >> 16) == MPC601)
 		__asm volatile 
 		    ("mfspr %0,%1" : "=r"(ci->ci_lasttb) : "n"(SPR_RTCL_R));
 	else
+#endif
 		__asm volatile ("mftb %0" : "=r"(ci->ci_lasttb));
 	__asm volatile ("mtdec %0" :: "r"(ticks_per_intr));
 	init_powerpc_tc();
@@ -104,7 +115,7 @@ setstatclockrate(int arg)
 }
 
 void
-decr_intr(struct clockframe *frame)
+decr_intr(struct clockframe *cfp)
 {
 	struct cpu_info * const ci = curcpu();
 	int msr;
@@ -126,7 +137,7 @@ decr_intr(struct clockframe *frame)
 		ticks += ticks_per_intr;
 	__asm volatile ("mtdec %0" :: "r"(ticks));
 
-	uvmexp.intrs++;
+	ci->ci_data.cpu_nintr++;
 	ci->ci_ev_clock.ev_count++;
 
 	pri = splclock();
@@ -140,12 +151,14 @@ decr_intr(struct clockframe *frame)
 		 * lasttb is used during microtime. Set it to the virtual
 		 * start of this tick interval.
 		 */
-		if ((mfpvr() >> 16) == MPC601) {
+#ifdef PPC_OEA601
+		if ((mfpvr() >> 16) == MPC601)
 			__asm volatile 
 			    ("mfspr %0,%1" : "=r"(tb) : "n"(SPR_RTCL_R));
-		} else {
+		else
+#endif
 			__asm volatile ("mftb %0" : "=r"(tb));
-		}
+
 		ci->ci_lasttb = tb + ticks - ticks_per_intr;
 
 		/*
@@ -158,11 +171,9 @@ decr_intr(struct clockframe *frame)
 		 * Do standard timer interrupt stuff.
 		 * Do softclock stuff only on the last iteration.
 		 */
-		frame->pri = pri | (1 << SIR_CLOCK);
 		while (--nticks > 0)
-			hardclock(frame);
-		frame->pri = pri;
-		hardclock(frame);
+			hardclock(cfp);
+		hardclock(cfp);
 	}
 	splx(pri);
 }
@@ -176,6 +187,7 @@ delay(unsigned int n)
 	u_quad_t tb;
 	u_long tbh, tbl, scratch;
 
+#ifdef PPC_OEA601
 	if ((mfpvr() >> 16) == MPC601) {
 		u_int32_t rtc[2];
 
@@ -194,7 +206,9 @@ delay(unsigned int n)
 		    : "=&r"(scratch)
 		    : "r"(rtc[0]), "r"(rtc[1]), "n"(SPR_RTCU_R), "n"(SPR_RTCL_R)
 		    : "cr0");
-	} else {
+	} else
+#endif
+	{
 		tb = mftb();
 		tb += (n * 1000 + ns_per_tick - 1) / ns_per_tick;
 		tbh = tb >> 32;
@@ -214,9 +228,11 @@ get_powerpc_timecount(struct timecounter *tc)
 	
 	__asm volatile ("mfmsr %0; andi. %1,%0,%2; mtmsr %1"
 		      : "=r"(msr), "=r"(scratch) : "K"((u_short)~PSL_EE));
+#ifdef PPC_OEA601
 	if ((mfpvr() >> 16) == MPC601)
 		__asm volatile ("mfspr %0,%1" : "=r"(tb) : "n"(SPR_RTCL_R));
 	else
+#endif
 		__asm volatile ("mftb %0" : "=r"(tb));
 	mtmsr(msr);
 

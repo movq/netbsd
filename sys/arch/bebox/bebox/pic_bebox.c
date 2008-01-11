@@ -1,4 +1,4 @@
-/* $NetBSD: pic_bebox.c,v 1.3 2007/12/11 18:04:18 garbled Exp $ */
+/* $NetBSD: pic_bebox.c,v 1.6 2008/04/28 20:23:15 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_bebox.c,v 1.3 2007/12/11 18:04:18 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_bebox.c,v 1.6 2008/04/28 20:23:15 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -45,13 +38,14 @@ __KERNEL_RCSID(0, "$NetBSD: pic_bebox.c,v 1.3 2007/12/11 18:04:18 garbled Exp $"
 
 #include <uvm/uvm_extern.h>
 
+#include <machine/atomic.h>
 #include <machine/pio.h>
 
 #include <arch/powerpc/pic/picvar.h>
 
 extern paddr_t bebox_mb_reg;
 
-#define BEBOX_INTR_MASK		0x0fffffdc
+#define BEBOX_INTR_MASK		0x0ffffffc
 #define BEBOX_SET_MASK		0x80000000
 #define BEBOX_INTR(x)		(0x80000000 >> x)
 #define CPU0_INT_MASK		0x0f0
@@ -88,26 +82,30 @@ setup_bebox_intr(void)
 static void
 bebox_enable_irq(struct pic_ops *pic, int irq, int type)
 {
-	out32rb(bebox_mb_reg + CPU0_INT_MASK, BEBOX_INTR_MASK);
-	out32rb(bebox_mb_reg + CPU0_INT_MASK,  BEBOX_SET_MASK | (1 << (31 - irq)) );
+
+	*(volatile unsigned int *)(bebox_mb_reg + CPU0_INT_MASK) =
+	    BEBOX_SET_MASK | (1 << (31 - irq));
 }
 
 static void
 bebox_disable_irq(struct pic_ops *pic, int irq)
 {
-	out32rb(bebox_mb_reg + CPU0_INT_MASK, BEBOX_INTR_MASK);
-	out32rb(bebox_mb_reg + CPU0_INT_MASK, (1 << (31 - irq)));
+
+	*(volatile unsigned int *)(bebox_mb_reg + CPU0_INT_MASK) =
+	    (1 << (31 - irq));
 }
 
 static int
 bebox_get_irq(struct pic_ops *pic, int mode)
 {
-	int irq;
+	unsigned int state;
 
-	irq = in32rb(bebox_mb_reg + INT_STATE_REG);
-	if (irq == 0)
+	state = *(volatile unsigned int *)(bebox_mb_reg + INT_STATE_REG);
+	state &= BEBOX_INTR_MASK;
+	state &= *(volatile unsigned int *)(bebox_mb_reg + CPU0_INT_MASK);
+	if (state == 0)
 		return 255;
-	return irq;
+	return __builtin_clz(state);
 }
 
 static void

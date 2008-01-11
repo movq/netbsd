@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.15 2007/02/08 21:36:58 drochner Exp $	*/
+/*	$NetBSD: utilities.c,v 1.21 2010/01/07 01:39:56 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,11 +40,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -63,7 +58,7 @@
 #if 0
 static char sccsid[] = "@(#)utilities.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: utilities.c,v 1.15 2007/02/08 21:36:58 drochner Exp $");
+__RCSID("$NetBSD: utilities.c,v 1.21 2010/01/07 01:39:56 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -75,6 +70,7 @@ __RCSID("$NetBSD: utilities.c,v 1.15 2007/02/08 21:36:58 drochner Exp $");
 #include <ufs/ufs/dinode.h> /* for IFMT & friends */
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
@@ -83,12 +79,13 @@ __RCSID("$NetBSD: utilities.c,v 1.15 2007/02/08 21:36:58 drochner Exp $");
 #include "fsutil.h"
 #include "fsck.h"
 #include "extern.h"
+#include "exitvalues.h"
 
 long	diskreads, totalreads;	/* Disk cache statistics */
 
 static void rwerror(const char *, daddr_t);
 
-extern int returntosingle;
+extern volatile sig_atomic_t returntosingle;
 
 int
 ftypeok(struct ext2fs_dinode *dp)
@@ -160,12 +157,14 @@ bufinit(void)
 	if (bufcnt < MINBUFS)
 		bufcnt = MINBUFS;
 	for (i = 0; i < bufcnt; i++) {
-		bp = (struct bufarea *)malloc(sizeof(struct bufarea));
-		bufp = malloc((unsigned int)sblock.e2fs_bsize);
+		bp = malloc(sizeof(struct bufarea));
+		bufp = malloc((size_t)sblock.e2fs_bsize);
 		if (bp == NULL || bufp == NULL) {
+			free(bp);
+			free(bufp);
 			if (i >= MINBUFS)
 				break;
-			errexit("cannot allocate buffer pool\n");
+			errexit("cannot allocate buffer pool");
 		}
 		bp->b_un.b_buf = bufp;
 		bp->b_prev = &bufhead;
@@ -192,7 +191,7 @@ getdatablk(daddr_t blkno, long size)
 		if ((bp->b_flags & B_INUSE) == 0)
 			break;
 	if (bp == &bufhead)
-		errexit("deadlocked buffer pool\n");
+		errexit("deadlocked buffer pool");
 	getblk(bp, blkno, size);
 	diskreads++;
 	/* fall through */
@@ -254,7 +253,7 @@ rwerror(const char *mesg, daddr_t blk)
 		printf("\n");
 	pfatal("CANNOT %s: BLK %lld", mesg, (long long)blk);
 	if (reply("CONTINUE") == 0)
-		errexit("Program terminated\n");
+		errexit("Program terminated");
 }
 
 void
@@ -282,10 +281,10 @@ ckfini(int markclean)
 		flush(fswritefd, bp);
 		nbp = bp->b_prev;
 		free(bp->b_un.b_buf);
-		free((char *)bp);
+		free(bp);
 	}
 	if (bufhead.b_size != cnt)
-		errexit("Panic: lost %d buffers\n", bufhead.b_size - cnt);
+		errexit("Panic: lost %d buffers", bufhead.b_size - cnt);
 	pbp = pdirbp = (struct bufarea *)0;
 	if (markclean && (sblock.e2fs.e2fs_state & E2FS_ISCLEAN) == 0) {
 		/*
@@ -466,7 +465,7 @@ void
 catch(int n)
 {
 	ckfini(0);
-	exit(12);
+	_exit(FSCK_EXIT_SIGNALLED);
 }
 
 /*
@@ -477,9 +476,14 @@ catch(int n)
 void
 catchquit(int n)
 {
-	printf("returning to single-user after filesystem check\n");
+	static const char msg[] =
+	    "returning to single-user after filesystem check\n";
+	int serrno = errno;
+
+	(void)write(STDOUT_FILENO, msg, sizeof(msg) - 1);
 	returntosingle = 1;
 	(void)signal(SIGQUIT, SIG_DFL);
+	errno = serrno;
 }
 
 /*
@@ -489,10 +493,12 @@ catchquit(int n)
 void
 voidquit(int n)
 {
+	int serrno = errno;
 
 	sleep(1);
 	(void)signal(SIGQUIT, SIG_IGN);
 	(void)signal(SIGQUIT, SIG_DFL);
+	errno = serrno;
 }
 
 /*
@@ -529,7 +535,7 @@ dofix(struct inodesc *idesc, const char *msg)
 		return (0);
 
 	default:
-		errexit("UNKNOWN INODESC FIX MODE %d\n", idesc->id_fix);
+		errexit("UNKNOWN INODESC FIX MODE %d", idesc->id_fix);
 	}
 	/* NOTREACHED */
 }

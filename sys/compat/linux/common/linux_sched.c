@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sched.c,v 1.46 2007/12/20 23:02:56 dsl Exp $	*/
+/*	$NetBSD: linux_sched.c,v 1.63 2010/07/07 01:30:35 chs Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sched.c,v 1.46 2007/12/20 23:02:56 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_sched.c,v 1.63 2010/07/07 01:30:35 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/mount.h>
@@ -54,19 +47,40 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sched.c,v 1.46 2007/12/20 23:02:56 dsl Exp $")
 #include <sys/wait.h>
 #include <sys/kauth.h>
 #include <sys/ptrace.h>
+#include <sys/atomic.h>
 
 #include <sys/cpu.h>
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
-#include <compat/linux/common/linux_machdep.h> /* For LINUX_NPTL */
 #include <compat/linux/common/linux_emuldata.h>
 #include <compat/linux/common/linux_ipc.h>
 #include <compat/linux/common/linux_sem.h>
+#include <compat/linux/common/linux_exec.h>
+#include <compat/linux/common/linux_machdep.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux/common/linux_sched.h>
+
+static int linux_clone_nptl(struct lwp *, const struct linux_sys_clone_args *, register_t *);
+
+static void
+linux_child_return(void *arg)
+{
+	struct lwp *l = arg;
+	struct proc *p = l->l_proc;
+	struct linux_emuldata *led = l->l_emuldata;
+	void *ctp = led->led_child_tidptr;
+
+	if (ctp) {
+		if (copyout(&p->p_pid, ctp, sizeof(p->p_pid)) != 0)
+			printf("%s: LINUX_CLONE_CHILD_SETTID "
+			    "failed (child_tidptr = %p, tid = %d)\n",
+			    __func__, ctp, p->p_pid);
+	}
+	child_return(arg);
+}
 
 int
 linux_sys_clone(struct lwp *l, const struct linux_sys_clone_args *uap, register_t *retval)
@@ -74,16 +88,13 @@ linux_sys_clone(struct lwp *l, const struct linux_sys_clone_args *uap, register_
 	/* {
 		syscallarg(int) flags;
 		syscallarg(void *) stack;
-#ifdef LINUX_NPTL
 		syscallarg(void *) parent_tidptr;
+		syscallarg(void *) tls;
 		syscallarg(void *) child_tidptr;
-#endif
 	} */
-	int flags, sig;
-	int error;
-#ifdef LINUX_NPTL
+	struct proc *p;
 	struct linux_emuldata *led;
-#endif
+	int flags, sig, error;
 
 	/*
 	 * We don't support the Linux CLONE_PID or CLONE_PTRACE flags.
@@ -102,8 +113,14 @@ linux_sys_clone(struct lwp *l, const struct linux_sys_clone_args *uap, register_
 	    && (SCARG(uap, flags) & LINUX_CLONE_VM) == 0)
 		return (EINVAL);
 
-	flags = 0;
+	/*
+	 * The thread group flavor is implemented totally differently.
+	 */
+	if (SCARG(uap, flags) & LINUX_CLONE_THREAD) {
+		return linux_clone_nptl(l, uap, retval);
+	}
 
+	flags = 0;
 	if (SCARG(uap, flags) & LINUX_CLONE_VM)
 		flags |= FORK_SHAREVM;
 	if (SCARG(uap, flags) & LINUX_CLONE_FS)
@@ -120,13 +137,10 @@ linux_sys_clone(struct lwp *l, const struct linux_sys_clone_args *uap, register_
 		return (EINVAL);
 	sig = linux_to_native_signo[sig];
 
-#ifdef LINUX_NPTL
-	led = (struct linux_emuldata *)l->l_proc->p_emuldata;
-
-	led->parent_tidptr = SCARG(uap, parent_tidptr);
-	led->child_tidptr = SCARG(uap, child_tidptr);
-	led->clone_flags = SCARG(uap, flags);
-#endif /* LINUX_NPTL */
+	if (SCARG(uap, flags) & LINUX_CLONE_CHILD_SETTID) {
+		led = l->l_emuldata;
+		led->led_child_tidptr = SCARG(uap, child_tidptr);
+	}
 
 	/*
 	 * Note that Linux does not provide a portable way of specifying
@@ -135,8 +149,242 @@ linux_sys_clone(struct lwp *l, const struct linux_sys_clone_args *uap, register_
 	 * that makes this adjustment is a noop.
 	 */
 	if ((error = fork1(l, flags, sig, SCARG(uap, stack), 0,
-	    NULL, NULL, retval, NULL)) != 0)
+	    linux_child_return, NULL, retval, &p)) != 0)
 		return error;
+
+	return 0;
+}
+
+static int
+linux_clone_nptl(struct lwp *l, const struct linux_sys_clone_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(int) flags;
+		syscallarg(void *) stack;
+		syscallarg(void *) parent_tidptr;
+		syscallarg(void *) tls;
+		syscallarg(void *) child_tidptr;
+	} */
+	struct proc *p;
+	struct lwp *l2;
+	struct linux_emuldata *led;
+	void *parent_tidptr, *tls, *child_tidptr;
+	struct schedstate_percpu *spc;
+	vaddr_t uaddr;
+	lwpid_t lid;
+	int flags, tnprocs, error;
+
+	p = l->l_proc;
+	flags = SCARG(uap, flags);
+	parent_tidptr = SCARG(uap, parent_tidptr);
+	tls = SCARG(uap, tls);
+	child_tidptr = SCARG(uap, child_tidptr);
+
+	tnprocs = atomic_inc_uint_nv(&nprocs);
+	if (__predict_false(tnprocs >= maxproc) ||
+	    kauth_authorize_process(l->l_cred, KAUTH_PROCESS_FORK, p,
+				    KAUTH_ARG(tnprocs), NULL, NULL) != 0) {
+		atomic_dec_uint(&nprocs);
+		return EAGAIN;
+	}
+
+	uaddr = uvm_uarea_alloc();
+	if (__predict_false(uaddr == 0)) {
+		atomic_dec_uint(&nprocs);
+		return ENOMEM;
+	}
+
+	error = lwp_create(l, p, uaddr, LWP_DETACHED | LWP_PIDLID,
+			   SCARG(uap, stack), 0, child_return, NULL, &l2,
+			   l->l_class);
+	if (__predict_false(error)) {
+		atomic_dec_uint(&nprocs);
+		uvm_uarea_free(uaddr);
+		return error;
+	}
+	lid = l2->l_lid;
+
+	/* LINUX_CLONE_CHILD_CLEARTID: clear TID in child's memory on exit() */
+	if (flags & LINUX_CLONE_CHILD_CLEARTID) {
+		led = l2->l_emuldata;
+		led->led_clear_tid = child_tidptr;
+	}
+
+	/* LINUX_CLONE_PARENT_SETTID: store child's TID in parent's memory */
+	if (flags & LINUX_CLONE_PARENT_SETTID) {
+		if (copyout(&lid, parent_tidptr, sizeof(lid)) != 0)
+			printf("%s: LINUX_CLONE_PARENT_SETTID "
+			    "failed (parent_tidptr = %p tid = %d)\n",
+			    __func__, parent_tidptr, lid);
+	}
+
+	/* LINUX_CLONE_CHILD_SETTID: store child's TID in child's memory  */
+	if (flags & LINUX_CLONE_CHILD_SETTID) {
+		if (copyout(&lid, child_tidptr, sizeof(lid)) != 0)
+			printf("%s: LINUX_CLONE_CHILD_SETTID "
+			    "failed (child_tidptr = %p, tid = %d)\n",
+			    __func__, child_tidptr, lid);
+	}
+
+	if (flags & LINUX_CLONE_SETTLS) {
+		error = LINUX_LWP_SETPRIVATE(l2, tls);
+		if (error) {
+			lwp_exit(l2);
+			return error;
+		}
+	}
+
+	/*
+	 * Set the new LWP running, unless the process is stopping,
+	 * then the LWP is created stopped.
+	 */
+	mutex_enter(p->p_lock);
+	lwp_lock(l2);
+	spc = &l2->l_cpu->ci_schedstate;
+	if ((l->l_flag & (LW_WREBOOT | LW_WSUSPEND | LW_WEXIT)) == 0) {
+	    	if (p->p_stat == SSTOP || (p->p_sflag & PS_STOPPING) != 0) {
+			KASSERT(l2->l_wchan == NULL);
+	    		l2->l_stat = LSSTOP;
+			p->p_nrlwps--;
+			lwp_unlock_to(l2, spc->spc_lwplock);
+		} else {
+			KASSERT(lwp_locked(l2, spc->spc_mutex));
+			l2->l_stat = LSRUN;
+			sched_enqueue(l2, false);
+			lwp_unlock(l2);
+		}
+	} else {
+		l2->l_stat = LSSUSPENDED;
+		p->p_nrlwps--;
+		lwp_unlock_to(l2, spc->spc_lwplock);
+	}
+	mutex_exit(p->p_lock);
+
+	retval[0] = lid;
+	retval[1] = 0;
+	return 0;
+}
+
+/*
+ * linux realtime priority
+ *
+ * - SCHED_RR and SCHED_FIFO tasks have priorities [1,99].
+ *
+ * - SCHED_OTHER tasks don't have realtime priorities.
+ *   in particular, sched_param::sched_priority is always 0.
+ */
+
+#define	LINUX_SCHED_RTPRIO_MIN	1
+#define	LINUX_SCHED_RTPRIO_MAX	99
+
+static int
+sched_linux2native(int linux_policy, struct linux_sched_param *linux_params,
+    int *native_policy, struct sched_param *native_params)
+{
+
+	switch (linux_policy) {
+	case LINUX_SCHED_OTHER:
+		if (native_policy != NULL) {
+			*native_policy = SCHED_OTHER;
+		}
+		break;
+
+	case LINUX_SCHED_FIFO:
+		if (native_policy != NULL) {
+			*native_policy = SCHED_FIFO;
+		}
+		break;
+
+	case LINUX_SCHED_RR:
+		if (native_policy != NULL) {
+			*native_policy = SCHED_RR;
+		}
+		break;
+
+	default:
+		return EINVAL;
+	}
+
+	if (linux_params != NULL) {
+		int prio = linux_params->sched_priority;
+	
+		KASSERT(native_params != NULL);
+
+		if (linux_policy == LINUX_SCHED_OTHER) {
+			if (prio != 0) {
+				return EINVAL;
+			}
+			native_params->sched_priority = PRI_NONE; /* XXX */
+		} else {
+			if (prio < LINUX_SCHED_RTPRIO_MIN ||
+			    prio > LINUX_SCHED_RTPRIO_MAX) {
+				return EINVAL;
+			}
+			native_params->sched_priority =
+			    (prio - LINUX_SCHED_RTPRIO_MIN)
+			    * (SCHED_PRI_MAX - SCHED_PRI_MIN)
+			    / (LINUX_SCHED_RTPRIO_MAX - LINUX_SCHED_RTPRIO_MIN)
+			    + SCHED_PRI_MIN;
+		}
+	}
+
+	return 0;
+}
+
+static int
+sched_native2linux(int native_policy, struct sched_param *native_params,
+    int *linux_policy, struct linux_sched_param *linux_params)
+{
+
+	switch (native_policy) {
+	case SCHED_OTHER:
+		if (linux_policy != NULL) {
+			*linux_policy = LINUX_SCHED_OTHER;
+		}
+		break;
+
+	case SCHED_FIFO:
+		if (linux_policy != NULL) {
+			*linux_policy = LINUX_SCHED_FIFO;
+		}
+		break;
+
+	case SCHED_RR:
+		if (linux_policy != NULL) {
+			*linux_policy = LINUX_SCHED_RR;
+		}
+		break;
+
+	default:
+		panic("%s: unknown policy %d\n", __func__, native_policy);
+	}
+
+	if (native_params != NULL) {
+		int prio = native_params->sched_priority;
+
+		KASSERT(prio >= SCHED_PRI_MIN);
+		KASSERT(prio <= SCHED_PRI_MAX);
+		KASSERT(linux_params != NULL);
+
+#ifdef DEBUG_LINUX
+		printf("native2linux: native: policy %d, priority %d\n",
+		    native_policy, prio);
+#endif
+
+		if (native_policy == SCHED_OTHER) {
+			linux_params->sched_priority = 0;
+		} else {
+			linux_params->sched_priority =
+			    (prio - SCHED_PRI_MIN)
+			    * (LINUX_SCHED_RTPRIO_MAX - LINUX_SCHED_RTPRIO_MIN)
+			    / (SCHED_PRI_MAX - SCHED_PRI_MIN)
+			    + LINUX_SCHED_RTPRIO_MIN;
+		}
+#ifdef DEBUG_LINUX
+		printf("native2linux: linux: policy %d, priority %d\n",
+		    -1, linux_params->sched_priority);
+#endif
+	}
 
 	return 0;
 }
@@ -148,36 +396,37 @@ linux_sys_sched_setparam(struct lwp *l, const struct linux_sys_sched_setparam_ar
 		syscallarg(linux_pid_t) pid;
 		syscallarg(const struct linux_sched_param *) sp;
 	} */
-	int error;
+	int error, policy;
 	struct linux_sched_param lp;
-	struct proc *p;
+	struct sched_param sp;
 
-/*
- * We only check for valid parameters and return afterwards.
- */
-
-	if (SCARG(uap, pid) < 0 || SCARG(uap, sp) == NULL)
-		return EINVAL;
+	if (SCARG(uap, pid) < 0 || SCARG(uap, sp) == NULL) {
+		error = EINVAL;
+		goto out;
+	}
 
 	error = copyin(SCARG(uap, sp), &lp, sizeof(lp));
 	if (error)
-		return error;
+		goto out;
 
-	if (SCARG(uap, pid) != 0) {
-		kauth_cred_t pc = l->l_cred;
+	/* We need the current policy in Linux terms. */
+	error = do_sched_getparam(0, SCARG(uap, pid), &policy, NULL);
+	if (error)
+		goto out;
+	error = sched_native2linux(policy, NULL, &policy, NULL);
+	if (error)
+		goto out;
 
-		if ((p = pfind(SCARG(uap, pid))) == NULL)
-			return ESRCH;
-		if (!(l->l_proc == p ||
-		      kauth_authorize_generic(pc, KAUTH_GENERIC_ISSUSER, NULL) == 0 ||
-		      kauth_cred_getuid(pc) == kauth_cred_getuid(p->p_cred) ||
-		      kauth_cred_geteuid(pc) == kauth_cred_getuid(p->p_cred) ||
-		      kauth_cred_getuid(pc) == kauth_cred_geteuid(p->p_cred) ||
-		      kauth_cred_geteuid(pc) == kauth_cred_geteuid(p->p_cred)))
-			return EPERM;
-	}
+	error = sched_linux2native(policy, &lp, &policy, &sp);
+	if (error)
+		goto out;
 
-	return 0;
+	error = do_sched_setparam(0, SCARG(uap, pid), policy, &sp);
+	if (error)
+		goto out;
+
+ out:
+	return error;
 }
 
 int
@@ -187,31 +436,37 @@ linux_sys_sched_getparam(struct lwp *l, const struct linux_sys_sched_getparam_ar
 		syscallarg(linux_pid_t) pid;
 		syscallarg(struct linux_sched_param *) sp;
 	} */
-	struct proc *p;
 	struct linux_sched_param lp;
+	struct sched_param sp;
+	int error, policy;
 
-/*
- * We only check for valid parameters and return a dummy priority afterwards.
- */
-	if (SCARG(uap, pid) < 0 || SCARG(uap, sp) == NULL)
-		return EINVAL;
-
-	if (SCARG(uap, pid) != 0) {
-		kauth_cred_t pc = l->l_cred;
-
-		if ((p = pfind(SCARG(uap, pid))) == NULL)
-			return ESRCH;
-		if (!(l->l_proc == p ||
-		      kauth_authorize_generic(pc, KAUTH_GENERIC_ISSUSER, NULL) == 0 ||
-		      kauth_cred_getuid(pc) == kauth_cred_getuid(p->p_cred) ||
-		      kauth_cred_geteuid(pc) == kauth_cred_getuid(p->p_cred) ||
-		      kauth_cred_getuid(pc) == kauth_cred_geteuid(p->p_cred) ||
-		      kauth_cred_geteuid(pc) == kauth_cred_geteuid(p->p_cred)))
-			return EPERM;
+	if (SCARG(uap, pid) < 0 || SCARG(uap, sp) == NULL) {
+		error = EINVAL;
+		goto out;
 	}
 
-	lp.sched_priority = 0;
-	return copyout(&lp, SCARG(uap, sp), sizeof(lp));
+	error = do_sched_getparam(0, SCARG(uap, pid), &policy, &sp);
+	if (error)
+		goto out;
+#ifdef DEBUG_LINUX
+	printf("getparam: native: policy %d, priority %d\n",
+	    policy, sp.sched_priority);
+#endif
+
+	error = sched_native2linux(policy, &sp, NULL, &lp);
+	if (error)
+		goto out;
+#ifdef DEBUG_LINUX
+	printf("getparam: linux: policy %d, priority %d\n",
+	    policy, lp.sched_priority);
+#endif
+
+	error = copyout(&lp, SCARG(uap, sp), sizeof(lp));
+	if (error)
+		goto out;
+
+ out:
+	return error;
 }
 
 int
@@ -220,45 +475,39 @@ linux_sys_sched_setscheduler(struct lwp *l, const struct linux_sys_sched_setsche
 	/* {
 		syscallarg(linux_pid_t) pid;
 		syscallarg(int) policy;
-		syscallarg(cont struct linux_sched_scheduler *) sp;
+		syscallarg(cont struct linux_sched_param *) sp;
 	} */
-	int error;
+	int error, policy;
 	struct linux_sched_param lp;
-	struct proc *p;
+	struct sched_param sp;
 
-/*
- * We only check for valid parameters and return afterwards.
- */
-
-	if (SCARG(uap, pid) < 0 || SCARG(uap, sp) == NULL)
-		return EINVAL;
+	if (SCARG(uap, pid) < 0 || SCARG(uap, sp) == NULL) {
+		error = EINVAL;
+		goto out;
+	}
 
 	error = copyin(SCARG(uap, sp), &lp, sizeof(lp));
 	if (error)
-		return error;
+		goto out;
+#ifdef DEBUG_LINUX
+	printf("setscheduler: linux: policy %d, priority %d\n",
+	    SCARG(uap, policy), lp.sched_priority);
+#endif
 
-	if (SCARG(uap, pid) != 0) {
-		kauth_cred_t pc = l->l_cred;
+	error = sched_linux2native(SCARG(uap, policy), &lp, &policy, &sp);
+	if (error)
+		goto out;
+#ifdef DEBUG_LINUX
+	printf("setscheduler: native: policy %d, priority %d\n",
+	    policy, sp.sched_priority);
+#endif
 
-		if ((p = pfind(SCARG(uap, pid))) == NULL)
-			return ESRCH;
-		if (!(l->l_proc == p ||
-		      kauth_authorize_generic(pc, KAUTH_GENERIC_ISSUSER, NULL) == 0 ||
-		      kauth_cred_getuid(pc) == kauth_cred_getuid(p->p_cred) ||
-		      kauth_cred_geteuid(pc) == kauth_cred_getuid(p->p_cred) ||
-		      kauth_cred_getuid(pc) == kauth_cred_geteuid(p->p_cred) ||
-		      kauth_cred_geteuid(pc) == kauth_cred_geteuid(p->p_cred)))
-			return EPERM;
-	}
+	error = do_sched_setparam(0, SCARG(uap, pid), policy, &sp);
+	if (error)
+		goto out;
 
-	return 0;
-/*
- * We can't emulate anything put the default scheduling policy.
- */
-	if (SCARG(uap, policy) != LINUX_SCHED_OTHER || lp.sched_priority != 0)
-		return EINVAL;
-
-	return 0;
+ out:
+	return error;
 }
 
 int
@@ -267,32 +516,22 @@ linux_sys_sched_getscheduler(struct lwp *l, const struct linux_sys_sched_getsche
 	/* {
 		syscallarg(linux_pid_t) pid;
 	} */
-	struct proc *p;
+	int error, policy;
 
 	*retval = -1;
-/*
- * We only check for valid parameters and return afterwards.
- */
 
-	if (SCARG(uap, pid) != 0) {
-		kauth_cred_t pc = l->l_cred;
+	error = do_sched_getparam(0, SCARG(uap, pid), &policy, NULL);
+	if (error)
+		goto out;
 
-		if ((p = pfind(SCARG(uap, pid))) == NULL)
-			return ESRCH;
-		if (!(l->l_proc == p ||
-		      kauth_authorize_generic(pc, KAUTH_GENERIC_ISSUSER, NULL) == 0 ||
-		      kauth_cred_getuid(pc) == kauth_cred_getuid(p->p_cred) ||
-		      kauth_cred_geteuid(pc) == kauth_cred_getuid(p->p_cred) ||
-		      kauth_cred_getuid(pc) == kauth_cred_geteuid(p->p_cred) ||
-		      kauth_cred_geteuid(pc) == kauth_cred_geteuid(p->p_cred)))
-			return EPERM;
-	}
+	error = sched_native2linux(policy, NULL, &policy, NULL);
+	if (error)
+		goto out;
 
-/*
- * We can't emulate anything put the default scheduling policy.
- */
-	*retval = LINUX_SCHED_OTHER;
-	return 0;
+	*retval = policy;
+
+ out:
+	return error;
 }
 
 int
@@ -310,15 +549,18 @@ linux_sys_sched_get_priority_max(struct lwp *l, const struct linux_sys_sched_get
 		syscallarg(int) policy;
 	} */
 
-/*
- * We can't emulate anything put the default scheduling policy.
- */
-	if (SCARG(uap, policy) != LINUX_SCHED_OTHER) {
-		*retval = -1;
+	switch (SCARG(uap, policy)) {
+	case LINUX_SCHED_OTHER:
+		*retval = 0;
+		break;
+	case LINUX_SCHED_FIFO:
+	case LINUX_SCHED_RR:
+		*retval = LINUX_SCHED_RTPRIO_MAX;
+		break;
+	default:
 		return EINVAL;
 	}
 
-	*retval = 0;
 	return 0;
 }
 
@@ -329,15 +571,26 @@ linux_sys_sched_get_priority_min(struct lwp *l, const struct linux_sys_sched_get
 		syscallarg(int) policy;
 	} */
 
-/*
- * We can't emulate anything put the default scheduling policy.
- */
-	if (SCARG(uap, policy) != LINUX_SCHED_OTHER) {
-		*retval = -1;
+	switch (SCARG(uap, policy)) {
+	case LINUX_SCHED_OTHER:
+		*retval = 0;
+		break;
+	case LINUX_SCHED_FIFO:
+	case LINUX_SCHED_RR:
+		*retval = LINUX_SCHED_RTPRIO_MIN;
+		break;
+	default:
 		return EINVAL;
 	}
 
-	*retval = 0;
+	return 0;
+}
+
+int
+linux_sys_exit(struct lwp *l, const struct linux_sys_exit_args *uap, register_t *retval)
+{
+
+	lwp_exit(l);
 	return 0;
 }
 
@@ -346,68 +599,11 @@ linux_sys_sched_get_priority_min(struct lwp *l, const struct linux_sys_sched_get
 int
 linux_sys_exit_group(struct lwp *l, const struct linux_sys_exit_group_args *uap, register_t *retval)
 {
-#ifdef LINUX_NPTL
-	/* {
-		syscallarg(int) error_code;
-	} */
-	struct proc *p = l->l_proc;
-	struct linux_emuldata *led = p->p_emuldata;
-	struct linux_emuldata *e;
-
-	if (led->s->flags & LINUX_LES_USE_NPTL) {
-
-#ifdef DEBUG_LINUX
-		printf("%s:%d, led->s->refs = %d\n", __func__, __LINE__,
-		    led->s->refs);
-#endif
-
-		/*
-		 * The calling thread is supposed to kill all threads
-		 * in the same thread group (i.e. all threads created
-		 * via clone(2) with CLONE_THREAD flag set).
-		 *
-		 * If there is only one thread, things are quite simple
-		 */
-		if (led->s->refs == 1)
-			return sys_exit(l, (const void *)uap, retval);
-
-#ifdef DEBUG_LINUX
-		printf("%s:%d\n", __func__, __LINE__);
-#endif
-
-		led->s->flags |= LINUX_LES_INEXITGROUP;
-		led->s->xstat = W_EXITCODE(SCARG(uap, error_code), 0);
-
-		/*
-		 * Kill all threads in the group. The emulation exit hook takes
-		 * care of hiding the zombies and reporting the exit code
-		 * properly.
-		 */
-		mutex_enter(&proclist_mutex);
-      		LIST_FOREACH(e, &led->s->threads, threads) {
-			if (e->proc == p)
-				continue;
-
-#ifdef DEBUG_LINUX
-			printf("%s: kill PID %d\n", __func__, e->proc->p_pid);
-#endif
-			psignal(e->proc, SIGKILL);
-		}
-
-		/* Now, kill ourselves */
-		psignal(p, SIGKILL);
-		mutex_exit(&proclist_mutex);
-
-		return 0;
-
-	}
-#endif /* LINUX_NPTL */
 
 	return sys_exit(l, (const void *)uap, retval);
 }
 #endif /* !__m68k__ */
 
-#ifdef LINUX_NPTL
 int
 linux_sys_set_tid_address(struct lwp *l, const struct linux_sys_set_tid_address_args *uap, register_t *retval)
 {
@@ -416,12 +612,9 @@ linux_sys_set_tid_address(struct lwp *l, const struct linux_sys_set_tid_address_
 	} */
 	struct linux_emuldata *led;
 
-	led = (struct linux_emuldata *)l->l_proc->p_emuldata;
-	led->clear_tid = SCARG(uap, tid);
-
-	led->s->flags |= LINUX_LES_USE_NPTL;
-
-	*retval = l->l_proc->p_pid;
+	led = (struct linux_emuldata *)l->l_emuldata;
+	led->led_clear_tid = SCARG(uap, tid);
+	*retval = l->l_lid;
 
 	return 0;
 }
@@ -430,118 +623,73 @@ linux_sys_set_tid_address(struct lwp *l, const struct linux_sys_set_tid_address_
 int
 linux_sys_gettid(struct lwp *l, const void *v, register_t *retval)
 {
-	/* The Linux kernel does it exactly that way */
-	*retval = l->l_proc->p_pid;
+
+	*retval = l->l_lid;
 	return 0;
 }
-
-#ifdef LINUX_NPTL
-/* ARGUSED1 */
-int
-linux_sys_getpid(struct lwp *l, const void *v, register_t *retval)
-{
-	struct linux_emuldata *led = l->l_proc->p_emuldata;
-
-	if (led->s->flags & LINUX_LES_USE_NPTL) {
-		/* The Linux kernel does it exactly that way */
-		*retval = led->s->group_pid;
-	} else {
-		*retval = l->l_proc->p_pid;
-	}
-
-	return 0;
-}
-
-/* ARGUSED1 */
-int
-linux_sys_getppid(struct lwp *l, const void *v, register_t *retval)
-{
-	struct proc *p = l->l_proc;
-	struct linux_emuldata *led = p->p_emuldata;
-	struct proc *glp;
-	struct proc *pp;
-
-	if (led->s->flags & LINUX_LES_USE_NPTL) {
-
-		/* Find the thread group leader's parent */
-		if ((glp = pfind(led->s->group_pid)) == NULL) {
-			/* Maybe panic... */
-			printf("linux_sys_getppid: missing group leader PID"
-			    " %d\n", led->s->group_pid); 
-			return -1;
-		}
-		pp = glp->p_pptr;
-
-		/* If this is a Linux process too, return thread group PID */
-		if (pp->p_emul == p->p_emul) {
-			struct linux_emuldata *pled;
-
-			pled = pp->p_emuldata;
-			*retval = pled->s->group_pid;
-		} else {
-			*retval = pp->p_pid;
-		}
-
-	} else {
-		*retval = p->p_pptr->p_pid;
-	}
-
-	return 0;
-}
-#endif /* LINUX_NPTL */
 
 int
 linux_sys_sched_getaffinity(struct lwp *l, const struct linux_sys_sched_getaffinity_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(pid_t) pid;
+		syscallarg(linux_pid_t) pid;
 		syscallarg(unsigned int) len;
 		syscallarg(unsigned long *) mask;
 	} */
-	int error;
-	int ret;
-	char *data;
-	int *retp;
+	proc_t *p;
+	unsigned long *lp, *data;
+	int error, size, nb = ncpu;
 
-	if (SCARG(uap, mask) == NULL)
+	/* Unlike Linux, dynamically calculate cpu mask size */
+	size = sizeof(long) * ((ncpu + LONG_BIT - 1) / LONG_BIT);
+	if (SCARG(uap, len) < size)
 		return EINVAL;
 
-	if (SCARG(uap, len) < sizeof(int))
-		return EINVAL;
-
-	if (pfind(SCARG(uap, pid)) == NULL)
+	/* XXX: Pointless check.  TODO: Actually implement this. */
+	mutex_enter(proc_lock);
+	p = proc_find(SCARG(uap, pid));
+	mutex_exit(proc_lock);
+	if (p == NULL) {
 		return ESRCH;
+	}
 
 	/* 
 	 * return the actual number of CPU, tag all of them as available 
 	 * The result is a mask, the first CPU being in the least significant
 	 * bit.
 	 */
-	ret = (1 << ncpu) - 1;
-	data = malloc(SCARG(uap, len), M_TEMP, M_WAITOK|M_ZERO);
-	retp = (int *)&data[SCARG(uap, len) - sizeof(ret)];
-	*retp = ret;
+	data = kmem_zalloc(size, KM_SLEEP);
+	lp = data;
+	while (nb > LONG_BIT) {
+		*lp++ = ~0UL;
+		nb -= LONG_BIT;
+	}
+	if (nb)
+		*lp = (1 << ncpu) - 1;
 
-	if ((error = copyout(data, SCARG(uap, mask), SCARG(uap, len))) != 0)
-		return error;
-
-	free(data, M_TEMP);
-
-	return 0;
-
+	error = copyout(data, SCARG(uap, mask), size);
+	kmem_free(data, size);
+	*retval = size;
+	return error;
 }
 
 int
 linux_sys_sched_setaffinity(struct lwp *l, const struct linux_sys_sched_setaffinity_args *uap, register_t *retval)
 {
 	/* {
-		syscallarg(pid_t) pid;
+		syscallarg(linux_pid_t) pid;
 		syscallarg(unsigned int) len;
 		syscallarg(unsigned long *) mask;
 	} */
+	proc_t *p;
 
-	if (pfind(SCARG(uap, pid)) == NULL)
+	/* XXX: Pointless check.  TODO: Actually implement this. */
+	mutex_enter(proc_lock);
+	p = proc_find(SCARG(uap, pid));
+	mutex_exit(proc_lock);
+	if (p == NULL) {
 		return ESRCH;
+	}
 
 	/* Let's ignore it */
 #ifdef DEBUG_LINUX
@@ -549,4 +697,3 @@ linux_sys_sched_setaffinity(struct lwp *l, const struct linux_sys_sched_setaffin
 #endif
 	return 0;
 };
-#endif /* LINUX_NPTL */

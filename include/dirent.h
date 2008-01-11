@@ -1,4 +1,4 @@
-/*	$NetBSD: dirent.h,v 1.30 2008/01/09 20:55:03 christos Exp $	*/
+/*	$NetBSD: dirent.h,v 1.34 2010/09/26 02:26:59 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -74,6 +74,8 @@ struct _dirdesc {
 #define DTF_NODUP	0x0002	/* don't return duplicate names */
 #define DTF_REWIND	0x0004	/* rewind after reading union stack */
 #define __DTF_READALL	0x0008	/* everything has been read */
+#define __DTF_RETRY_ON_BADCOOKIE 0x0001	/* retry on EINVAL
+					(only valid with __DTF_READALL) */
 
 #include <sys/null.h>
 
@@ -98,13 +100,14 @@ long telldir(DIR *);
 #endif /* defined(_NETBSD_SOURCE) || defined(_XOPEN_SOURCE) */
 #if defined(_NETBSD_SOURCE)
 #ifndef __LIBC12_SOURCE__
+DIR *fdopendir(int);
 DIR *__opendir2(const char *, int) __RENAME(__opendir230);
 int scandir(const char *, struct dirent ***,
     int (*)(const struct dirent *), int (*)(const void *, const void *))
     __RENAME(__scandir30);
 int getdents(int, char *, size_t) __RENAME(__getdents30);
+int alphasort(const void *, const void *) __RENAME(__alphasort30);
 #endif
-int alphasort(const void *, const void *);
 #endif /* defined(_NETBSD_SOURCE) */
 __END_DECLS
 

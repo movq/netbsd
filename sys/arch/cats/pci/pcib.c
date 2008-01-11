@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.8 2005/12/11 12:17:04 christos Exp $	*/
+/*	$NetBSD: pcib.c,v 1.13 2010/01/14 10:32:49 skrll Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.8 2005/12/11 12:17:04 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.13 2010/01/14 10:32:49 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,19 +49,16 @@ __KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.8 2005/12/11 12:17:04 christos Exp $");
 
 #include "isadma.h"
 
-int	pcibmatch __P((struct device *, struct cfdata *, void *));
-void	pcibattach __P((struct device *, struct device *, void *));
+int	pcibmatch(struct device *, struct cfdata *, void *);
+void	pcibattach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(pcib, sizeof(struct device),
     pcibmatch, pcibattach, NULL, NULL);
 
-void	pcib_callback __P((struct device *));
+void	pcib_callback(struct device *);
 
 int
-pcibmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+pcibmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -78,7 +68,7 @@ pcibmatch(parent, match, aux)
 	switch (PCI_VENDOR(pa->pa_id)) {
 	case PCI_VENDOR_ALI:
 		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_ALI_M1543:
+		case PCI_PRODUCT_ALI_M1533:
 			return (1);
 		}
 		break;
@@ -88,9 +78,7 @@ pcibmatch(parent, match, aux)
 }
 
 void
-pcibattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pcibattach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
@@ -110,8 +98,7 @@ pcibattach(parent, self, aux)
 }
 
 void
-pcib_callback(self)
-	struct device *self;
+pcib_callback(struct device *self)
 {
 	struct isabus_attach_args iba;
 

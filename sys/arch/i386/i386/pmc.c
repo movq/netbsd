@@ -1,4 +1,4 @@
-/*	$NetBSD: pmc.c,v 1.15 2007/10/17 19:54:46 garbled Exp $	*/
+/*	$NetBSD: pmc.c,v 1.19 2010/04/27 18:41:52 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000 Zembu Labs, Inc.
@@ -38,16 +38,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmc.c,v 1.15 2007/10/17 19:54:46 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmc.c,v 1.19 2010/04/27 18:41:52 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 
 #include <machine/cpufunc.h>
+#include <machine/cpuvar.h>
 #include <machine/specialreg.h>
 #include <machine/sysarch.h>
 #include <machine/pmc.h>
+#include <machine/cpu_counter.h>
+#include <machine/cputypes.h>
 
 static int pmc_initialized;
 static int pmc_ncounters;
@@ -100,7 +103,7 @@ pmc_init(void)
 			 * Figure out what we support; right now
 			 * we're missing Pentium 4 support.
 			 */
-			if (ci->ci_cpuid_level == -1 ||
+			if (cpuid_level == -1 ||
 			    CPUID2FAMILY(ci->ci_signature) == CPU_FAMILY_P4)
 				break;
 
@@ -120,7 +123,7 @@ pmc_init(void)
 		break;
 	}
 
-	if (pmc_type != PMC_TYPE_NONE && (cpu_feature & CPUID_TSC) != 0)
+	if (pmc_type != PMC_TYPE_NONE && cpu_hascounter())
 		pmc_flags |= PMC_INFO_HASTSC;
 
 #ifdef MULTIPROCESSOR
@@ -272,7 +275,7 @@ pmc_read(struct lwp *l, struct x86_pmc_read_args *uargs,
 		    rdmsr(pmc_state[args.counter].pmcs_ctrmsr) &
 		    0xffffffffffULL;
 		if (pmc_flags & PMC_INFO_HASTSC)
-			pmc_state[args.counter].pmcs_tsc = rdtsc();
+			pmc_state[args.counter].pmcs_tsc = cpu_counter();
 	}
 
 	args.val = pmc_state[args.counter].pmcs_val;

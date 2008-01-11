@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_tsd.c,v 1.4 2007/12/24 14:46:29 ad Exp $	*/
+/*	$NetBSD: pthread_tsd.c,v 1.7 2008/04/28 20:23:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_tsd.c,v 1.4 2007/12/24 14:46:29 ad Exp $");
+__RCSID("$NetBSD: pthread_tsd.c,v 1.7 2008/04/28 20:23:01 martin Exp $");
 
 /* Functions and structures dealing with thread-specific data */
 #include <errno.h>
@@ -47,7 +40,7 @@ __RCSID("$NetBSD: pthread_tsd.c,v 1.4 2007/12/24 14:46:29 ad Exp $");
 
 static pthread_mutex_t tsd_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int nextkey;
-int pthread__tsd_alloc[PTHREAD_KEYS_MAX];
+void *pthread__tsd_alloc[PTHREAD_KEYS_MAX];
 void (*pthread__tsd_destructors[PTHREAD_KEYS_MAX])(void *);
 
 __strong_alias(__libc_thr_keycreate,pthread_key_create)
@@ -64,7 +57,7 @@ pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 	/* Find an available slot */
 	/* 1. Search from "nextkey" to the end of the list. */
 	for (i = nextkey; i < PTHREAD_KEYS_MAX; i++)
-		if (pthread__tsd_alloc[i] == 0)
+		if (pthread__tsd_alloc[i] == NULL)
 			break;
 
 	if (i == PTHREAD_KEYS_MAX) {
@@ -72,7 +65,7 @@ pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 		 *    of the list back to "nextkey".
 		 */
 		for (i = 0; i < nextkey; i++)
-			if (pthread__tsd_alloc[i] == 0)
+			if (pthread__tsd_alloc[i] == NULL)
 				break;
 		
 		if (i == nextkey) {
@@ -85,7 +78,7 @@ pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
 	}
 
 	/* Got one. */
-	pthread__tsd_alloc[i] = 1;
+	pthread__tsd_alloc[i] = (void *)__builtin_return_address(0);
 	nextkey = (i + 1) % PTHREAD_KEYS_MAX;
 	pthread__tsd_destructors[i] = destructor;
 	pthread_mutex_unlock(&tsd_mutex);

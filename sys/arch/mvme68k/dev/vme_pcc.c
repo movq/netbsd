@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_pcc.c,v 1.20 2005/12/11 12:18:17 christos Exp $	*/
+/*	$NetBSD: vme_pcc.c,v 1.25 2009/03/16 23:11:13 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1996-2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme_pcc.c,v 1.20 2005/12/11 12:18:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme_pcc.c,v 1.25 2009/03/16 23:11:13 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -135,10 +128,7 @@ static struct mvmebus_range vme_pcc_masters[] = {
 
 /* ARGSUSED */
 int
-vme_pcc_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+vme_pcc_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct pcc_attach_args *pa;
 
@@ -155,15 +145,12 @@ vme_pcc_match(parent, cf, aux)
 }
 
 void
-vme_pcc_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+vme_pcc_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pcc_attach_args *pa;
 	struct vme_pcc_softc *sc;
 	vme_am_t am;
-	u_int8_t reg;
+	uint8_t reg;
 
 	sc = (struct vme_pcc_softc *) self;
 	pa = aux;
@@ -254,12 +241,7 @@ vme_pcc_attach(parent, self, aux)
 }
 
 void
-vme_pcc_intr_establish(csc, prior, level, vector, first, func, arg, evcnt)
-	void *csc;
-	int prior, level, vector, first;
-	int (*func)(void *);
-	void *arg;
-	struct evcnt *evcnt;
+vme_pcc_intr_establish(void *csc, int prior, int level, int vector, int first, int (*func)(void *), void *arg, struct evcnt *evcnt)
 {
 	struct vme_pcc_softc *sc = csc;
 
@@ -283,10 +265,7 @@ vme_pcc_intr_establish(csc, prior, level, vector, first, func, arg, evcnt)
 }
 
 void
-vme_pcc_intr_disestablish(csc, level, vector, last, evcnt)
-	void *csc;
-	int level, vector, last;
-	struct evcnt *evcnt;
+vme_pcc_intr_disestablish(void *csc, int level, int vector, int last, struct evcnt *evcnt)
 {
 	struct vme_pcc_softc *sc = csc;
 

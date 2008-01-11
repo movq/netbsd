@@ -1,4 +1,4 @@
-/*	$NetBSD: fault.c,v 1.65 2008/01/06 03:11:42 matt Exp $	*/
+/*	$NetBSD: fault.c,v 1.78 2010/12/20 00:25:27 matt Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -79,16 +79,18 @@
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
+#include "opt_sa.h"
 
 #include <sys/types.h>
-__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.65 2008/01/06 03:11:42 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.78 2010/12/20 00:25:27 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/kernel.h>
 #include <sys/kauth.h>
+
+#include <sys/savar.h>
 #include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
@@ -174,9 +176,7 @@ static inline void
 call_trapsignal(struct lwp *l, ksiginfo_t *ksi)
 {
 
-	KERNEL_LOCK(1, l);
 	TRAPSIGNAL(l, ksi);
-	KERNEL_UNLOCK_LAST(l);
 }
 
 static inline int
@@ -198,8 +198,8 @@ data_abort_fixup(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l)
 #ifdef THUMB_CODE
 	if (tf->tf_spsr & PSR_T_bit) {
 		printf("pc = 0x%08x, opcode 0x%04x, 0x%04x, insn = ",
-		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1),
-		    *((u_int16 *)((tf->tf_pc + 2) & ~1));
+		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1)),
+		    *((u_int16 *)((tf->tf_pc + 2) & ~1)));
 	}
 	else
 #endif
@@ -240,14 +240,16 @@ data_abort_handler(trapframe_t *tf)
 
 	UVMHIST_CALLED(maphist);
 	/* Update vmmeter statistics */
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 
 	/* Re-enable interrupts if they were enabled previously */
-	if (__predict_true((tf->tf_spsr & I32_bit) == 0))
-		enable_interrupts(I32_bit);
+	KASSERT(!TRAP_USERMODE(tf) || (tf->tf_spsr & IF32_bits) == 0);
+	if (__predict_true((tf->tf_spsr & IF32_bits) != IF32_bits))
+		restore_interrupts(tf->tf_spsr & IF32_bits);
 
-	/* Get the current lwp structure or lwp0 if there is none */
-	l = (curlwp != NULL) ? curlwp : &lwp0;
+	/* Get the current lwp structure */
+	KASSERT(curlwp != NULL);
+	l = curlwp;
 
 	UVMHIST_LOG(maphist, " (pc=0x%x, l=0x%x, far=0x%x, fsr=0x%x)",
 	    tf->tf_pc, l, far, fsr);
@@ -257,7 +259,7 @@ data_abort_handler(trapframe_t *tf)
 		LWP_CACHE_CREDS(l, l->l_proc);
 
 	/* Grab the current pcb */
-	pcb = &l->l_addr->u_pcb;
+	pcb = lwp_getpcb(l);
 
 	/* Invoke the appropriate handler, if necessary */
 	if (__predict_false(data_aborts[fsr & FAULT_TYPE_MASK].func != NULL)) {
@@ -288,8 +290,9 @@ data_abort_handler(trapframe_t *tf)
 		return;
 	}
 
-	if (user)
-		l->l_addr->u_pcb.pcb_tf = tf;
+	if (user) {
+		pcb->pcb_tf = tf;
+	}
 
 	/*
 	 * Make sure the Program Counter is sane. We could fall foul of
@@ -378,8 +381,15 @@ data_abort_handler(trapframe_t *tf)
 			user = 1;
 			goto do_trapsignal;
 		}
-	} else
+	} else {
 		map = &l->l_proc->p_vmspace->vm_map;
+#ifdef KERN_SA
+		if ((l->l_flag & LW_SA) && (~l->l_pflag & LP_SA_NOBLOCK)) {
+			l->l_savp->savp_faultaddr = (vaddr_t)far;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
+#endif
+	}
 
 	/*
 	 * We need to know whether the page should be mapped
@@ -439,11 +449,15 @@ data_abort_handler(trapframe_t *tf)
 	last_fault_code = fsr;
 #endif
 	if (pmap_fault_fixup(map->pmap, va, ftype, user)) {
+#ifdef KERN_SA
+		if (map != kernel_map)
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
+#endif
 		UVMHIST_LOG(maphist, " <- ref/mod emul", 0, 0, 0, 0);
 		goto out;
 	}
 
-	if (__predict_false(curcpu()->ci_idepth > 0)) {
+	if (__predict_false(curcpu()->ci_intr_depth > 0)) {
 		if (pcb->pcb_onfault) {
 			tf->tf_r0 = EINVAL;
 			tf->tf_pc = (register_t)(intptr_t) pcb->pcb_onfault;
@@ -458,9 +472,16 @@ data_abort_handler(trapframe_t *tf)
 	error = uvm_fault(map, va, ftype);
 	pcb->pcb_onfault = onfault;
 
+#ifdef KERN_SA
+	if (map != kernel_map)
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
+#endif
+
 	if (__predict_true(error == 0)) {
 		if (user)
 			uvm_grow(l->l_proc, va); /* Record any stack growth */
+		else
+			ucas_ras_check(tf);
 		UVMHIST_LOG(maphist, " <- uvm", 0, 0, 0, 0);
 		goto out;
 	}
@@ -490,7 +511,7 @@ data_abort_handler(trapframe_t *tf)
 	ksi.ksi_code = (error == EACCES) ? SEGV_ACCERR : SEGV_MAPERR;
 	ksi.ksi_addr = (u_int32_t *)(intptr_t) far;
 	ksi.ksi_trap = fsr;
-	UVMHIST_LOG(maphist, " <- erorr (%d)", error, 0, 0, 0);
+	UVMHIST_LOG(maphist, " <- error (%d)", error, 0, 0, 0);
 
 do_trapsignal:
 	call_trapsignal(l, &ksi);
@@ -570,13 +591,14 @@ dab_fatal(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l, ksiginfo_t *ksi)
 static int
 dab_align(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l, ksiginfo_t *ksi)
 {
+	struct pcb *pcb = lwp_getpcb(l);
 
 	/* Alignment faults are always fatal if they occur in kernel mode */
 	if (!TRAP_USERMODE(tf))
 		dab_fatal(tf, fsr, far, l, NULL);
 
 	/* pcb_onfault *must* be NULL at this point */
-	KDASSERT(l->l_addr->u_pcb.pcb_onfault == NULL);
+	KDASSERT(pcb->pcb_onfault == NULL);
 
 	/* See if the CPU state needs to be fixed up */
 	(void) data_abort_fixup(tf, fsr, far, l);
@@ -588,7 +610,7 @@ dab_align(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l, ksiginfo_t *ksi)
 	ksi->ksi_addr = (u_int32_t *)(intptr_t)far;
 	ksi->ksi_trap = fsr;
 
-	l->l_addr->u_pcb.pcb_tf = tf;
+	pcb->pcb_tf = tf;
 
 	return (1);
 }
@@ -619,7 +641,7 @@ static int
 dab_buserr(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l,
     ksiginfo_t *ksi)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 
 #ifdef __XSCALE__
 	if ((fsr & FAULT_IMPRECISE) != 0 &&
@@ -695,7 +717,7 @@ dab_buserr(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l,
 	ksi->ksi_addr = (u_int32_t *)(intptr_t)far;
 	ksi->ksi_trap = fsr;
 
-	l->l_addr->u_pcb.pcb_tf = tf;
+	pcb->pcb_tf = tf;
 
 	return (1);
 }
@@ -720,8 +742,8 @@ prefetch_abort_fixup(trapframe_t *tf)
 #ifdef THUMB_CODE
 	if (tf->tf_spsr & PSR_T_bit) {
 		printf("pc = 0x%08x, opcode 0x%04x, 0x%04x, insn = ",
-		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1),
-		    *((u_int16 *)((tf->tf_pc + 2) & ~1));
+		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1)),
+		    *((u_int16 *)((tf->tf_pc + 2) & ~1)));
 	}
 	else
 #endif
@@ -756,6 +778,7 @@ void
 prefetch_abort_handler(trapframe_t *tf)
 {
 	struct lwp *l;
+	struct pcb *pcb;
 	struct vm_map *map;
 	vaddr_t fault_pc, va;
 	ksiginfo_t ksi;
@@ -764,9 +787,10 @@ prefetch_abort_handler(trapframe_t *tf)
 	UVMHIST_FUNC("prefetch_abort_handler"); UVMHIST_CALLED(maphist);
 
 	/* Update vmmeter statistics */
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 
 	l = curlwp;
+	pcb = lwp_getpcb(l);
 
 	if ((user = TRAP_USERMODE(tf)) != 0)
 		LWP_CACHE_CREDS(l, l->l_proc);
@@ -776,12 +800,14 @@ prefetch_abort_handler(trapframe_t *tf)
 	 * from user mode so we know interrupts were not disabled.
 	 * But we check anyway.
 	 */
-	if (__predict_true((tf->tf_spsr & I32_bit) == 0))
-		enable_interrupts(I32_bit);
+	KASSERT(!TRAP_USERMODE(tf) || (tf->tf_spsr & IF32_bits) == 0);
+	if (__predict_true((tf->tf_spsr & I32_bit) != IF32_bits))
+		restore_interrupts(tf->tf_spsr & IF32_bits);
 
 	/* See if the CPU state needs to be fixed up */
 	switch (prefetch_abort_fixup(tf)) {
 	case ABORT_FIXUP_RETURN:
+		KASSERT(!TRAP_USERMODE(tf) || (tf->tf_spsr & IF32_bits) == 0);
 		return;
 	case ABORT_FIXUP_FAILED:
 		/* Deliver a SIGILL to the process */
@@ -789,7 +815,7 @@ prefetch_abort_handler(trapframe_t *tf)
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_code = ILL_ILLOPC;
 		ksi.ksi_addr = (u_int32_t *)(intptr_t) tf->tf_pc;
-		l->l_addr->u_pcb.pcb_tf = tf;
+		pcb->pcb_tf = tf;
 		goto do_trapsignal;
 	default:
 		break;
@@ -801,8 +827,7 @@ prefetch_abort_handler(trapframe_t *tf)
 
 	/* Get fault address */
 	fault_pc = tf->tf_pc;
-	l = curlwp;
-	l->l_addr->u_pcb.pcb_tf = tf;
+	pcb->pcb_tf = tf;
 	UVMHIST_LOG(maphist, " (pc=0x%x, l=0x%x, tf=0x%x)", fault_pc, l, tf,
 	    0);
 
@@ -832,12 +857,26 @@ prefetch_abort_handler(trapframe_t *tf)
 	}
 
 #ifdef DIAGNOSTIC
-	if (__predict_false(cpu_intr_p())) {
+	if (__predict_false(l->l_cpu->ci_intr_depth > 0)) {
 		printf("\nNon-emulated prefetch abort with intr_depth > 0\n");
 		dab_fatal(tf, 0, tf->tf_pc, NULL, NULL);
 	}
 #endif
+
+#ifdef KERN_SA
+	if (map != kernel_map && (l->l_flag & LW_SA)) {
+		l->l_savp->savp_faultaddr = fault_pc;
+		l->l_pflag |= LP_SA_PAGEFAULT;
+	}
+#endif
+
+	KASSERT(pcb->pcb_onfault == NULL);
 	error = uvm_fault(map, va, VM_PROT_READ);
+
+#ifdef KERN_SA
+	if (map != kernel_map)
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
+#endif
 
 	if (__predict_true(error == 0)) {
 		UVMHIST_LOG (maphist, " <- uvm", 0, 0, 0, 0);
@@ -862,6 +901,7 @@ do_trapsignal:
 	call_trapsignal(l, &ksi);
 
 out:
+	KASSERT(!TRAP_USERMODE(tf) || (tf->tf_spsr & IF32_bits) == 0);
 	userret(l);
 }
 
@@ -893,7 +933,7 @@ badaddr_read(void *addr, size_t size, void *rptr)
 	 */
 	s = splhigh();
 	if ((curpcb_save = curpcb) == NULL)
-		curpcb = &lwp0.l_addr->u_pcb;
+		curpcb = lwp_getpcb(&lwp0);
 
 	/* Read from the test address. */
 	switch (size) {

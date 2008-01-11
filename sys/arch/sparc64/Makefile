@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.16 2007/10/17 19:57:27 garbled Exp $
+#	$NetBSD: Makefile,v 1.18 2009/05/19 22:01:34 dyoung Exp $
 
 # Makefile for sparc64 tags file and boot blocks
 
@@ -16,10 +16,13 @@ DSPARC64=	conf dev fpu include sparc64
 .include "../../kern/Make.tags.inc"
 
 tags:
-	-rm ${TSPARC64}
-	-echo ${SSPARC64} ${COMM} | xargs ctags -wadtf ${TSPARC64}
+	-rm -f ${TSPARC64}
+	-echo ${SSPARC64} | xargs ctags -wadtf ${TSPARC64}
+	${FINDCOMM} | xargs ctags -wadtf ${TSPARC64}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${ASPARC64} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e "s;/;\\/;g" | \
+	    ${TOOL_SED} -e \
+		"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3	\1	/^\2(\3\4$$/;" \
 	    >> tags
 	sort -o ${TSPARC64} ${TSPARC64}
 

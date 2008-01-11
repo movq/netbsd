@@ -1,7 +1,7 @@
-/* $NetBSD: pckbd.c,v 1.19 2008/01/10 07:58:39 dyoung Exp $ */
+/* $NetBSD: pckbd.c,v 1.29 2010/02/24 22:38:08 dyoung Exp $ */
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbd.c,v 1.19 2008/01/10 07:58:39 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbd.c,v 1.29 2010/02/24 22:38:08 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -115,14 +108,14 @@ struct pckbd_internal {
 };
 
 struct pckbd_softc {
-        struct  device sc_dev;
+        device_t sc_dev;
 
 	struct pckbd_internal *id;
 	int sc_enabled;
 
 	int sc_ledstate;
 
-	struct device *sc_wskbddev;
+	device_t sc_wskbddev;
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int rawkbd;
 #endif
@@ -130,10 +123,10 @@ struct pckbd_softc {
 
 static int pckbd_is_console(pckbport_tag_t, pckbport_slot_t);
 
-int pckbdprobe(struct device *, struct cfdata *, void *);
-void pckbdattach(struct device *, struct device *, void *);
+int pckbdprobe(device_t, cfdata_t, void *);
+void pckbdattach(device_t, device_t, void *);
 
-CFATTACH_DECL(pckbd, sizeof(struct pckbd_softc),
+CFATTACH_DECL_NEW(pckbd, sizeof(struct pckbd_softc),
     pckbdprobe, pckbdattach, NULL, NULL);
 
 int	pckbd_enable(void *, int);
@@ -211,9 +204,7 @@ pckbd_set_xtscancode(pckbport_tag_t kbctag, pckbport_slot_t kbcslot)
 		res = pckbport_poll_cmd(kbctag, kbcslot, cmd, 2, 0, 0, 0);
 		if (res) {
 			u_char cmdb[1];
-#ifdef DEBUG
-			printf("pckbd: error setting scanset 2\n");
-#endif
+			aprint_debug("pckbd: error setting scanset 2\n");
 			/*
 			 * XXX at least one keyboard is reported to lock up
 			 * if a "set table" is attempted, thus the "reset".
@@ -230,10 +221,8 @@ pckbd_set_xtscancode(pckbport_tag_t kbctag, pckbport_slot_t kbcslot)
 		cmd[0] = KBC_SETTABLE;
 		cmd[1] = 1;
 		res = pckbport_poll_cmd(kbctag, kbcslot, cmd, 2, 0, 0, 0);
-#ifdef DEBUG
 		if (res)
-			printf("pckbd: error setting scanset 1\n");
-#endif
+			aprint_debug("pckbd: error setting scanset 1\n");
 	}
 	return res;
 }
@@ -247,7 +236,7 @@ pckbd_is_console(pckbport_tag_t tag, pckbport_slot_t slot)
 }
 
 static bool
-pckbd_suspend(device_t dv)
+pckbd_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct pckbd_softc *sc = device_private(dv);
 	u_char cmd[1];
@@ -270,7 +259,7 @@ pckbd_suspend(device_t dv)
 }
 
 static bool
-pckbd_resume(device_t dv)
+pckbd_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct pckbd_softc *sc = device_private(dv);
 	u_char cmd[1], resp[1];
@@ -282,10 +271,8 @@ pckbd_resume(device_t dv)
 	cmd[0] = KBC_RESET;
 	res = pckbport_poll_cmd(sc->id->t_kbctag,
 	    sc->id->t_kbcslot, cmd, 1, 1, resp, 1);
-#ifdef DEBUG
 	if (res)
-		printf("pckbdprobe: reset error %d\n", res);
-#endif
+		aprint_debug("pckbdprobe: reset error %d\n", res);
 	if (resp[0] != KBR_RSTDONE)
 		printf("pckbdprobe: reset response 0x%x\n",
 		    resp[0]);
@@ -301,7 +288,7 @@ pckbd_resume(device_t dv)
  * these are both bad jokes
  */
 int
-pckbdprobe(struct device *parent, struct cfdata *cf, void *aux)
+pckbdprobe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pckbport_attach_args *pa = aux;
 	int res;
@@ -324,9 +311,7 @@ pckbdprobe(struct device *parent, struct cfdata *cf, void *aux)
 	cmd[0] = KBC_RESET;
 	res = pckbport_poll_cmd(pa->pa_tag, pa->pa_slot, cmd, 1, 1, resp, 1);
 	if (res) {
-#ifdef DEBUG
-		printf("pckbdprobe: reset error %d\n", res);
-#endif
+		aprint_debug("pckbdprobe: reset error %d\n", res);
 		/*
 		 * There is probably no keyboard connected.
 		 * Let the probe succeed if the keyboard is used
@@ -353,7 +338,7 @@ pckbdprobe(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-pckbdattach(struct device *parent, struct device *self, void *aux)
+pckbdattach(device_t parent, device_t self, void *aux)
 {
 	struct pckbd_softc *sc = device_private(self);
 	struct pckbport_attach_args *pa = aux;
@@ -364,6 +349,7 @@ pckbdattach(struct device *parent, struct device *self, void *aux)
 	aprint_naive("\n");
 	aprint_normal("\n");
 
+	sc->sc_dev = self;
 	isconsole = pckbd_is_console(pa->pa_tag, pa->pa_slot);
 
 	if (isconsole) {
@@ -392,7 +378,7 @@ pckbdattach(struct device *parent, struct device *self, void *aux)
 	sc->id->t_sc = sc;
 
 	pckbport_set_inputhandler(sc->id->t_kbctag, sc->id->t_kbcslot,
-			       pckbd_input, sc, sc->sc_dev.dv_xname);
+			       pckbd_input, sc, device_xname(sc->sc_dev));
 
 	a.console = isconsole;
 
@@ -408,7 +394,7 @@ pckbdattach(struct device *parent, struct device *self, void *aux)
 	 * Attach the wskbd, saving a handle to it.
 	 * XXX XXX XXX
 	 */
-	sc->sc_wskbddev = config_found(self, &a, wskbddevprint);
+	sc->sc_wskbddev = config_found_ia(self, "wskbddev", &a, wskbddevprint);
 }
 
 int
@@ -420,9 +406,7 @@ pckbd_enable(void *v, int on)
 
 	if (on) {
 		if (sc->sc_enabled) {
-#ifdef DIAGNOSTIC
-			printf("pckbd_enable: bad enable\n");
-#endif
+			aprint_debug("pckbd_enable: bad enable\n");
 			return EBUSY;
 		}
 
@@ -473,6 +457,17 @@ pckbd_decode(struct pckbd_internal *id, int datain, u_int *type, int *dataout)
 	} else if (datain == KBR_EXTENDED1) {
 		id->t_extended1 = 2;
 		return 0;
+	}
+
+	if (id->t_extended0 == 1) {
+		switch (datain & 0x7f) {
+		case 0x2a:
+		case 0x36:
+			id->t_extended0 = 0;
+			return 0;
+		default:
+			break;
+		}
 	}
 
  	/* map extended keys to (unused) codes 128-254 */

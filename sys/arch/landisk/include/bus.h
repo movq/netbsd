@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.3 2007/03/04 06:00:03 christos Exp $	*/
+/*	$NetBSD: bus.h,v 1.5 2009/08/02 00:06:44 nonaka Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -136,6 +129,9 @@ struct _bus_space {
 
 	/* get kernel virtual address */
 	void *		(*bs_vaddr)(void *, bus_space_handle_t);
+
+	/* mmap bus space for user */
+	paddr_t		(*bs_mmap)(void *, bus_addr_t, off_t, int, int);
 
 	/* read (single) */
 	uint8_t	(*bs_r_1)(void *, bus_space_handle_t,
@@ -297,6 +293,12 @@ do {									\
  */
 #define bus_space_vaddr(t, h) \
 	(*(t)->bs_vaddr)((t)->bs_cookie, (h))
+
+/*
+ * MMap bus space for a user application.
+ */
+#define bus_space_mmap(t, a, o, p, f)					\
+	(*(t)->bs_mmap)((t)->bs_cookie, (a), (o), (p), (f))
 
 /*
  * Bus barrier operations.  The SH3 does not currently require

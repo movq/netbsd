@@ -1,15 +1,23 @@
-#	$NetBSD: Makefile.inc,v 1.9 2006/11/22 23:38:27 tnozaki Exp $
+#	$NetBSD: Makefile.inc,v 1.12 2011/05/30 14:41:26 joerg Exp $
 
 NOLINT=		# defined
 NOPICINSTALL=	# defined
 NOPROFILE=	# defined
 
+NOCLANGERROR=	# defined
+
 .include <bsd.own.mk>
 
 SHLIB_VERSION_FILE=	${NETBSDSRCDIR}/lib/i18n_module/shlib_version
+.if defined(MLIBDIR)
+LIBDIR=		/usr/lib/${MLIBDIR}/i18n
+SHLIBDIR=	/usr/lib/${MLIBDIR}/i18n
+SHLIBINSTALLDIR=/usr/lib/${MLIBDIR}/i18n
+.else
 LIBDIR=		/usr/lib/i18n
 SHLIBDIR=	/usr/lib/i18n
 SHLIBINSTALLDIR=/usr/lib/i18n
+.endif
 CPPFLAGS+=	-I${NETBSDSRCDIR}/lib/libc/citrus
 CPPFLAGS+=	-DLOCALEMOD_MAJOR=${SHLIB_MAJOR}
 CPPFLAGS+=	-DLIBC_SCCS

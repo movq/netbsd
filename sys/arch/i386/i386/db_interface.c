@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.57 2008/01/04 21:24:22 xtraeme Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.66 2011/04/03 22:29:26 dyoung Exp $	*/
 
 /*
  * Mach Operating System
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.57 2008/01/04 21:24:22 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.66 2011/04/03 22:29:26 dyoung Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -44,6 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.57 2008/01/04 21:24:22 xtraeme Ex
 #include <sys/systm.h>
 #include <sys/atomic.h>
 #include <sys/simplelock.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -73,7 +74,8 @@ void db_mach_cpu (db_expr_t, bool, db_expr_t, const char *);
 
 const struct db_command db_machine_command_table[] = {
 #ifdef MULTIPROCESSOR
-	{ DDB_ADD_CMD("cpu",	db_mach_cpu,	0, NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("cpu",	db_mach_cpu,	0,
+	  "switch to another cpu", "cpu-no", NULL) },
 #endif
 		
 	{ DDB_ADD_CMD(NULL, NULL, 0,  NULL,NULL,NULL) },
@@ -98,13 +100,12 @@ typedef void (vector)(void);
 extern vector Xintrddbipi;
 
 void
-db_machine_init()
+db_machine_init(void)
 {
 
 #ifdef MULTIPROCESSOR
 	ddb_vec = idt_vec_alloc(0xf0, 0xff);
-	setgate((struct gate_descriptor *)&idt[ddb_vec], &Xintrddbipi, 0,
-	    SDT_SYS386IGT, SEL_KPL, GSEL(GCODE_SEL, SEL_KPL));
+	idt_vec_set(ddb_vec, &Xintrddbipi);
 #endif
 }
 
@@ -137,21 +138,18 @@ db_suspend_others(void)
 static void
 db_resume_others(void)
 {
-	int i;
+	CPU_INFO_ITERATOR cii;
+	struct cpu_info *ci;
 
 	x86_mp_online = ddb_mp_online;
 	__cpu_simple_lock(&db_lock);
 	ddb_cpu = NOCPU;
 	__cpu_simple_unlock(&db_lock);
 
-	for (i=0; i < X86_MAXPROCS; i++) {
-		struct cpu_info *ci = cpu_info[i];
-		if (ci == NULL)
-			continue;
+	for (CPU_INFO_FOREACH(cii, ci)) {
 		if (ci->ci_flags & CPUF_PAUSE)
 			atomic_and_32(&ci->ci_flags, ~CPUF_PAUSE);
 	}
-
 }
 
 #endif
@@ -160,8 +158,7 @@ db_resume_others(void)
  * Print trap reason.
  */
 void
-kdbprinttrap(type, code)
-	int type, code;
+kdbprinttrap(int type, int code)
 {
 	db_printf("kernel: %s trap ", (type & T_USER) ? "user" : "supervisor");
 	type &= ~T_USER;
@@ -176,9 +173,7 @@ kdbprinttrap(type, code)
  *  kdb_trap - field a TRACE or BPT trap
  */
 int
-kdb_trap(type, code, regs)
-	int type, code;
-	db_regs_t *regs;
+kdb_trap(int type, int code, db_regs_t *regs)
 {
 	int s, flags;
 	db_regs_t dbreg;
@@ -187,9 +182,11 @@ kdb_trap(type, code, regs)
 	regs->tf_err &= ~TC_FLAGMASK;
 
 	switch (type) {
+	case T_NMI:	/* NMI */
+		printf("NMI ... going to debugger\n");
+		/*FALLTHROUGH*/
 	case T_BPTFLT:	/* breakpoint */
 	case T_TRCTRAP:	/* single_step */
-	case T_NMI:	/* NMI */
 	case -1:	/* keyboard interrupt */
 		break;
 	default:
@@ -267,7 +264,7 @@ kdb_trap(type, code, regs)
 }
 
 void
-cpu_Debugger()
+cpu_Debugger(void)
 {
 	breakpoint();
 }
@@ -358,11 +355,11 @@ db_mach_cpu(
 		return;
 	}
 
-	if ((addr < 0) || (addr >= X86_MAXPROCS)) {
+	if (addr < 0) {
 		db_printf("%ld: CPU out of range\n", addr);
 		return;
 	}
-	ci = cpu_info[addr];
+	ci = cpu_lookup(addr);
 	if (ci == NULL) {
 		db_printf("CPU %ld not configured\n", addr);
 		return;

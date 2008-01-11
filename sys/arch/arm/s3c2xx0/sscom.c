@@ -1,4 +1,4 @@
-/*	$NetBSD: sscom.c,v 1.27 2007/11/27 22:00:59 ad Exp $ */
+/*	$NetBSD: sscom.c,v 1.33 2011/04/24 16:26:54 rmind Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -47,13 +47,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -105,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.27 2007/11/27 22:00:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.33 2011/04/24 16:26:54 rmind Exp $");
 
 #include "opt_sscom.h"
 #include "opt_ddb.h"
@@ -136,7 +129,6 @@ __KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.27 2007/11/27 22:00:59 ad Exp $");
 #include <sys/select.h>
 #include <sys/tty.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/uio.h>
@@ -466,9 +458,7 @@ sscom_attach_subr(struct sscom_softc *sc)
 	}
 #endif
 
-
-
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = sscomstart;
 	tp->t_param = sscomparam;
 	tp->t_hwiflow = sscomhwiflow;
@@ -517,41 +507,32 @@ sscom_attach_subr(struct sscom_softc *sc)
 }
 
 int
-sscom_detach(struct device *self, int flags)
+sscom_detach(device_t self, int flags)
 {
+	struct sscom_softc *sc = device_private(self);
+
+	if (sc->sc_hwflags & (SSCOM_HW_CONSOLE|SSCOM_HW_KGDB))
+		return EBUSY;
+
 	return 0;
 }
 
 int
-sscom_activate(struct device *self, enum devact act)
+sscom_activate(device_t self, enum devact act)
 {
 #ifdef notyet
-	struct sscom_softc *sc = (struct sscom_softc *)self;
-	int s, rv = 0;
-
-	s = splserial();
-	SSCOM_LOCK(sc);
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		if (sc->sc_hwflags & (SSCOM_HW_CONSOLE|SSCOM_HW_KGDB)) {
-			rv = EBUSY;
-			break;
-		}
-
-		sc->enabled = 0;
-		break;
-	}
-
-	SSCOM_UNLOCK(sc);	
-	splx(s);
-	return rv;
-#else
-	return 0;
+	struct sscom_softc *sc = device_private(self);
 #endif
+
+	switch (act) {
+	case DVACT_DEACTIVATE:
+#ifdef notyet
+		sc->enabled = 0;
+#endif
+		return 0;
+	default:
+		return EOPNOTSUPP;
+	}
 }
 
 void
@@ -611,7 +592,7 @@ sscomopen(dev_t dev, int flag, int mode, struct lwp *l)
 	int s, s2;
 	int error;
 
-	sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	if (sc == NULL || !ISSET(sc->sc_hwflags, SSCOM_HW_DEV_OK) ||
 		sc->sc_rbuf == NULL)
 		return ENXIO;
@@ -740,7 +721,7 @@ bad:
 int
 sscomclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	/* XXX This is for cons.c. */
@@ -768,7 +749,7 @@ sscomclose(dev_t dev, int flag, int mode, struct lwp *l)
 int
 sscomread(dev_t dev, struct uio *uio, int flag)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (SSCOM_ISALIVE(sc) == 0)
@@ -780,7 +761,7 @@ sscomread(dev_t dev, struct uio *uio, int flag)
 int
 sscomwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (SSCOM_ISALIVE(sc) == 0)
@@ -792,7 +773,7 @@ sscomwrite(dev_t dev, struct uio *uio, int flag)
 int
 sscompoll(dev_t dev, int events, struct lwp *l)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	if (SSCOM_ISALIVE(sc) == 0)
@@ -804,7 +785,7 @@ sscompoll(dev_t dev, int events, struct lwp *l)
 struct tty *
 sscomtty(dev_t dev)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return tp;
@@ -813,7 +794,7 @@ sscomtty(dev_t dev)
 int
 sscomioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int error;
 	int s;
@@ -1031,7 +1012,7 @@ cflag2lcr(tcflag_t cflag)
 int
 sscomparam(struct tty *tp, struct termios *t)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(tp->t_dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(tp->t_dev));
 	int ospeed;
 	u_char lcr;
 	int s;
@@ -1222,7 +1203,7 @@ sscom_loadchannelregs(struct sscom_softc *sc)
 static int
 sscomhwiflow(struct tty *tp, int block)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(tp->t_dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(tp->t_dev));
 	int s;
 
 	if (SSCOM_ISALIVE(sc) == 0)
@@ -1278,7 +1259,7 @@ sscom_hwiflow(struct sscom_softc *sc)
 void
 sscomstart(struct tty *tp)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(tp->t_dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(tp->t_dev));
 	int s;
 
 	if (SSCOM_ISALIVE(sc) == 0)
@@ -1329,7 +1310,7 @@ out:
 void
 sscomstop(struct tty *tp, int flag)
 {
-	struct sscom_softc *sc = device_lookup(&sscom_cd, SSCOMUNIT(tp->t_dev));
+	struct sscom_softc *sc = device_lookup_private(&sscom_cd, SSCOMUNIT(tp->t_dev));
 	int s;
 
 	s = splserial();

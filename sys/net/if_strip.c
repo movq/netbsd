@@ -1,4 +1,4 @@
-/*	$NetBSD: if_strip.c,v 1.84 2007/11/10 18:29:36 ad Exp $	*/
+/*	$NetBSD: if_strip.c,v 1.95 2010/04/05 07:22:24 joerg Exp $	*/
 /*	from: NetBSD: if_sl.c,v 1.38 1996/02/13 22:00:23 christos Exp $	*/
 
 /*
@@ -87,10 +87,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.84 2007/11/10 18:29:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.95 2010/04/05 07:22:24 joerg Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -111,6 +110,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_strip.c,v 1.84 2007/11/10 18:29:36 ad Exp $");
 #include <sys/syslog.h>
 #include <sys/cpu.h>
 #include <sys/intr.h>
+#include <sys/socketvar.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -135,10 +135,8 @@ typedef u_char ttychar_t;
 typedef char ttychar_t;
 #endif
 
-#if NBPFILTER > 0
 #include <sys/time.h>
 #include <net/bpf.h>
-#endif
 
 /*
  * SLMAX is a hard limit on input packet size.  To simplify the code
@@ -363,10 +361,9 @@ strip_clone_create(struct if_clone *ifc, int unit)
 {
 	struct strip_softc *sc;
 
-	MALLOC(sc, struct strip_softc *, sizeof(*sc), M_DEVBUF, M_WAIT|M_ZERO);
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAIT|M_ZERO);
 	sc->sc_unit = unit;
-	(void)snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname),
-	    "%s%d", ifc->ifc_name, unit);
+	if_initname(&sc->sc_if, ifc->ifc_name, unit);
 	callout_init(&sc->sc_timo_ch, 0);
 	sc->sc_if.if_softc = sc;
 	sc->sc_if.if_mtu = SLMTU;
@@ -385,9 +382,7 @@ strip_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_if.if_watchdog = strip_watchdog;
 	if_attach(&sc->sc_if);
 	if_alloc_sadl(&sc->sc_if);
-#if NBPFILTER > 0
-	bpfattach(&sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
-#endif
+	bpf_attach(&sc->sc_if, DLT_SLIP, SLIP_HDRLEN);
 	LIST_INSERT_HEAD(&strip_softc_list, sc, sc_iflist);
 	return 0;
 }
@@ -402,12 +397,10 @@ strip_clone_destroy(struct ifnet *ifp)
 
 	LIST_REMOVE(sc, sc_iflist);
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 
-	FREE(sc, M_DEVBUF);
+	free(sc, M_DEVBUF);
 	return 0;
 }
 
@@ -475,8 +468,10 @@ stripopen(dev_t dev, struct tty *tp)
 	struct strip_softc *sc;
 	int error;
 
-	if ((error = kauth_authorize_generic(l->l_cred,
-	    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	error = kauth_authorize_network(l->l_cred,
+	    KAUTH_NETWORK_INTERFACE_STRIP,
+	    KAUTH_REQ_NETWORK_INTERFACE_STRIP_ADD, NULL, NULL, NULL);
+	if (error)
 		return (error);
 
 	if (tp->t_linesw == &strip_disc)
@@ -1059,22 +1054,19 @@ stripintr(void *arg)
 #ifdef INET
 	u_char c;
 #endif
-#if NBPFILTER > 0
 	u_char chdr[CHDR_LEN];
-#endif
 
 	KASSERT(tp != NULL);
 
 	/*
 	 * Output processing loop.
 	 */
+	mutex_enter(softnet_lock);
 	for (;;) {
 #ifdef INET
 		struct ip *ip;
 #endif
-#if NBPFILTER > 0
 		struct mbuf *bpf_m;
-#endif
 
 		/*
 		 * Do not remove the packet from the queue if it
@@ -1112,7 +1104,6 @@ stripintr(void *arg)
 		 * connection ID compression will get munged when
 		 * this happens.
 		 */
-#if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
 			/*
 			 * We need to save the TCP/IP header before
@@ -1126,7 +1117,6 @@ stripintr(void *arg)
 			bpf_m = m_dup(m, 0, M_COPYALL, M_DONTWAIT);
 		} else
 			bpf_m = NULL;
-#endif
 #ifdef INET
 		if ((ip = mtod(m, struct ip *))->ip_p == IPPROTO_TCP) {
 			if (sc->sc_if.if_flags & SC_COMPRESS)
@@ -1135,11 +1125,8 @@ stripintr(void *arg)
 				    &sc->sc_comp, 1);
 		}
 #endif
-#if NBPFILTER > 0
-		if (sc->sc_if.if_bpf && bpf_m != NULL)
-			bpf_mtap_sl_out(sc->sc_if.if_bpf, mtod(m, u_char *),
-			    bpf_m);
-#endif
+		if (bpf_m != NULL)
+			bpf_mtap_sl_out(&sc->sc_if, mtod(m, u_char *), bpf_m);
 		getbinuptime(&sc->sc_lastpacket);
 
 		s = spltty();
@@ -1165,7 +1152,6 @@ stripintr(void *arg)
 			break;
 		pktstart = mtod(m, u_char *);
 		len = m->m_pkthdr.len;
-#if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
 			/*
 			 * Save the compressed header, so we
@@ -1177,7 +1163,6 @@ stripintr(void *arg)
 			 */
 			memcpy(chdr, pktstart, CHDR_LEN);
 		}
-#endif /* NBPFILTER > 0 */
 #ifdef INET
 		if ((c = (*pktstart & 0xf0)) != (IPVERSION << 4)) {
 			if (c & 0x80)
@@ -1217,13 +1202,11 @@ stripintr(void *arg)
 #endif
 		m->m_data = (void *) pktstart;
 		m->m_pkthdr.len = m->m_len = len;
-#if NBPFILTER > 0
 		if (sc->sc_if.if_bpf) {
-			bpf_mtap_sl_in(sc->sc_if.if_bpf, chdr, &m);
+			bpf_mtap_sl_in(&sc->sc_if, chdr, &m);
 			if (m == NULL)
 				continue;
 		}
-#endif
 		/*
 		 * If the packet will fit into a single
 		 * header mbuf, copy it into one, to save
@@ -1259,6 +1242,7 @@ stripintr(void *arg)
 		splx(s);
 #endif
 	}
+	mutex_exit(softnet_lock);
 }
 
 /*
@@ -1275,7 +1259,7 @@ stripioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		if (ifa->ifa_addr->sa_family == AF_INET)
 			ifp->if_flags |= IFF_UP;
 		else
@@ -1308,7 +1292,7 @@ stripioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = EINVAL;
+		error = ifioctl_common(ifp, cmd, data);
 	}
 	splx(s);
 	return (error);
@@ -1458,11 +1442,11 @@ strip_watchdog(struct ifnet *ifp)
 
 #ifdef DEBUG
 	if (ifp->if_flags & IFF_DEBUG)
-		addlog("\n%s: in watchdog, state %s timeout %ld\n",
+		addlog("\n%s: in watchdog, state %s timeout %lld\n",
 		       ifp->if_xname,
  		       ((unsigned) sc->sc_state < 3) ?
 		       strip_statenames[sc->sc_state] : "<<illegal state>>",
-		       sc->sc_statetimo - time_second);
+		       (long long)(sc->sc_statetimo - time_second));
 #endif
 
 	/*
@@ -1607,7 +1591,7 @@ strip_newpacket(struct strip_softc *sc, u_char *ptr, u_char *end)
 	 * of the decoded packet.  Decode start of IP header, get the
 	 * IP header length and decode that many bytes in total.
 	 */
-	packetlen = ((u_int16_t)sc->sc_rxbuf[2] << 8) | sc->sc_rxbuf[3];
+	packetlen = ((uint16_t)sc->sc_rxbuf[2] << 8) | sc->sc_rxbuf[3];
 
 #ifdef DIAGNOSTIC
 #if 0
@@ -1626,7 +1610,7 @@ strip_newpacket(struct strip_softc *sc, u_char *ptr, u_char *end)
 	}
 
 	/* XXX redundant copy */
-	bcopy(sc->sc_rxbuf, sc->sc_pktstart, packetlen );
+	memcpy(sc->sc_pktstart, sc->sc_rxbuf, packetlen );
 	return (packetlen);
 }
 

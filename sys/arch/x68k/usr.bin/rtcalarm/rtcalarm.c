@@ -1,4 +1,4 @@
-/*	$NetBSD: rtcalarm.c,v 1.5 2006/08/04 02:32:30 mhitch Exp $	*/
+/*	$NetBSD: rtcalarm.c,v 1.11 2011/05/19 21:26:39 tsutsui Exp $	*/
 /*
  * Copyright (c) 1995 MINOURA Makoto.
  * All rights reserved.
@@ -38,32 +38,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <err.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <machine/powioctl.h>
 
-char           *prog;
+static void usage(void) __attribute__((__noreturn__));
+static void showinfo(void);
+static char *numstr(unsigned int);
+static void showontime(unsigned int);
+static void disablealarm(void);
+static void setinfo(int, char **);
+static int strnum(const char *, size_t);
 
-static void usage __P((void)) __attribute__((__noreturn__));
-static void myperror __P((const char *, int)) __attribute__((__noreturn__));
-
-static void showinfo __P((void));
-static char    *numstr __P((unsigned int));
-static void showontime __P((unsigned int));
-
-static void disablealarm __P((void));
-
-static void setinfo __P((int, char **));
-static int strnum __P((const char *, int));
+static const char *devicefile = "/dev/pow0";	/* default path */
 
 int
-main(argc, argv)
-	int             argc;
-	char           *argv[];
+main(int argc, char *argv[])
 {
-	prog = argv[0];
 
 	if (argc == 1)
 		showinfo();
@@ -78,26 +72,13 @@ main(argc, argv)
 static void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [[-w day-of-the-week] [-d day-of-the-month]\n", prog);
-	fprintf(stderr, "                [-m minites] [-s seconds] [-c channel] HH:MM]\n");
+	fprintf(stderr,
+		"Usage: %s [[-w day-of-the-week] [-d day-of-the-month]\n" 
+		"                [-m minites] [-s seconds] [-c channel] HH:MM]\n",
+		getprogname());
 
 	exit(1);
 }
-
-static void
-myperror(str, fd)
-	const char     *str;
-	int             fd;
-{
-	fprintf(stderr, "%s: %s: %s\n", prog, str, strerror(errno));
-
-	if (fd >= 0)
-		close(fd);
-
-	exit(1);
-}
-
-
 
 static void
 showinfo(void)
@@ -105,12 +86,12 @@ showinfo(void)
 	struct x68k_alarminfo alarminfo;
 	int             fd;
 
-	fd = open("/dev/pow1", O_RDONLY);
+	fd = open(devicefile, O_RDONLY);
 	if (fd < 0)
-		myperror("Opening /dev/pow1", -1);
+		err(EXIT_FAILURE, "Opening %s", devicefile);
 
 	if (ioctl(fd, POWIOCGALARMINFO, &alarminfo) < 0)
-		myperror("powiocgalarminfo", fd);
+		err(EXIT_FAILURE, "POWIOCGALARMINFO");
 	close(fd);
 
 	if (alarminfo.al_enable) {
@@ -123,20 +104,20 @@ showinfo(void)
 			printf("TV mode.\n");
 		else
 			printf("Computer mode. ADDR=%8.8x\n", alarminfo.al_dowhat);
+
 		if (alarminfo.al_offtime == 0)
 			printf("Never shut down automatically.\n");
 		else
 			printf("Shut down in %d seconds (%d minutes).\n",
-			       alarminfo.al_offtime,
-			       alarminfo.al_offtime / 60);
+			       (int)alarminfo.al_offtime,
+			       (int)alarminfo.al_offtime / 60);
 	} else {
 		printf("RTC alarm is disabled.\n");
 	}
 }
 
-static char    *
-numstr(num)
-	unsigned int    num;
+static char *
+numstr(unsigned int num)
 {
 	static char     buffer[4];
 
@@ -155,8 +136,7 @@ numstr(num)
 	return buffer;
 }
 
-const char     *weekname[] =
-{
+const char * const weekname[] = {
 	"Sunday",
 	"Monday",
 	"Tuesday",
@@ -167,9 +147,9 @@ const char     *weekname[] =
 };
 
 static void
-showontime(ontime)
-	unsigned int    ontime;
+showontime(unsigned int ontime)
 {
+
 	printf("At %s:", numstr((ontime & 0x0000ff00) >> 8));
 	printf("%s ", numstr(ontime & 0x000000ff));
 
@@ -182,14 +162,14 @@ showontime(ontime)
 			else
 				printf("on every %s, \n",
 				     weekname[(ontime & 0x0f000000) >> 24]);
-		} else
+		} else {
 			printf("on %sth in every month, \n",
 			       numstr((ontime & 0x00ff0000) >> 16));
-	} else
+		}
+	} else {
 		printf("everyday.\n");
+	}
 }
-
-
 
 static void
 disablealarm(void)
@@ -199,33 +179,27 @@ disablealarm(void)
 
 	alarminfo.al_enable = 0;
 
-	fd = open("/dev/pow1", O_WRONLY);
+	fd = open(devicefile, O_WRONLY);
 	if (fd < 0)
-		myperror("Opening /dev/pow1", -1);
+		err(EXIT_FAILURE, "Opening %s", devicefile);
 	if (ioctl(fd, POWIOCSALARMINFO, &alarminfo) < 0)
-		myperror("powiocsalarminfo", fd);
+		err(EXIT_FAILURE, "POWIOCSALARMINFO");
 	close(fd);
 }
 
-
-
 static void
-setinfo(argc, argv)
-	int             argc;
-	char          **argv;
+setinfo(int argc, char **argv)
 {
 	int             ch;
 	int             week = 0x0f;
 	int             hour = 0xffff;
 	int             day = 0xff;
-	int             offtime = 0;
+	int             off_time = 0;
 	int             dowhat = 0;
-	extern char    *optarg;
-	extern int      optind;
 	int             fd;
 	struct x68k_alarminfo alarminfo;
 
-	while ((ch = getopt(argc, argv, "w:d:m:s:c:")) != -1)
+	while ((ch = getopt(argc, argv, "w:d:m:s:c:")) != -1) {
 		switch (ch) {
 		case 'w':	/* day of the week */
 			if ((week = strnum(optarg, 1)) < 0)
@@ -236,10 +210,10 @@ setinfo(argc, argv)
 				usage();
 			break;
 		case 'm':	/* for X minits */
-			offtime = atoi(optarg);
+			off_time = atoi(optarg);
 			break;
 		case 's':	/* for X seconds */
-			offtime = atoi(optarg) / 60;
+			off_time = atoi(optarg) / 60;
 			break;
 		case 'c':	/* channel */
 			dowhat = atoi(optarg) + 0x30 - 1;
@@ -247,12 +221,13 @@ setinfo(argc, argv)
 				usage();
 			break;
 		}
+	}
 	if (optind != argc - 1)
 		usage();
 
 #ifdef DEBUG
 	printf("week: %x, day:%x, for:%d, hour:%x\n",
-	       week, day, offtime, strnum(argv[optind], 5));
+	       week, day, off_time, strnum(argv[optind], 5));
 #endif
 
 	hour = strnum(argv[optind], 5);
@@ -262,20 +237,18 @@ setinfo(argc, argv)
 	alarminfo.al_enable = 1;
 	alarminfo.al_ontime = (week << 24) | (day << 16) | hour;
 	alarminfo.al_dowhat = dowhat;
-	alarminfo.al_offtime = offtime * 60;
+	alarminfo.al_offtime = off_time * 60;
 
-	fd = open("/dev/pow1", O_WRONLY);
+	fd = open(devicefile, O_WRONLY);
 	if (fd < 0)
-		myperror("Opening /dev/pow1", -1);
+		err(EXIT_FAILURE, "Opening %s", devicefile);
 	if (ioctl(fd, POWIOCSALARMINFO, &alarminfo) < 0)
-		myperror("powiocsalarminfo", fd);
+		err(EXIT_FAILURE, "POWIOCSALARMINFO");
 	close(fd);
 }
 
 static int
-strnum(str, wid)
-	const char     *str;
-	int             wid;
+strnum(const char *str, size_t wid)
 {
 	int             r;
 

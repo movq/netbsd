@@ -1,4 +1,4 @@
-/* $NetBSD: tsvar.h,v 1.5 2005/12/11 12:16:17 christos Exp $ */
+/* $NetBSD: tsvar.h,v 1.9 2010/10/07 19:55:02 hans Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -35,11 +35,9 @@
 #include <dev/pci/pcivar.h>
 #include <alpha/pci/pci_sgmap_pte64.h>
 
-#define	tsvar() { Generate ctags(1) key. }
+#define	_FSTORE	(EXTENT_FIXED_STORAGE_SIZE(8) / sizeof(long))
 
-struct tsc_softc {
-	struct	device tsc_dev;
-};
+#define	tsvar() { Generate ctags(1) key. }
 
 struct tsp_config {
 	int	pc_pslot;		/* Pchip 0 or 1 */
@@ -58,13 +56,10 @@ struct tsp_config {
 	u_int32_t pc_hae_mem;
 	u_int32_t pc_hae_io;
 
+	long	pc_io_exstorage[_FSTORE];
+	long	pc_mem_exstorage[_FSTORE];
 	struct	extent *pc_io_ex, *pc_mem_ex;
 	int	pc_mallocsafe;
-};
-
-struct tsp_softc {
-	struct	device sc_dev;
-	struct	tsp_config *sc_ccp;
 };
 
 struct tsp_attach_args {
@@ -74,11 +69,17 @@ struct tsp_attach_args {
 
 extern int tsp_console_hose;
 
-struct	tsp_config *tsp_init __P((int, int));
-void	tsp_pci_init __P((pci_chipset_tag_t, void *));
-void	tsp_dma_init __P((struct tsp_config *));
+struct	tsp_config *tsp_init(int, int);
+void	tsp_pci_init(pci_chipset_tag_t, void *);
+void	tsp_dma_init(struct tsp_config *);
 
-void	tsp_bus_io_init __P((bus_space_tag_t, void *));
-void	tsp_bus_mem_init __P((bus_space_tag_t, void *));
+void	tsp_bus_io_init(bus_space_tag_t, void *);
+void	tsp_bus_mem_init(bus_space_tag_t, void *);
 
-void	tsp_bus_mem_init2 __P((bus_space_tag_t, void *));
+void	tsp_bus_mem_init2(bus_space_tag_t, void *);
+
+void	tsp_print_error(unsigned int, unsigned long);
+void	tsc_print_misc(unsigned int, unsigned long);
+void	tsc_print_dir(unsigned int, unsigned long);
+
+#define IPRINTF(i, f, ...)	printf("%*s" f, i * 4, "", ##__VA_ARGS__)

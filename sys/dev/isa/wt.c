@@ -1,4 +1,4 @@
-/*	$NetBSD: wt.c,v 1.78 2007/10/19 12:00:24 ad Exp $	*/
+/*	$NetBSD: wt.c,v 1.82 2009/05/12 09:10:16 cegger Exp $	*/
 
 /*
  * Streamer tape driver.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wt.c,v 1.78 2007/10/19 12:00:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wt.c,v 1.82 2009/05/12 09:10:16 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -181,8 +181,8 @@ static int	wtwritefm(struct wt_softc *sc);
 static u_char	wtsoft(struct wt_softc *sc, int mask, int bits);
 static int	wtintr(void *sc);
 
-int	wtprobe(struct device *, struct cfdata *, void *);
-void	wtattach(struct device *, struct device *, void *);
+int	wtprobe(device_t, cfdata_t, void *);
+void	wtattach(device_t, device_t, void *);
 
 CFATTACH_DECL(wt, sizeof(struct wt_softc),
     wtprobe, wtattach, NULL, NULL);
@@ -193,8 +193,7 @@ extern struct cfdriver wt_cd;
  * Probe for the presence of the device.
  */
 int
-wtprobe(struct device *parent, struct cfdata *match,
-    void *aux)
+wtprobe(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -258,7 +257,7 @@ done:
  * Device is found, configure it.
  */
 void
-wtattach(struct device *parent, struct device *self, void *aux)
+wtattach(device_t parent, device_t self, void *aux)
 {
 	struct wt_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
@@ -297,7 +296,7 @@ wtattach(struct device *parent, struct device *self, void *aux)
 	}
 
 	/* what happened? */
-	printf("%s: lost controller\n", self->dv_xname);
+	aprint_error_dev(self, "lost controller\n");
 	return;
 
 ok:
@@ -307,21 +306,20 @@ ok:
 	sc->chan = ia->ia_drq[0].ir_drq;
 
 	if ((maxsize = isa_dmamaxsize(sc->sc_ic, sc->chan)) < MAXPHYS) {
-		printf("%s: max DMA size %lu is less than required %d\n",
-		    sc->sc_dev.dv_xname, (u_long)maxsize, MAXPHYS);
+		aprint_error_dev(&sc->sc_dev, "max DMA size %lu is less than required %d\n",
+		    (u_long)maxsize, MAXPHYS);
 		return;
 	}
 
 	if (isa_drq_alloc(sc->sc_ic, sc->chan) != 0) {
-		printf("%s: can't reserve drq %d\n",
-		    sc->sc_dev.dv_xname, sc->chan);
+		aprint_error_dev(&sc->sc_dev, "can't reserve drq %d\n",
+		    sc->chan);
 		return;
 	}
 
 	if (isa_dmamap_create(sc->sc_ic, sc->chan, MAXPHYS,
 	    BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-		printf("%s: can't set up ISA DMA map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't set up ISA DMA map\n");
 		return;
 	}
 
@@ -356,7 +354,7 @@ wtopen(dev_t dev, int flag, int mode, struct lwp *l)
 	struct wt_softc *sc;
 	int error;
 
-	sc = device_lookup(&wt_cd, unit);
+	sc = device_lookup_private(&wt_cd, unit);
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -409,8 +407,7 @@ wtopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 				/* Check the status of the controller. */
 				if (sc->error & TP_ILL) {
-					printf("%s: invalid tape density\n",
-					    sc->sc_dev.dv_xname);
+					aprint_error_dev(&sc->sc_dev, "invalid tape density\n");
 					return ENODEV;
 				}
 			}
@@ -438,7 +435,9 @@ static int
 wtclose(dev_t dev, int flags, int mode,
     struct lwp *l)
 {
-	struct wt_softc *sc = device_lookup(&wt_cd, minor(dev) & T_UNIT);
+	struct wt_softc *sc;
+
+	sc = device_lookup_private(&wt_cd, minor(dev) & T_UNIT);
 
 	/* If rewind is pending, do nothing */
 	if (sc->flags & TPREW)
@@ -488,8 +487,10 @@ static int
 wtioctl(dev_t dev, unsigned long cmd, void *addr, int flag,
     struct lwp *l)
 {
-	struct wt_softc *sc = device_lookup(&wt_cd, minor(dev) & T_UNIT);
+	struct wt_softc *sc;
 	int error, count, op;
+
+	sc = device_lookup_private(&wt_cd, minor(dev) & T_UNIT);
 
 	switch (cmd) {
 	default:
@@ -586,8 +587,10 @@ wtioctl(dev_t dev, unsigned long cmd, void *addr, int flag,
 static void
 wtstrategy(struct buf *bp)
 {
-	struct wt_softc *sc = device_lookup(&wt_cd, minor(bp->b_dev) & T_UNIT);
+	struct wt_softc *sc;
 	int s;
+
+	sc = device_lookup_private(&wt_cd, minor(bp->b_dev) & T_UNIT);
 
 	bp->b_resid = bp->b_bcount;
 
@@ -1082,7 +1085,7 @@ wtsense(struct wt_softc *sc, int verbose, int ignore)
 	else if (error & TP_ILL)
 		msg = "Illegal command";
 	if (msg)
-		printf("%s: %s\n", sc->sc_dev.dv_xname, msg);
+		printf("%s: %s\n", device_xname(&sc->sc_dev), msg);
 	return 0;
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: output.h,v 1.17 2003/08/07 09:05:36 agc Exp $	*/
+/*	$NetBSD: output.h,v 1.22 2010/10/29 17:06:53 stacktic Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -47,6 +47,9 @@ struct output {
 	short flags;
 };
 
+/* flags for ->flags */
+#define OUTPUT_ERR 01		/* error occurred on output */
+
 extern struct output output;
 extern struct output errout;
 extern struct output memout;
@@ -57,6 +60,8 @@ void open_mem(char *, int, struct output *);
 void out1str(const char *);
 void out2str(const char *);
 void outstr(const char *, struct output *);
+void out2shstr(const char *);
+void outshstr(const char *, struct output *);
 void emptyoutbuf(struct output *);
 void flushall(void);
 void flushout(struct output *);
@@ -65,8 +70,10 @@ void outfmt(struct output *, const char *, ...)
     __attribute__((__format__(__printf__,2,3)));
 void out1fmt(const char *, ...)
     __attribute__((__format__(__printf__,1,2)));
-void dprintf(const char *, ...)
+#ifdef DEBUG
+void debugprintf(const char *, ...)
     __attribute__((__format__(__printf__,1,2)));
+#endif
 void fmtstr(char *, size_t, const char *, ...)
     __attribute__((__format__(__printf__,3,4)));
 void doformat(struct output *, const char *, va_list);
@@ -74,8 +81,8 @@ int xwrite(int, char *, int);
 int xioctl(int, unsigned long, char *);
 
 #define outc(c, file)	(--(file)->nleft < 0? (emptyoutbuf(file), *(file)->nextc++ = (c)) : (*(file)->nextc++ = (c)))
-#define out1c(c)	outc(c, out1);
-#define out2c(c)	outc(c, out2);
+#define out1c(c)	outc(c, out1)
+#define out2c(c)	outc(c, out2)
 
 #define OUTPUT_INCL
 #endif

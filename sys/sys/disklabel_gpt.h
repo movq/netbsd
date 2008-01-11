@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel_gpt.h,v 1.4 2007/12/28 19:53:09 riz Exp $	*/
+/*	$NetBSD: disklabel_gpt.h,v 1.7 2008/11/12 22:50:22 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2002 Marcel Moolenaar
@@ -67,6 +67,8 @@ struct gpt_hdr {
 #define	GPT_HDR_REVISION	0x00010000	/* 1.0 */
 
 #define	GPT_HDR_BLKNO		1
+
+#define	GPT_HDR_SIZE		0x5c
 
 /*
  * GUID Partition Entry
@@ -147,5 +149,13 @@ struct gpt_ent {
 
 #define	GPT_ENT_TYPE_APPLE_HFS		\
 	{0x48465300,0x0000,0x11aa,0xaa,0x11,{0x00,0x30,0x65,0x43,0xec,0xac}}
+#define	GPT_ENT_TYPE_APPLE_UFS		\
+	{0x55465300,0x0000,0x11aa,0xaa,0x11,{0x00,0x30,0x65,0x43,0xec,0xac}}
+
+/*
+ * Used by GRUB 2.
+ */
+#define GPT_ENT_TYPE_BIOS		\
+	{0x21686148,0x6449,0x6e6f,0x74,0x4e,{0x65,0x65,0x64,0x45,0x46,0x49}}
 
 #endif /* _SYS_DISKLABEL_GPT_H_ */

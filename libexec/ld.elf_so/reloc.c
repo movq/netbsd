@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc.c,v 1.95 2006/03/04 08:58:46 skrll Exp $	 */
+/*	$NetBSD: reloc.c,v 1.103 2010/12/24 12:41:43 skrll Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: reloc.c,v 1.95 2006/03/04 08:58:46 skrll Exp $");
+__RCSID("$NetBSD: reloc.c,v 1.103 2010/12/24 12:41:43 skrll Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -52,6 +52,7 @@ __RCSID("$NetBSD: reloc.c,v 1.95 2006/03/04 08:58:46 skrll Exp $");
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <sys/bitops.h>
 #include <dirent.h>
 
 #include "debug.h"
@@ -84,7 +85,7 @@ _rtld_do_copy_relocation(const Obj_Entry *dstobj, const Elf_Rela *rela)
 	srcaddr = (const void *)(srcobj->relocbase + srcsym->st_value);
 	(void)memcpy(dstaddr, srcaddr, size);
 	rdbg(("COPY %s %s %s --> src=%p dst=%p size %ld",
-	    dstobj->path, srcobj->path, name, (void *)srcaddr,
+	    dstobj->path, srcobj->path, name, srcaddr,
 	    (void *)dstaddr, (long)size));
 	return (0);
 }
@@ -154,6 +155,10 @@ _rtld_relocate_objects(Obj_Entry *first, bool bind_now)
 			    " symbol table", obj->path);
 			return -1;
 		}
+		if (obj->nbuckets == UINT32_MAX) {
+			_rtld_error("%s: Symbol table too large", obj->path);
+			return -1;
+		}
 		rdbg((" relocating %s (%ld/%ld rel/rela, %ld/%ld plt rel/rela)",
 		    obj->path,
 		    (long)(obj->rellim - obj->rel),
@@ -190,14 +195,13 @@ _rtld_relocate_objects(Obj_Entry *first, bool bind_now)
 #if defined(__hppa__)
 		bind_now = 1;
 #endif
-		if (bind_now) {
+		if (obj->z_now || bind_now) {
 			dbg(("doing immediate PLT binding"));
 			if (_rtld_relocate_plt_objects(obj) < 0)
 				ok = 0;
 		}
 		if (!ok)
 			return -1;
-
 
 		/* Set some sanity-checking numbers in the Obj_Entry. */
 		obj->magic = RTLD_MAGIC;

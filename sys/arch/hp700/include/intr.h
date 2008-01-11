@@ -1,4 +1,5 @@
-/*	$NetBSD: intr.h,v 1.11 2007/12/03 15:33:41 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.19 2010/11/16 08:59:30 uebayasi Exp $	*/
+/*	$OpenBSD: intr.h,v 1.26 2009/12/29 13:11:40 jsing Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -60,34 +54,15 @@
 
 #ifndef _LOCORE
 
+#ifdef _KERNEL
+
 /* The priority level masks. */
 extern int imask[NIPL];
 
-/* The current priority level. */
-extern volatile int cpl;
-
-/* The asynchronous system trap flag. */
-extern volatile int astpending;
-
-/* The softnet mask. */
-extern int softnetmask;
-
-/* 
- * Add a mask to cpl, and return the old value of cpl.
- */
-static __inline int  
-splraise(register int ncpl)
-{
-	register int ocpl = cpl;
-
-	cpl = ocpl | ncpl;      
-
-	return (ocpl);  
-}
-
-/* spllower() is in locore.S */
+/* splraise()/spllower() are in locore.S */
+int splraise(int);
 void spllower(int);
- 
+
 /*
  * Miscellaneous
  */
@@ -114,20 +89,9 @@ splraiseipl(ipl_cookie_t icookie)
 }
 
 #include <sys/spl.h>
+#endif
 
-#define	setsoftast()	(astpending = 1)
-#define	setsoftnet()	hp700_intr_schedule(softnetmask)
-
-/*
- * Generic software interrupt support.
- */
-
-#define	HP700_SOFTINTR_SOFTCLOCK	0
-#define	HP700_SOFTINTR_SOFTNET		1
-#define	HP700_SOFTINTR_SOFTSERIAL	2
-#define	HP700_NSOFTINTR			3
-
-void	hp700_intr_schedule(int);
+#define	setsoftast(l)	((l)->l_md.md_astpending = 1)
 
 #endif /* !_LOCORE */
 

@@ -1,4 +1,4 @@
-/* $NetBSD: envsys.h,v 1.20 2007/12/07 11:47:49 xtraeme Exp $ */
+/* $NetBSD: envsys.h,v 1.31 2010/02/28 20:04:04 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 1999, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,26 +46,6 @@
 
 #define ENVSYS_MAXSENSORS	512
 #define ENVSYS_DESCLEN		32
-
-/* struct used by a sensor */
-struct envsys_data {
-	TAILQ_ENTRY(envsys_data)	sensors_head;
-	uint32_t	sensor;		/* sensor number */
-	uint32_t	units;		/* type of sensor */
-	uint32_t	state;		/* sensor state */
-	uint32_t	flags;		/* sensor flags */
-	uint32_t	rpms;		/* for fans, nominal RPMs */
-	int32_t		rfact;		/* for volts, factor x 10^4 */
-	int32_t		value_cur;	/* current value */
-	int32_t		value_max;	/* max value */
-	int32_t		value_min;	/* min value */
-	int32_t		value_avg;	/* avg value */
-	int		upropset;	/* userland property set? */
-	bool		monitor;	/* monitoring enabled/disabled */
-	char		desc[ENVSYS_DESCLEN];	/* sensor description */
-};
-
-typedef struct envsys_data envsys_data_t;
 
 /* sensor units */
 enum envsys_units {
@@ -116,7 +89,10 @@ enum envsys_drive_states {
 	ENVSYS_DRIVE_POWERDOWN,		/* drive is powered down */
 	ENVSYS_DRIVE_FAIL,		/* drive failed */
 	ENVSYS_DRIVE_PFAIL,		/* drive is degraded */
-	ENVSYS_DRIVE_MIGRATING		/* drive is migrating */
+	ENVSYS_DRIVE_MIGRATING,		/* drive is migrating */
+	ENVSYS_DRIVE_OFFLINE,		/* drive is offline */
+	ENVSYS_DRIVE_BUILD,		/* drive is building */
+	ENVSYS_DRIVE_CHECK		/* drive is checking its state */
 };
 
 /* sensor battery capacity states */
@@ -124,25 +100,14 @@ enum envsys_battery_capacity_states {
 	ENVSYS_BATTERY_CAPACITY_NORMAL	= 1,	/* normal cap in battery */
 	ENVSYS_BATTERY_CAPACITY_WARNING,	/* warning cap in battery */
 	ENVSYS_BATTERY_CAPACITY_CRITICAL,	/* critical cap in battery */
+	ENVSYS_BATTERY_CAPACITY_HIGH,		/* high cap in battery */
+	ENVSYS_BATTERY_CAPACITY_MAX,		/* maximum cap in battery */
 	ENVSYS_BATTERY_CAPACITY_LOW		/* low cap in battery */
 };
 
-/* sensor flags */
-#define ENVSYS_FPERCENT 	0x00000001	/* sensor wants a percentage */
-#define ENVSYS_FVALID_MAX	0x00000002	/* max value is ok */
-#define ENVSYS_FVALID_MIN	0x00000004	/* min value is ok */
-#define ENVSYS_FVALID_AVG	0x00000008	/* avg value is ok */
-#define ENVSYS_FCHANGERFACT	0x00000010	/* sensor can change rfact */
-
-/* monitoring flags */
-#define ENVSYS_FMONCRITICAL	0x00000020	/* monitor a critical state */
-#define ENVSYS_FMONCRITUNDER	0x00000040	/* monitor a critunder state */
-#define ENVSYS_FMONCRITOVER	0x00000080	/* monitor a critover state */
-#define ENVSYS_FMONWARNUNDER	0x00000100	/* monitor a warnunder state */
-#define ENVSYS_FMONWARNOVER	0x00000200	/* monitor a warnover state */
-#define ENVSYS_FMONSTCHANGED	0x00000400	/* monitor a battery/drive state */
-#define ENVSYS_FMONNOTSUPP	0x00000800	/* monitoring not supported */
-
+/*
+ * IOCTLs
+ */
 #define ENVSYS_GETDICTIONARY	_IOWR('E', 0, struct plistref)
 #define ENVSYS_SETDICTIONARY	_IOWR('E', 1, struct plistref)
 #define ENVSYS_REMOVEPROPS	_IOWR('E', 2, struct plistref)

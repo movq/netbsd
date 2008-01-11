@@ -1,4 +1,4 @@
-/*	$NetBSD: rtas.c,v 1.6 2007/12/28 05:12:41 garbled Exp $ */
+/*	$NetBSD: rtas.c,v 1.9 2010/11/09 06:47:24 uebayasi Exp $ */
 
 /*
  * CHRP RTAS support routines
@@ -9,7 +9,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtas.c,v 1.6 2007/12/28 05:12:41 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtas.c,v 1.9 2010/11/09 06:47:24 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,6 +65,8 @@ static struct {
         { "suspend", RTAS_FUNC_SUSPEND },
         { "hibernate", RTAS_FUNC_HIBERNATE },
         { "system-reboot", RTAS_FUNC_SYSTEM_REBOOT },
+	{ "freeze-time-base", RTAS_FUNC_FREEZE_TIME_BASE },
+	{ "thaw-time-base", RTAS_FUNC_THAW_TIME_BASE },
 };
 
 static int rtas_match(struct device *, struct cfdata *, void *);
@@ -114,12 +116,14 @@ rtas_attach(struct device *parent, struct device *self, void *aux)
 	rtas_size = of_decode_int(buf);
 
 	/*
-	 * Instantiate the RTAS
+	 * Instantiate the RTAS.
+	 * The physical base address should be in the first 256 MB segment.
 	 */
-	if (uvm_pglistalloc(rtas_size, 0, ~0, 4096, 256 << 20, &pglist, 1, 0))
+	if (uvm_pglistalloc(rtas_size, 0x100000, 0x0fffffff, 4096, 256 << 20,
+	    &pglist, 1, 0))
 		goto fail;
 
-	sc->ra_base_pa = TAILQ_FIRST(&pglist)->phys_addr;
+	sc->ra_base_pa = VM_PAGE_TO_PHYS(TAILQ_FIRST(&pglist));
 
 	ih = OF_open("/rtas");
 	if (ih == -1)

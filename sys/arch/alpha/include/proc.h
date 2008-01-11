@@ -1,4 +1,4 @@
-/* $NetBSD: proc.h,v 1.17 2007/02/09 21:55:01 ad Exp $ */
+/* $NetBSD: proc.h,v 1.19 2011/01/14 02:06:22 rmind Exp $ */
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -31,6 +31,7 @@
 #define _ALPHA_PROC_H
 
 #include <machine/frame.h>
+#include <machine/pcb.h>
 
 /*
  * Machine-dependent part of the lwp struct for the Alpha.

@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_node.c,v 1.14 2008/01/04 21:18:08 ad Exp $	*/
+/*	$NetBSD: filecore_node.c,v 1.24 2011/05/23 22:00:31 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1994
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_node.c,v 1.14 2008/01/04 21:18:08 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_node.c,v 1.24 2011/05/23 22:00:31 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,10 +78,9 @@ __KERNEL_RCSID(0, "$NetBSD: filecore_node.c,v 1.14 2008/01/04 21:18:08 ad Exp $"
 #include <sys/vnode.h>
 #include <sys/namei.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/stat.h>
-#include <sys/simplelock.h>
+#include <sys/mutex.h>
 
 #include <fs/filecorefs/filecore.h>
 #include <fs/filecorefs/filecore_extern.h>
@@ -91,12 +90,13 @@ __KERNEL_RCSID(0, "$NetBSD: filecore_node.c,v 1.14 2008/01/04 21:18:08 ad Exp $"
 /*
  * Structures associated with filecore_node caching.
  */
-LIST_HEAD(ihashhead, filecore_node) *filecorehashtbl;
-u_long filecorehash;
-#define	INOHASH(device, inum)	(((device) + ((inum)>>12)) & filecorehash)
-struct simplelock filecore_ihash_slock;
+static LIST_HEAD(ihashhead, filecore_node) *filecorehashtbl;
+static u_long		filecorehash;
 
-struct pool filecore_node_pool;
+#define	INOHASH(device, inum)	(((device) + ((inum)>>12)) & filecorehash)
+
+static kmutex_t		filecore_ihash_lock;
+struct pool		filecore_node_pool;
 
 extern int prtactive;	/* 1 => print out reclaim of active vnodes */
 
@@ -104,33 +104,30 @@ extern int prtactive;	/* 1 => print out reclaim of active vnodes */
  * Initialize hash links for inodes and dnodes.
  */
 void
-filecore_init()
+filecore_init(void)
 {
 
-	malloc_type_attach(M_FILECOREMNT);
-	malloc_type_attach(M_FILECORETMP);
+	mutex_init(&filecore_ihash_lock, MUTEX_DEFAULT, IPL_NONE);
 	pool_init(&filecore_node_pool, sizeof(struct filecore_node), 0, 0, 0,
 	    "filecrnopl", &pool_allocator_nointr, IPL_NONE);
-	filecorehashtbl = hashinit(desiredvnodes, HASH_LIST, M_FILECOREMNT,
-	    M_WAITOK, &filecorehash);
-	simple_lock_init(&filecore_ihash_slock);
+	filecorehashtbl = hashinit(desiredvnodes, HASH_LIST, true,
+	    &filecorehash);
 }
 
 /*
  * Reinitialize inode hash table.
  */
 void
-filecore_reinit()
+filecore_reinit(void)
 {
 	struct filecore_node *ip;
 	struct ihashhead *oldhash, *hash;
 	u_long oldmask, mask, val;
 	int i;
 
-	hash = hashinit(desiredvnodes, HASH_LIST, M_FILECOREMNT, M_WAITOK,
-	    &mask);
+	hash = hashinit(desiredvnodes, HASH_LIST, true, &mask);
 
-	simple_lock(&filecore_ihash_slock);
+	mutex_enter(&filecore_ihash_lock);
 	oldhash = filecorehashtbl;
 	oldmask = filecorehash;
 	filecorehashtbl = hash;
@@ -142,20 +139,20 @@ filecore_reinit()
 			LIST_INSERT_HEAD(&hash[val], ip, i_hash);
 		}
 	}
-	simple_unlock(&filecore_ihash_slock);
-	hashdone(oldhash, M_FILECOREMNT);
+	mutex_exit(&filecore_ihash_lock);
+	hashdone(oldhash, HASH_LIST, oldmask);
 }
 
 /*
  * Destroy node pool and hash table.
  */
 void
-filecore_done()
+filecore_done(void)
 {
-	hashdone(filecorehashtbl, M_FILECOREMNT);
+
+	hashdone(filecorehashtbl, HASH_LIST, filecorehash);
 	pool_destroy(&filecore_node_pool);
-	malloc_type_detach(M_FILECORETMP);
-	malloc_type_detach(M_FILECOREMNT);
+	mutex_destroy(&filecore_ihash_lock);
 }
 
 /*
@@ -163,26 +160,24 @@ filecore_done()
  * to it. If it is in core, but locked, wait for it.
  */
 struct vnode *
-filecore_ihashget(dev, inum)
-	dev_t dev;
-	ino_t inum;
+filecore_ihashget(dev_t dev, ino_t inum)
 {
 	struct filecore_node *ip;
 	struct vnode *vp;
 
 loop:
-	simple_lock(&filecore_ihash_slock);
+	mutex_enter(&filecore_ihash_lock);
 	LIST_FOREACH(ip, &filecorehashtbl[INOHASH(dev, inum)], i_hash) {
 		if (inum == ip->i_number && dev == ip->i_dev) {
 			vp = ITOV(ip);
 			mutex_enter(&vp->v_interlock);
-			simple_unlock(&filecore_ihash_slock);
-			if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK))
+			mutex_exit(&filecore_ihash_lock);
+			if (vget(vp, LK_EXCLUSIVE))
 				goto loop;
 			return (vp);
 		}
 	}
-	simple_unlock(&filecore_ihash_slock);
+	mutex_exit(&filecore_ihash_lock);
 	return (NULL);
 }
 
@@ -190,31 +185,27 @@ loop:
  * Insert the inode into the hash table, and return it locked.
  */
 void
-filecore_ihashins(ip)
-	struct filecore_node *ip;
+filecore_ihashins(struct filecore_node *ip)
 {
 	struct ihashhead *ipp;
-	struct vnode *vp;
 
-	simple_lock(&filecore_ihash_slock);
+	mutex_enter(&filecore_ihash_lock);
 	ipp = &filecorehashtbl[INOHASH(ip->i_dev, ip->i_number)];
 	LIST_INSERT_HEAD(ipp, ip, i_hash);
-	simple_unlock(&filecore_ihash_slock);
+	mutex_exit(&filecore_ihash_lock);
 
-	vp = ip->i_vnode;
-	lockmgr(&vp->v_lock, LK_EXCLUSIVE, &vp->v_interlock);
+	VOP_LOCK(ITOV(ip), LK_EXCLUSIVE);
 }
 
 /*
  * Remove the inode from the hash table.
  */
 void
-filecore_ihashrem(ip)
-	struct filecore_node *ip;
+filecore_ihashrem(struct filecore_node *ip)
 {
-	simple_lock(&filecore_ihash_slock);
+	mutex_enter(&filecore_ihash_lock);
 	LIST_REMOVE(ip, i_hash);
-	simple_unlock(&filecore_ihash_slock);
+	mutex_exit(&filecore_ihash_lock);
 }
 
 /*
@@ -222,8 +213,7 @@ filecore_ihashrem(ip)
  * truncate and deallocate the file.
  */
 int
-filecore_inactive(v)
-	void *v;
+filecore_inactive(void *v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
@@ -233,16 +223,13 @@ filecore_inactive(v)
 	struct filecore_node *ip = VTOI(vp);
 	int error = 0;
 
-	if (prtactive && vp->v_usecount != 0)
-		vprint("filecore_inactive: pushing active", vp);
-
 	/*
 	 * If we are done with the inode, reclaim it
 	 * so that it can be reused immediately.
 	 */
 	ip->i_flag = 0;
 	*ap->a_recycle = (filecore_staleinode(ip) != 0);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return error;
 }
 
@@ -250,8 +237,7 @@ filecore_inactive(v)
  * Reclaim an inode so that it can be used for other purposes.
  */
 int
-filecore_reclaim(v)
-	void *v;
+filecore_reclaim(void *v)
 {
 	struct vop_reclaim_args /* {
 		struct vnode *a_vp;
@@ -260,7 +246,7 @@ filecore_reclaim(v)
 	struct vnode *vp = ap->a_vp;
 	struct filecore_node *ip = VTOI(vp);
 
-	if (prtactive && vp->v_usecount != 0)
+	if (prtactive && vp->v_usecount > 1)
 		vprint("filecore_reclaim: pushing active", vp);
 	/*
 	 * Remove the inode from its hash chain.
@@ -269,7 +255,6 @@ filecore_reclaim(v)
 	/*
 	 * Purge old data structures associated with the inode.
 	 */
-	cache_purge(vp);
 	if (ip->i_devvp) {
 		vrele(ip->i_devvp);
 		ip->i_devvp = 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: atavar.h,v 1.75 2007/12/09 20:27:54 jmcneill Exp $	*/
+/*	$NetBSD: atavar.h,v 1.82 2011/04/30 00:34:03 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -98,7 +93,7 @@ struct ata_queue {
 
 /* ATA bus instance state information. */
 struct atabus_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct ata_channel *sc_chan;
 	int sc_flags;
 #define ATABUSCF_OPEN	0x01
@@ -112,12 +107,6 @@ struct atabus_initq {
 	TAILQ_ENTRY(atabus_initq) atabus_initq;
 	struct atabus_softc *atabus_sc;
 };
-
-#ifdef _KERNEL
-TAILQ_HEAD(atabus_initq_head, atabus_initq);
-extern struct atabus_initq_head atabus_initq_head;
-extern struct simplelock atabus_interlock;
-#endif /* _KERNEL */
 
 /* High-level functions and structures used by both ATA and ATAPI devices */
 struct ataparams;
@@ -185,7 +174,7 @@ struct ata_drive_datas {
 	/* Callbacks into the drive's driver. */
 	void	(*drv_done)(void *);	/* transfer is done */
 
-	struct device *drv_softc;	/* ATA drives softc, if any */
+	device_t drv_softc;	/* ATA drives softc, if any */
 	void *chnl_softc;		/* channel softc */
 };
 
@@ -342,6 +331,7 @@ struct ata_channel {
 #define	ATACH_DISABLED 0x80	/* channel is disabled */
 #define ATACH_TH_RUN   0x100	/* the kernel thread is working */
 #define ATACH_TH_RESET 0x200	/* someone ask the thread to reset */
+#define ATACH_TH_RESCAN 0x400	/* rescan requested */
 	u_int8_t ch_status;	/* copy of status register */
 	u_int8_t ch_error;	/* copy of error register */
 
@@ -352,14 +342,14 @@ struct ata_channel {
 	int ch_ndrive;
 	struct ata_drive_datas ch_drive[ATA_MAXDRIVES];
 
-	struct device *atabus;	/* self */
+	device_t atabus;	/* self */
 
 	/* ATAPI children */
-	struct device *atapibus;
+	device_t atapibus;
 	struct scsipi_channel ch_atapi_channel;
 
 	/* ATA children */
-	struct device *ata_drives[ATA_MAXDRIVES];
+	device_t ata_drives[ATA_MAXDRIVES];
 
 	/*
 	 * Channel queues.  May be the same for all channels, if hw
@@ -380,7 +370,7 @@ struct ata_channel {
  * XXX There is still some lingering wdc-centricity here.
  */
 struct atac_softc {
-	struct device atac_dev;		/* generic device info */
+	device_t atac_dev;		/* generic device info */
 
 	int	atac_cap;		/* controller capabilities */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rnd_pos.c,v 1.5 2003/08/07 09:37:37 agc Exp $	*/
+/*	$NetBSD: rnd_pos.c,v 1.10 2009/08/12 08:30:55 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,23 +34,27 @@
 #if 0
 static char sccsid[] = "@(#)rnd_pos.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: rnd_pos.c,v 1.5 2003/08/07 09:37:37 agc Exp $");
+__RCSID("$NetBSD: rnd_pos.c,v 1.10 2009/08/12 08:30:55 dholland Exp $");
 #endif
 #endif /* not lint */
 
-# include	"robots.h"
+#include <curses.h>
+#include <stdlib.h>
+#include "robots.h"
 
-# define	IS_SAME(p,y,x)	((p).y != -1 && (p).y == y && (p).x == x)
+#define IS_SAME(p,y,x)	((p).y != -1 && (p).y == y && (p).x == x)
+
+static int rnd(int);
 
 /*
  * rnd_pos:
  *	Pick a random, unoccupied position
  */
 COORD *
-rnd_pos()
+rnd_pos(void)
 {
-	static COORD	pos;
-	static int	call = 0;
+	static COORD pos;
+	static int call = 0;
 
 	do {
 		pos.y = rnd(Y_FIELDSIZE - 1) + 1;
@@ -61,10 +65,9 @@ rnd_pos()
 	return &pos;
 }
 
-int
-rnd(range)
-	int	range;
+static int
+rnd(int range)
 {
 
-	return rand() % range;
+	return random() % range;
 }

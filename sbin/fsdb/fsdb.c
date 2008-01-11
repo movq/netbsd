@@ -1,4 +1,4 @@
-/*	$NetBSD: fsdb.c,v 1.36 2006/10/16 03:10:59 christos Exp $	*/
+/*	$NetBSD: fsdb.c,v 1.39 2009/04/11 06:53:53 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsdb.c,v 1.36 2006/10/16 03:10:59 christos Exp $");
+__RCSID("$NetBSD: fsdb.c,v 1.39 2009/04/11 06:53:53 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -137,7 +130,7 @@ main(int argc, char *argv[])
 	if (fsys == NULL)
 		usage();
 	endian = 0;
-	if (setup(fsys) <= 0)
+	if (setup(fsys, fsys) <= 0)
 		errx(1, "cannot set up file system `%s'", fsys);
 	printf("Editing file system `%s'\nLast Mounted on %s\n", fsys,
 	    sblock->fs_fsmnt);
@@ -573,7 +566,7 @@ CMDFUNCSTART(findblk)
 				{
 				uint64_t size = iswap64(DIP(curinode, size));
 				if (size > 0 &&
-				    size < sblock->fs_maxsymlinklen &&
+				    size < (uint64_t)sblock->fs_maxsymlinklen &&
 				    DIP(curinode, blocks) == 0)
 					continue;
 				else
@@ -679,7 +672,7 @@ find_indirblks32(uint32_t blk, int ind_level, uint32_t *wantedblk)
 {
 #define MAXNINDIR	(MAXBSIZE / sizeof(uint32_t))
 	uint32_t idblk[MAXNINDIR];
-	int i;
+	size_t i;
 
 	bread(fsreadfd, (char *)idblk, fsbtodb(sblock, blk),
 	    (int)sblock->fs_bsize);
@@ -725,7 +718,7 @@ find_indirblks64(uint64_t blk, int ind_level, uint64_t *wantedblk)
 {
 #define MAXNINDIR	(MAXBSIZE / sizeof(uint64_t))
 	uint64_t idblk[MAXNINDIR];
-	int i;
+	size_t i;
 
 	bread(fsreadfd, (char *)idblk, fsbtodb(sblock, blk),
 	    (int)sblock->fs_bsize);

@@ -1,4 +1,4 @@
-/*      $NetBSD: sv.c,v 1.37 2007/10/19 12:00:55 ad Exp $ */
+/*      $NetBSD: sv.c,v 1.44 2009/11/26 15:17:10 njoly Exp $ */
 /*      $OpenBSD: sv.c,v 1.2 1998/07/13 01:50:15 csapuntz Exp $ */
 
 /*
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sv.c,v 1.37 2007/10/19 12:00:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sv.c,v 1.44 2009/11/26 15:17:10 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -118,8 +111,8 @@ int	svdebug = 0;
 #define DPRINTFN(n,x)
 #endif
 
-static int	sv_match(struct device *, struct cfdata *, void *);
-static void	sv_attach(struct device *, struct device *, void *);
+static int	sv_match(device_t, cfdata_t, void *);
+static void	sv_attach(device_t, device_t, void *);
 static int	sv_intr(void *);
 
 struct sv_dma {
@@ -268,8 +261,7 @@ sv_write_indirect(struct sv_softc *sc, uint8_t reg, uint8_t val)
 }
 
 static int
-sv_match(struct device *parent, struct cfdata *match,
-    void *aux)
+sv_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -304,14 +296,14 @@ pci_alloc_io(pci_chipset_tag_t pc, pcitag_t pt, int pcioffs,
  * Allocate IO addresses when all other configuration is done.
  */
 static void
-sv_defer(struct device *self)
+sv_defer(device_t self)
 {
 	struct sv_softc *sc;
 	pci_chipset_tag_t pc;
 	pcitag_t pt;
 	pcireg_t dmaio;
 
-	sc = (struct sv_softc *)self;
+	sc = device_private(self);
 	pc = sc->sc_pa.pa_pc;
 	pt = sc->sc_pa.pa_tag;
 	DPRINTF(("sv_defer: %p\n", sc));
@@ -349,7 +341,7 @@ sv_defer(struct device *self)
 }
 
 static void
-sv_attach(struct device *parent, struct device *self, void *aux)
+sv_attach(device_t parent, device_t self, void *aux)
 {
 	struct sv_softc *sc;
 	struct pci_attach_args *pa;
@@ -361,7 +353,7 @@ sv_attach(struct device *parent, struct device *self, void *aux)
 	uint8_t reg;
 	struct audio_attach_args arg;
 
-	sc = (struct sv_softc *)self;
+	sc = device_private(self);
 	pa = aux;
 	pc = pa->pa_pc;
 	pt = pa->pa_tag;
@@ -371,20 +363,19 @@ sv_attach(struct device *parent, struct device *self, void *aux)
 	if (pci_mapreg_map(pa, SV_ENHANCED_PORTBASE_SLOT,
 			   PCI_MAPREG_TYPE_IO, 0,
 			   &sc->sc_iot, &sc->sc_ioh, NULL, NULL)) {
-		printf("%s: can't map enhanced i/o space\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map enhanced i/o space\n");
 		return;
 	}
 	if (pci_mapreg_map(pa, SV_FM_PORTBASE_SLOT,
 			   PCI_MAPREG_TYPE_IO, 0,
 			   &sc->sc_opliot, &sc->sc_oplioh, NULL, NULL)) {
-		printf("%s: can't map FM i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map FM i/o space\n");
 		return;
 	}
 	if (pci_mapreg_map(pa, SV_MIDI_PORTBASE_SLOT,
 			   PCI_MAPREG_TYPE_IO, 0,
 			   &sc->sc_midiiot, &sc->sc_midiioh, NULL, NULL)) {
-		printf("%s: can't map MIDI i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map MIDI i/o space\n");
 		return;
 	}
 	DPRINTF(("sv: IO ports: enhanced=0x%x, OPL=0x%x, MIDI=0x%x\n",
@@ -444,21 +435,20 @@ sv_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_AUDIO, sv_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
-	printf("%s: rev %d", sc->sc_dev.dv_xname,
+	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
+	printf("%s: rev %d", device_xname(&sc->sc_dev),
 	       sv_read_indirect(sc, SV_REVISION_LEVEL));
 	if (sv_read(sc, SV_CODEC_CONTROL) & SV_CTL_MD1)
 		printf(", reverb SRAM present");
@@ -1368,7 +1358,7 @@ sv_init_mixer(struct sv_softc *sc)
 	sv_mixer_set_port(sc, &cp);
 
 	for (i = 0; i < ARRAY_SIZE(ports); i++) {
-		if (ports[i].audio == AudioNdac) {
+		if (!strcmp(ports[i].audio, AudioNdac)) {
 			cp.type = AUDIO_MIXER_ENUM;
 			cp.dev = SV_FIRST_MIXER + i * SV_DEVICES_PER_PORT + 1;
 			cp.un.ord = 0;

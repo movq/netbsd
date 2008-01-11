@@ -1,4 +1,4 @@
-#	$NetBSD: OFWGENCFG,v 1.27 2006/08/26 20:26:56 christos Exp $
+#	$NetBSD: OFWGENCFG,v 1.37 2011/03/06 17:08:31 bouyer Exp $
 #
 #	OFWGENCFG: 'generic' configuration for Open Firmware boards.
 #
@@ -47,14 +47,14 @@ file-system	NFS
 #file-system	FILECORE	# Acorn filecore file system
 file-system	KERNFS		# /kern
 #file-system	NULLFS		# loopback file system
-#file-system	PORTAL		# portal filesystem (still experimental)
 #file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 #file-system	PTYFS		# /dev/pts/N support
 
 # File system options
-#options 	QUOTA		# UFS quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	NFSSERVER
 options 	NFS_BOOT_DHCP	# NFS booting via DHCP
 options 	NFS_BOOT_RWSIZE=1024	# OFW driver can't cope with more
@@ -75,6 +75,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 # Compatibility options
 
 options 	COMPAT_43	# 4.3BSD compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_20	# NetBSD 2.0 compatibility.
 options 	COMPAT_16	# NetBSD 1.6 compatibility.
@@ -90,7 +91,6 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
-options 	SHMMAXPGS=1024	# 1024 pages is the default
 
 # Device options
 
@@ -100,7 +100,6 @@ options 	SHMMAXPGS=1024	# 1024 pages is the default
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
-#options 	LKM		# loadable kernel modules
 options 	KMEMSTATS	# kernel memory statistics
 options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -111,7 +110,6 @@ options 	USERCONF	# userconf(4) support
 #options 	ARM700BUGTRACK	# track the ARM700 swi bug
 #options 	PORTMASTER	# Enable PortMaster only options
 options 	DIAGNOSTIC	# internally consistency checks
-#options 	IPKDB		# remote kernel debugging
 options 	DDB		# in-kernel debugger
 #makeoptions	DEBUG="-g"	# compile full symbol table
 
@@ -133,6 +131,9 @@ ofcons*		at ofbus?
 ofrtc*		at ofbus?
 ofrom*		at ofbus?
 
+# Pull in optional local configuration
+cinclude "arch/shark/conf/GENERIC.local"
+
 pseudo-device	loop	1		# network loopback
 pseudo-device	bpfilter		# packet filter
 #pseudo-device	sl			# CSLIP
@@ -143,9 +144,9 @@ pseudo-device	bpfilter		# packet filter
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	ccd	2		# concatenated disk devices
-#pseudo-device	fss	4		# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 pseudo-device	rnd			# /dev/random and /dev/urandom
 
-#pseudo-device	md	1		# Ramdisk driver
+#pseudo-device	md			# Ramdisk driver
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	openfirm		# /dev/openfirm

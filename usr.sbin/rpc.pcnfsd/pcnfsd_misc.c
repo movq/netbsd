@@ -1,4 +1,4 @@
-/*	$NetBSD: pcnfsd_misc.c,v 1.10 2003/07/16 08:22:01 itojun Exp $	*/
+/*	$NetBSD: pcnfsd_misc.c,v 1.12 2009/11/17 18:37:45 drochner Exp $	*/
 
 /* RE_SID: @(%)/usr/dosnfs/shades_SCCS/unix/pcnfsd/v2/src/SCCS/s.pcnfsd_misc.c 1.5 92/01/24 19:59:13 SMI */
 /*
@@ -192,10 +192,7 @@ get_password(usrnam)
 
 
 char   *
-mapfont(f, i, b)
-	char    f;
-	char    i;
-	char    b;
+mapfont(char f, char i, char b)
 {
 	static char fontname[64];
 
@@ -491,7 +488,6 @@ su_pclose(ptr)
 
 
 
-#if XXX_unused
 /*
 ** The following routine reads a file "/etc/pcnfsd.conf" if present,
 ** and uses it to replace certain builtin elements, like the
@@ -507,8 +503,8 @@ su_pclose(ptr)
 **	printer name alias-for command
 **	wtmp yes|no
 */
-void
-config_from_file()
+static void
+config_from_file(void)
 {
 	FILE   *fd;
 	char    buff[1024];
@@ -559,8 +555,21 @@ config_from_file()
 	}
 	fclose(fd);
 }
-#endif	/* XXX_unused */
 
+/*
+** hack for main() - call config_from_file() then the real main
+** in the rpcgen output, which is hacked by CPPFLAGS to be "mymain"
+*/
+#undef main
+
+int mymain(int argc, char *argv[]);
+
+int
+main(int argc, char *argv[])
+{
+	config_from_file();
+	return mymain(argc, argv);
+}
 
 /*
 ** strembedded - returns true if s1 is embedded (in any case) in s2

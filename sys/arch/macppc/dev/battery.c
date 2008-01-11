@@ -1,4 +1,4 @@
-/*	$NetBSD: battery.c,v 1.8 2007/12/12 18:19:20 macallan Exp $ */
+/*	$NetBSD: battery.c,v 1.11 2008/10/23 07:35:46 aymeric Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: battery.c,v 1.8 2007/12/12 18:19:20 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: battery.c,v 1.11 2008/10/23 07:35:46 aymeric Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -247,11 +244,11 @@ battery_setup_envsys(struct battery_softc *sc)
 	INITDATA(BAT_AC_PRESENT, ENVSYS_INDICATOR, "AC present");
 	INITDATA(BAT_PRESENT, ENVSYS_INDICATOR, "Battery present");
 	INITDATA(BAT_VOLTAGE, ENVSYS_SVOLTS_DC, "Battery voltage");
-	INITDATA(BAT_CHARGE, ENVSYS_INTEGER, "Battery charge");
-	INITDATA(BAT_MAX_CHARGE, ENVSYS_INTEGER, "Battery design cap");
+	INITDATA(BAT_CHARGE, ENVSYS_SAMPHOUR, "Battery charge");
+	INITDATA(BAT_MAX_CHARGE, ENVSYS_SAMPHOUR, "Battery design cap");
 	INITDATA(BAT_CURRENT, ENVSYS_SAMPS, "Battery current");
 	INITDATA(BAT_TEMPERATURE, ENVSYS_STEMP, "Battery temperature");
-	INITDATA(BAT_CHARGING, ENVSYS_INDICATOR, "Battery charging");
+	INITDATA(BAT_CHARGING, ENVSYS_BATTERY_CHARGE, "Battery charging");
 	INITDATA(BAT_FULL, ENVSYS_INDICATOR, "Battery full");
 #undef INITDATA
 
@@ -288,6 +285,9 @@ battery_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 		break;
 	case BAT_AC_PRESENT:
 		edata->value_cur = (sc->sc_flags & PMU_PWR_AC_PRESENT);
+		break;
+	case BAT_PRESENT:
+		edata->value_cur = (sc->sc_flags & PMU_PWR_BATT_PRESENT);
 		break;
 	case BAT_VOLTAGE:
 		edata->value_cur = sc->sc_voltage * 1000;

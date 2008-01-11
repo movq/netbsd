@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gif.c,v 1.72 2007/10/08 16:18:05 ad Exp $	*/
+/*	$NetBSD: if_gif.c,v 1.78 2010/04/05 07:22:23 joerg Exp $	*/
 /*	$KAME: if_gif.c,v 1.76 2001/08/20 02:01:02 kjc Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.72 2007/10/08 16:18:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.78 2010/04/05 07:22:23 joerg Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -85,7 +85,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.72 2007/10/08 16:18:05 ad Exp $");
 #include <netinet/ip_encap.h>
 #include <net/if_gif.h>
 
-#include "bpfilter.h"
 
 #include <net/net_osdep.h>
 
@@ -134,11 +133,9 @@ gif_clone_create(struct if_clone *ifc, int unit)
 {
 	struct gif_softc *sc;
 
-	sc = malloc(sizeof(struct gif_softc), M_DEVBUF, M_WAITOK);
-	memset(sc, 0, sizeof(struct gif_softc));
+	sc = malloc(sizeof(struct gif_softc), M_DEVBUF, M_WAITOK|M_ZERO);
 
-	snprintf(sc->gif_if.if_xname, sizeof(sc->gif_if.if_xname), "%s%d",
-	    ifc->ifc_name, unit);
+	if_initname(&sc->gif_if, ifc->ifc_name, unit);
 
 	gifattach0(sc);
 
@@ -159,12 +156,11 @@ gifattach0(struct gif_softc *sc)
 	sc->gif_if.if_output = gif_output;
 	sc->gif_if.if_type   = IFT_GIF;
 	sc->gif_if.if_dlt    = DLT_NULL;
+	sc->gif_if.if_softc  = sc;
 	IFQ_SET_READY(&sc->gif_if.if_snd);
 	if_attach(&sc->gif_if);
 	if_alloc_sadl(&sc->gif_if);
-#if NBPFILTER > 0
-	bpfattach(&sc->gif_if, DLT_NULL, sizeof(u_int));
-#endif
+	bpf_attach(&sc->gif_if, DLT_NULL, sizeof(u_int));
 }
 
 static int
@@ -181,9 +177,7 @@ gif_clone_destroy(struct ifnet *ifp)
 	encap_detach(sc->encap_cookie4);
 #endif
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 	rtcache_free(&sc->gif_ro);
 
@@ -199,7 +193,7 @@ gif_encapcheck(struct mbuf *m, int off, int proto, void *arg)
 	struct ip ip;
 	struct gif_softc *sc;
 
-	sc = (struct gif_softc *)arg;
+	sc = arg;
 	if (sc == NULL)
 		return 0;
 
@@ -232,7 +226,7 @@ gif_encapcheck(struct mbuf *m, int off, int proto, void *arg)
 	if (m->m_pkthdr.len < sizeof(ip))
 		return 0;
 
-	m_copydata(m, 0, sizeof(ip), (void *)&ip);
+	m_copydata(m, 0, sizeof(ip), &ip);
 
 	switch (ip.ip_v) {
 #ifdef INET
@@ -261,7 +255,7 @@ int
 gif_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
     struct rtentry *rt)
 {
-	struct gif_softc *sc = (struct gif_softc*)ifp;
+	struct gif_softc *sc = ifp->if_softc;
 	int error = 0;
 	static int called = 0;	/* XXX: MUTEX */
 	ALTQ_DECL(struct altq_pktattr pktattr;)
@@ -347,7 +341,7 @@ gifintr(void *arg)
 	int s;
 	int error;
 
-	sc = (struct gif_softc *)arg;
+	sc = arg;
 	ifp = &sc->gif_if;
 
 	/* output processing */
@@ -367,10 +361,7 @@ gifintr(void *arg)
 			}
 		}
 		family = *mtod(m, int *);
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 		m_adj(m, sizeof(int));
 
 		len = m->m_pkthdr.len;
@@ -416,10 +407,7 @@ gif_input(struct mbuf *m, int af, struct ifnet *ifp)
 
 	m->m_pkthdr.rcvif = ifp;
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, af, m);
-#endif /*NBPFILTER > 0*/
+	bpf_mtap_af(ifp, af, m);
 
 	/*
 	 * Put the packet to the network layer input queue according to the
@@ -479,13 +467,10 @@ int
 gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct lwp *l = curlwp;	/* XXX */
-	struct gif_softc *sc  = (struct gif_softc*)ifp;
+	struct gif_softc *sc  = ifp->if_softc;
 	struct ifreq     *ifr = (struct ifreq*)data;
 	int error = 0, size;
 	struct sockaddr *dst, *src;
-#ifdef SIOCSIFMTU
-	u_long mtu;
-#endif
 
 	switch (cmd) {
 	case SIOCSIFMTU:
@@ -504,7 +489,7 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	}
 
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP;
 		break;
 
@@ -528,17 +513,15 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
 		break;
 
-#ifdef	SIOCSIFMTU /* xxx */
 	case SIOCGIFMTU:
 		break;
 
 	case SIOCSIFMTU:
-		mtu = ifr->ifr_mtu;
-		if (mtu < GIF_MTU_MIN || mtu > GIF_MTU_MAX)
-			return (EINVAL);
-		ifp->if_mtu = mtu;
+		if (ifr->ifr_mtu < GIF_MTU_MIN || ifr->ifr_mtu > GIF_MTU_MAX)
+			return EINVAL;
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+			error = 0;
 		break;
-#endif /* SIOCSIFMTU */
 
 #ifdef INET
 	case SIOCSIFPHYADDR:
@@ -727,13 +710,8 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		memcpy(dst, src, src->sa_len);
 		break;
 
-	case SIOCSIFFLAGS:
-		/* if_ioctl() takes care of it */
-		break;
-
 	default:
-		error = EINVAL;
-		break;
+		return ifioctl_common(ifp, cmd, data);
 	}
  bad:
 	return error;
@@ -742,7 +720,7 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 int
 gif_set_tunnel(struct ifnet *ifp, struct sockaddr *src, struct sockaddr *dst)
 {
-	struct gif_softc *sc = (struct gif_softc *)ifp;
+	struct gif_softc *sc = ifp->if_softc;
 	struct gif_softc *sc2;
 	struct sockaddr *osrc, *odst;
 	int s;
@@ -851,7 +829,7 @@ gif_set_tunnel(struct ifnet *ifp, struct sockaddr *src, struct sockaddr *dst)
 void
 gif_delete_tunnel(struct ifnet *ifp)
 {
-	struct gif_softc *sc = (struct gif_softc *)ifp;
+	struct gif_softc *sc = ifp->if_softc;
 	int s;
 
 	s = splsoftnet();
@@ -885,9 +863,9 @@ gif_delete_tunnel(struct ifnet *ifp)
 
 #ifdef ISO
 struct eonhdr {
-	u_int8_t version;
-	u_int8_t class;
-	u_int16_t cksum;
+	uint8_t version;
+	uint8_t class;
+	uint16_t cksum;
 };
 
 /*

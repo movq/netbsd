@@ -1,4 +1,4 @@
-/* $NetBSD: timekeeper.c,v 1.4 2006/09/14 15:04:07 gdamore Exp $ */
+/* $NetBSD: timekeeper.c,v 1.8 2009/03/14 21:04:11 dsl Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: timekeeper.c,v 1.4 2006/09/14 15:04:07 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timekeeper.c,v 1.8 2009/03/14 21:04:11 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,23 +54,20 @@ struct timekeeper_softc {
 	struct todr_chip_handle sc_todr;
 };
 
-static int  clock_match __P((struct device *, struct cfdata *, void *));
-static void clock_attach __P((struct device *, struct device *, void *));
+static int  clock_match(struct device *, struct cfdata *, void *);
+static void clock_attach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(clock, sizeof (struct timekeeper_softc),
     clock_match, clock_attach, NULL, NULL);
 extern struct cfdriver clock_cd;
 
-static int mkclock_get __P((todr_chip_handle_t, struct clock_ymdhms *));
-static int mkclock_set __P((todr_chip_handle_t, struct clock_ymdhms *));
-static int dsclock_get __P((todr_chip_handle_t, struct clock_ymdhms *));
-static int dsclock_set __P((todr_chip_handle_t, struct clock_ymdhms *));
+static int mkclock_get(todr_chip_handle_t, struct clock_ymdhms *);
+static int mkclock_set(todr_chip_handle_t, struct clock_ymdhms *);
+static int dsclock_get(todr_chip_handle_t, struct clock_ymdhms *);
+static int dsclock_set(todr_chip_handle_t, struct clock_ymdhms *);
 
 static int
-clock_match(parent, match, aux)
-        struct device *parent;
-        struct cfdata *match;
-        void *aux;
+clock_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -87,9 +77,7 @@ clock_match(parent, match, aux)
 }
 
 static void
-clock_attach(parent, self, aux)
-        struct device *parent, *self;
-        void *aux;
+clock_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct timekeeper_softc *sc = (void *)self;
 	struct mainbus_attach_args *ma = aux;

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.5 2007/10/17 19:54:20 garbled Exp $ */
+/*	$NetBSD: machdep.c,v 1.15 2011/01/17 07:32:54 matt Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -34,11 +34,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2007/10/17 19:54:20 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.15 2011/01/17 07:32:54 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
+#include "opt_modular.h"
 #include "opt_virtex.h"
 #include "opt_kgdb.h"
 
@@ -55,9 +56,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2007/10/17 19:54:20 garbled Exp $");
 #include <sys/syslog.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/user.h>
 #include <sys/boot_flag.h>
 #include <sys/ksyms.h>
+#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -68,8 +69,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2007/10/17 19:54:20 garbled Exp $");
 #include <machine/bus.h>
 #include <machine/powerpc.h>
 #include <machine/trap.h>
+#include <machine/pcb.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/ibm4xx/spr.h>
 
 #include <evbppc/virtex/dcr.h>
 #include <evbppc/virtex/virtex.h>
@@ -88,8 +91,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2007/10/17 19:54:20 garbled Exp $");
 /*
  * Global variables used here and there
  */
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 /*
@@ -99,13 +100,11 @@ char cpu_model[80];
 char machine[] = MACHINE;		/* from <machine/param.h> */
 char machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 
-extern struct user *proc0paddr;
-
 char bootpath[256];
 paddr_t msgbuf_paddr;
 vaddr_t msgbuf_vaddr;
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 void *startsym, *endsym;
 #endif
 
@@ -208,10 +207,9 @@ initppc(u_int startkernel, u_int endkernel)
 	    physmemr, availmemr);
 
 	lwp0.l_cpu = ci;
-	lwp0.l_addr = proc0paddr;
-	memset(lwp0.l_addr, 0, sizeof(*lwp0.l_addr));
 
-	curpcb = &proc0paddr->u_pcb;
+	curpcb = lwp_getpcb(&lwp0);
+	memset(curpcb, 0, sizeof(struct pcb));
 	curpcb->pcb_pm = pmap_kernel();
 
 	for (exc = EXC_RSVD; exc <= EXC_LAST; exc += 0x100)
@@ -246,8 +244,8 @@ initppc(u_int startkernel, u_int endkernel)
 	uvm_setpagesize();
 	pmap_bootstrap(startkernel, endkernel);
 
-#if NKSYMS || defined(DDB) || defined(LKM)
-	ksyms_init((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	ksyms_addsyms_elf((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
 #endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
@@ -334,13 +332,6 @@ cpu_startup(void)
 
 	minaddr = 0;
 	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
-
-	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
@@ -418,6 +409,8 @@ cpu_reboot(int howto, char *what)
 		dumpsys();
 
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 		/* Power off here if we know how...*/

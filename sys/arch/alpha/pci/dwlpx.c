@@ -1,4 +1,4 @@
-/* $NetBSD: dwlpx.c,v 1.32 2007/03/04 05:59:11 christos Exp $ */
+/* $NetBSD: dwlpx.c,v 1.36 2011/05/17 17:34:47 dyoung Exp $ */
 
 /*
  * Copyright (c) 1997 by Matthew Jacob
@@ -32,14 +32,12 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dwlpx.c,v 1.32 2007/03/04 05:59:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwlpx.c,v 1.36 2011/05/17 17:34:47 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 
@@ -64,8 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: dwlpx.c,v 1.32 2007/03/04 05:59:11 christos Exp $");
 	     (1LL					<< 39))
 
 
-static int	dwlpxmatch __P((struct device *, struct cfdata *, void *));
-static void	dwlpxattach __P((struct device *, struct device *, void *));
+static int	dwlpxmatch(struct device *, struct cfdata *, void *);
+static void	dwlpxattach(struct device *, struct device *, void *);
 CFATTACH_DECL(dwlpx, sizeof(struct dwlpx_softc),
     dwlpxmatch, dwlpxattach, NULL, NULL);
 
@@ -74,10 +72,7 @@ extern struct cfdriver dwlpx_cd;
 void	dwlpx_errintr(void *, u_long vec);
 
 static int
-dwlpxmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+dwlpxmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct kft_dev_attach_args *ka = aux;
 	unsigned long ls;
@@ -107,10 +102,7 @@ dwlpxmatch(parent, cf, aux)
 }
 
 static void
-dwlpxattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+dwlpxattach(struct device *parent, struct device *self, void *aux)
 {
 	static int once = 0;
 	struct dwlpx_softc *sc = (struct dwlpx_softc *)self;
@@ -183,14 +175,13 @@ dwlpxattach(parent, self, aux)
 	pba.pba_pc = &sc->dwlpx_cc.cc_pc;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }
 
 void
-dwlpx_init(sc)
-	struct dwlpx_softc *sc;
+dwlpx_init(struct dwlpx_softc *sc)
 {
 	u_int32_t ctl;
 	struct dwlpx_config *ccp = &sc->dwlpx_cc;
@@ -310,9 +301,7 @@ dwlpx_init(sc)
 }
 
 void
-dwlpx_errintr(arg, vec)
-	void *arg;
-	unsigned long vec;
+dwlpx_errintr(void *arg, unsigned long vec)
 {
 	struct dwlpx_softc *sc = arg;
 	struct dwlpx_config *ccp = &sc->dwlpx_cc;

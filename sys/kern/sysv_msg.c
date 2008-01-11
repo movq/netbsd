@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_msg.c,v 1.55 2008/01/07 16:12:54 ad Exp $	*/
+/*	$NetBSD: sysv_msg.c,v 1.61 2009/01/28 00:59:03 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2006, 2007 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_msg.c,v 1.55 2008/01/07 16:12:54 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_msg.c,v 1.61 2009/01/28 00:59:03 njoly Exp $");
 
 #define SYSVMSG
 
@@ -128,11 +121,11 @@ msginit(void)
 	if (v == 0)
 		panic("sysv_msg: cannot allocate memory");
 	msgpool = (void *)v;
-	msgmaps = (void *)(ALIGN(msgpool) + msginfo.msgmax);
-	msghdrs = (void *)(ALIGN(msgmaps) +
-	    msginfo.msgseg * sizeof(struct msgmap));
-	msqs = (void *)(ALIGN(msghdrs) +
-	    msginfo.msgtql * sizeof(struct __msg));
+	msgmaps = (void *)((uintptr_t)msgpool + ALIGN(msginfo.msgmax));
+	msghdrs = (void *)((uintptr_t)msgmaps +
+	    ALIGN(msginfo.msgseg * sizeof(struct msgmap)));
+	msqs = (void *)((uintptr_t)msghdrs +
+	    ALIGN(msginfo.msgtql * sizeof(struct __msg)));
 
 	for (i = 0; i < (msginfo.msgseg - 1); i++)
 		msgmaps[i].next = i + 1;
@@ -225,11 +218,11 @@ msgrealloc(int newmsgmni, int newmsgseg)
 	}
 
 	new_msgpool = (void *)v;
-	new_msgmaps = (void *)(ALIGN(new_msgpool) + newmsgmax);
-	new_msghdrs = (void *)(ALIGN(new_msgmaps) +
-	    newmsgseg * sizeof(struct msgmap));
-	new_msqs = (void *)(ALIGN(new_msghdrs) +
-	    msginfo.msgtql * sizeof(struct __msg));
+	new_msgmaps = (void *)((uintptr_t)new_msgpool + ALIGN(newmsgmax));
+	new_msghdrs = (void *)((uintptr_t)new_msgmaps +
+	    ALIGN(newmsgseg * sizeof(struct msgmap)));
+	new_msqs = (void *)((uintptr_t)new_msghdrs +
+	    ALIGN(msginfo.msgtql * sizeof(struct __msg)));
 
 	/* Initialize the structures */
 	for (i = 0; i < (newmsgseg - 1); i++)
@@ -399,7 +392,8 @@ msg_freehdr(struct __msg *msghdr)
 }
 
 int
-sys___msgctl13(struct lwp *l, const struct sys___msgctl13_args *uap, register_t *retval)
+sys___msgctl50(struct lwp *l, const struct sys___msgctl50_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(int) msqid;
@@ -659,6 +653,10 @@ msgsnd1(struct lwp *l, int msqidr, const char *user_msgp, size_t msgsz,
 
 	MSG_PRINTF(("call to msgsnd(%d, %p, %lld, %d)\n", msqid, user_msgp,
 	    (long long)msgsz, msgflg));
+
+	if ((ssize_t)msgsz < 0)
+		return EINVAL;
+
 restart:
 	msqid = IPCID_TO_IX(msqidr);
 
@@ -858,6 +856,7 @@ restart:
 		msqptr->msg_perm.mode &= ~MSG_LOCKED;
 		cv_broadcast(&msq->msq_cv);
 		MSG_PRINTF(("mtype (%ld) < 1\n", msghdr->msg_type));
+		error = EINVAL;
 		goto unlock;
 	}
 
@@ -964,6 +963,10 @@ msgrcv1(struct lwp *l, int msqidr, char *user_msgp, size_t msgsz, long msgtyp,
 
 	MSG_PRINTF(("call to msgrcv(%d, %p, %lld, %ld, %d)\n", msqid,
 	    user_msgp, (long long)msgsz, msgtyp, msgflg));
+
+	if ((ssize_t)msgsz < 0)
+		return EINVAL;
+
 restart:
 	msqid = IPCID_TO_IX(msqidr);
 
@@ -1172,7 +1175,7 @@ restart:
 		else
 			tlen = msgsz - len;
 		mutex_exit(&msgmutex);
-		error = (*put_type)(&msgpool[next * msginfo.msgssz],
+		error = copyout(&msgpool[next * msginfo.msgssz],
 		    user_msgp, tlen);
 		mutex_enter(&msgmutex);
 		if (error != 0) {

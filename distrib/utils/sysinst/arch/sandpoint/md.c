@@ -1,10 +1,11 @@
-/*	$NetBSD: md.c,v 1.26 2006/04/05 16:55:06 garbled Exp $ */
+/*	$NetBSD: md.c,v 1.36 2011/04/04 08:30:41 mbalmer Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
  * All rights reserved.
  *
- * Written by Philip A. Nelson for Piermont Information Systems Inc.
+ * Based on code written by Philip A. Nelson for Piermont Information
+ * Systems Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -14,49 +15,107 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
- *
  */
 
-/* md.c -- Machine specific code for bebox */
+/* md.c -- sandpoint machine specific routines */
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
+#include <sys/utsname.h>
+
 #include <stdio.h>
+#include <string.h>
 #include <util.h>
+
 #include "defs.h"
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
 
+static char *prodname;
+
+void
+md_init(void)
+{
+}
+
+void
+md_init_set_status(int flags)
+{
+	static const char mib_name[] = "machdep.prodfamily";
+	static char unknown[] = "unknown";
+	size_t len;
+
+	(void)flags;
+
+	/*
+	 * Determine the product family of the board we are running on and
+	 * enable the installation of the corresponding GENERIC kernel.
+	 *
+	 * Note:  In md.h the two kernels are disabled.  If they are
+	 *        enabled there the logic here needs to be switched.
+	 */
+	if (sysctlbyname(mib_name, NULL, &len, NULL, 0) != 0) {
+		prodname = unknown;
+		return;
+	}
+	prodname = malloc(len);
+	sysctlbyname(mib_name, prodname, &len, NULL, 0);
+
+	if (strcmp(prodname, "kurobox") == 0)
+		/*
+		 * Running on a KuroBox family product, so enable KUROBOX
+		 */
+		set_kernel_set(SET_KERNEL_2);
+        else
+		/*
+		 * Otherwise enable GENERIC
+		 */
+		set_kernel_set(SET_KERNEL_1);
+}
 
 int
 md_get_info(void)
 {
-
-	read_mbr(diskdev, &mbr);
-	md_bios_info(diskdev);
-	return edit_mbr(&mbr);
+	return set_bios_geom_with_mbr_guess();
 }
 
+/*
+ * md back-end code for menu-driven BSD disklabel editor.
+ */
+int
+md_make_bsd_partitions(void)
+{
+	return make_bsd_partitions();
+}
+
+/*
+ * any additional partition validation
+ */
+int
+md_check_partitions(void)
+{
+	return 1;
+}
+
+/*
+ * hook called before writing new disklabel.
+ */
 int
 md_pre_disklabel(void)
 {
@@ -71,6 +130,9 @@ md_pre_disklabel(void)
 	return 0;
 }
 
+/*
+ * hook called after writing disklabel to new target disk.
+ */
 int
 md_post_disklabel(void)
 {
@@ -83,75 +145,53 @@ md_post_disklabel(void)
 	return 0;
 }
 
+/*
+ * hook called after upgrade() or install() has finished setting
+ * up the target disk but immediately before the user is given the
+ * ``disks are now set up'' message.
+ */
 int
 md_post_newfs(void)
 {
-	/* boot blocks ... */
-	printf (msg_string(MSG_dobootblks), diskdev);
-	run_program(RUN_DISPLAY, 
-	    "/usr/mdec/installboot -v /usr/mdec/biosboot.sym /dev/r%sa",
-	    diskdev);
+	/* no boot blocks, we are using netboot */
 	return 0;
 }
 
 int
-md_copy_filesystem (void)
+md_post_extract(void)
 {
-	if (target_already_root()) {
-		return 0;
-	}
-
-	/* Copy the instbin(s) to the disk */
-	if (run_program(RUN_DISPLAY | RUN_PROGRESS,
-	    "pax -X -O -r -w -pe / %s", targetroot_mnt) != 0)
-		return 1;
-
-	/* Copy next-stage install profile into target /.profile. */
-	if (cp_to_target ("/tmp/.hdprofile", "/.profile")!= 0)
-		return 1;
-	return cp_to_target ("/usr/share/misc/termcap", "/.termcap");
-}
-
-
-
-int
-md_make_bsd_partitions(void)
-{
-
-	return make_bsd_partitions();
-}
-
-int
-md_check_partitions(void)
-{
-
-	return 1;
-}
-
-
-/* Upgrade support */
-int
-md_update(void)
-{
-	endwin();
-	md_copy_filesystem ();
-	md_post_newfs();
-	wrefresh(curscr);
-	wmove(stdscr, 0, 0);
-	wclear(stdscr);
-	wrefresh(stdscr);
-	return 1;
+	return 0;
 }
 
 void
 md_cleanup_install(void)
 {
+#ifndef DEBUG
+	int new_speed;
+	char sed_cmd[64];
 
 	enable_rc_conf();
 
-	run_program(0, "rm -f %s", target_expand("/sysinst"));
-	run_program(0, "rm -f %s", target_expand("/.termcap"));
-	run_program(0, "rm -f %s", target_expand("/.profile"));
+	/*
+	 * Set the console speed in /etc/ttys depending on the board.
+	 * The default speed is 115200, which is patched when needed.
+	 */
+	if (strcmp(prodname, "kurobox") == 0)
+		new_speed = 57600;			/* KuroBox */
+
+	else if (strcmp(prodname, "dlink") == 0 ||	/* D-Link DSM-G600 */
+	    strcmp(prodname, "nhnas") == 0)		/* NH23x, All6250 */
+		new_speed = 9600;
+
+	else
+		new_speed = 0;
+
+	if (new_speed != 0) {
+		snprintf(sed_cmd, 64, "sed -an -e 's/115200/%d/;H;$!d;g;w"
+		    "/etc/ttys' /etc/ttys", new_speed);
+		run_program(RUN_CHROOT, sed_cmd);
+	}
+#endif
 }
 
 int
@@ -160,27 +200,12 @@ md_pre_update(void)
 	return 1;
 }
 
-void
-md_init(void)
-{
-}
-
+/* Upgrade support */
 int
-md_bios_info(char *dev)
+md_update(void)
 {
-	int cyl, head, sec;
-
-	msg_display(MSG_nobiosgeom, dlcyl, dlhead, dlsec);
-	if (guess_biosgeom_from_mbr(&mbr, &cyl, &head, &sec) >= 0)
-		msg_display_add(MSG_biosguess, cyl, head, sec);
-	set_bios_geom(cyl, head, sec);
-	return 0;
-}
-
-int
-md_post_extract(void)
-{
-	return 0;
+	md_post_newfs();
+	return 1;
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_hippi.h,v 1.11 2007/12/25 18:33:45 perry Exp $	*/
+/*	$NetBSD: if_hippi.h,v 1.13 2008/04/28 20:24:09 martin Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,22 +36,22 @@
 #include <net/if_ether.h>
 
 struct hippi_fp {
-	u_int8_t  fp_ulp;
-	u_int8_t  fp_flags;
+	uint8_t  fp_ulp;
+	uint8_t  fp_flags;
 #define HIPPI_FP_D1_PRESENT	0x80
 #define HIPPI_FP_D2_ON_BURST	0x40
-	u_int16_t fp_offsets;
+	uint16_t fp_offsets;
 #define HIPPI_FP_D2_MASK	0x07
-	u_int32_t fp_d2_len;
+	uint32_t fp_d2_len;
 } __packed;
 
 struct hippi_le {
-	u_int32_t le_dest_switch;
-	u_int32_t le_src_switch;
-	u_int16_t le_reserved;
-	u_int8_t  le_dest_addr[6];
-	u_int16_t le_local_admin;
-	u_int8_t  le_src_addr[6];
+	uint32_t le_dest_switch;
+	uint32_t le_src_switch;
+	uint16_t le_reserved;
+	uint8_t  le_dest_addr[6];
+	uint16_t le_local_admin;
+	uint8_t  le_src_addr[6];
 } __packed;
 
 struct hippi_header {

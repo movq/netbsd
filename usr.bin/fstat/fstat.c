@@ -1,4 +1,4 @@
-/*	$NetBSD: fstat.c,v 1.77 2007/12/15 19:44:50 perry Exp $	*/
+/*	$NetBSD: fstat.c,v 1.90 2011/04/14 00:35:35 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -31,18 +31,19 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)fstat.c	8.3 (Berkeley) 5/2/95";
 #else
-__RCSID("$NetBSD: fstat.c,v 1.77 2007/12/15 19:44:50 perry Exp $");
+__RCSID("$NetBSD: fstat.c,v 1.90 2011/04/14 00:35:35 rmind Exp $");
 #endif
 #endif /* not lint */
 
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/proc.h>
@@ -128,20 +129,24 @@ static int 	checkfile; /* true if restricting to particular files or filesystems
 static int	nflg;	/* (numerical) display f.s. and rdev as dev_t */
 int	vflg;	/* display errors in locating kernel data objects etc... */
 
-static struct file **ofiles;	/* buffer of pointers to file structures */
+static fdfile_t **ofiles; /* buffer of pointers to file structures */
 static int fstat_maxfiles;
 #define ALLOC_OFILES(d)	\
 	if ((d) > fstat_maxfiles) { \
+		size_t len = (d) * sizeof(fdfile_t *); \
 		free(ofiles); \
-		ofiles = malloc((d) * sizeof(struct file *)); \
+		ofiles = malloc(len); \
 		if (ofiles == NULL) { \
-			err(1, "malloc(%u)", (d) *	\
-					(unsigned int)sizeof(struct file *)); \
+			err(1, "malloc(%zu)", len);	\
 		} \
 		fstat_maxfiles = (d); \
 	}
 
 kvm_t *kd;
+
+static const char *const dtypes[] = {
+	DTYPE_NAMES
+};
 
 static void	dofiles(struct kinfo_proc2 *);
 static int	ext2fs_filestat(struct vnode *, struct filestat *);
@@ -155,12 +160,12 @@ static int	nfs_filestat(struct vnode *, struct filestat *);
 static const char *inet6_addrstr(struct in6_addr *);
 #endif
 static void	socktrans(struct socket *, int);
-static void	kqueuetrans(void *, int);
+static void	misctrans(struct file *);
 static int	ufs_filestat(struct vnode *, struct filestat *);
 static void	usage(void) __dead;
 static const char   *vfilestat(struct vnode *, struct filestat *);
 static void	vtrans(struct vnode *, int, int);
-static void	ftrans(struct file *, int);
+static void	ftrans(fdfile_t *, int);
 static void	ptrans(struct file *, struct pipe *, int);
 
 int
@@ -306,9 +311,9 @@ static void
 dofiles(struct kinfo_proc2 *p)
 {
 	int i;
-	struct filedesc0 filed0;
-#define	filed	filed0.fd_fd
+	struct filedesc filed;
 	struct cwdinfo cwdi;
+	struct fdtab dt;
 
 	Uname = user_from_uid(p->p_uid, 0);
 	Pid = p->p_pid;
@@ -316,17 +321,21 @@ dofiles(struct kinfo_proc2 *p)
 
 	if (p->p_fd == 0 || p->p_cwdi == 0)
 		return;
-	if (!KVM_READ(p->p_fd, &filed0, sizeof (filed0))) {
-		warnx("can't read filedesc at %#llx for pid %d", (unsigned long long)p->p_fd, Pid);
+	if (!KVM_READ(p->p_fd, &filed, sizeof (filed))) {
+		warnx("can't read filedesc at %p for pid %d", (void *)(uintptr_t)p->p_fd, Pid);
 		return;
 	}
 	if (!KVM_READ(p->p_cwdi, &cwdi, sizeof(cwdi))) {
-		warnx("can't read cwdinfo at %#llx for pid %d", (unsigned long long)p->p_cwdi, Pid);
+		warnx("can't read cwdinfo at %p for pid %d", (void *)(uintptr_t)p->p_cwdi, Pid);
 		return;
 	}
-	if (filed.fd_nfiles < 0 || filed.fd_lastfile >= filed.fd_nfiles ||
+	if (!KVM_READ(filed.fd_dt, &dt, sizeof(dt))) {
+		warnx("can't read dtab at %p for pid %d", filed.fd_dt, Pid);
+		return;
+	}
+	if ((unsigned)filed.fd_lastfile >= dt.dt_nfiles ||
 	    filed.fd_freefile > filed.fd_lastfile + 1) {
-		dprintf("filedesc corrupted at %#llx for pid %d", (unsigned long long)p->p_fd, Pid);
+		dprintf("filedesc corrupted at %p for pid %d", (void *)(uintptr_t)p->p_fd, Pid);
 		return;
 	}
 	/*
@@ -338,20 +347,23 @@ dofiles(struct kinfo_proc2 *p)
 	 * current working directory vnode
 	 */
 	vtrans(cwdi.cwdi_cdir, CDIR, FREAD);
+#if 0
 	/*
+	 * Disable for now, since p->p_tracep appears to point to a ktr_desc *
 	 * ktrace vnode, if one
 	 */
 	if (p->p_tracep)
 		ftrans((struct file *)(intptr_t)p->p_tracep, TRACE);
+#endif
 	/*
 	 * open files
 	 */
-#define FPSIZE	(sizeof (struct file *))
+#define FPSIZE	(sizeof (fdfile_t *))
 	ALLOC_OFILES(filed.fd_lastfile+1);
-	if (!KVM_READ(filed.fd_ofiles, ofiles,
+	if (!KVM_READ(&filed.fd_dt->dt_ff, ofiles,
 	    (filed.fd_lastfile+1) * FPSIZE)) {
 		dprintf("can't read file structures at %p for pid %d",
-		    filed.fd_ofiles, Pid);
+		    &filed.fd_dt->dt_ff, Pid);
 		return;
 	}
 	for (i = 0; i <= filed.fd_lastfile; i++) {
@@ -362,13 +374,21 @@ dofiles(struct kinfo_proc2 *p)
 }
 
 static void
-ftrans(struct file *fp, int i)
+ftrans(fdfile_t *fp, int i)
 {
 	struct file file;
+	fdfile_t fdfile;
 
-	if (!KVM_READ(fp, &file, sizeof (struct file))) {
+	if (!KVM_READ(fp, &fdfile, sizeof(fdfile))) {
 		dprintf("can't read file %d at %p for pid %d",
 		    i, fp, Pid);
+		return;
+	}
+	if (fdfile.ff_file == NULL)
+		return;
+	if (!KVM_READ(fdfile.ff_file, &file, sizeof(file))) {
+		dprintf("can't read file %d at %p for pid %d",
+		    i, fdfile.ff_file, Pid);
 		return;
 	}
 	switch (file.f_type) {
@@ -383,9 +403,13 @@ ftrans(struct file *fp, int i)
 		if (checkfile == 0)
 			ptrans(&file, (struct pipe *)file.f_data, i);
 		break;
+	case DTYPE_MISC:
 	case DTYPE_KQUEUE:
+	case DTYPE_CRYPTO:
+	case DTYPE_MQUEUE:
+	case DTYPE_SEM:
 		if (checkfile == 0)
-			kqueuetrans((void *)file.f_data, i);
+			misctrans(&file);
 		break;
 	default:
 		dprintf("unknown file type %d for file %d of pid %d",
@@ -492,14 +516,16 @@ vtrans(struct vnode *vp, int i, int flag)
 		return;
 	}
 	if (nflg)
-		(void)printf(" %2d,%-2d", major(fst.fsid), minor(fst.fsid));
+		(void)printf(" %2llu,%-2llu",
+		    (unsigned long long)major(fst.fsid),
+		    (unsigned long long)minor(fst.fsid));
 	else
 		(void)printf(" %-8s", getmnton(vn.v_mount));
 	if (nflg)
 		(void)snprintf(mode, sizeof mode, "%o", fst.mode);
 	else
 		strmode(fst.mode, mode);
-	(void)printf(" %7lu %*s", (unsigned long)fst.fileid, nflg ? 5 : 10, mode);
+	(void)printf(" %7"PRIu64" %*s", fst.fileid, nflg ? 5 : 10, mode);
 	switch (vn.v_type) {
 	case VBLK:
 	case VCHR: {
@@ -507,8 +533,9 @@ vtrans(struct vnode *vp, int i, int flag)
 
 		if (nflg || ((name = devname(fst.rdev, vn.v_type == VCHR ? 
 		    S_IFCHR : S_IFBLK)) == NULL))
-			(void)printf("  %2d,%-2d", major(fst.rdev),
-			    minor(fst.rdev));
+			(void)printf("  %2llu,%-2llu",
+			    (unsigned long long)major(fst.rdev),
+			    (unsigned long long)minor(fst.rdev));
 		else
 			(void)printf(" %6s", name);
 		break;
@@ -559,7 +586,7 @@ ufs_filestat(struct vnode *vp, struct filestat *fsp)
 	}
 
 	fsp->fsid = inode.i_dev & 0xffff;
-	fsp->fileid = (long)inode.i_number;
+	fsp->fileid = inode.i_number;
 	fsp->mode = (mode_t)inode.i_mode;
 	fsp->size = inode.i_size;
 
@@ -578,7 +605,7 @@ ext2fs_filestat(struct vnode *vp, struct filestat *fsp)
 		return 0;
 	}
 	fsp->fsid = inode.i_dev & 0xffff;
-	fsp->fileid = (long)inode.i_number;
+	fsp->fileid = inode.i_number;
 
 	if (!KVM_READ(&inode.i_e2fs_mode, &mode, sizeof mode)) {
 		dprintf("can't read inode %p's mode at %p for pid %d", VTOI(vp),
@@ -956,12 +983,11 @@ bad:
 }
 
 static void
-kqueuetrans(void *kq, int i)
+misctrans(struct file *file)
 {
 
-	PREFIX(i);
-	(void)printf("* kqueue %lx", (long)kq);
-	(void)printf("\n");
+	PREFIX((int)file->f_type);
+	pmisc(file, dtypes[file->f_type]);
 }
 
 /*

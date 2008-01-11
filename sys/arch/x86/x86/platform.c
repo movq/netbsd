@@ -1,4 +1,4 @@
-/* $NetBSD: platform.c,v 1.3 2007/12/09 21:14:26 xtraeme Exp $ */
+/* $NetBSD: platform.c,v 1.11 2011/01/18 07:47:16 jmmv Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -32,19 +26,23 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "isa.h"
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: platform.c,v 1.3 2007/12/09 21:14:26 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: platform.c,v 1.11 2011/01/18 07:47:16 jmmv Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
-#include <sys/malloc.h>
 #include <sys/kernel.h>
 #include <sys/pmf.h>
+
+#include <dev/isa/isavar.h>
 
 #include <arch/x86/include/smbiosvar.h>
 
 void		platform_init(void);	/* XXX */
 static void	platform_add(struct smbtable *, const char *, int);
+static void	platform_add_date(struct smbtable *, const char *, int);
 static void	platform_print(void);
 
 void
@@ -52,9 +50,11 @@ platform_init(void)
 {
 	struct smbtable smbios;
 	struct smbios_sys *psys;
+	struct smbios_struct_bios *pbios;
+	struct smbios_slot *pslot;
+	int nisa, nother;
 
 	smbios.cookie = 0;
-
 	if (smbios_find_table(SMBIOS_TYPE_SYSTEM, &smbios)) {
 		psys = smbios.tblhdr;
 
@@ -63,6 +63,38 @@ platform_init(void)
 		platform_add(&smbios, "system-version", psys->version);
 		platform_add(&smbios, "system-serial-number", psys->serial);
 	}
+
+	smbios.cookie = 0;
+	if (smbios_find_table(SMBIOS_TYPE_BIOS, &smbios)) {
+		pbios = smbios.tblhdr;
+
+		platform_add(&smbios, "firmware-vendor", pbios->vendor);
+		platform_add(&smbios, "firmware-version", pbios->version);
+		platform_add_date(&smbios, "firmware-date", pbios->release);
+	}
+
+	smbios.cookie = 0;
+	nisa = 0;
+	nother = 0;
+	while (smbios_find_table(SMBIOS_TYPE_SLOTS, &smbios)) {
+		pslot = smbios.tblhdr;
+		switch (pslot->type) {
+		case SMBIOS_SLOT_ISA:
+		case SMBIOS_SLOT_EISA:
+			nisa++;
+			break;
+		default:
+			nother++;
+			break;
+		}
+	}
+
+#if NISA > 0
+	if ((nother | nisa) != 0) {
+		/* Only if there seems to be good expansion slot info. */
+		isa_set_slotcount(nisa);
+	}
+#endif
 
 	platform_print();
 }
@@ -77,16 +109,16 @@ platform_print(void)
 	ver = pmf_get_platform("system-version");
 
 	if (manuf == NULL)
-		aprint_normal("Generic");
+		aprint_verbose("Generic");
 	else
-		aprint_normal("%s", manuf);
+		aprint_verbose("%s", manuf);
 	if (prod == NULL)
-		aprint_normal(" PC");
+		aprint_verbose(" PC");
 	else
-		aprint_normal(" %s", prod);
+		aprint_verbose(" %s", prod);
 	if (ver != NULL)
-		aprint_normal(" (%s)", ver);
-	aprint_normal("\n");
+		aprint_verbose(" (%s)", ver);
+	aprint_verbose("\n");
 }
 
 static void
@@ -96,4 +128,49 @@ platform_add(struct smbtable *tbl, const char *key, int idx)
 
 	if (smbios_get_string(tbl, idx, tmpbuf, 128) != NULL)
 		pmf_set_platform(key, tmpbuf);
+}
+
+static int
+platform_scan_date(char *buf, unsigned int *month, unsigned int *day,
+    unsigned int *year)
+{
+	char *p, *s;
+
+	s = buf;
+	p = strchr(s, '/');
+	if (p) *p = '\0';
+	*month = strtoul(s, NULL, 10);
+	if (!p) return 1;
+
+	s = p + 1;
+	p = strchr(s, '/');
+	if (p) *p = '\0';
+	*day = strtoul(s, NULL, 10);
+	if (!p) return 2;
+
+	s = p + 1;
+	*year = strtoul(s, NULL, 10);
+	return 3;
+}
+
+static void
+platform_add_date(struct smbtable *tbl, const char *key, int idx)
+{
+	unsigned int month, day, year;
+	char tmpbuf[128], datestr[9];
+
+	if (smbios_get_string(tbl, idx, tmpbuf, 128) == NULL)
+		return;
+	if (platform_scan_date(tmpbuf, &month, &day, &year) != 3)
+		return;
+	if (month == 0 || month > 12 || day == 0 || day > 31)
+		return;
+	if (year > 9999)
+		return;
+	if (year < 70)
+		year += 2000;
+	else if (year < 100)
+		year += 1900;
+	sprintf(datestr, "%04u%02u%02u", year, month, day);
+	pmf_set_platform(key, datestr);
 }

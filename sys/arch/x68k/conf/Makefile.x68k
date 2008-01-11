@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.x68k,v 1.60 2005/12/11 12:19:37 christos Exp $
+#	$NetBSD: Makefile.x68k,v 1.62 2011/01/21 15:59:10 joerg Exp $
 #
 # Makefile for NetBSD
 #
@@ -32,7 +32,7 @@ GENASSYM_CONF=	${X68K}/x68k/genassym.cf
 ## (2) compile settings
 ##
 CPPFLAGS+=	-Dx68k
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
+AFLAGS+=	-x assembler-with-cpp
 CMACHFLAGS?=	-m68020-60 -Wa,-m68030 -Wa,-m68851
 CFLAGS+=	${CMACHFLAGS} -msoft-float
 
@@ -56,6 +56,8 @@ MD_SFILES=	${X68K}/x68k/locore.s
 
 locore.o: ${X68K}/x68k/locore.s assym.h Makefile
 	${NORMAL_S}
+
+copy.o copypage.o lock_stubs.o: assym.h
 
 ##
 ## (5) link settings

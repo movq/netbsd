@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.34 2006/09/04 00:11:00 hubertf Exp $ */
+/*	$NetBSD: md.c,v 1.40 2011/04/04 08:30:45 mbalmer Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -15,11 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -36,7 +32,7 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* md.c -- Machine specific code for x68k */
+/* md.c -- x68k machine specific routines */
 /* This file is in close sync with pmax, sparc, and vax md.c */
 
 #include <stdio.h>
@@ -61,11 +57,23 @@ typedef struct parttab {
 parttab md_disklabel;
 int md_freepart;
 int md_nfreepart;
-#endif
+#endif /* notyet */
+
 int md_need_newdisk = 0;
 
 /* prototypes */
-static int md_newdisk (void);
+static int md_newdisk(void);
+
+void
+md_init(void)
+{
+}
+
+void
+md_init_set_status(int flags)
+{
+	(void)flags;
+}
 
 int
 md_get_info(void)
@@ -135,6 +143,50 @@ md_get_info(void)
 	return 1;
 }
 
+/*
+ * md back-end code for menu-driven BSD disklabel editor.
+ */
+int
+md_make_bsd_partitions(void)
+{
+	return(make_bsd_partitions());
+}
+
+/*
+ * any additional partition validation
+ */
+int
+md_check_partitions(void)
+{
+	/* X68k partitions must be in order of the range. */
+	int part, last = PART_A-1;
+	uint32_t start = 0;
+
+	for (part = PART_A; part < 8; part++) {
+		if (part == PART_C)
+			continue;
+		if (last >= PART_A && bsdlabel[part].pi_size > 0) {
+			msg_display(MSG_emptypart, part+'a');
+			process_menu(MENU_ok, NULL);
+			return 0;
+		}
+		if (bsdlabel[part].pi_size == 0) {
+			if (last < PART_A)
+				last = part;
+		} else {
+			if (start >= bsdlabel[part].pi_offset) {
+				msg_display(MSG_ordering, part+'a');
+				process_menu(MENU_yesno, NULL);
+				if (yesno)
+					return 0;
+			}
+			start = bsdlabel[part].pi_offset;
+		}
+	}
+
+	return 1;
+}
+
 #ifdef notyet
 static int
 md_check_partitions(void)
@@ -191,16 +243,7 @@ md_check_partitions(void)
 
 	/* Partitions should be preserved in md_make_bsdpartitions() */
 }
-#endif
-
-static int
-md_newdisk(void)
-{
-	msg_display(MSG_newdisk, diskdev, diskdev);
-
-	return run_program(RUN_FATAL|RUN_DISPLAY,
-	    "/usr/mdec/newdisk -v %s", diskdev);
-}
+#endif /* notyet */
 
 /*
  * hook called before writing new disklabel.
@@ -221,16 +264,13 @@ md_post_disklabel(void)
 {
 	if (get_ramsize() < 6)
 		set_swap(diskdev, bsdlabel);
-
 	return 0;
 }
 
 /*
- * MD hook called after upgrade() or install() has finished setting
+ * hook called after upgrade() or install() has finished setting
  * up the target disk but immediately before the user is given the
- * ``disks are now set up'' message, so that if power fails, they can
- * continue installation by booting the target disk and doing an
- * `upgrade'.
+ * ``disks are now set up'' message.
  *
  * On the x68k, we use this opportunity to install the boot blocks.
  */
@@ -248,55 +288,25 @@ md_post_newfs(void)
 	return 0;
 }
 
-/*
- * some ports use this to copy the MD filesystem, we do not.
- */
 int
-md_copy_filesystem(void)
+md_post_extract(void)
 {
 	return 0;
 }
 
-/*
- * md back-end code for menu-driven BSD disklabel editor.
- */
-int
-md_make_bsd_partitions(void)
+void
+md_cleanup_install(void)
 {
-	return(make_bsd_partitions());
+#ifdef notyet			/* sed is too large for ramdisk */
+	enable_rc_conf();
+#endif
 }
 
-/*
- * any additional partition validation
- */
 int
-md_check_partitions(void)
+md_pre_update(void)
 {
-	/* X68k partitions must be in order of the range. */
-	int part, start = 0, last = PART_A-1;
-
-	for (part = PART_A; part < 8; part++) {
-		if (part == PART_C)
-			continue;
-		if (last >= PART_A && bsdlabel[part].pi_size > 0) {
-			msg_display(MSG_emptypart, part+'a');
-			process_menu(MENU_ok, NULL);
-			return 0;
-		}
-		if (bsdlabel[part].pi_size == 0) {
-			if (last < PART_A)
-				last = part;
-		} else {
-			if (start >= bsdlabel[part].pi_offset) {
-				msg_display(MSG_ordering, part+'a');
-				process_menu(MENU_yesno, NULL);
-				if (yesno)
-					return 0;
-			}
-			start = bsdlabel[part].pi_offset;
-		}
-	}
-
+	if (get_ramsize() < 6)
+		set_swap(diskdev, NULL);
 	return 1;
 }
 
@@ -304,43 +314,16 @@ md_check_partitions(void)
 int
 md_update(void)
 {
-	endwin();
-	md_copy_filesystem();
 	md_post_newfs();
-	wrefresh(curscr);
-	wmove(stdscr, 0, 0);
-	wclear(stdscr);
-	wrefresh(stdscr);
 	return 1;
 }
 
-void
-md_cleanup_install(void)
+static int
+md_newdisk(void)
 {
-  
-#ifdef notyet			/* sed is too large for ramdisk */
-	enable_rc_conf();
-#endif
-	run_program(0, "rm -f %s", target_expand("/sysinst"));
-	run_program(0, "rm -f %s", target_expand("/.termcap"));
-	run_program(0, "rm -f %s", target_expand("/.profile"));
+	msg_display(MSG_newdisk, diskdev, diskdev);
+
+	return run_program(RUN_FATAL|RUN_DISPLAY,
+	    "/usr/mdec/newdisk -v %s", diskdev);
 }
 
-int
-md_pre_update()
-{
-	if (get_ramsize() < 6)
-		set_swap(diskdev, NULL);
-	return 1;
-}
-
-void
-md_init()
-{
-}
-
-int
-md_post_extract(void)
-{
-	return 0;
-}

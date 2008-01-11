@@ -1,4 +1,4 @@
-/*	$NetBSD: files.c,v 1.7 2007/11/30 23:19:18 dsl Exp $	*/
+/*	$NetBSD: files.c,v 1.10 2009/03/13 18:24:41 cube Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -69,9 +69,6 @@ static int	checkaux(const char *, void *);
 static int	fixcount(const char *, void *);
 static int	fixfsel(const char *, void *);
 static int	fixsel(const char *, void *);
-static int	expr_eval(struct nvlist *,
-		    int (*)(const char *, void *), void *);
-static void	expr_free(struct nvlist *);
 
 void
 initfiles(void)
@@ -382,7 +379,7 @@ fixdevsw(void)
 		    !expr_eval(dm->dm_opts, fixsel, NULL))
 			continue;
 
-		if (dm->dm_cmajor != -1) {
+		if (dm->dm_cmajor != NODEVMAJOR) {
 			if (ht_lookup(cdevmtab, intern(dm->dm_name)) != NULL) {
 				cfgxerror(dm->dm_srcfile, dm->dm_srcline,
 				       "device-major of character device '%s' "
@@ -404,7 +401,7 @@ fixdevsw(void)
 				      dm->dm_name, dm->dm_cmajor);
 			}
 		}
-		if (dm->dm_bmajor != -1) {
+		if (dm->dm_bmajor != NODEVMAJOR) {
 			if (ht_lookup(bdevmtab, intern(dm->dm_name)) != NULL) {
 				cfgxerror(dm->dm_srcfile, dm->dm_srcline,
 				       "device-major of block device '%s' "
@@ -496,12 +493,12 @@ fixsel(const char *name, void *context)
  * No short circuiting ever occurs.  fn must return 0 or 1 (otherwise
  * our mixing of C's bitwise & boolean here may give surprises).
  */
-static int
+int
 expr_eval(struct nvlist *expr, int (*fn)(const char *, void *), void *context)
 {
 	int lhs, rhs;
 
-	switch (expr->nv_int) {
+	switch (expr->nv_num) {
 
 	case FX_ATOM:
 		return ((*fn)(expr->nv_name, context));
@@ -519,7 +516,7 @@ expr_eval(struct nvlist *expr, int (*fn)(const char *, void *), void *context)
 		rhs = expr_eval(expr->nv_next, fn, context);
 		return (lhs | rhs);
 	}
-	panic("expr_eval %d", expr->nv_int);
+	panic("expr_eval %lld", expr->nv_num);
 	/* NOTREACHED */
 	return (0);
 }
@@ -527,14 +524,14 @@ expr_eval(struct nvlist *expr, int (*fn)(const char *, void *), void *context)
 /*
  * Free an expression tree.
  */
-static void
+void
 expr_free(struct nvlist *expr)
 {
 	struct nvlist *rhs;
 
 	/* This loop traverses down the RHS of each subexpression. */
 	for (; expr != NULL; expr = rhs) {
-		switch (expr->nv_int) {
+		switch (expr->nv_num) {
 
 		/* Atoms and !-exprs have no left hand side. */
 		case FX_ATOM:
@@ -548,7 +545,7 @@ expr_free(struct nvlist *expr)
 			break;
 
 		default:
-			panic("expr_free %d", expr->nv_int);
+			panic("expr_free %lld", expr->nv_num);
 		}
 		rhs = expr->nv_next;
 		nvfree(expr);
@@ -574,7 +571,7 @@ static void
 pr0(struct nvlist *e)
 {
 
-	switch (e->nv_int) {
+	switch (e->nv_num) {
 	case FX_ATOM:
 		printf(" %s", e->nv_name);
 		return;
@@ -588,7 +585,7 @@ pr0(struct nvlist *e)
 		printf(" (|");
 		break;
 	default:
-		printf(" (?%d?", e->nv_int);
+		printf(" (?%lld?", e->nv_num);
 		break;
 	}
 	if (e->nv_ptr)

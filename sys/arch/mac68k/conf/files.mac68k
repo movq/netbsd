@@ -1,4 +1,4 @@
-#	$NetBSD: files.mac68k,v 1.120 2007/12/03 15:33:51 ad Exp $
+#	$NetBSD: files.mac68k,v 1.123 2010/06/06 04:52:17 mrg Exp $
 
 # mac68k-specific configuration info
 
@@ -6,6 +6,7 @@
 # (note, these are case-sensitive)
 defflag	opt_adb.h		ADB_DEBUG MRG_ADB ALTXBUTTONS
 defflag	opt_mac68k.h		DISABLE_EXT_CACHE ZS_CONSOLE_ABORT
+defflag	opt_grf_compat.h	GRF_COMPAT
 
 defflag	opt_wsdisplay_compat.h	WSDISPLAY_COMPAT_ITEFONT
 
@@ -16,8 +17,6 @@ maxusers 2 8 64
 
 device mainbus { }			# no locators (yet?)
 attach mainbus at root
-
-include "dev/wscons/files.wscons"
 
 device	obio { [addr = -1] }
 attach	obio at mainbus
@@ -132,6 +131,10 @@ include	"dev/ata/files.ata"
 
 attach	wdc at obio with wdc_obio
 file	arch/mac68k/obio/wdc_obio.c	wdc_obio
+
+device	cpi { }
+attach	cpi at nubus
+file	arch/mac68k/nubus/cpi_nubus.c	cpi
 
 device	zsc { channel = -1 }
 attach	zsc at obio

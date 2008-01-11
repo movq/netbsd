@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.35 2007/03/04 05:59:46 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.48 2011/04/04 20:37:50 dyoung Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -67,11 +67,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.35 2007/03/04 05:59:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.48 2011/04/04 20:37:50 dyoung Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -86,9 +87,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.35 2007/03/04 05:59:46 christos Exp $"
 #include <sys/syslog.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/user.h>
 #include <sys/boot_flag.h>
 #include <sys/ksyms.h>
+#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -100,11 +101,15 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.35 2007/03/04 05:59:46 christos Exp $"
 #include <machine/powerpc.h>
 #include <machine/trap.h>
 #include <machine/walnut.h>
+#include <machine/pcb.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/ibm4xx/dcr405gp.h>
+#include <powerpc/ibm4xx/spr.h>
+#include <powerpc/ibm4xx/dcr4xx.h>
 
 #include <dev/cons.h>
+#include <dev/pci/pcivar.h>
+#include <dev/pci/pciconf.h>
 
 #include "ksyms.h"
 
@@ -119,8 +124,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.35 2007/03/04 05:59:46 christos Exp $"
 /*
  * Global variables used here and there
  */
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 /*
@@ -130,13 +133,11 @@ char cpu_model[80];
 char machine[] = MACHINE;		/* from <machine/param.h> */
 char machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 
-extern struct user *proc0paddr;
-
 char bootpath[256];
 paddr_t msgbuf_paddr;
 vaddr_t msgbuf_vaddr;
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 void *startsym, *endsym;
 #endif
 
@@ -177,7 +178,7 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 	struct cpu_info * const ci = curcpu();
 
 	/* Disable all external interrupts */
-	mtdcr(DCR_UIC0_ER, 0);
+	mtdcr(DCR_UIC0_BASE + DCR_UIC_ER, 0);
 
         /* Initialize cache info for memcpy, etc. */
         cpu_probe_cache();
@@ -190,7 +191,7 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 	physmemr[0].start = 0;
 	physmemr[0].size = board_data.mem_size & ~PGOFSET;
 	/* Lower memory reserved by eval board BIOS */
-	availmemr[0].start = startkernel; 
+	availmemr[0].start = startkernel;
 	availmemr[0].size = board_data.mem_size - availmemr[0].start;
 
 	/* Linear map kernel memory */
@@ -205,10 +206,9 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 	 * Initialize lwp0 and current pcb and pmap pointers.
 	 */
 	lwp0.l_cpu = ci;
-	lwp0.l_addr = proc0paddr;
-	memset(lwp0.l_addr, 0, sizeof *lwp0.l_addr);
 
-	curpcb = &proc0paddr->u_pcb;
+	curpcb = lwp_getpcb(&lwp0);
+	memset(curpcb, 0, sizeof(struct pcb));
 	curpcb->pcb_pm = pmap_kernel();
 
 	/*
@@ -247,11 +247,11 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 			memcpy((void *)EXC_DTMISS, &tlbdmiss4xx,
 				(size_t)&tlbdm4size);
 			break;
-		/* 
-		 * EXC_PIT, EXC_FIT, EXC_WDOG handlers 
-		 * are spaced by 0x10 bytes only.. 
+		/*
+		 * EXC_PIT, EXC_FIT, EXC_WDOG handlers
+		 * are spaced by 0x10 bytes only..
 		 */
-		case EXC_PIT:	
+		case EXC_PIT:
 			memcpy((void *)EXC_PIT, &pitfitwdog,
 				(size_t)&pitfitwdogsize);
 			break;
@@ -260,7 +260,7 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 				(size_t)&debugsize);
 			break;
 		case EXC_DTMISS|EXC_ALI:
-                        /* PPC405GP Rev D errata item 51 */	
+                        /* PPC405GP Rev D errata item 51 */
 			memcpy((void *)(EXC_DTMISS|EXC_ALI), &errata51handler,
 				(size_t)&errata51size);
 			break;
@@ -293,7 +293,7 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 	 * Now enable translation (and machine checks/recoverable interrupts).
 	 */
 	__asm volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0; isync"
-		      : : "r"(0), "K"(PSL_IR|PSL_DR)); 
+		      : : "r"(0), "K"(PSL_IR|PSL_DR));
 	/* XXXX PSL_ME - With ME set kernel gets stuck... */
 
 	uvm_setpagesize();
@@ -321,8 +321,8 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 	printf("  pci_speed = %u\n", board_data.pci_speed);
 #endif
 
-#if NKSYMS || defined(DDB) || defined(LKM)
-	ksyms_init((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	ksyms_addsyms_elf((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
 #endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
@@ -384,7 +384,7 @@ cpu_startup(void)
 		panic("startup: no room for message buffer");
 	for (i = 0; i < btoc(MSGBUFSIZE); i++)
 		pmap_kenter_pa(msgbuf_vaddr + i * PAGE_SIZE,
-		    msgbuf_paddr + i * PAGE_SIZE, VM_PROT_READ|VM_PROT_WRITE);
+		    msgbuf_paddr + i * PAGE_SIZE, VM_PROT_READ|VM_PROT_WRITE, 0);
 	initmsgbuf((void *)msgbuf_vaddr, round_page(MSGBUFSIZE));
 #else
 	initmsgbuf((void *)msgbuf, round_page(MSGBUFSIZE));
@@ -397,13 +397,6 @@ cpu_startup(void)
 	printf("total memory = %s\n", pbuf);
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
-
 	/*
 	 * Allocate a submap for physio
 	 */
@@ -493,6 +486,8 @@ cpu_reboot(int howto, char *what)
 
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 	  /* Power off here if we know how...*/
 	}
@@ -557,4 +552,71 @@ mem_regions(struct mem_region **mem, struct mem_region **avail)
 
 	*mem = physmemr;
 	*avail = availmemr;
+}
+
+
+int
+pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
+{
+
+	/*
+	 * Bus number is irrelevant.  Configuration Mechanism 1 is in
+	 * use, can have devices 0-32 (i.e. the `normal' range).
+	 */
+	return 5;
+}
+
+int
+pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+{
+	int pin = pa->pa_intrpin;
+	int dev = pa->pa_device;
+
+	if (pin == 0)
+		/* No IRQ used. */
+		goto bad;
+
+	if (pin > 4) {
+		printf("pci_intr_map: bad interrupt pin %d\n", pin);
+		goto bad;
+	}
+
+	/*
+	 * We need to map the interrupt pin to the interrupt bit in the UIC
+	 * associated with it.  This is highly machine-dependent.
+	 */
+	switch(dev) {
+	case 1:
+	case 2:
+	case 3:
+	case 4:
+		*ihp = 27 + dev;
+		break;
+	default:
+		printf("Hmm.. PCI device %d should not exist on this board\n",
+			dev);
+		goto bad;
+	}
+	return 0;
+
+bad:
+	*ihp = -1;
+	return 1;
+}
+
+void
+pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin,
+		   int swiz, int *iline)
+{
+
+	if (bus == 0)
+		switch(dev) {
+		case 1:
+		case 2:
+		case 3:
+		case 4:
+			*iline = 31 - dev;
+		}
+	else
+		*iline = 20 + ((swiz + dev + 1) & 3);
 }

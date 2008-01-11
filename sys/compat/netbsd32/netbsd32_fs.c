@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_fs.c,v 1.50 2008/01/05 19:14:08 dsl Exp $	*/
+/*	$NetBSD: netbsd32_fs.c,v 1.60 2011/01/22 22:26:10 matt Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,11 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_fs.c,v 1.50 2008/01/05 19:14:08 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_fs.c,v 1.60 2011/01/22 22:26:10 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
@@ -52,15 +49,21 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_fs.c,v 1.50 2008/01/05 19:14:08 dsl Exp $")
 #include <sys/kauth.h>
 #include <sys/vfs_syscalls.h>
 
+#include <fs/cd9660/cd9660_mount.h>
+#include <ufs/ufs/ufsmount.h>
+
+#define NFS_ARGS_ONLY
+#include <nfs/nfsmount.h>
+
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 #include <compat/netbsd32/netbsd32_conv.h>
 #include <compat/sys/mount.h>
 
 
-static int dofilereadv32(struct lwp *, int, struct file *, struct netbsd32_iovec *,
+static int dofilereadv32(int, struct file *, struct netbsd32_iovec *,
 			      int, off_t *, int, register_t *);
-static int dofilewritev32(struct lwp *, int, struct file *, struct netbsd32_iovec *,
+static int dofilewritev32(int, struct file *, struct netbsd32_iovec *,
 			       int,  off_t *, int, register_t *);
 
 struct iovec *
@@ -78,7 +81,7 @@ netbsd32_get_iov(struct netbsd32_iovec *iov32, int iovlen, struct iovec *aiov,
 		return NULL;
 
 	if (iovlen > aiov_len)
-		iov = malloc(iovlen * sizeof (*iov), M_TEMP, M_WAITOK);
+		iov = kmem_alloc(iovlen * sizeof(*iov), KM_SLEEP);
 
 	iovp = iov;
 	for (i = 0; i < iovlen; iov32 += N_IOV32, i += N_IOV32) {
@@ -88,7 +91,7 @@ netbsd32_get_iov(struct netbsd32_iovec *iov32, int iovlen, struct iovec *aiov,
 		error = copyin(iov32, aiov32, n * sizeof (*iov32));
 		if (error != 0) {
 			if (iov != aiov)
-				free(iov, M_TEMP);
+				kmem_free(iov, iovlen * sizeof(*iov));
 			return NULL;
 		}
 		for (j = 0; j < n; iovp++, j++) {
@@ -109,28 +112,24 @@ netbsd32_readv(struct lwp *l, const struct netbsd32_readv_args *uap, register_t 
 		syscallarg(int) iovcnt;
 	} */
 	int fd = SCARG(uap, fd);
-	struct proc *p = l->l_proc;
-	struct file *fp;
-	struct filedesc *fdp = p->p_fd;
+	file_t *fp;
 
-	if ((fp = fd_getfile(fdp, fd)) == NULL)
+	if ((fp = fd_getfile(fd)) == NULL)
 		return (EBADF);
 
 	if ((fp->f_flag & FREAD) == 0) {
-		FILE_UNLOCK(fp);
+		fd_putfile(fd);
 		return (EBADF);
 	}
 
-	FILE_USE(fp);
-
-	return (dofilereadv32(l, fd, fp,
+	return (dofilereadv32(fd, fp,
 	    (struct netbsd32_iovec *)SCARG_P32(uap, iovp),
 	    SCARG(uap, iovcnt), &fp->f_offset, FOF_UPDATE_OFFSET, retval));
 }
 
 /* Damn thing copies in the iovec! */
 int
-dofilereadv32(struct lwp *l, int fd, struct file *fp, struct netbsd32_iovec *iovp, int iovcnt, off_t *offset, int flags, register_t *retval)
+dofilereadv32(int fd, struct file *fp, struct netbsd32_iovec *iovp, int iovcnt, off_t *offset, int flags, register_t *retval)
 {
 	struct uio auio;
 	struct iovec *iov;
@@ -147,7 +146,7 @@ dofilereadv32(struct lwp *l, int fd, struct file *fp, struct netbsd32_iovec *iov
 			error = EINVAL;
 			goto out;
 		}
-		iov = malloc(iovlen, M_IOV, M_WAITOK);
+		iov = kmem_alloc(iovlen, KM_SLEEP);
 		needfree = iov;
 	} else if ((u_int)iovcnt > 0) {
 		iov = aiov;
@@ -160,7 +159,7 @@ dofilereadv32(struct lwp *l, int fd, struct file *fp, struct netbsd32_iovec *iov
 	auio.uio_iov = iov;
 	auio.uio_iovcnt = iovcnt;
 	auio.uio_rw = UIO_READ;
-	auio.uio_vmspace = l->l_proc->p_vmspace;
+	auio.uio_vmspace = curproc->p_vmspace;
 	error = netbsd32_to_iovecin(iovp, iov, iovcnt);
 	if (error)
 		goto done;
@@ -183,7 +182,7 @@ dofilereadv32(struct lwp *l, int fd, struct file *fp, struct netbsd32_iovec *iov
 	 * if tracing, save a copy of iovec
 	 */
 	if (ktrpoint(KTR_GENIO)) {
-		ktriov = malloc(iovlen, M_TEMP, M_WAITOK);
+		ktriov = kmem_alloc(iovlen, KM_SLEEP);
 		memcpy((void *)ktriov, (void *)auio.uio_iov, iovlen);
 	}
 
@@ -197,15 +196,15 @@ dofilereadv32(struct lwp *l, int fd, struct file *fp, struct netbsd32_iovec *iov
 
 	if (ktriov != NULL) {
 		ktrgeniov(fd, UIO_READ, ktriov, cnt, error);
-		free(ktriov, M_TEMP);
+		kmem_free(ktriov, iovlen);
 	}
 
 	*retval = cnt;
 done:
 	if (needfree)
-		free(needfree, M_IOV);
+		kmem_free(needfree, iovlen);
 out:
-	FILE_UNUSE(fp, l);
+	fd_putfile(fd);
 	return (error);
 }
 
@@ -218,33 +217,28 @@ netbsd32_writev(struct lwp *l, const struct netbsd32_writev_args *uap, register_
 		syscallarg(int) iovcnt;
 	} */
 	int fd = SCARG(uap, fd);
-	struct file *fp;
-	struct proc *p = l->l_proc;
-	struct filedesc *fdp = p->p_fd;
+	file_t *fp;
 
-	if ((fp = fd_getfile(fdp, fd)) == NULL)
+	if ((fp = fd_getfile(fd)) == NULL)
 		return (EBADF);
 
 	if ((fp->f_flag & FWRITE) == 0) {
-		FILE_UNLOCK(fp);
+		fd_putfile(fd);
 		return (EBADF);
 	}
 
-	FILE_USE(fp);
-
-	return (dofilewritev32(l, fd, fp,
+	return (dofilewritev32(fd, fp,
 	    (struct netbsd32_iovec *)SCARG_P32(uap, iovp),
 	    SCARG(uap, iovcnt), &fp->f_offset, FOF_UPDATE_OFFSET, retval));
 }
 
 int
-dofilewritev32(struct lwp *l, int fd, struct file *fp, struct netbsd32_iovec *iovp, int iovcnt, off_t *offset, int flags, register_t *retval)
+dofilewritev32(int fd, struct file *fp, struct netbsd32_iovec *iovp, int iovcnt, off_t *offset, int flags, register_t *retval)
 {
 	struct uio auio;
 	struct iovec *iov;
 	struct iovec *needfree;
 	struct iovec aiov[UIO_SMALLIOV];
-	struct proc *p = l->l_proc;
 	long i, cnt, error = 0;
 	u_int iovlen;
 	struct iovec *ktriov = NULL;
@@ -256,7 +250,7 @@ dofilewritev32(struct lwp *l, int fd, struct file *fp, struct netbsd32_iovec *io
 			error = EINVAL;
 			goto out;
 		}
-		iov = malloc(iovlen, M_IOV, M_WAITOK);
+		iov = kmem_alloc(iovlen, KM_SLEEP);
 		needfree = iov;
 	} else if ((u_int)iovcnt > 0) {
 		iov = aiov;
@@ -269,7 +263,7 @@ dofilewritev32(struct lwp *l, int fd, struct file *fp, struct netbsd32_iovec *io
 	auio.uio_iov = iov;
 	auio.uio_iovcnt = iovcnt;
 	auio.uio_rw = UIO_WRITE;
-	auio.uio_vmspace = l->l_proc->p_vmspace;
+	auio.uio_vmspace = curproc->p_vmspace;
 	error = netbsd32_to_iovecin(iovp, iov, iovcnt);
 	if (error)
 		goto done;
@@ -292,7 +286,7 @@ dofilewritev32(struct lwp *l, int fd, struct file *fp, struct netbsd32_iovec *io
 	 * if tracing, save a copy of iovec
 	 */
 	if (ktrpoint(KTR_GENIO))  {
-		ktriov = malloc(iovlen, M_TEMP, M_WAITOK);
+		ktriov = kmem_alloc(iovlen, KM_SLEEP);
 		memcpy((void *)ktriov, (void *)auio.uio_iov, iovlen);
 	}
 
@@ -303,22 +297,22 @@ dofilewritev32(struct lwp *l, int fd, struct file *fp, struct netbsd32_iovec *io
 		    error == EINTR || error == EWOULDBLOCK))
 			error = 0;
 		if (error == EPIPE) {
-			mutex_enter(&proclist_mutex);
-			psignal(p, SIGPIPE);
-			mutex_exit(&proclist_mutex);
+			mutex_enter(proc_lock);
+			psignal(curproc, SIGPIPE);
+			mutex_exit(proc_lock);
 		}
 	}
 	cnt -= auio.uio_resid;
 	if (ktriov != NULL) {
 		ktrgenio(fd, UIO_WRITE, ktriov, cnt, error);
-		free(ktriov, M_TEMP);
+		kmem_free(ktriov, iovlen);
 	}
 	*retval = cnt;
 done:
 	if (needfree)
-		free(needfree, M_IOV);
+		kmem_free(needfree, iovlen);
 out:
-	FILE_UNUSE(fp, l);
+	fd_putfile(fd);
 	return (error);
 }
 
@@ -348,7 +342,7 @@ get_utimes32(const netbsd32_timevalp_t *tptr, struct timeval *tv,
 }
 
 int
-netbsd32_utimes(struct lwp *l, const struct netbsd32_utimes_args *uap, register_t *retval)
+netbsd32___utimes50(struct lwp *l, const struct netbsd32___utimes50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const netbsd32_charp) path;
@@ -371,10 +365,10 @@ netbds32_copyout_statvfs(const void *kp, void *up, size_t len)
 	struct netbsd32_statvfs *sbuf_32;
 	int error;
 
-	sbuf_32 = malloc(sizeof *sbuf_32, M_TEMP, M_WAITOK);
+	sbuf_32 = kmem_alloc(sizeof(*sbuf_32), KM_SLEEP);
 	netbsd32_from_statvfs(kp, sbuf_32);
 	error = copyout(sbuf_32, up, sizeof(*sbuf_32));
-	free(sbuf_32, M_TEMP);
+	kmem_free(sbuf_32, sizeof(*sbuf_32));
 
 	return error;
 }
@@ -455,44 +449,44 @@ netbsd32___fhstatvfs140(struct lwp *l, const struct netbsd32___fhstatvfs140_args
 }
 
 int
-netbsd32_futimes(struct lwp *l, const struct netbsd32_futimes_args *uap, register_t *retval)
+netbsd32___futimes50(struct lwp *l, const struct netbsd32___futimes50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) fd;
 		syscallarg(const netbsd32_timevalp_t) tptr;
 	} */
 	int error;
-	struct file *fp;
+	file_t *fp;
 	struct timeval tv[2], *tvp;
 
 	error = get_utimes32(SCARG_P32(uap, tptr), tv, &tvp);
 	if (error != 0)
 		return error;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
 
 	error = do_sys_utimes(l, fp->f_data, NULL, 0, tvp, UIO_SYSSPACE);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
 int
-netbsd32_sys___getdents30(struct lwp *l, const struct netbsd32_sys___getdents30_args *uap, register_t *retval)
+netbsd32___getdents30(struct lwp *l,
+    const struct netbsd32___getdents30_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) fd;
 		syscallarg(netbsd32_charp) buf;
 		syscallarg(netbsd32_size_t) count;
 	} */
-	struct file *fp;
+	file_t *fp;
 	int error, done;
-	struct proc *p = l->l_proc;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
 	if ((fp->f_flag & FREAD) == 0) {
 		error = EBADF;
@@ -502,12 +496,13 @@ netbsd32_sys___getdents30(struct lwp *l, const struct netbsd32_sys___getdents30_
 	    UIO_USERSPACE, SCARG(uap, count), &done, l, 0, 0);
 	*retval = done;
  out:
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
 int
-netbsd32_lutimes(struct lwp *l, const struct netbsd32_lutimes_args *uap, register_t *retval)
+netbsd32___lutimes50(struct lwp *l,
+    const struct netbsd32___lutimes50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const netbsd32_charp) path;
@@ -525,7 +520,7 @@ netbsd32_lutimes(struct lwp *l, const struct netbsd32_lutimes_args *uap, registe
 }
 
 int
-netbsd32_sys___stat30(struct lwp *l, const struct netbsd32_sys___stat30_args *uap, register_t *retval)
+netbsd32___stat50(struct lwp *l, const struct netbsd32___stat50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const netbsd32_charp) path;
@@ -538,45 +533,35 @@ netbsd32_sys___stat30(struct lwp *l, const struct netbsd32_sys___stat30_args *ua
 
 	path = SCARG_P32(uap, path);
 
-	error = do_sys_stat(l, path, FOLLOW, &sb);
+	error = do_sys_stat(path, FOLLOW, &sb);
 	if (error)
 		return (error);
-	netbsd32_from___stat30(&sb, &sb32);
+	netbsd32_from_stat(&sb, &sb32);
 	error = copyout(&sb32, SCARG_P32(uap, ub), sizeof(sb32));
 	return (error);
 }
 
 int
-netbsd32_sys___fstat30(struct lwp *l, const struct netbsd32_sys___fstat30_args *uap, register_t *retval)
+netbsd32___fstat50(struct lwp *l, const struct netbsd32___fstat50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(int) fd;
 		syscallarg(netbsd32_statp_t) sb;
 	} */
-	int fd = SCARG(uap, fd);
-	struct proc *p = l->l_proc;
-	struct filedesc *fdp = p->p_fd;
-	struct file *fp;
 	struct netbsd32_stat sb32;
 	struct stat ub;
-	int error = 0;
+	int error;
 
-	if ((fp = fd_getfile(fdp, fd)) == NULL)
-		return (EBADF);
-
-	FILE_USE(fp);
-	error = (*fp->f_ops->fo_stat)(fp, &ub, l);
-	FILE_UNUSE(fp, l);
-
+	error = do_sys_fstat(SCARG(uap, fd), &ub);
 	if (error == 0) {
-		netbsd32_from___stat30(&ub, &sb32);
+		netbsd32_from_stat(&ub, &sb32);
 		error = copyout(&sb32, SCARG_P32(uap, sb), sizeof(sb32));
 	}
 	return (error);
 }
 
 int
-netbsd32_sys___lstat30(struct lwp *l, const struct netbsd32_sys___lstat30_args *uap, register_t *retval)
+netbsd32___lstat50(struct lwp *l, const struct netbsd32___lstat50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const netbsd32_charp) path;
@@ -589,16 +574,16 @@ netbsd32_sys___lstat30(struct lwp *l, const struct netbsd32_sys___lstat30_args *
 
 	path = SCARG_P32(uap, path);
 
-	error = do_sys_stat(l, path, NOFOLLOW, &sb);
+	error = do_sys_stat(path, NOFOLLOW, &sb);
 	if (error)
 		return (error);
-	netbsd32_from___stat30(&sb, &sb32);
+	netbsd32_from_stat(&sb, &sb32);
 	error = copyout(&sb32, SCARG_P32(uap, ub), sizeof(sb32));
 	return (error);
 }
 
 int
-netbsd32___fhstat40(struct lwp *l, const struct netbsd32___fhstat40_args *uap, register_t *retval)
+netbsd32___fhstat50(struct lwp *l, const struct netbsd32___fhstat50_args *uap, register_t *retval)
 {
 	/* {
 		syscallarg(const netbsd32_pointer_t) fhp;
@@ -611,7 +596,7 @@ netbsd32___fhstat40(struct lwp *l, const struct netbsd32___fhstat40_args *uap, r
 
 	error = do_fhstat(l, SCARG_P32(uap, fhp), SCARG(uap, fh_size), &sb);
 	if (error != 0) {
-		netbsd32_from___stat30(&sb, &sb32);
+		netbsd32_from_stat(&sb, &sb32);
 		error = copyout(&sb32, SCARG_P32(uap, sb), sizeof(sb));
 	}
 	return error;
@@ -627,24 +612,20 @@ netbsd32_preadv(struct lwp *l, const struct netbsd32_preadv_args *uap, register_
 		syscallarg(int) pad;
 		syscallarg(off_t) offset;
 	} */
-	struct proc *p = l->l_proc;
-	struct filedesc *fdp = p->p_fd;
-	struct file *fp;
+	file_t *fp;
 	struct vnode *vp;
 	off_t offset;
 	int error, fd = SCARG(uap, fd);
 
-	if ((fp = fd_getfile(fdp, fd)) == NULL)
+	if ((fp = fd_getfile(fd)) == NULL)
 		return (EBADF);
 
 	if ((fp->f_flag & FREAD) == 0) {
-		FILE_UNLOCK(fp);
+		fd_putfile(fd);
 		return (EBADF);
 	}
 
-	FILE_USE(fp);
-
-	vp = (struct vnode *)fp->f_data;
+	vp = fp->f_data;
 	if (fp->f_type != DTYPE_VNODE || vp->v_type == VFIFO) {
 		error = ESPIPE;
 		goto out;
@@ -659,11 +640,11 @@ netbsd32_preadv(struct lwp *l, const struct netbsd32_preadv_args *uap, register_
 	if ((error = VOP_SEEK(vp, fp->f_offset, offset, fp->f_cred)) != 0)
 		goto out;
 
-	return (dofilereadv32(l, fd, fp, SCARG_P32(uap, iovp),
+	return (dofilereadv32(fd, fp, SCARG_P32(uap, iovp),
 	    SCARG(uap, iovcnt), &offset, 0, retval));
 
 out:
-	FILE_UNUSE(fp, l);
+	fd_putfile(fd);
 	return (error);
 }
 
@@ -677,24 +658,20 @@ netbsd32_pwritev(struct lwp *l, const struct netbsd32_pwritev_args *uap, registe
 		syscallarg(int) pad;
 		syscallarg(off_t) offset;
 	} */
-	struct proc *p = l->l_proc;
-	struct filedesc *fdp = p->p_fd;
-	struct file *fp;
+	file_t *fp;
 	struct vnode *vp;
 	off_t offset;
 	int error, fd = SCARG(uap, fd);
 
-	if ((fp = fd_getfile(fdp, fd)) == NULL)
+	if ((fp = fd_getfile(fd)) == NULL)
 		return (EBADF);
 
 	if ((fp->f_flag & FWRITE) == 0) {
-		FILE_UNLOCK(fp);
+		fd_putfile(fd);
 		return (EBADF);
 	}
 
-	FILE_USE(fp);
-
-	vp = (struct vnode *)fp->f_data;
+	vp = fp->f_data;
 	if (fp->f_type != DTYPE_VNODE || vp->v_type == VFIFO) {
 		error = ESPIPE;
 		goto out;
@@ -709,11 +686,11 @@ netbsd32_pwritev(struct lwp *l, const struct netbsd32_pwritev_args *uap, registe
 	if ((error = VOP_SEEK(vp, fp->f_offset, offset, fp->f_cred)) != 0)
 		goto out;
 
-	return (dofilewritev32(l, fd, fp, SCARG_P32(uap, iovp),
+	return (dofilewritev32(fd, fp, SCARG_P32(uap, iovp),
 	    SCARG(uap, iovcnt), &offset, 0, retval));
 
 out:
-	FILE_UNUSE(fp, l);
+	fd_putfile(fd);
 	return (error);
 }
 
@@ -741,13 +718,14 @@ netbsd32___getcwd(struct lwp *l, const struct netbsd32___getcwd_args *uap, regis
 	char   *bp, *bend;
 	int     len = (int)SCARG(uap, length);
 	int	lenused;
+	struct	cwdinfo *cwdi;
 
 	if (len > MAXPATHLEN*4)
 		len = MAXPATHLEN*4;
 	else if (len < 2)
 		return ERANGE;
 
-	path = (char *)malloc(len, M_TEMP, M_WAITOK);
+	path = kmem_alloc(len, KM_SLEEP);
 	if (!path)
 		return ENOMEM;
 
@@ -761,8 +739,11 @@ netbsd32___getcwd(struct lwp *l, const struct netbsd32___getcwd_args *uap, regis
 	 * limit it to N/2 vnodes for an N byte buffer.
 	 */
 #define GETCWD_CHECK_ACCESS 0x0001
-	error = getcwd_common (p->p_cwdi->cwdi_cdir, NULL, &bp, path, len/2,
+	cwdi = p->p_cwdi;
+	rw_enter(&cwdi->cwdi_lock, RW_READER);
+	error = getcwd_common (cwdi->cwdi_cdir, NULL, &bp, path, len/2,
 			       GETCWD_CHECK_ACCESS, l);
+	rw_exit(&cwdi->cwdi_lock);
 
 	if (error)
 		goto out;
@@ -772,6 +753,186 @@ netbsd32___getcwd(struct lwp *l, const struct netbsd32___getcwd_args *uap, regis
 	error = copyout(bp, SCARG_P32(uap, bufp), lenused);
 
 out:
-	free(path, M_TEMP);
+	kmem_free(path, len);
+	return error;
+}
+
+int
+netbsd32___mount50(struct lwp *l, const struct netbsd32___mount50_args *uap,
+	register_t *retval) 
+{
+	/* {
+		syscallarg(netbsd32_charp) type;
+		syscallarg(netbsd32_charp) path;
+		syscallarg(int) flags;
+		syscallarg(netbsd32_voidp) data;
+		syscallarg(netbsd32_size_t) data_len;
+	} */
+	char mtype[MNAMELEN];
+	union {
+		struct netbsd32_ufs_args ufs_args;
+		struct netbsd32_mfs_args mfs_args;
+		struct netbsd32_iso_args iso_args;
+		struct netbsd32_nfs_args nfs_args;
+	} fs_args32;
+	union {
+		struct ufs_args ufs_args;
+		struct mfs_args mfs_args;
+		struct iso_args iso_args;
+		struct nfs_args nfs_args;
+	} fs_args;
+	const char *type = SCARG_P32(uap, type);
+	const char *path = SCARG_P32(uap, path);
+	int flags = SCARG(uap, flags);
+	void *data = SCARG_P32(uap, data);
+	size_t data_len = SCARG(uap, data_len);
+	enum uio_seg data_seg;
+	size_t len;
+	int error;
+ 
+	error = copyinstr(type, mtype, sizeof(mtype), &len);
+	if (error)
+		return error;
+	if (strcmp(mtype, MOUNT_MFS) == 0) {
+		if (data_len != sizeof(fs_args32.mfs_args))
+			return EINVAL;
+		if ((flags & MNT_GETARGS) == 0) {
+			error = copyin(data, &fs_args32.mfs_args, 
+			    sizeof(fs_args32.mfs_args));
+			if (error)
+				return error;
+			fs_args.mfs_args.fspec =
+			    NETBSD32PTR64(fs_args32.mfs_args.fspec);
+			memset(&fs_args.mfs_args._pad1, 0,
+			    sizeof(fs_args.mfs_args._pad1));
+			fs_args.mfs_args.base =
+			    NETBSD32PTR64(fs_args32.mfs_args.base);
+			fs_args.mfs_args.size = fs_args32.mfs_args.size;
+		}
+		data_seg = UIO_SYSSPACE;
+		data = &fs_args.mfs_args;
+		data_len = sizeof(fs_args.mfs_args);
+	} else if (strcmp(mtype, MOUNT_UFS) == 0) {
+		if (data_len > sizeof(fs_args32.ufs_args))
+			return EINVAL;
+		if ((flags & MNT_GETARGS) == 0) {
+			error = copyin(data, &fs_args32.ufs_args, 
+			    sizeof(fs_args32.ufs_args));
+			if (error)
+				return error;
+			fs_args.ufs_args.fspec =
+			    NETBSD32PTR64(fs_args32.ufs_args.fspec);
+		}
+		data_seg = UIO_SYSSPACE;
+		data = &fs_args.ufs_args;
+		data_len = sizeof(fs_args.ufs_args);
+	} else if (strcmp(mtype, MOUNT_CD9660) == 0) {
+		if (data_len != sizeof(fs_args32.iso_args))
+			return EINVAL;
+		if ((flags & MNT_GETARGS) == 0) {
+			error = copyin(data, &fs_args32.iso_args, 
+			    sizeof(fs_args32.iso_args));
+			if (error)
+				return error;
+			fs_args.iso_args.fspec =
+			    NETBSD32PTR64(fs_args32.iso_args.fspec);
+			memset(&fs_args.iso_args._pad1, 0,
+			    sizeof(fs_args.iso_args._pad1));
+			fs_args.iso_args.flags = fs_args32.iso_args.flags;
+		}
+		data_seg = UIO_SYSSPACE;
+		data = &fs_args.iso_args;
+		data_len = sizeof(fs_args.iso_args);
+	} else if (strcmp(mtype, MOUNT_NFS) == 0) {
+		if (data_len != sizeof(fs_args32.nfs_args))
+			return EINVAL;
+		if ((flags & MNT_GETARGS) == 0) {
+			error = copyin(data, &fs_args32.nfs_args, 
+			    sizeof(fs_args32.nfs_args));
+			if (error)
+				return error;
+			fs_args.nfs_args.version = fs_args32.nfs_args.version;
+			fs_args.nfs_args.addr =
+			    NETBSD32PTR64(fs_args32.nfs_args.addr);
+			memcpy(&fs_args.nfs_args.addrlen,
+			    &fs_args32.nfs_args.addrlen,
+			    offsetof(struct nfs_args, fh)
+				- offsetof(struct nfs_args, addrlen));
+			fs_args.nfs_args.fh =
+			    NETBSD32PTR64(fs_args32.nfs_args.fh);
+			memcpy(&fs_args.nfs_args.fhsize,
+			    &fs_args32.nfs_args.fhsize,
+			    offsetof(struct nfs_args, hostname)
+				- offsetof(struct nfs_args, fhsize));
+			fs_args.nfs_args.hostname =
+			    NETBSD32PTR64(fs_args32.nfs_args.hostname);
+		}
+		data_seg = UIO_SYSSPACE;
+		data = &fs_args.nfs_args;
+		data_len = sizeof(fs_args.nfs_args);
+	} else {
+		data_seg = UIO_USERSPACE;
+	}
+	error = do_sys_mount(l, NULL, type, path, flags, data, data_seg,
+	    data_len, retval);
+	if (error)
+		return error;
+	if (flags & MNT_GETARGS) {
+		data_len = *retval;
+		if (strcmp(mtype, MOUNT_MFS) == 0) {
+			if (data_len != sizeof(fs_args.mfs_args))
+				return EINVAL;
+			NETBSD32PTR32(fs_args32.mfs_args.fspec,
+			    fs_args.mfs_args.fspec);
+			memset(&fs_args32.mfs_args._pad1, 0,
+			    sizeof(fs_args32.mfs_args._pad1));
+			NETBSD32PTR32(fs_args32.mfs_args.base,
+			    fs_args.mfs_args.base);
+			fs_args32.mfs_args.size = fs_args.mfs_args.size;
+			error = copyout(&fs_args32.mfs_args, data,
+				    sizeof(fs_args32.mfs_args));
+		} else if (strcmp(mtype, MOUNT_UFS) == 0) {
+			if (data_len != sizeof(fs_args.ufs_args))
+				return EINVAL;
+			NETBSD32PTR32(fs_args32.ufs_args.fspec,
+			    fs_args.ufs_args.fspec);
+			error = copyout(&fs_args32.ufs_args, data, 
+			    sizeof(fs_args32.ufs_args));
+		} else if (strcmp(mtype, MOUNT_CD9660) == 0) {
+			if (data_len != sizeof(fs_args.iso_args))
+				return EINVAL;
+			NETBSD32PTR32(fs_args32.iso_args.fspec,
+			    fs_args.iso_args.fspec);
+			memset(&fs_args32.iso_args._pad1, 0,
+			    sizeof(fs_args32.iso_args._pad1));
+			fs_args32.iso_args.flags = fs_args.iso_args.flags;
+			error = copyout(&fs_args32.iso_args, data,
+				    sizeof(fs_args32.iso_args));
+		} else if (strcmp(mtype, MOUNT_NFS) == 0) {
+			if (data_len != sizeof(fs_args.nfs_args))
+				return EINVAL;
+			error = copyin(data, &fs_args32.nfs_args, 
+			    sizeof(fs_args32.nfs_args));
+			if (error)
+				return error;
+			fs_args.nfs_args.version = fs_args32.nfs_args.version;
+			NETBSD32PTR32(fs_args32.nfs_args.addr,
+			    fs_args.nfs_args.addr);
+			memcpy(&fs_args32.nfs_args.addrlen,
+			    &fs_args.nfs_args.addrlen,
+			    offsetof(struct nfs_args, fh)
+				- offsetof(struct nfs_args, addrlen));
+			NETBSD32PTR32(fs_args32.nfs_args.fh,
+			    fs_args.nfs_args.fh);
+			memcpy(&fs_args32.nfs_args.fhsize,
+			    &fs_args.nfs_args.fhsize,
+			    offsetof(struct nfs_args, hostname)
+				- offsetof(struct nfs_args, fhsize));
+			NETBSD32PTR32(fs_args32.nfs_args.hostname,
+			    fs_args.nfs_args.hostname);
+			error = copyout(&fs_args32.nfs_args, data,
+			    sizeof(fs_args32.nfs_args));
+		}
+	}
 	return error;
 }

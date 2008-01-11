@@ -1,4 +1,4 @@
-/*	$NetBSD: domain.h,v 1.27 2007/09/19 04:33:45 dyoung Exp $	*/
+/*	$NetBSD: domain.h,v 1.30 2011/03/31 19:40:54 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -39,6 +39,7 @@
  */
 #include <sys/mbuf.h>
 #include <sys/socket.h>
+#include <net/route.h>
 
 /*
  * Forward structure declarations for function prototypes [sic].
@@ -47,7 +48,6 @@ struct	lwp;
 struct	mbuf;
 struct	ifnet;
 struct	ifqueue;
-struct  route;
 struct  sockaddr;
 
 LIST_HEAD(dom_rtlist, route);
@@ -63,7 +63,7 @@ struct	domain {
 			(struct mbuf *);
 	const struct protosw *dom_protosw, *dom_protoswNPROTOSW;
 	int	(*dom_rtattach)		/* initialize routing table */
-			(void **, int);
+			(rtbl_t **, int);
 	int	dom_rtoffset;		/* an arg to rtattach, in bits */
 	int	dom_maxrtkey;		/* for routing layer */
 	void	*(*dom_ifattach)	/* attach af-dependent data on ifnet */
@@ -75,6 +75,9 @@ struct	domain {
 	void	*(*dom_sockaddr_addr)(struct sockaddr *, socklen_t *);
 	int	(*dom_sockaddr_cmp)(const struct sockaddr *,
 	                            const struct sockaddr *);
+	struct sockaddr *(*dom_sockaddr_externalize)(struct sockaddr *,
+	                                             socklen_t,
+						     const struct sockaddr *);
 	const struct sockaddr *dom_sa_any;
 	struct ifqueue *dom_ifqueues[2]; /* ifqueue for domain */
 	STAILQ_ENTRY(domain) dom_link;
@@ -94,7 +97,7 @@ STAILQ_HEAD(domainhead,domain);
 #define	DOMAIN_FOREACH(dom)	STAILQ_FOREACH(dom, &domains, dom_link)
 extern struct domainhead domains;
 void domain_attach(struct domain *);
-void domaininit(void);
+void domaininit(bool);
 #endif
 
 #endif /* !_SYS_DOMAIN_H_ */

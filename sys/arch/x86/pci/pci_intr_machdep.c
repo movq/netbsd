@@ -1,7 +1,7 @@
-/*	$NetBSD: pci_intr_machdep.c,v 1.7 2008/01/04 18:38:31 ad Exp $	*/
+/*	$NetBSD: pci_intr_machdep.c,v 1.19 2011/04/04 20:37:55 dyoung Exp $	*/
 
 /*-
- * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 1998, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -80,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.7 2008/01/04 18:38:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.19 2011/04/04 20:37:55 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -90,17 +83,15 @@ __KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.7 2008/01/04 18:38:31 ad Exp 
 #include <sys/device.h>
 #include <sys/intr.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/pci/pcivar.h>
 
 #include "ioapic.h"
 #include "eisa.h"
-#include "acpi.h"
+#include "acpica.h"
 #include "opt_mpbios.h"
 #include "opt_acpi.h"
 
-#if NIOAPIC > 0 || NACPI > 0
+#if NIOAPIC > 0 || NACPICA > 0
 #include <machine/i82093var.h>
 #include <machine/mpconfig.h>
 #include <machine/mpbiosvar.h>
@@ -111,22 +102,32 @@ __KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.7 2008/01/04 18:38:31 ad Exp 
 #include <machine/mpbiosvar.h>
 #endif
 
-#if NACPI > 0
+#if NACPICA > 0
 #include <machine/mpacpi.h>
 #endif
 
+#define	MPSAFE_MASK	0x80000000
+
 int
-pci_intr_map(pa, ihp)
-	struct pci_attach_args *pa;
-	pci_intr_handle_t *ihp;
+pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int pin = pa->pa_intrpin;
 	int line = pa->pa_intrline;
-#if NIOAPIC > 0 || NACPI > 0
+	pci_chipset_tag_t pc;
+#if NIOAPIC > 0 || NACPICA > 0
 	int rawpin = pa->pa_rawintrpin;
-	pci_chipset_tag_t pc = pa->pa_pc;
 	int bus, dev, func;
 #endif
+
+	if ((pc = pa->pa_pc) != NULL) {
+		if ((pc->pc_present & PCI_OVERRIDE_INTR_MAP) != 0)
+			return (*pc->pc_ov->ov_intr_map)(pc->pc_ctx, pa, ihp);
+		if (pc->pc_super != NULL) {
+			struct pci_attach_args paclone = *pa;
+			paclone.pa_pc = pc->pc_super;
+			return pci_intr_map(&paclone, ihp);
+		}
+	}
 
 	if (pin == 0) {
 		/* No IRQ used. */
@@ -136,11 +137,11 @@ pci_intr_map(pa, ihp)
 	*ihp = 0;
 
 	if (pin > PCI_INTERRUPT_PIN_MAX) {
-		printf("pci_intr_map: bad interrupt pin %d\n", pin);
+		aprint_normal("pci_intr_map: bad interrupt pin %d\n", pin);
 		goto bad;
 	}
 
-#if NIOAPIC > 0 || NACPI > 0
+#if NIOAPIC > 0 || NACPICA > 0
 	pci_decompose_tag(pc, pa->pa_tag, &bus, &dev, &func);
 	if (mp_busses != NULL) {
 		if (intr_find_mpmapping(bus, (dev<<2)|(rawpin-1), ihp) == 0) {
@@ -170,20 +171,20 @@ pci_intr_map(pa, ihp)
 	 * the BIOS has not configured the device.
 	 */
 	if (line == 0 || line == X86_PCI_INTERRUPT_LINE_NO_CONNECTION) {
-		printf("pci_intr_map: no mapping for pin %c (line=%02x)\n",
+		aprint_normal("pci_intr_map: no mapping for pin %c (line=%02x)\n",
 		       '@' + pin, line);
 		goto bad;
 	} else {
 		if (line >= NUM_LEGACY_IRQS) {
-			printf("pci_intr_map: bad interrupt line %d\n", line);
+			aprint_normal("pci_intr_map: bad interrupt line %d\n", line);
 			goto bad;
 		}
 		if (line == 2) {
-			printf("pci_intr_map: changed line 2 to line 9\n");
+			aprint_normal("pci_intr_map: changed line 2 to line 9\n");
 			line = 9;
 		}
 	}
-#if NIOAPIC > 0 || NACPI > 0
+#if NIOAPIC > 0 || NACPICA > 0
 	if (mp_busses != NULL) {
 		if (intr_find_mpmapping(mp_isa_bus, line, ihp) == 0) {
 			if ((*ihp & 0xff) == 0)
@@ -197,9 +198,9 @@ pci_intr_map(pa, ihp)
 			return 0;
 		}
 #endif
-		printf("pci_intr_map: bus %d dev %d func %d pin %d; line %d\n",
+		aprint_normal("pci_intr_map: bus %d dev %d func %d pin %d; line %d\n",
 		    bus, dev, func, pin, line);
-		printf("pci_intr_map: no MP mapping found\n");
+		aprint_normal("pci_intr_map: no MP mapping found\n");
 	}
 #endif
 
@@ -214,7 +215,15 @@ bad:
 const char *
 pci_intr_string(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 {
-	return intr_string(ih);
+
+	if (pc != NULL) {
+		if ((pc->pc_present & PCI_OVERRIDE_INTR_STRING) != 0)
+			return (*pc->pc_ov->ov_intr_string)(pc->pc_ctx, pc, ih);
+		if (pc->pc_super != NULL)
+			return pci_intr_string(pc->pc_super, ih);
+	}
+
+	return intr_string(ih & ~MPSAFE_MASK);
 }
 
 
@@ -222,8 +231,34 @@ const struct evcnt *
 pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 {
 
+	if (pc != NULL) {
+		if ((pc->pc_present & PCI_OVERRIDE_INTR_EVCNT) != 0)
+			return (*pc->pc_ov->ov_intr_evcnt)(pc->pc_ctx, pc, ih);
+		if (pc->pc_super != NULL)
+			return pci_intr_evcnt(pc->pc_super, ih);
+	}
+
 	/* XXX for now, no evcnt parent reported */
 	return NULL;
+}
+
+int
+pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
+		 int attr, uint64_t data)
+{
+
+	switch (attr) {
+	case PCI_INTR_MPSAFE:
+		if (data) {
+			 *ih |= MPSAFE_MASK;
+		} else {
+			 *ih &= ~MPSAFE_MASK;
+		}
+		/* XXX Set live if already mapped. */
+		return 0;
+	default:
+		return ENODEV;
+	}
 }
 
 void *
@@ -232,18 +267,35 @@ pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih,
 {
 	int pin, irq;
 	struct pic *pic;
+#if NIOAPIC > 0
+	struct ioapic_softc *ioapic;
+#endif
+	bool mpsafe;
+
+	if (pc != NULL) {
+		if ((pc->pc_present & PCI_OVERRIDE_INTR_ESTABLISH) != 0) {
+			return (*pc->pc_ov->ov_intr_establish)(pc->pc_ctx,
+			    pc, ih, level, func, arg);
+		}
+		if (pc->pc_super != NULL) {
+			return pci_intr_establish(pc->pc_super, ih, level, func,
+			    arg);
+		}
+	}
 
 	pic = &i8259_pic;
-	pin = irq = ih;
+	pin = irq = (ih & ~MPSAFE_MASK);
+	mpsafe = ((ih & MPSAFE_MASK) != 0);
 
 #if NIOAPIC > 0
 	if (ih & APIC_INT_VIA_APIC) {
-		pic = (struct pic *)ioapic_find(APIC_IRQ_APIC(ih));
-		if (pic == NULL) {
-			printf("pci_intr_establish: bad ioapic %d\n",
+		ioapic = ioapic_find(APIC_IRQ_APIC(ih));
+		if (ioapic == NULL) {
+			aprint_normal("pci_intr_establish: bad ioapic %d\n",
 			    APIC_IRQ_APIC(ih));
 			return NULL;
 		}
+		pic = &ioapic->sc_pic;
 		pin = APIC_IRQ_PIN(ih);
 		irq = APIC_IRQ_LEGACY_IRQ(ih);
 		if (irq < 0 || irq >= NUM_LEGACY_IRQS)
@@ -251,12 +303,25 @@ pci_intr_establish(pci_chipset_tag_t pc, pci_intr_handle_t ih,
 	}
 #endif
 
-	return intr_establish(irq, pic, pin, IST_LEVEL, level, func, arg);
+	return intr_establish(irq, pic, pin, IST_LEVEL, level, func, arg,
+	    mpsafe);
 }
 
 void
 pci_intr_disestablish(pci_chipset_tag_t pc, void *cookie)
 {
+
+	if (pc != NULL) {
+		if ((pc->pc_present & PCI_OVERRIDE_INTR_ESTABLISH) != 0) {
+			(*pc->pc_ov->ov_intr_disestablish)(pc->pc_ctx,
+			    pc, cookie);
+			return;
+		}
+		if (pc->pc_super != NULL) {
+			pci_intr_disestablish(pc->pc_super, cookie);
+			return;
+		}
+	}
 
 	intr_disestablish(cookie);
 }

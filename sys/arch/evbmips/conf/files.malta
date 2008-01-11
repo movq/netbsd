@@ -1,4 +1,4 @@
-#	$NetBSD: files.malta,v 1.14 2007/04/10 02:33:02 macallan Exp $
+#	$NetBSD: files.malta,v 1.17 2011/02/20 07:48:34 matt Exp $
 
 file	arch/evbmips/malta/malta_bus_io.c
 file	arch/evbmips/malta/malta_bus_mem.c
@@ -16,7 +16,6 @@ file	arch/evbmips/evbmips/yamon.c			# XXX should be in arch/mips/yamon ?
 
 file	arch/mips/mips/mips3_clock.c
 file	arch/mips/mips/mips3_clockintr.c
-file	arch/mips/mips/softintr.c
 
 # The autoconfiguration root.
 device	mainbus { [addr = -1] }
@@ -25,7 +24,7 @@ file	arch/evbmips/malta/dev/mainbus.c	mainbus
 
 device	cpu
 attach	cpu at mainbus
-file	arch/evbmips/malta/cpu.c		cpu
+file	arch/evbmips/evbmips/cpu.c		cpu
 
 # Machine-independent I2O drivers.
 include "dev/i2o/files.i2o"
@@ -35,11 +34,6 @@ include "dev/scsipi/files.scsipi"
 
 # Machine-independent ATA drivers
 include "dev/ata/files.ata"
-
-# Machine-independent WS console drivers
-include "dev/wsfont/files.wsfont"
-include "dev/wscons/files.wscons"
-include "dev/wsfb/files.wsfb"
 
 # Machine-independent PC-style keyboard controller drivers
 include "dev/pckbport/files.pckbport"
@@ -82,7 +76,7 @@ device	mcclock: mc146818
 attach	mcclock at isa with mcclock_isa
 file	arch/evbmips/isa/mcclock_isa.c		mcclock_isa
 
-file	arch/evbmips/isa/isadma_bounce.c	isa
+#file	arch/evbmips/isa/isadma_bounce.c	isa
 
 # Floppy disk controller
 device	fdc { drive = -1 }: isadma

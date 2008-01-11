@@ -1,4 +1,4 @@
-/*	$NetBSD: ath_netbsd.h,v 1.8 2007/11/26 23:52:40 dyoung Exp $ */
+/*	$NetBSD: ath_netbsd.h,v 1.11 2011/01/21 17:46:19 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2003, 2004 David Young
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,6 +26,8 @@
  */
 #ifndef _ATH_NETBSD_H
 #define _ATH_NETBSD_H
+
+#include <sys/sysctl.h>
 
 #undef KASSERT
 #define KASSERT(__cond, __complaint) if (!(__cond)) panic __complaint
@@ -119,8 +119,6 @@ typedef struct ath_lock ath_txbuf_lock_t;
 	    SYSCTL_DESCR(__descr), NULL, 0, &ath_##__var, 0, CTL_CREATE,\
 	    CTL_EOL)
 
-extern void device_printf(device_t, const char *fmt, ...)
-    __attribute__((__format__(__printf__,2,3)));
 const struct sysctlnode *ath_sysctl_treetop(struct sysctllog **);
 const struct sysctlnode *ath_sysctl_instance(const char *, struct sysctllog **);
 

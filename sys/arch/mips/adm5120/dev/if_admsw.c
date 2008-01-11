@@ -1,4 +1,4 @@
-/* $NetBSD: if_admsw.c,v 1.3 2007/04/22 19:26:25 dyoung Exp $ */
+/* $NetBSD: if_admsw.c,v 1.8 2010/04/05 07:19:30 joerg Exp $ */
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -76,9 +76,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_admsw.c,v 1.3 2007/04/22 19:26:25 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_admsw.c,v 1.8 2010/04/05 07:19:30 joerg Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,9 +100,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_admsw.c,v 1.3 2007/04/22 19:26:25 dyoung Exp $");
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <machine/bus.h>
 #include <machine/intr.h>
@@ -344,7 +341,7 @@ admsw_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_dmat = aa->oba_dt;
 	sc->sc_st = aa->oba_st;
 
-	pd = prop_dictionary_get(device_properties(&sc->sc_dev), "mac-addr");
+	pd = prop_dictionary_get(device_properties(&sc->sc_dev), "mac-address");
 
 	if (pd == NULL) {
 		enaddr[0] = 0x02;
@@ -679,11 +676,8 @@ admsw_start(struct ifnet *ifp)
 		sc->sc_txfree--;
 		sc->sc_txnext = ADMSW_NEXTTXL(nexttx);
 
-#if NBPFILTER > 0
 		/* Pass the packet to any BPF listeners. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER */
+		bpf_mtap(ifp, m0);
 
 		/* Set a watchdog timer in case the chip flakes out. */
 		sc->sc_ethercom[0].ec_if.if_timer = 5;
@@ -745,6 +739,10 @@ admsw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	s = splnet();
 
 	switch (cmd) {
+	case SIOCSIFCAP:
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET)
+			error = 0;
+		break;
 	case SIOCSIFMEDIA:
 	case SIOCGIFMEDIA:
 		port = (struct ethercom *)ifp - sc->sc_ethercom;	/* XXX */
@@ -808,8 +806,8 @@ admsw_intr(void *arg)
 	pending = REG_READ(ADMSW_INT_ST);
 
 	if ((pending & ~(ADMSW_INTR_RHD|ADMSW_INTR_RLD|ADMSW_INTR_SHD|ADMSW_INTR_SLD|ADMSW_INTR_W1TE|ADMSW_INTR_W0TE)) != 0) {
-		printf("%s: pending=%s\n", __func__,
-		    bitmask_snprintf(pending, ADMSW_INT_FMT, buf, sizeof(buf)));
+		snprintb(buf, sizeof(buf), ADMSW_INT_FMT, pending);
+		printf("%s: pending=%s\n", __func__, buf);
 	}
 	REG_WRITE(ADMSW_INT_ST, pending);
 
@@ -1001,11 +999,8 @@ admsw_rxintr(struct admsw_softc *sc, int high)
 			if (stat & ADM5120_DMA_CSUMFAIL)
 				m->m_pkthdr.csum_flags |= M_CSUM_IPv4_BAD;
 		}
-#if NBPFILTER > 0
 		/* Pass this up to any BPF listeners. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);

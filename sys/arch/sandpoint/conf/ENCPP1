@@ -1,4 +1,4 @@
-# $NetBSD: ENCPP1,v 1.3 2007/11/29 06:50:37 nisimura Exp $
+# $NetBSD: ENCPP1,v 1.8 2010/06/30 17:49:32 phx Exp $
 #
 # Ampro EnCorePP1 machine description file
 # 
@@ -19,10 +19,11 @@
 # device.
 
 include 	"arch/sandpoint/conf/std.sandpoint"
+options 	PIC_I8259
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"ENCPP1-$Revision: 1.3 $"
+#ident 		"ENCPP1-$Revision: 1.8 $"
 
 maxusers	32
 
@@ -56,6 +57,7 @@ options 	COMPAT_15
 options 	COMPAT_16
 options 	COMPAT_20
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_386BSD_MBRPART	# recognize old partition ID
 #options 	COMPAT_LINUX		# Linux binary compatibility
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -71,13 +73,11 @@ file-system 	FDESC
 file-system 	KERNFS
 file-system 	NULLFS
 #file-system 	OVERLAY
-#file-system 	PORTAL
 file-system 	PROCFS
 #file-system 	UMAPFS
 #file-system 	UNION
 file-system	PTYFS		# /dev/pts/N support
 
-options 	SOFTDEP		# FFS soft updates support.
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 options 	INET
@@ -122,6 +122,8 @@ pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device	fss			# file system snapshot device
+
 #
 # device
 #

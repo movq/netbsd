@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: daic_isa.c,v 1.14 2007/10/19 12:00:15 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: daic_isa.c,v 1.19 2009/05/12 09:10:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -65,11 +58,11 @@ struct daic_isa_softc {
 
 /* local functions */
 #ifdef __BROKEN_INDIRECT_CONFIG
-static int daic_isa_probe(struct device *, void *, void *);
+static int daic_isa_probe(device_t, void *, void *);
 #else
-static int daic_isa_probe(struct device *, struct cfdata *, void *);
+static int daic_isa_probe(device_t, cfdata_t, void *);
 #endif
-static void daic_isa_attach(struct device *, struct device *, void *);
+static void daic_isa_attach(device_t, device_t, void *);
 static int daic_isa_intr(void *);
 
 CFATTACH_DECL(daic_isa, sizeof(struct daic_isa_softc),
@@ -81,11 +74,11 @@ daic_isa_probe(parent, match, aux)
 #else
 daic_isa_probe(parent, cf, aux)
 #endif
-	struct device *parent;
+	device_t parent;
 #ifdef __BROKEN_INDIRECT_CONFIG
 	void *match;
 #else
-	struct cfdata *cf;
+	cfdata_t cf;
 #endif
 	void *aux;
 {
@@ -127,9 +120,7 @@ bad:
 }
 
 static void
-daic_isa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+daic_isa_attach(device_t parent, device_t self, void *aux)
 {
 	struct daic_isa_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
@@ -155,8 +146,7 @@ daic_isa_attach(parent, self, aux)
  * Controller interrupt.
  */
 static int
-daic_isa_intr(arg)
-	void *arg;
+daic_isa_intr(void *arg)
 {
 	struct daic_isa_softc *sc = arg;
 	return daic_intr(&sc->sc_daic);

@@ -1,4 +1,4 @@
-/* $NetBSD: monitor.c,v 1.14 2006/05/09 20:18:09 mrg Exp $ */
+/* $NetBSD: monitor.c,v 1.16 2009/04/16 05:56:32 lukem Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -235,7 +228,7 @@ monitor_start_rights(const char *clientspec)
 			s ^= ~0U;
 			l = p - clientspec;
 
-			if (l >= sizeof hostname)
+			if (l >= (int)sizeof hostname)
 				return I4BMAR_LENGTH;
 
 			strncpy(hostname, clientspec, l);
@@ -745,7 +738,7 @@ cmd_dump_rights(int fd, int r_mask, u_int8_t *cmd, const char *source)
  * rescan config file
  *---------------------------------------------------------------------------*/
 static void
-cmd_reread_cfg(int fd, int rights, u_int8_t *cmd, const char * source)
+cmd_reread_cfg(int fd, int _rights, u_int8_t *cmd, const char * source)
 {
 	rereadconfig(42);
 }
@@ -754,7 +747,7 @@ cmd_reread_cfg(int fd, int rights, u_int8_t *cmd, const char * source)
  * drop one connection
  *---------------------------------------------------------------------------*/
 static void
-cmd_hangup(int fd, int rights, u_int8_t *cmd, const char * source)
+cmd_hangup(int fd, int _rights, u_int8_t *cmd, const char * source)
 {
 	int channel = I4B_GET_4B(cmd, I4B_MON_HANGUP_CHANNEL);
 	int ctrl = I4B_GET_4B(cmd, I4B_MON_HANGUP_CTRL);	
@@ -766,7 +759,7 @@ cmd_hangup(int fd, int rights, u_int8_t *cmd, const char * source)
  * dump all active monitor connections
  *---------------------------------------------------------------------------*/
 static void
-cmd_dump_mcons(int fd, int rights, u_int8_t *cmd, const char * source)
+cmd_dump_mcons(int fd, int _rights, u_int8_t *cmd, const char * source)
 {
 	int num_connections;
 	struct monitor_connection *con;
@@ -813,7 +806,7 @@ cmd_dump_mcons(int fd, int rights, u_int8_t *cmd, const char * source)
  * Return non-zero if connection is closed.
  *---------------------------------------------------------------------------*/
 static int
-monitor_command(struct monitor_connection * con, int fd, int rights)
+monitor_command(struct monitor_connection * con, int fd, int mcrights)
 {
 	char cmd[I4B_MAX_MON_CLIENT_CMD];
 	u_int code;
@@ -867,7 +860,7 @@ monitor_command(struct monitor_connection * con, int fd, int rights)
 
 	bytes = I4B_GET_2B(cmd, I4B_MON_CMD_LEN);
 
-	if (bytes >= sizeof cmd)
+	if (bytes >= (int)sizeof cmd)
 	{
 		close(fd);
 		logit(LL_MER, "monitor: garbage on connection");
@@ -898,11 +891,11 @@ monitor_command(struct monitor_connection * con, int fd, int rights)
 		*/
 
 		int events = I4B_GET_4B(cmd, I4B_MON_ICLIENT_EVENTS);
-		con->events = events & rights;
+		con->events = events & mcrights;
 		return 0;
 	}
 
-	if (code < 0 || code >= NUMCMD)
+	if (code >= NUMCMD)
 	{
 		logit(LL_MER, "illegal command from client, code = %d\n",
 			code);
@@ -912,8 +905,8 @@ monitor_command(struct monitor_connection * con, int fd, int rights)
 	if (cmd_tab[code].call == NULL)
 		return 0;
 
-	if ((cmd_tab[code].rights & rights) == cmd_tab[code].rights)
-		cmd_tab[code].call(fd, rights, (u_char *)cmd, con->source);
+	if ((cmd_tab[code].rights & mcrights) == cmd_tab[code].rights)
+		cmd_tab[code].call(fd, mcrights, (u_char *)cmd, con->source);
 
 	return 0;
 }
@@ -1050,7 +1043,7 @@ void
 monitor_evnt_connect(struct cfg_entry *cep)
 {
 	u_int8_t evnt[I4B_MON_CONNECT_SIZE];
-	char devname[I4B_MAX_MON_STRING];
+	char devnam[I4B_MAX_MON_STRING];
 	int mask;
 	time_t now;
 	
@@ -1061,7 +1054,7 @@ monitor_evnt_connect(struct cfg_entry *cep)
 
 	time(&now);
 
-	snprintf(devname, sizeof devname, "%s%d", cep->usrdevicename, cep->usrdeviceunit);
+	snprintf(devnam, sizeof devnam, "%s%d", cep->usrdevicename, cep->usrdeviceunit);
 
 	I4B_PREP_EVNT(evnt, I4B_MON_CONNECT_CODE);
 	I4B_PUT_4B(evnt, I4B_MON_CONNECT_TSTAMP, (long)now);
@@ -1069,7 +1062,7 @@ monitor_evnt_connect(struct cfg_entry *cep)
 	I4B_PUT_4B(evnt, I4B_MON_CONNECT_CTRL, cep->isdncontrollerused);
 	I4B_PUT_4B(evnt, I4B_MON_CONNECT_CHANNEL, cep->isdnchannelused);	
 	I4B_PUT_STR(evnt, I4B_MON_CONNECT_CFGNAME, cep->name);
-	I4B_PUT_STR(evnt, I4B_MON_CONNECT_DEVNAME, devname);
+	I4B_PUT_STR(evnt, I4B_MON_CONNECT_DEVNAME, devnam);
 
 	if (cep->direction == DIR_OUT)
 	{

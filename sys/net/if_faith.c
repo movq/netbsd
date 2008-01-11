@@ -1,4 +1,4 @@
-/*	$NetBSD: if_faith.c,v 1.40 2007/10/19 12:16:44 ad Exp $	*/
+/*	$NetBSD: if_faith.c,v 1.47 2010/04/05 07:22:23 joerg Exp $	*/
 /*	$KAME: if_faith.c,v 1.21 2001/02/20 07:59:26 itojun Exp $	*/
 
 /*
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.40 2007/10/19 12:16:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.47 2010/04/05 07:22:23 joerg Exp $");
 
 #include "opt_inet.h"
 
@@ -79,14 +79,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.40 2007/10/19 12:16:44 ad Exp $");
 #include <netinet6/ip6_var.h>
 #endif
 
-#include "bpfilter.h"
 
 #include <net/net_osdep.h>
 
 static int	faithioctl(struct ifnet *, u_long, void *);
 static int	faithoutput(struct ifnet *, struct mbuf *,
 		            const struct sockaddr *, struct rtentry *);
-static void	faithrtrequest(int, struct rtentry *, struct rt_addrinfo *);
+static void	faithrtrequest(int, struct rtentry *,
+		               const struct rt_addrinfo *);
 
 void	faithattach(int);
 
@@ -111,10 +111,9 @@ faith_clone_create(struct if_clone *ifc, int unit)
 {
 	struct ifnet *ifp;
 
-	ifp = malloc(sizeof(*ifp), M_DEVBUF, M_WAITOK | M_ZERO);
+	ifp = if_alloc(IFT_FAITH);
 
-	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d",
-	    ifc->ifc_name, unit);
+	if_initname(ifp, ifc->ifc_name, unit);
 
 	ifp->if_mtu = FAITHMTU;
 	/* Change to BROADCAST experimentaly to announce its prefix. */
@@ -127,9 +126,7 @@ faith_clone_create(struct if_clone *ifc, int unit)
 	ifp->if_dlt = DLT_NULL;
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_NULL, sizeof(u_int));
-#endif
+	bpf_attach(ifp, DLT_NULL, sizeof(u_int));
 	return (0);
 }
 
@@ -137,9 +134,7 @@ int
 faith_clone_destroy(struct ifnet *ifp)
 {
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 	free(ifp, M_DEVBUF);
 
@@ -157,16 +152,13 @@ faithoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	if ((m->m_flags & M_PKTHDR) == 0)
 		panic("faithoutput no HDR");
 	af = dst->sa_family;
-#if NBPFILTER > 0
 	/* BPF write needs to be handled specially */
 	if (af == AF_UNSPEC) {
 		af = *(mtod(m, int *));
 		m_adj(m, sizeof(int));
 	}
 
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, af, m);
-#endif
+	bpf_mtap_af(ifp, af, m);
 
 	if (rt && rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE)) {
 		m_freem(m);
@@ -214,7 +206,7 @@ faithoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 /* ARGSUSED */
 static void
 faithrtrequest(int cmd, struct rtentry *rt,
-    struct rt_addrinfo *info)
+    const struct rt_addrinfo *info)
 {
 	if (rt)
 		rt->rt_rmx.rmx_mtu = rt->rt_ifp->if_mtu; /* for ISO */
@@ -233,7 +225,7 @@ faithioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP | IFF_RUNNING;
 		ifa = (struct ifaddr *)data;
 		ifa->ifa_rtrequest = faithrtrequest;
@@ -264,17 +256,10 @@ faithioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
 		break;
 
-#ifdef SIOCSIFMTU
-	case SIOCSIFMTU:
-		ifp->if_mtu = ifr->ifr_mtu;
-		break;
-#endif
-
-	case SIOCSIFFLAGS:
-		break;
-
 	default:
-		error = EINVAL;
+		if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+			error = 0;
+		break;
 	}
 	return (error);
 }

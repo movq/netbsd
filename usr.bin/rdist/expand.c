@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.16 2003/08/07 11:15:35 agc Exp $	*/
+/*	$NetBSD: expand.c,v 1.18 2009/07/14 21:05:34 apb Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)expand.c	8.1 (Berkeley) 6/9/93";
 #else
-__RCSID("$NetBSD: expand.c,v 1.16 2003/08/07 11:15:35 agc Exp $");
+__RCSID("$NetBSD: expand.c,v 1.18 2009/07/14 21:05:34 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,7 +57,7 @@ char	**eargv;	/* expanded arg vectors */
 char	*path;
 char	*pathp;
 char	*lastpathp;
-char	*tilde;		/* "~user" if not expanding tilde, else "" */
+const char *tilde;		/* "~user" if not expanding tilde, else "" */
 char	*tpathp;
 int	nleft;
 
@@ -68,7 +68,7 @@ char	**sortbase;
 #define sort()	qsort((char *)sortbase, &eargv[eargc] - sortbase, \
 		      sizeof(*sortbase), argcmp), sortbase = &eargv[eargc]
 
-static void	Cat(char *, char *);
+static void	Cat(const char *, const char *);
 static void	addpath(int);
 static int	amatch(char *, char *);
 static int	argcmp(const void *, const void *);
@@ -77,7 +77,6 @@ static void	expsh(char *);
 static void	expstr(char *);
 static int	match(char *, char *);
 static void	matchdir(char *);
-static int	smatch(char *, char *);
 
 /*
  * Take a list of names and expand any macros, etc.
@@ -151,7 +150,7 @@ expstr(char *s)
 	char *cp, *cp1;
 	struct namelist *tp;
 	char *tail;
-	char buf[BUFSIZ];
+	char expbuf[BUFSIZ];
 	int savec, oeargc;
 	extern char homedir[];
 
@@ -185,14 +184,14 @@ expstr(char *s)
 			*tail = savec;
 		if (tp != NULL) {
 			for (; tp != NULL; tp = tp->n_next) {
-				snprintf(buf, sizeof(buf), "%s%s%s", s,
+				snprintf(expbuf, sizeof(expbuf), "%s%s%s", s,
 				    tp->n_name, tail);
-				expstr(buf);
+				expstr(expbuf);
 			}
 			return;
 		}
-		snprintf(buf, sizeof(buf), "%s%s", s, tail);
-		expstr(buf);
+		snprintf(expbuf, sizeof(expbuf), "%s%s", s, tail);
+		expstr(expbuf);
 		return;
 	}
 	if ((which & ~E_VARS) == 0 || !strcmp(s, "{") || !strcmp(s, "{}")) {
@@ -206,17 +205,17 @@ expstr(char *s)
 			tilde = "~";
 			cp1 = homedir;
 		} else {
-			tilde = cp1 = buf;
+			tilde = cp1 = expbuf;
 			*cp1++ = '~';
 			do
 				*cp1++ = *cp++;
 			while (*cp && *cp != '/');
 			*cp1 = '\0';
-			if (pw == NULL || strcmp(pw->pw_name, buf+1) != 0) {
-				if ((pw = getpwnam(buf+1)) == NULL) {
-					strlcat(buf, ": unknown user name",
-					    sizeof(buf));
-					yyerror(buf+1);
+			if (pw == NULL || strcmp(pw->pw_name, expbuf+1) != 0) {
+				if ((pw = getpwnam(expbuf+1)) == NULL) {
+					strlcat(expbuf, ": unknown user name",
+					    sizeof(expbuf));
+					yyerror(expbuf+1);
 					return;
 				}
 			}
@@ -251,7 +250,7 @@ static int
 argcmp(const void *a1, const void *a2)
 {
 
-	return (strcmp(*(char **)a1, *(char **)a2));
+	return (strcmp(*(const char * const *)a1, *(const char * const *)a2));
 }
 
 /*
@@ -520,66 +519,8 @@ slash:
 	}
 }
 
-static int
-smatch(char *s, char *p)
-{
-	int scc;
-	int ok, lc;
-	int c, cc;
-
-	for (;;) {
-		scc = *s++ & TRIM;
-		switch (c = *p++) {
-
-		case '[':
-			ok = 0;
-			lc = 077777;
-			while ((cc = *p++) != 0) {
-				if (cc == ']') {
-					if (ok)
-						break;
-					return (0);
-				}
-				if (cc == '-') {
-					if (lc <= scc && scc <= *p++)
-						ok++;
-				} else
-					if (scc == (lc = cc))
-						ok++;
-			}
-			if (cc == 0) {
-				yyerror("Missing ']'");
-				return (0);
-			}
-			continue;
-
-		case '*':
-			if (!*p)
-				return (1);
-			for (s--; *s; s++)
-				if (smatch(s, p))
-					return (1);
-			return (0);
-
-		case '\0':
-			return (scc == '\0');
-
-		default:
-			if ((c & TRIM) != scc)
-				return (0);
-			continue;
-
-		case '?':
-			if (scc == 0)
-				return (0);
-			continue;
-
-		}
-	}
-}
-
 static void
-Cat(char *s1, char *s2)
+Cat(const char *s1, const char *s2)
 {
 	int len = strlen(s1) + strlen(s2) + 1;
 	char *s;
@@ -616,14 +557,14 @@ addpath(int c)
  * part corresponding to `file'.
  */
 char *
-exptilde(char *buf, char *file)
+exptilde(char *expbuf, char *file)
 {
 	char *s1, *s2, *s3;
 	extern char homedir[];
 
 	if (*file != '~') {
-		strcpy(buf, file);
-		return(buf);
+		strcpy(expbuf, file);
+		return(expbuf);
 	}
 	if (*++file == '\0') {
 		s2 = homedir;
@@ -651,7 +592,7 @@ exptilde(char *buf, char *file)
 			*s3 = '/';
 		s2 = pw->pw_dir;
 	}
-	for (s1 = buf; (*s1++ = *s2++) != 0; )
+	for (s1 = expbuf; (*s1++ = *s2++) != 0; )
 		;
 	s2 = --s1;
 	if (s3 != NULL) {

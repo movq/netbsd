@@ -31,12 +31,13 @@
  * SUCH DAMAGE. 
  */
 
-/* $Heimdal: lex.h,v 1.5 2000/07/01 20:21:34 assar Exp $
-   $NetBSD: lex.h,v 1.1.1.3 2002/09/12 12:41:40 joda Exp $ */
+/* $Heimdal: lex.h 15617 2005-07-12 06:27:42Z lha $
+   $NetBSD: lex.h,v 1.4 2010/01/20 19:54:07 tsutsui Exp $ */
 
 #include <roken.h>
 
 void error_message (const char *, ...)
 __attribute__ ((format (printf, 1, 2)));
+extern int error_flag;
 
 int yylex(void);

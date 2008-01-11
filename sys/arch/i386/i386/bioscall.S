@@ -1,4 +1,4 @@
-/*	$NetBSD: bioscall.S,v 1.7 2007/12/12 14:58:58 yamt Exp $ */
+/*	$NetBSD: bioscall.S,v 1.9 2010/07/24 00:45:54 jym Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: bioscall.S,v 1.7 2007/12/12 14:58:58 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bioscall.S,v 1.9 2010/07/24 00:45:54 jym Exp $");
 
 #include <machine/bioscall.h>
 
@@ -45,8 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: bioscall.S,v 1.7 2007/12/12 14:58:58 yamt Exp $");
 
 /* LINTSTUB: include <sys/types.h> */
 /* LINTSTUB: include <machine/bioscall.h> */
-
-	.globl	_C_LABEL(PDPpaddr)	/* from locore.S */
 
 	.section ".rodata"
 _C_LABEL(biostramp_image):
@@ -76,11 +67,11 @@ NENTRY(bioscall)
 	pushl	%ebp
 	movl	%esp,%ebp		/* set up frame ptr */
 
-	movl	%cr3,%eax		/* save PDP base register */
+	/* install lwp0 pmap */
+	movl	_C_LABEL(kernel_pmap_ptr),%eax
 	pushl	%eax
-
-	movl	_C_LABEL(PDPpaddr),%eax	/* install proc0 PDP */
-	movl	%eax,%cr3
+	call	_C_LABEL(cpu_load_pmap)
+	addl	$4,%esp
 
 	movl	$(BIOSTRAMP_BASE),%eax	/* address of trampoline area */
 	pushl	12(%ebp)
@@ -88,8 +79,11 @@ NENTRY(bioscall)
 	call	*%eax			/* machdep.c initializes it */
 	addl	$8,%esp			/* clear args from stack */
 
-	popl	%eax
-	movl	%eax,%cr3			/* restore PTDB register */
+	/* restore pmap - saved value is in curcpu()->ci_pmap */
+	movl	%fs:(CPU_INFO_PMAP),%eax
+	pushl	%eax
+	call	_C_LABEL(cpu_load_pmap)
+	addl	$4,%esp
 
 	leave
 	ret

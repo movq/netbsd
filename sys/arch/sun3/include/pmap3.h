@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap3.h,v 1.43 2008/01/04 22:03:26 ad Exp $	*/
+/*	$NetBSD: pmap3.h,v 1.47 2009/12/11 18:40:08 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,9 +45,6 @@ struct pmap {
 };
 
 #ifdef _KERNEL
-extern	struct pmap	kernel_pmap_store;
-#define	pmap_kernel()	(&kernel_pmap_store)
-
 /*
  * We give the pmap code a chance to resolve faults by
  * reloading translations that it was forced to unload.
@@ -106,3 +96,12 @@ pmap_remove_all(struct pmap *pmap)
 #define	PMAP_SPEC	0x1C	/* mask to get all above. */
 
 #endif	/* _KERNEL */
+
+/* MMU specific segment size */
+#define	SEGSHIFT	17	        /* LOG2(NBSG) */
+#define	NBSG		(1 << SEGSHIFT)	/* bytes/segment */
+#define	SEGOFSET	(NBSG - 1)	/* byte offset into segment */
+
+#define	sun3_round_seg(x)	((((vaddr_t)(x)) + SEGOFSET) & ~SEGOFSET)
+#define	sun3_trunc_seg(x)	((vaddr_t)(x) & ~SEGOFSET)
+#define	sun3_seg_offset(x)	((vaddr_t)(x) & SEGOFSET)

@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.9 2007/04/08 09:35:32 scw Exp $
+#	$NetBSD: Makefile,v 1.14 2008/11/04 23:58:40 dbj Exp $
 
-MKPRIVATELIB=	yes
+LIBISPRIVATE=	yes
 
 LIB=		backend
 
@@ -156,14 +156,14 @@ tm_p.h: Makefile
 
 CLEANFILES+=	options.h options.c optionlist
 optionlist: ${G_ALL_OPT_FILES} ${GCCARCH}/defs.mk Makefile ${DIST}/gcc/opt-gather.awk
-	${AWK} -f ${DIST}/gcc/opt-gather.awk ${G_ALL_OPT_FILES} > ${.TARGET}
+	${TOOL_AWK} -f ${DIST}/gcc/opt-gather.awk ${G_ALL_OPT_FILES} > ${.TARGET}
 
 options.c: optionlist ${DIST}/gcc/opt-functions.awk ${DIST}/gcc/optc-gen.awk
-	${AWK} -f ${DIST}/gcc/opt-functions.awk -f ${DIST}/gcc/optc-gen.awk \
+	${TOOL_AWK} -f ${DIST}/gcc/opt-functions.awk -f ${DIST}/gcc/optc-gen.awk \
 		-v header_name="config.h system.h coretypes.h tm.h" < optionlist > ${.TARGET}
 
 options.h: optionlist ${DIST}/gcc/opt-functions.awk ${DIST}/gcc/opth-gen.awk
-	${AWK} -f ${DIST}/gcc/opt-functions.awk -f ${DIST}/gcc/opth-gen.awk \
+	${TOOL_AWK} -f ${DIST}/gcc/opt-functions.awk -f ${DIST}/gcc/opth-gen.awk \
 		< optionlist > ${.TARGET}
 
 options.o: options.c coretypes.h opts.h intl.h
@@ -176,7 +176,8 @@ auto-build.h: Makefile
 	rm -rf .ab && \
 	mkdir .ab && \
 	(cd .ab && \
-		CC=${HOST_CC:Q} \
+		AWK=${TOOL_AWK:Q} \
+		CC=${HOST_CC:Q} CFLAGS=${HOST_CFLAGS:Q} \
 		MAKE=${MAKE:Q} \
 		CONFIG_SHELL=${HOST_SH:Q} \
 		${HOST_SH} ${GNUHOSTDIST}/gcc/configure \
@@ -195,21 +196,24 @@ build-rtl.c: rtl.c \
   ${G_RTL_H} real.h ${G_GCC_H} errors.h gtype-desc.h
 	${_MKTARGET_CREATE}
 	rm -f build-rtl.c
-	sed -e 's/<config[.]h/hconfig.h/' ${GNUHOSTDIST}/gcc/rtl.c >${.TARGET}
+	${TOOL_SED} -e 's/<config[.]h/hconfig.h/' \
+		${GNUHOSTDIST}/gcc/rtl.c >${.TARGET}
 build-rtl.lo: ${HH}
 
 build-print-rtl.c: print-rtl.c \
   ${G_RTL_H} ${G_TREE_H} hard-reg-set.h ${G_BASIC_BLOCK_H}
 	${_MKTARGET_CREATE}
 	rm -f buid-print-rtl.c
-	sed -e 's/<config[.]h/hconfig.h/' ${GNUHOSTDIST}/gcc/print-rtl.c >${.TARGET}
+	${TOOL_SED} -e 's/<config[.]h/hconfig.h/' \
+		${GNUHOSTDIST}/gcc/print-rtl.c >${.TARGET}
 build-print-rtl.lo: ${HH}
 
 build-bitmap.c: bitmap.c \
   ${G_RTL_H} flags.h ${G_BASIC_BLOCK_H} ${REGS_H} ${G_GCC_H} gtype-desc.h
 	${_MKTARGET_CREATE}
 	rm -f build-bitmap.c
-	sed -e 's/<config[.]h/hconfig.h/' ${GNUHOSTDIST}/gcc/bitmap.c >${.TARGET}
+	${TOOL_SED} -e 's/<config[.]h/hconfig.h/' \
+		${GNUHOSTDIST}/gcc/bitmap.c >${.TARGET}
 build-bitmap.lo: ${HH}
 
 build-errors.c: errors.c errors.h
@@ -222,14 +226,16 @@ build-varray.c: varray.c \
   ${G_RTL_H} ${G_GCC_H} ${TREE_H} bitmap.h errors.h
 	${_MKTARGET_CREATE}
 	rm -f build-varray.c
-	sed -e 's/<config[.]h/hconfig.h/' ${GNUHOSTDIST}/gcc/varray.c >${.TARGET}
+	${TOOL_SED} -e 's/<config[.]h/hconfig.h/' \
+		${GNUHOSTDIST}/gcc/varray.c >${.TARGET}
 build-varray.lo: ${HH} gtype-desc.h
 
 build-ggc-none.c: ggc-none.c \
   ${G_GCC_H} gtype-desc.h
 	${_MKTARGET_CREATE}
 	rm -f build-ggc-none.c
-	sed -e 's/<config[.]h/hconfig.h/' ${GNUHOSTDIST}/gcc/ggc-none.c >${.TARGET}
+	${TOOL_SED} -e 's/<config[.]h/hconfig.h/' \
+		${GNUHOSTDIST}/gcc/ggc-none.c >${.TARGET}
 build-ggc-none.lo: ${HH}
 
 #
@@ -294,6 +300,7 @@ insn-attrtab.o: insn-config.h
 insn-extract.o: insn-config.h
 toplev.d toplev.o: options.h
 coverage.d: gcov-iov.h
+gcov-io.h: gcov-iov.h
 
 COPTS+=-Wno-stack-protector
 

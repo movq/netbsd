@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_domain.c,v 1.74 2008/01/07 16:12:54 ad Exp $	*/
+/*	$NetBSD: uipc_domain.c,v 1.86 2011/05/29 03:32:46 manu Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_domain.c,v 1.74 2008/01/07 16:12:54 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_domain.c,v 1.86 2011/05/29 03:32:46 manu Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -73,12 +73,17 @@ callout_t pffasttimo_ch, pfslowtimo_ch;
 u_int	pfslowtimo_now;
 u_int	pffasttimo_now;
 
+static struct sysctllog *domain_sysctllog;
+static void sysctl_net_setup(void);
+
 void
-domaininit(void)
+domaininit(bool addroute)
 {
 	__link_set_decl(domains, struct domain);
 	struct domain * const * dpp;
 	struct domain *rt_domain = NULL;
+
+	sysctl_net_setup();
 
 	/*
 	 * Add all of the domains.  Make sure the PF_ROUTE
@@ -90,11 +95,11 @@ domaininit(void)
 		else
 			domain_attach(*dpp);
 	}
-	if (rt_domain)
+	if (rt_domain && addroute)
 		domain_attach(rt_domain);
 
-	callout_init(&pffasttimo_ch, 0);
-	callout_init(&pfslowtimo_ch, 0);
+	callout_init(&pffasttimo_ch, CALLOUT_MPSAFE);
+	callout_init(&pfslowtimo_ch, CALLOUT_MPSAFE);
 
 	callout_reset(&pffasttimo_ch, 1, pffasttimo, NULL);
 	callout_reset(&pfslowtimo_ch, 1, pfslowtimo, NULL);
@@ -140,8 +145,8 @@ pffinddomain(int family)
 
 	DOMAIN_FOREACH(dp)
 		if (dp->dom_family == family)
-			return (dp);
-	return (NULL);
+			return dp;
+	return NULL;
 }
 
 const struct protosw *
@@ -152,13 +157,13 @@ pffindtype(int family, int type)
 
 	dp = pffinddomain(family);
 	if (dp == NULL)
-		return (NULL);
+		return NULL;
 
 	for (pr = dp->dom_protosw; pr < dp->dom_protoswNPROTOSW; pr++)
 		if (pr->pr_type && pr->pr_type == type)
-			return (pr);
+			return pr;
 
-	return (NULL);
+	return NULL;
 }
 
 const struct protosw *
@@ -169,21 +174,21 @@ pffindproto(int family, int protocol, int type)
 	const struct protosw *maybe = NULL;
 
 	if (family == 0)
-		return (NULL);
+		return NULL;
 
 	dp = pffinddomain(family);
 	if (dp == NULL)
-		return (NULL);
+		return NULL;
 
 	for (pr = dp->dom_protosw; pr < dp->dom_protoswNPROTOSW; pr++) {
 		if ((pr->pr_protocol == protocol) && (pr->pr_type == type))
-			return (pr);
+			return pr;
 
 		if (type == SOCK_RAW && pr->pr_type == SOCK_RAW &&
 		    pr->pr_protocol == 0 && maybe == NULL)
 			maybe = pr;
 	}
-	return (maybe);
+	return maybe;
 }
 
 void *
@@ -202,7 +207,7 @@ const void *
 sockaddr_const_addr(const struct sockaddr *sa, socklen_t *slenp)
 {
 	const struct domain *dom;
-	
+
 	if ((dom = pffinddomain(sa->sa_family)) == NULL ||
 	    dom->dom_sockaddr_const_addr == NULL)
 		return NULL;
@@ -211,14 +216,20 @@ sockaddr_const_addr(const struct sockaddr *sa, socklen_t *slenp)
 }
 
 const struct sockaddr *
-sockaddr_any(const struct sockaddr *sa)
+sockaddr_any_by_family(int family)
 {
 	const struct domain *dom;
-	
-	if ((dom = pffinddomain(sa->sa_family)) == NULL)
+
+	if ((dom = pffinddomain(family)) == NULL)
 		return NULL;
 
 	return dom->dom_sa_any;
+}
+
+const struct sockaddr *
+sockaddr_any(const struct sockaddr *sa)
+{
+	return sockaddr_any_by_family(sa->sa_family);
 }
 
 const void *
@@ -255,6 +266,20 @@ sockaddr_copy(struct sockaddr *dst, socklen_t socklen,
 		    src->sa_len);
 	}
 	return memcpy(dst, src, src->sa_len);
+}
+
+struct sockaddr *
+sockaddr_externalize(struct sockaddr *dst, socklen_t socklen,
+    const struct sockaddr *src)
+{
+	struct domain *dom;
+
+	dom = pffinddomain(src->sa_family);
+
+	if (dom != NULL && dom->dom_sockaddr_externalize != NULL)
+		return (*dom->dom_sockaddr_externalize)(dst, socklen, src);
+
+	return sockaddr_copy(dst, socklen, src);
 }
 
 int
@@ -381,10 +406,10 @@ sysctl_unpcblist(SYSCTLFN_ARGS)
 	int error, elem_count, pf, type, pf2;
 
 	if (namelen == 1 && name[0] == CTL_QUERY)
-		return (sysctl_query(SYSCTLFN_CALL(rnode)));
+		return sysctl_query(SYSCTLFN_CALL(rnode));
 
 	if (namelen != 4)
-		return (EINVAL);
+		return EINVAL;
 
 	if (oldp != NULL) {
 		len = *oldlenp;
@@ -405,7 +430,7 @@ sysctl_unpcblist(SYSCTLFN_ARGS)
 	needed = 0;
 
 	if (name - oname != 4)
-		return (EINVAL);
+		return EINVAL;
 
 	pf = oname[1];
 	type = oname[2];
@@ -430,22 +455,23 @@ sysctl_unpcblist(SYSCTLFN_ARGS)
 		if (fp->f_count == 0 || fp->f_type != DTYPE_SOCKET ||
 		    fp->f_data == NULL)
 			continue;
-		if (kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_CANSEE, fp->f_cred) != 0)
-			continue;
 		so = (struct socket *)fp->f_data;
 		if (so->so_type != type)
 			continue;
 		if (so->so_proto->pr_domain->dom_family != pf)
 			continue;
+		if (kauth_authorize_network(l->l_cred, KAUTH_NETWORK_SOCKET,
+		    KAUTH_REQ_NETWORK_SOCKET_CANSEE, so, NULL, NULL) != 0)
+			continue;
 		if (len >= elem_size && elem_count > 0) {
-			FILE_LOCK(fp);
-			FILE_USE(fp);
+			mutex_enter(&fp->f_lock);
+			fp->f_count++;
+			mutex_exit(&fp->f_lock);
 			LIST_INSERT_AFTER(fp, dfp, f_list);
 			mutex_exit(&filelist_lock);
 			sysctl_dounpcb(&pcb, so);
 			error = copyout(&pcb, dp, out_size);
-			FILE_UNUSE(fp, NULL);
+			closef(fp);
 			mutex_enter(&filelist_lock);
 			np = LIST_NEXT(dfp, f_list);
 			LIST_REMOVE(dfp, f_list);
@@ -454,11 +480,9 @@ sysctl_unpcblist(SYSCTLFN_ARGS)
 			dp += elem_size;
 			len -= elem_size;
 		}
-		if (elem_count > 0) {
-			needed += elem_size;
-			if (elem_count != INT_MAX)
-				elem_count--;
-		}
+		needed += elem_size;
+		if (elem_count > 0 && elem_count != INT_MAX)
+			elem_count--;
 	}
 	mutex_exit(&filelist_lock);
 	fputdummy(dfp);
@@ -467,42 +491,58 @@ sysctl_unpcblist(SYSCTLFN_ARGS)
 		*oldlenp += PCB_SLOP * sizeof(struct kinfo_pcb);
  	sysctl_relock();
 
-	return (error);
+	return error;
 }
 
-SYSCTL_SETUP(sysctl_net_setup, "sysctl net subtree setup")
+static void
+sysctl_net_setup(void)
 {
-	sysctl_createv(clog, 0, NULL, NULL,
+
+	KASSERT(domain_sysctllog == NULL);
+	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "net", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_NET, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "local",
 		       SYSCTL_DESCR("PF_LOCAL related settings"),
 		       NULL, 0, NULL, 0,
 		       CTL_NET, PF_LOCAL, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "stream",
 		       SYSCTL_DESCR("SOCK_STREAM settings"),
 		       NULL, 0, NULL, 0,
 		       CTL_NET, PF_LOCAL, SOCK_STREAM, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "seqpacket",
+		       SYSCTL_DESCR("SOCK_SEQPACKET settings"),
+		       NULL, 0, NULL, 0,
+		       CTL_NET, PF_LOCAL, SOCK_SEQPACKET, CTL_EOL);
+	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "dgram",
 		       SYSCTL_DESCR("SOCK_DGRAM settings"),
 		       NULL, 0, NULL, 0,
 		       CTL_NET, PF_LOCAL, SOCK_DGRAM, CTL_EOL);
 
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "pcblist",
 		       SYSCTL_DESCR("SOCK_STREAM protocol control block list"),
 		       sysctl_unpcblist, 0, NULL, 0,
 		       CTL_NET, PF_LOCAL, SOCK_STREAM, CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_STRUCT, "pcblist",
+		       SYSCTL_DESCR("SOCK_SEQPACKET protocol control "
+				    "block list"),
+		       sysctl_unpcblist, 0, NULL, 0,
+		       CTL_NET, PF_LOCAL, SOCK_SEQPACKET, CTL_CREATE, CTL_EOL);
+	sysctl_createv(&domain_sysctllog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "pcblist",
 		       SYSCTL_DESCR("SOCK_DGRAM protocol control block list"),
@@ -562,7 +602,7 @@ pfslowtimo(void *arg)
 			if (pr->pr_slowtimo)
 				(*pr->pr_slowtimo)();
 	}
-	callout_reset(&pfslowtimo_ch, hz / 2, pfslowtimo, NULL);
+	callout_schedule(&pfslowtimo_ch, hz / 2);
 }
 
 void
@@ -578,5 +618,5 @@ pffasttimo(void *arg)
 			if (pr->pr_fasttimo)
 				(*pr->pr_fasttimo)();
 	}
-	callout_reset(&pffasttimo_ch, hz / 5, pffasttimo, NULL);
+	callout_schedule(&pffasttimo_ch, hz / 5);
 }

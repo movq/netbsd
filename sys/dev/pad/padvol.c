@@ -1,4 +1,4 @@
-/* $NetBSD: padvol.c,v 1.1 2007/11/11 19:53:38 jmcneill Exp $ */
+/* $NetBSD: padvol.c,v 1.5 2011/02/28 16:56:39 riz Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,14 +27,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: padvol.c,v 1.1 2007/11/11 19:53:38 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: padvol.c,v 1.5 2011/02/28 16:56:39 riz Exp $");
 
 #include <sys/types.h>
+#include <sys/param.h>
 #include <sys/select.h>
 #include <sys/condvar.h>
-#include <sys/mutex.h>
 #include <sys/kmem.h>
 #include <sys/device.h>
+#include <sys/endian.h>
 
 #include <dev/audiovar.h>
 #include <dev/auconv.h>
@@ -85,7 +80,7 @@ PAD_DEFINE_FILTER(pad_vol_slinear16_le)
 	int m, err;
 
 	pf = (pad_filter_t *)self;
-	sc = (pad_softc_t *)pf->audiosc->sc_dev;
+	sc = device_private(pf->audiosc->sc_dev);
 	this = &pf->base;
 	max_used = (max_used + 1) & ~1;
 
@@ -94,9 +89,9 @@ PAD_DEFINE_FILTER(pad_vol_slinear16_le)
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
 	FILTER_LOOP_PROLOGUE(this->src, 2, dst, 2, m) {
-		j = (s[1] << 8 | s[0]);
+		j = le16dec(s);
 		wp = (int16_t *)d;
-		*wp = ((j * sc->sc_swvol) / 255);
+		le16enc(wp, (j * sc->sc_swvol) / 255);
 	} FILTER_LOOP_EPILOGUE(this->src, dst);
 
 	return 0;
@@ -111,7 +106,7 @@ PAD_DEFINE_FILTER(pad_vol_slinear16_be)
 	int m, err;
 
 	pf = (pad_filter_t *)self;
-	sc = (pad_softc_t *)pf->audiosc->sc_dev;
+	sc = device_private(pf->audiosc->sc_dev);
 	this = &pf->base;
 	max_used = (max_used + 1) & ~1;
 
@@ -120,9 +115,9 @@ PAD_DEFINE_FILTER(pad_vol_slinear16_be)
 	m = (dst->end - dst->start) & ~1;
 	m = min(m, max_used);
 	FILTER_LOOP_PROLOGUE(this->src, 2, dst, 2, m) {
-		j = (s[0] << 8 | s[1]);
+		j = be16dec(s);
 		wp = (int16_t *)d;
-		*wp = ((j * sc->sc_swvol) / 255);
+		be16enc(wp, (j * sc->sc_swvol) / 255);
 	} FILTER_LOOP_EPILOGUE(this->src, dst);
 
 	return 0;

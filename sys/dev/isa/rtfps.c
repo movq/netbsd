@@ -1,4 +1,4 @@
-/*	$NetBSD: rtfps.c,v 1.53 2007/10/19 12:00:22 ad Exp $	*/
+/*	$NetBSD: rtfps.c,v 1.57 2009/05/12 09:10:15 cegger Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtfps.c,v 1.53 2007/10/19 12:00:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtfps.c,v 1.57 2009/05/12 09:10:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,16 +66,15 @@ struct rtfps_softc {
 	bus_space_handle_t sc_slaveioh[NSLAVES];
 };
 
-int rtfpsprobe(struct device *, struct cfdata *, void *);
-void rtfpsattach(struct device *, struct device *, void *);
+int rtfpsprobe(device_t, cfdata_t, void *);
+void rtfpsattach(device_t, device_t, void *);
 int rtfpsintr(void *);
 
 CFATTACH_DECL(rtfps, sizeof(struct rtfps_softc),
     rtfpsprobe, rtfpsattach, NULL, NULL);
 
 int
-rtfpsprobe(struct device *parent, struct cfdata *self,
-    void *aux)
+rtfpsprobe(device_t parent, cfdata_t self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -141,7 +140,7 @@ out:
 }
 
 void
-rtfpsattach(struct device *parent, struct device *self, void *aux)
+rtfpsattach(device_t parent, device_t self, void *aux)
 {
 	struct rtfps_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
@@ -160,7 +159,7 @@ rtfpsattach(struct device *parent, struct device *self, void *aux)
 	irq = ia->ia_irq[0].ir_irq;
 
 	if (irq >= 16 || irqport[irq] == -1) {
-		printf("%s: invalid irq\n", sc->sc_dev.dv_xname);
+		printf("%s: invalid irq\n", device_xname(&sc->sc_dev));
 		return;
 	}
 	sc->sc_irqport = irqport[irq];
@@ -170,13 +169,12 @@ rtfpsattach(struct device *parent, struct device *self, void *aux)
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 			&sc->sc_slaveioh[i])) {
-			printf("%s: can't map i/o space for slave %d\n",
-			    sc->sc_dev.dv_xname, i);
+			aprint_error_dev(&sc->sc_dev, "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}
 	if (bus_space_map(iot, sc->sc_irqport, 1, 0, &sc->sc_irqioh)) {
-		printf("%s: can't map irq port at 0x%x\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(&sc->sc_dev, "can't map irq port at 0x%x\n",
 		    sc->sc_irqport);
 		return;
 	}
@@ -200,8 +198,7 @@ rtfpsattach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-rtfpsintr(arg)
-	void *arg;
+rtfpsintr(void *arg)
 {
 	struct rtfps_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;

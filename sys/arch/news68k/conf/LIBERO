@@ -1,4 +1,4 @@
-# 	$NetBSD: LIBERO,v 1.47 2007/12/31 15:32:01 ad Exp $
+# 	$NetBSD: LIBERO,v 1.54 2011/03/06 17:08:28 bouyer Exp $
 
 #	NEWS1750 config file;
 #
@@ -20,8 +20,6 @@ options 	KTRACE			# system call tracing support
 options 	SYSVMSG			# System V message queues
 options 	SYSVSEM			# System V semaphores
 options 	SYSVSHM			# System V shared memory
-#options 	SHMMAXPGS=1024		# 1024 pages is the default
-options 	LKM			# loadable kernel modules
 #options 	USERCONF		# userconf(4) support
 #options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
@@ -48,6 +46,7 @@ options 	COMPAT_16		# NetBSD 1.6 binary compatibility
 options 	COMPAT_20		# NetBSD 2.0 binary compatibility
 options 	COMPAT_30		# NetBSD 3.0 binary compatibility
 options 	COMPAT_40		# NetBSD 4.0 binary compatibility
+options 	COMPAT_50		# NetBSD 5.0 binary compatibility
 options 	COMPAT_AOUT_M68K	# compatibility with NetBSD/m68k a.out
 
 #options 	COMPAT_SVR4		# binary compatibility with SVR4
@@ -71,9 +70,9 @@ file-system	NULLFS		# loopback file system
 file-system	PTYFS		# /dev/pts/N support
 
 options 	NFSSERVER	# nfs server support
-#options 	QUOTA		# ffs quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# ffs endian independent support
-options 	SOFTDEP		# ffs soft updates support
 options 	FFS_NO_SNAPSHOT	# FFS snapshot support
 
 # Networking options
@@ -158,11 +157,11 @@ cd*	at scsibus? target ? lun ?		# SCSI CD-ROMs
 # Misc.
 pseudo-device	loop			# loopback interface; required
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	md		1	# memory disk device
+pseudo-device	md			# memory disk device
 pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	ccd		4	# concatenated and striped disks
 #pseudo-device	raid		4	# RAIDframe disk driver
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 #pseudo-device	sl			# SLIP interfaces
 #pseudo-device	ppp			# PPP interfaces
 #pseudo-device	tun			# Network "tunnel" device

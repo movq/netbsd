@@ -1,4 +1,4 @@
-/*   $NetBSD: get_wch.c,v 1.5 2007/12/08 18:38:11 jdc Exp $ */
+/*   $NetBSD: get_wch.c,v 1.9 2010/12/16 17:42:28 wiz Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation Inc.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: get_wch.c,v 1.5 2007/12/08 18:38:11 jdc Exp $");
+__RCSID("$NetBSD: get_wch.c,v 1.9 2010/12/16 17:42:28 wiz Exp $");
 #endif						  /* not lint */
 
 #include <string.h>
@@ -47,12 +47,17 @@ __RCSID("$NetBSD: get_wch.c,v 1.5 2007/12/08 18:38:11 jdc Exp $");
 #include "curses_private.h"
 #include "keymap.h"
 
+#ifdef HAVE_WCHAR
 static short   wstate;		  /* state of the wcinkey function */
+#endif /* HAVE_WCHAR */
 extern short state;		/* storage declared in getch.c */
 
 /* prototypes for private functions */
+#ifdef HAVE_WCHAR
 static int inkey(wchar_t *wc, int to, int delay);
+#endif /* HAVE_WCHAR */
 
+#ifdef HAVE_WCHAR
 /*
  * __init_get_wch - initialise all the pointers & structures needed to make
  * get_wch work in keypad mode.
@@ -61,28 +66,22 @@ static int inkey(wchar_t *wc, int to, int delay);
 void
 __init_get_wch(SCREEN *screen)
 {
-#ifndef HAVE_WCHAR
-	return;
-#else
 	wstate = INKEY_NORM;
 	memset( &screen->cbuf, 0, MAX_CBUF_SIZE * sizeof( int ));
 	screen->cbuf_head = screen->cbuf_tail = screen->cbuf_cur = 0;
-#endif /* HAVE_WCHAR */
 }
+#endif /* HAVE_WCHAR */
 
 
+#ifdef HAVE_WCHAR
 /*
  * inkey - do the work to process keyboard input, check for multi-key
  * sequences and return the appropriate symbol if we get a match.
  *
  */
-
-int
+static int
 inkey(wchar_t *wc, int to, int delay)
 {
-#ifndef HAVE_WCHAR
-	return ERR;
-#else
 	wchar_t		 k = 0;
 	int		  c, mapping, ret = 0;
 	size_t	  mlen = 0;
@@ -100,7 +99,7 @@ inkey(wchar_t *wc, int to, int delay)
 		if (wstate == INKEY_NORM) {
 			if (delay && __timeout(delay) == ERR)
 				return ERR;
-			c = getchar();
+			c = fgetc(infd);
 			if (c == WEOF) {
 				clearerr(infd);
 				return ERR;
@@ -148,7 +147,7 @@ inkey(wchar_t *wc, int to, int delay)
 					return ERR;
 			}
 
-			c = getchar();
+			c = fgetc(infd);
 			if (ferror(infd)) {
 				clearerr(infd);
 				return ERR;
@@ -188,7 +187,7 @@ inkey(wchar_t *wc, int to, int delay)
 #endif /* DEBUG */
 			}
 		} else if (wstate == INKEY_WCASSEMBLING) {
-			/* assembling a wide char sequence */
+			/* assembling a wide-char sequence */
 			if (delay) {
 				if (__timeout(to ? (ESCDELAY / 100) : delay)
 						== ERR)
@@ -198,7 +197,7 @@ inkey(wchar_t *wc, int to, int delay)
 					return ERR;
 			}
 
-			c = getchar();
+			c = fgetc(infd);
 			if (ferror(infd)) {
 				clearerr(infd);
 				return ERR;
@@ -323,7 +322,7 @@ inkey(wchar_t *wc, int to, int delay)
 				|| ((current->key[mapping]->type
 					== KEYMAP_LEAF)
 				&& (current->key[mapping]->enable == FALSE))) {
-			/* wide character specific code */
+			/* wide-character specific code */
 #ifdef DEBUG
 			__CTRACE(__CTRACE_INPUT,
 			    "inkey: Checking for wide char\n");
@@ -446,8 +445,8 @@ inkey(wchar_t *wc, int to, int delay)
 			}
 		}
 	}
-#endif /* HAVE_WCHAR */
 }
+#endif /* HAVE_WCHAR */
 
 /*
  * get_wch --
@@ -558,10 +557,8 @@ wget_wch(WINDOW *win, wint_t *ch)
 					win->flags & __NOTIMEOUT ? 0 : 1, 0);
 				break;
 			case 0:
-				if (__nodelay() == ERR) {
-					__restore_termios();
+				if (__nodelay() == ERR)
 					return ERR;
-				}
 				ret = inkey(&inp, 0, 0);
 				break;
 			default:
@@ -577,16 +574,12 @@ wget_wch(WINDOW *win, wint_t *ch)
 			case -1:
 				break;
 			case 0:
-				if (__nodelay() == ERR) {
-					__restore_termios();
+				if (__nodelay() == ERR)
 					return ERR;
-				}
 				break;
 			default:
-				if (__timeout(win->delay) == ERR) {
-					__restore_termios();
+				if (__timeout(win->delay) == ERR)
 					return ERR;
-				}
 				break;
 		}
 
@@ -617,10 +610,8 @@ wget_wch(WINDOW *win, wint_t *ch)
 		__CTRACE(__CTRACE_INPUT, "wget_wch got '%s'\n", unctrl(inp));
 #endif
 	if (win->delay > -1) {
-		if (__delay() == ERR) {
-			__restore_termios();
+		if (__delay() == ERR)
 			return ERR;
-		}
 	}
 
 	__restore_termios();

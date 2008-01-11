@@ -1,4 +1,4 @@
-/*	$NetBSD: amdpm_smbus.c,v 1.14 2007/08/27 15:57:13 xtraeme Exp $ */
+/*	$NetBSD: amdpm_smbus.c,v 1.16 2009/02/03 16:27:13 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2005 Anil Gopinath (anil_public@yahoo.com)
@@ -32,7 +32,7 @@
  * AMD-8111 HyperTransport I/O Hub
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdpm_smbus.c,v 1.14 2007/08/27 15:57:13 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdpm_smbus.c,v 1.16 2009/02/03 16:27:13 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,6 +68,7 @@ static int       amdpm_smbus_exec(void *, i2c_op_t, i2c_addr_t, const void *,
 static int       amdpm_smbus_check_done(struct amdpm_softc *, i2c_op_t);
 static void      amdpm_smbus_clear_gsr(struct amdpm_softc *);
 static uint16_t	amdpm_smbus_get_gsr(struct amdpm_softc *);
+static int       amdpm_smbus_quick(struct amdpm_softc *, i2c_op_t);
 static int       amdpm_smbus_send_1(struct amdpm_softc *, uint8_t, i2c_op_t);
 static int       amdpm_smbus_write_1(struct amdpm_softc *, uint8_t,
 				     uint8_t, i2c_op_t);
@@ -113,8 +114,7 @@ amdpm_smbus_attach(struct amdpm_softc *sc)
 
 		if (bus_space_map(sc->sc_iot, XBOX_SMBA, XBOX_SMSIZE,
 		    0, &sc->sc_sm_ioh) == 0) {
-			aprint_normal("%s: system management at 0x%04x\n",
-			    sc->sc_dev.dv_xname, XBOX_SMBA);
+			aprint_normal_dev(&sc->sc_dev, "system management at 0x%04x\n", XBOX_SMBA);
 
 			/* Disable PM ACPI timer SCI interrupt */
 			val = bus_space_read_2(sc->sc_iot, sc->sc_sm_ioh,
@@ -126,15 +126,14 @@ amdpm_smbus_attach(struct amdpm_softc *sc)
 	}
 
 	if (pci_intr_map(sc->sc_pa, &ih))
-		aprint_error("%s: couldn't map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 	else {
 		intrstr = pci_intr_string(sc->sc_pc, ih);
 		sc->sc_ih = pci_intr_establish(sc->sc_pc, ih, IPL_BIO,
 		    amdpm_smbus_intr, sc);
 		if (sc->sc_ih != NULL)
-			aprint_normal("%s: interrupting at %s\n",
-			    sc->sc_dev.dv_xname, intrstr);
+			aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n",
+			    intrstr);
 	}
 #endif
 
@@ -189,6 +188,9 @@ amdpm_smbus_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *cmd,
 	uint8_t *p = vbuf;
 	int rv;
 	
+	if ((cmdlen == 0) && (buflen == 0))
+		return amdpm_smbus_quick(sc, op);
+
 	if (I2C_OP_READ_P(op) && (cmdlen == 0) && (buflen == 1)) {
 		rv = amdpm_smbus_receive_1(sc, op);
 		if (rv == -1)
@@ -252,6 +254,32 @@ amdpm_smbus_get_gsr(struct amdpm_softc *sc)
 	int off = (sc->sc_nforce ? 0xe0 : 0);
         return bus_space_read_2(sc->sc_iot, sc->sc_ioh,
 	    AMDPM_8111_SMBUS_STAT - off);
+}
+
+static int
+amdpm_smbus_quick(struct amdpm_softc *sc, i2c_op_t op)
+{
+	uint16_t data = 0;
+	int off = (sc->sc_nforce ? 0xe0 : 0);
+
+	/* first clear gsr */
+	amdpm_smbus_clear_gsr(sc);
+
+	/* write smbus slave address and read/write bit to register */
+	data = sc->sc_smbus_slaveaddr;
+	data <<= 1;
+	if (I2C_OP_READ_P(op))
+		data |= AMDPM_8111_SMBUS_READ;
+
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh,
+	    AMDPM_8111_SMBUS_HOSTADDR - off, data);
+
+	/* host start */
+	bus_space_write_2(sc->sc_iot, sc->sc_ioh,
+	    AMDPM_8111_SMBUS_CTRL - off,
+	    AMDPM_8111_SMBUS_GSR_QUICK);	
+
+	return amdpm_smbus_check_done(sc, op);
 }
 
 static int

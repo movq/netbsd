@@ -1,4 +1,4 @@
-/*	$NetBSD: shutdown.c,v 1.49 2007/12/15 19:44:47 perry Exp $	*/
+/*	$NetBSD: shutdown.c,v 1.54 2011/02/16 19:33:48 wiz Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)shutdown.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: shutdown.c,v 1.49 2007/12/15 19:44:47 perry Exp $");
+__RCSID("$NetBSD: shutdown.c,v 1.54 2011/02/16 19:33:48 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -91,6 +91,7 @@ static time_t offset, shuttime;
 static int dofast, dohalt, doreboot, killflg, nofork, nosync, dodump;
 static size_t mbuflen;
 static int dopowerdown;
+static int dodebug, dosilent, doverbose;
 static const char *whom;
 static char mbuf[BUFSIZ];
 static char *bootstr;
@@ -118,9 +119,9 @@ main(int argc, char *argv[])
 	(void)setprogname(argv[0]);
 #ifndef DEBUG
 	if (geteuid())
-		errx(1, "NOT super-user");
+		errx(1, "%s: Not super-user", strerror(EPERM));
 #endif
-	while ((ch = getopt(argc, argv, "b:Ddfhknpr")) != -1)
+	while ((ch = getopt(argc, argv, "b:Ddfhknprvxz")) != -1)
 		switch (ch) {
 		case 'b':
 			bootstr = optarg;
@@ -149,6 +150,15 @@ main(int argc, char *argv[])
 		case 'r':
 			doreboot = 1;
 			break;
+		case 'v':
+			doverbose = 1;
+			break;
+		case 'x':
+			dodebug = 1;
+			break;
+		case 'z':
+			dosilent = 1;
+			break;
 		case '?':
 		default:
 			usage();
@@ -163,13 +173,13 @@ main(int argc, char *argv[])
 		doreboot = 1;
 
 	if (dofast && nosync) {
-		warnx("incompatible switches -f and -n");
+		warnx("Incompatible options -f and -n");
 		usage();
 	}
 	if (dohalt && doreboot) {
 		const char *which_flag = dopowerdown ? "p" : "h";
 
-		warnx("incompatible switches -%s and -r", which_flag);
+		warnx("Incompatible options -%s and -r", which_flag);
 		usage();
 	}
 
@@ -346,9 +356,19 @@ timeout(int signo)
 static void
 die_you_gravy_sucking_pig_dog(void)
 {
+	const char *what;
 
-	syslog(LOG_NOTICE, "%s by %s: %s",
-	    doreboot ? "reboot" : dohalt ? "halt" : "shutdown", whom, mbuf);
+	if (doreboot) {
+		what = "reboot";
+	} else if (dohalt && dopowerdown) {
+		what = "poweroff";
+	} else if (dohalt) {
+		what = "halt";
+	} else {
+		what = "shutdown";
+	}
+
+	syslog(LOG_NOTICE, "%s by %s: %s", what, whom, mbuf);
 	(void)sleep(2);
 
 	(void)printf("\r\nSystem shutdown time has arrived\007\007\r\n");
@@ -360,7 +380,7 @@ die_you_gravy_sucking_pig_dog(void)
 		doitfast();
 	dorcshutdown();
 	if (doreboot || dohalt) {
-		const char *args[16];
+		const char *args[20];
 		const char **arg, *path;
 #ifndef DEBUG
 		int serrno;
@@ -374,6 +394,12 @@ die_you_gravy_sucking_pig_dog(void)
 			path = _PATH_HALT;
 			*arg++ = "halt";
 		}
+		if (doverbose)
+			*arg++ = "-v";
+		if (dodebug)
+			*arg++ = "-x";
+		if (dosilent)
+			*arg++ = "-z";
 		if (dodump)
 			*arg++ = "-d";
 		if (nosync)
@@ -385,10 +411,10 @@ die_you_gravy_sucking_pig_dog(void)
 			*arg++ = bootstr;
 		*arg++ = 0;
 #ifndef DEBUG
+		(void)unlink(_PATH_NOLOGIN);
 		(void)execve(path, __UNCONST(args), NULL);
 		serrno = errno;
-		syslog(LOG_ERR, "%s: Can't exec `%s' (%m)", getprogname(),
-		    path);
+		syslog(LOG_ERR, "Can't exec `%s' (%m)", path);
 		errno = serrno;
 		warn("Can't exec `%s'", path);
 #else
@@ -560,7 +586,7 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "Usage: %s [-Ddfhknpr] time [message ... | -]\n",
+	    "Usage: %s [-Ddfhknprvxz] [-b bootstr] time [message ... | -]\n",
 	    getprogname());
 	exit(1);
 }

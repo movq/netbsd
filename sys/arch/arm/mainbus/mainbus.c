@@ -1,4 +1,4 @@
-/* $NetBSD: mainbus.c,v 1.13 2005/12/11 12:16:51 christos Exp $ */
+/* $NetBSD: mainbus.c,v 1.16 2009/03/14 15:36:02 dsl Exp $ */
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.13 2005/12/11 12:16:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.16 2009/03/14 15:36:02 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,11 +68,11 @@ extern struct bus_space mainbus_bs_tag;
 
 /* Prototypes for functions provided */
 
-static int  mainbusmatch  __P((struct device *, struct cfdata *, void *));
-static void mainbusattach __P((struct device *, struct device *, void *));
-static int  mainbusprint  __P((void *aux, const char *mainbus));
-static int  mainbussearch __P((struct device *, struct cfdata *,
-				const int *, void *));
+static int  mainbusmatch(struct device *, struct cfdata *, void *);
+static void mainbusattach(struct device *, struct device *, void *);
+static int  mainbusprint(void *aux, const char *mainbus);
+static int  mainbussearch(struct device *, struct cfdata *,
+				const int *, void *);
 
 /* attach and device structures for the device */
 
@@ -86,10 +86,7 @@ CFATTACH_DECL(mainbus, sizeof(struct device),
  */
 
 static int
-mainbusmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+mainbusmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	return (1);
 }
@@ -101,9 +98,7 @@ mainbusmatch(parent, cf, aux)
  */
 
 static int
-mainbusprint(aux, mainbus)
-	void *aux;
-	const char *mainbus;
+mainbusprint(void *aux, const char *mainbus)
 {
 	struct mainbus_attach_args *mb = aux;
 
@@ -127,11 +122,7 @@ mainbusprint(aux, mainbus)
  */
 
 static int
-mainbussearch(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+mainbussearch(struct device *parent, struct cfdata *cf, const int *ldesc, void *aux)
 {
 	struct mainbus_attach_args mb;
 	int tryagain;
@@ -147,7 +138,7 @@ mainbussearch(parent, cf, ldesc, aux)
 #if defined(arm32) && !defined(EB7500ATX)
 			mb.mb_iobase += IO_CONF_BASE;
 #endif
-			mb.mb_iosize = 0;
+			mb.mb_iosize = cf->cf_loc[MAINBUSCF_SIZE];
 			mb.mb_drq = cf->cf_loc[MAINBUSCF_DACK];
 			mb.mb_irq = cf->cf_loc[MAINBUSCF_IRQ];
 		}
@@ -170,10 +161,7 @@ mainbussearch(parent, cf, ldesc, aux)
  */
 
 static void
-mainbusattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+mainbusattach(struct device *parent, struct device *self, void *aux)
 {
 	aprint_naive("\n");
 	aprint_normal("\n");

@@ -1,4 +1,4 @@
-/* $NetBSD: dev_net.c,v 1.2 2003/03/19 17:21:42 drochner Exp $ */
+/* $NetBSD: dev_net.c,v 1.5 2009/10/21 23:12:09 snj Exp $ */
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- * 4. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Gordon W. Ross
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -66,7 +61,7 @@
 #include <lib/libsa/dev_net.h>
 
 #ifndef SUN_BOOTPARAMS
-void bootp      __P((int));
+void bootp(int);
 #endif
 
 extern int debug;
@@ -95,7 +90,7 @@ char hostname[FNAME_SIZE];
 static int netdev_sock = -1;
 static int netdev_opens;
 
-int net_getparams __P((int));
+int net_getparams(int);
 
 /*
  * Called by devopen after it sets f->f_dev to our devsw entry.
@@ -158,8 +153,7 @@ net_open(struct open_file *f, ...)
 }
 
 int
-net_close(f)
-	struct open_file *f;
+net_close(struct open_file *f)
 {
 
 #ifdef	NETIF_DEBUG
@@ -199,8 +193,7 @@ net_strategy(void *a, int b, daddr_t c, size_t d, void *e, size_t *f)
 }
 
 int
-net_getparams(sock)
-	int sock;
+net_getparams(int sock)
 {
 	/*
 	 * Get info for NFS boot: our IP address, our hostname,

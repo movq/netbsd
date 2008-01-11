@@ -1,7 +1,7 @@
-/*	$NetBSD: sectioning.c,v 1.1.1.4 2004/07/12 23:26:48 wiz Exp $	*/
+/*	$NetBSD: sectioning.c,v 1.2 2011/05/11 23:20:46 joerg Exp $	*/
 
 /* sectioning.c -- for @chapter, @section, ..., @contents ...
-   Id: sectioning.c,v 1.15 2004/04/06 22:48:30 karl Exp
+   Id: sectioning.c,v 1.25 2004/07/05 22:23:23 karl Exp
 
    Copyright (C) 1999, 2001, 2002, 2003, 2004 Free Software Foundation, Inc.
 
@@ -258,14 +258,13 @@ current_chapter_number (void)
     return xstrdup ("");
   else if (enum_marker == APPENDIX_MAGIC)
     {
-      char s[1];
-      sprintf (s, "%c", numbers[0] + 64);
+      char s[2] = { numbers[0] + 64, '\0' };
       return xstrdup (s);
     }
   else
     {
-      char s[5];
-      sprintf (s, "%d", numbers[0]);
+      char s[11];
+      snprintf (s, sizeof(s), "%d", numbers[0]);
       return xstrdup (s);
     }
 }
@@ -395,7 +394,7 @@ sectioning_underscore (char *cmd)
 
 	  xml_insert_element (TITLE, START);
 	  xml_open_section (level, secname);
-	  execute_string (temp);
+	  execute_string ("%s", temp);
 	  xml_insert_element (TITLE, END);
 
 	  free (temp);

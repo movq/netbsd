@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcin.c,v 1.11 2007/12/15 00:39:27 perry Exp $	*/
+/*	$NetBSD: hpcin.c,v 1.14 2009/05/12 14:22:39 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpcin.c,v 1.11 2007/12/15 00:39:27 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpcin.c,v 1.14 2009/05/12 14:22:39 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,8 +44,8 @@ __KERNEL_RCSID(0, "$NetBSD: hpcin.c,v 1.11 2007/12/15 00:39:27 perry Exp $");
 
 #include "locators.h"
 
-int	hpcin_match(struct device *, struct cfdata *, void *);
-void	hpcin_attach(struct device *, struct device *, void *);
+int	hpcin_match(device_t, cfdata_t, void *);
+void	hpcin_attach(device_t, device_t, void *);
 int	hpcin_intr(void *);
 
 struct hpcin_softc {
@@ -76,13 +69,13 @@ CFATTACH_DECL(hpcin, sizeof(struct hpcin_softc),
     hpcin_match, hpcin_attach, NULL, NULL);
 
 int
-hpcin_match(struct device *parent, struct cfdata *cf, void *aux)
+hpcin_match(device_t parent, cfdata_t cf, void *aux)
 {
 	return (1);
 }
 
 void
-hpcin_attach(struct device *parent, struct device *self, void *aux)
+hpcin_attach(device_t parent, device_t self, void *aux)
 {
 	struct hpcioman_attach_args *hma = aux;
 	struct hpcin_softc *sc = device_private(self);

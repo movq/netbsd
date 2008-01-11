@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs_vnops.c,v 1.27 2008/01/02 11:48:43 ad Exp $	*/
+/*	$NetBSD: ptyfs_vnops.c,v 1.34 2010/06/24 13:03:10 hannken Exp $	*/
 
 /*
  * Copyright (c) 1993, 1995
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ptyfs_vnops.c,v 1.27 2008/01/02 11:48:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptyfs_vnops.c,v 1.34 2010/06/24 13:03:10 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -305,7 +305,7 @@ ptyfs_getattr(void *v)
 	PTYFS_ITIMES(ptyfs, NULL, NULL, NULL);
 
 	/* start by zeroing out the attributes */
-	VATTR_NULL(vap);
+	vattr_null(vap);
 
 	/* next do all the common fields */
 	vap->va_type = ap->a_vp->v_type;
@@ -419,11 +419,9 @@ ptyfs_setattr(void *v)
 			return EROFS;
 		if ((ptyfs->ptyfs_flags & SF_SNAPSHOT) != 0)
 			return EPERM;
-		if (kauth_cred_geteuid(cred) != ptyfs->ptyfs_uid &&
-		    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		    NULL)) &&
-		    ((vap->va_vaflags & VA_UTIMES_NULL) == 0 ||
-		    (error = VOP_ACCESS(vp, VWRITE, cred)) != 0))
+		error = genfs_can_chtimes(vp, vap->va_vaflags, ptyfs->ptyfs_uid,
+		    cred);
+		if (error)
 			return (error);
 		if (vap->va_atime.tv_sec != VNOVAL)
 			if (!(vp->v_mount->mnt_flag & MNT_NOATIME))
@@ -464,10 +462,11 @@ ptyfs_chmod(struct vnode *vp, mode_t mode, kauth_cred_t cred, struct lwp *l)
 	struct ptyfsnode *ptyfs = VTOPTYFS(vp);
 	int error;
 
-	if (kauth_cred_geteuid(cred) != ptyfs->ptyfs_uid &&
-	    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-	    NULL)) != 0)
-		return error;
+	error = genfs_can_chmod(vp, cred, ptyfs->ptyfs_uid,
+	    ptyfs->ptyfs_gid, mode);
+	if (error)
+		return (error);
+
 	ptyfs->ptyfs_mode &= ~ALLPERMS;
 	ptyfs->ptyfs_mode |= (mode & ALLPERMS);
 	return 0;
@@ -482,29 +481,36 @@ ptyfs_chown(struct vnode *vp, uid_t uid, gid_t gid, kauth_cred_t cred,
     struct lwp *l)
 {
 	struct ptyfsnode *ptyfs = VTOPTYFS(vp);
-	int		error, ismember = 0;
+	int error;
 
 	if (uid == (uid_t)VNOVAL)
 		uid = ptyfs->ptyfs_uid;
 	if (gid == (gid_t)VNOVAL)
 		gid = ptyfs->ptyfs_gid;
-	/*
-	 * If we don't own the file, are trying to change the owner
-	 * of the file, or are not a member of the target group,
-	 * the caller's credentials must imply super-user privilege
-	 * or the call fails.
-	 */
-	if ((kauth_cred_geteuid(cred) != ptyfs->ptyfs_uid || uid != ptyfs->ptyfs_uid ||
-	    (gid != ptyfs->ptyfs_gid &&
-	    !(kauth_cred_getegid(cred) == gid ||
-	    (kauth_cred_ismember_gid(cred, gid, &ismember) == 0 && ismember)))) &&
-	    ((error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-	    NULL)) != 0))
-		return error;
+
+	error = genfs_can_chown(vp, cred, ptyfs->ptyfs_uid,
+	    ptyfs->ptyfs_gid, uid, gid);
+	if (error)
+		return (error);
 
 	ptyfs->ptyfs_gid = gid;
 	ptyfs->ptyfs_uid = uid;
 	return 0;
+}
+
+static int
+ptyfs_check_possible(struct vnode *vp, mode_t mode)
+{
+
+	return 0;
+}
+
+static int
+ptyfs_check_permitted(struct vattr *va, mode_t mode, kauth_cred_t cred)
+{
+
+	return genfs_can_access(va->va_type, va->va_mode,
+	    va->va_uid, va->va_gid, mode, cred);
 }
 
 /*
@@ -530,8 +536,13 @@ ptyfs_access(void *v)
 	if ((error = VOP_GETATTR(ap->a_vp, &va, ap->a_cred)) != 0)
 		return error;
 
-	return vaccess(va.va_type, va.va_mode,
-	    va.va_uid, va.va_gid, ap->a_mode, ap->a_cred);
+	error = ptyfs_check_possible(ap->a_vp, ap->a_mode);
+	if (error)
+		return error;
+
+	error = ptyfs_check_permitted(&va, ap->a_mode, ap->a_cred);
+
+	return error;
 }
 
 /*
@@ -572,7 +583,7 @@ ptyfs_lookup(void *v)
 
 	if (cnp->cn_namelen == 1 && *pname == '.') {
 		*vpp = dvp;
-		VREF(dvp);
+		vref(dvp);
 		return 0;
 	}
 
@@ -783,7 +794,7 @@ ptyfs_read(void *v)
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
 	case PTYFSptc:
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		error = cdev_read(vp->v_rdev, ap->a_uio, ap->a_ioflag);
 		vn_lock(vp, LK_RETRY|LK_EXCLUSIVE);
 		return error;
@@ -813,7 +824,7 @@ ptyfs_write(void *v)
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
 	case PTYFSptc:
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 		error = cdev_write(vp->v_rdev, ap->a_uio, ap->a_ioflag);
 		vn_lock(vp, LK_RETRY|LK_EXCLUSIVE);
 		return error;

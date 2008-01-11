@@ -1,4 +1,4 @@
-# $NetBSD: t_varquote.sh,v 1.1 2007/11/12 15:14:03 jmmv Exp $
+# $NetBSD: t_varquote.sh,v 1.3 2010/07/10 15:57:37 jmmv Exp $
 #
 # Copyright (c) 2007 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -11,13 +11,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,6 +65,18 @@ all_body() {
 	check "$foo" "x}y}z}"
 }
 
+atf_test_case nested_quotes_multiword
+nested_quotes_multiword_head() {
+	atf_set "descr" "Tests that having nested quoting in a multi-word" \
+	    "string works"
+}
+nested_quotes_multiword_body() {
+	atf_expect_fail "PR bin/43597"
+	atf_check -s eq:0 -o match:"first-word second-word" -e empty \
+	    /bin/sh -c 'echo "${foo:="first-word"} second-word"'
+}
+
 atf_init_test_cases() {
 	atf_add_test_case all
+	atf_add_test_case nested_quotes_multiword
 }

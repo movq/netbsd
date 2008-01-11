@@ -1,4 +1,4 @@
-/*	$NetBSD: zbsdmod.c,v 1.1 2006/12/17 16:07:11 peter Exp $	*/
+/*	$NetBSD: zbsdmod.c,v 1.6 2011/05/05 09:07:59 nonaka Exp $	*/
 /*	$OpenBSD: zbsdmod.c,v 1.7 2005/05/02 02:45:29 uwe Exp $	*/
 
 /*
@@ -24,8 +24,6 @@
 #include "compat_linux.h"
 
 #include <machine/bootinfo.h>
-
-#define BOOTARGS_BUFSIZ	256
 
 #define ZBOOTDEV_MAJOR	99
 #define ZBOOTDEV_MODE	0222
@@ -77,7 +75,7 @@ static Elf_Off off;
 static int havesyms;
 
 /* The maximum size of a kernel image is restricted to 5MB. */
-static u_int bsdimage[1310720];	/* XXX use kmalloc() */
+static u_int bsdimage[5242880/sizeof(u_int)];	/* XXX use kmalloc() */
 static char bootargs[BOOTARGS_BUFSIZ];
 
 /*
@@ -264,7 +262,7 @@ elf32bsdboot(void)
 }
 
 /*
- * Initialize the LKM.
+ * Initialize the module.
  */
 int
 init_module(void)
@@ -275,7 +273,7 @@ init_module(void)
 	rc = register_chrdev(ZBOOTDEV_MAJOR, ZBOOTDEV_NAME, &fops);
 	if (rc != 0) {
 		printk("%s: register_chrdev(%d, ...): error %d\n",
-		    ZBOOTMOD_NAME, -rc);
+		    ZBOOTMOD_NAME, ZBOOTDEV_MAJOR, -rc);
 		return 1;
 	}
 
@@ -348,17 +346,15 @@ zbsdmod_close(struct inode *ino, struct file *f)
 		return -EBUSY;
 
 	if (position > 0) {
-		printk("%s: loaded %d bytes\n", ZBOOTDEV_NAME,
+		printk("%s: loaded %ld bytes\n", ZBOOTDEV_NAME,
 		    position);
 
-		if (position < BOOTARGS_BUFSIZ) {
+		if (position < BOOTINFO_MAXSIZE) {
 			*(u_int *)bootargs = BOOTARGS_MAGIC;
-			bootargs[position + sizeof(u_int)] = '\0';
-			memcpy(bootargs + sizeof(u_int), bsdimage,
-			    position);
+			memcpy(bootargs + sizeof(u_int), bsdimage, position);
 		} else {
 			elf32bsdboot();
-			printk("%s: boot failed\n", ZBOOTDEV_NAME);       
+			printk("%s: boot failed\n", ZBOOTDEV_NAME);
 		}
 	}
 	isopen = 0;

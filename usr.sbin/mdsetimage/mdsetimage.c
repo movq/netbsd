@@ -1,4 +1,4 @@
-/* $NetBSD: mdsetimage.c,v 1.17 2007/12/15 19:44:55 perry Exp $ */
+/* $NetBSD: mdsetimage.c,v 1.20 2010/11/06 16:03:23 uebayasi Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou
@@ -31,13 +31,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-    "@(#) Copyright (c) 1996 Christopher G. Demetriou.\
-  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1996\
+ Christopher G. Demetriou.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: mdsetimage.c,v 1.17 2007/12/15 19:44:55 perry Exp $");
+__RCSID("$NetBSD: mdsetimage.c,v 1.20 2010/11/06 16:03:23 uebayasi Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -50,6 +49,7 @@ __RCSID("$NetBSD: mdsetimage.c,v 1.17 2007/12/15 19:44:55 perry Exp $");
 #include <nlist.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "extern.h"
@@ -59,13 +59,8 @@ static void	usage __P((void)) __dead;
 static int	find_md_root __P((const char *, const char *, size_t,
 		    const struct nlist *, size_t *, u_int32_t *));
 
-static struct nlist md_root_nlist[] = {
 #define	X_MD_ROOT_IMAGE		0
-	{ "_md_root_image" },
 #define	X_MD_ROOT_SIZE		1
-	{ "_md_root_size" },
-	{ NULL }
-};
 
 int	verbose;
 #ifdef NLIST_AOUT
@@ -89,13 +84,24 @@ main(argc, argv)
 	const char *kfile, *fsfile;
 	char *mappedkfile;
 	int ch, kfd, fsfd, rv;
+	struct nlist md_root_nlist[3];
+
+	(void)memset(md_root_nlist, 0, sizeof(md_root_nlist));
+	N_NAME(&md_root_nlist[X_MD_ROOT_IMAGE]) = "_md_root_image";
+	N_NAME(&md_root_nlist[X_MD_ROOT_SIZE]) = "_md_root_size";
 
 	setprogname(argv[0]);
 
-	while ((ch = getopt(argc, argv, "T:v")) != -1)
+	while ((ch = getopt(argc, argv, "I:S:T:v")) != -1)
 		switch (ch) {
 		case 'v':
 			verbose = 1;
+			break;
+		case 'I':
+			N_NAME(&md_root_nlist[X_MD_ROOT_IMAGE]) = optarg;
+			break;
+		case 'S':
+			N_NAME(&md_root_nlist[X_MD_ROOT_SIZE]) = optarg;
 			break;
 		case 'T':
 #ifdef NLIST_AOUT
@@ -246,7 +252,7 @@ find_md_root(fname, mappedfile, mappedsize, nl, rootoffp, rootsizep)
 		fprintf(stderr, "%s is at offset %#lx in %s\n",
 			nl[X_MD_ROOT_SIZE].n_name,
 			(unsigned long)rootsizeoff, fname);
-	*rootsizep = *(u_int32_t *)&mappedfile[rootsizeoff];
+	*rootsizep = *(const u_int32_t *)&mappedfile[rootsizeoff];
 	if (verbose)
 		fprintf(stderr, "%s has value %#x\n",
 		    nl[X_MD_ROOT_SIZE].n_name, *rootsizep);

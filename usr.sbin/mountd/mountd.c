@@ -1,4 +1,4 @@
-/* 	$NetBSD: mountd.c,v 1.112 2007/01/16 17:32:04 hubertf Exp $	 */
+/* 	$NetBSD: mountd.c,v 1.120 2009/10/11 16:30:19 pooka Exp $	 */
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,22 +32,17 @@
  * SUCH DAMAGE.
  */
 
-
-/*
- * XXX The ISO support can't possibly work..
- */
-
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif				/* not lint */
 
 #ifndef lint
 #if 0
 static char     sccsid[] = "@(#)mountd.c  8.15 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: mountd.c,v 1.112 2007/01/16 17:32:04 hubertf Exp $");
+__RCSID("$NetBSD: mountd.c,v 1.120 2009/10/11 16:30:19 pooka Exp $");
 #endif
 #endif				/* not lint */
 
@@ -64,9 +59,6 @@ __RCSID("$NetBSD: mountd.c,v 1.112 2007/01/16 17:32:04 hubertf Exp $");
 #include <rpc/pmap_clnt.h>
 #include <rpc/pmap_prot.h>
 #include <rpcsvc/mount.h>
-#ifdef ISO
-#include <netiso/iso.h>
-#endif
 #include <nfs/rpcv2.h>
 #include <nfs/nfsproto.h>
 #include <nfs/nfs.h>
@@ -143,9 +135,6 @@ struct netmsk {
 union grouptypes {
 	struct addrinfo *gt_addrinfo;
 	struct netmsk   gt_net;
-#ifdef ISO
-	struct sockaddr_iso *gt_isoaddr;
-#endif
 };
 
 struct grouplist {
@@ -157,7 +146,6 @@ struct grouplist {
 #define	GT_NULL		0x0
 #define	GT_HOST		0x1
 #define	GT_NET		0x2
-#define	GT_ISO		0x4
 
 struct hostlist {
 	int             ht_flag;/* Uses DP_xx bits */
@@ -225,20 +213,18 @@ static int netpartcmp __P((struct sockaddr *, struct sockaddr *, int));
 static int sacmp __P((struct sockaddr *, struct sockaddr *));
 static int allones __P((struct sockaddr_storage *, int));
 static int countones __P((struct sockaddr *));
-#ifdef ISO
-static int get_isoaddr __P((const char *, size_t, char *, struct grouplist *));
-#endif
 static void bind_resv_port __P((int, sa_family_t, in_port_t));
+static void no_nfs(int);
 static struct exportlist *exphead;
 static struct mountlist *mlhead;
 static struct grouplist *grphead;
-static char    *exname;
+static const char *exname;
 static struct uucred def_anon = {
 	1,
 	(uid_t) -2,
 	(gid_t) -2,
 	0,
-	{}
+	{ 0 }
 };
 
 static int      opt_flags;
@@ -251,7 +237,6 @@ static const int ninumeric = NI_NUMERICHOST;
 #define	OP_KERB		0x004
 #define	OP_MASK		0x008
 #define	OP_NET		0x010
-#define	OP_ISO		0x020
 #define	OP_ALLDIRS	0x040
 #define OP_NORESPORT	0x080
 #define OP_NORESMNT	0x100
@@ -336,6 +321,7 @@ main(argc, argv)
 	else
 		exname = _PATH_EXPORTS;
 	openlog("mountd", LOG_PID | (debug ? LOG_PERROR : 0), LOG_DAEMON);
+	(void)signal(SIGSYS, no_nfs);
 
 	s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 	if (s < 0)
@@ -503,7 +489,7 @@ mntsrv(rqstp, transp)
 	int lookup_failed = 1;
 	struct sockaddr *saddr;
 	u_short         sport;
-	char            rpcpath[RPCMNT_PATHLEN + 1], dirpath[MAXPATHLEN];
+	char            rpcpath[RPCMNT_PATHLEN + 1], rdirpath[MAXPATHLEN];
 	long            bad = EACCES;
 	int             defset, hostset, ret;
 	sigset_t        sighup_mask;
@@ -556,27 +542,27 @@ mntsrv(rqstp, transp)
 		 * Get the real pathname and make sure it is a file or
 		 * directory that exists.
 		 */
-		if (realpath(rpcpath, dirpath) == 0 ||
-		    stat(dirpath, &stb) < 0 ||
+		if (realpath(rpcpath, rdirpath) == 0 ||
+		    stat(rdirpath, &stb) < 0 ||
 		    (!S_ISDIR(stb.st_mode) && !S_ISREG(stb.st_mode)) ||
-		    statvfs(dirpath, &fsb) < 0) {
+		    statvfs(rdirpath, &fsb) < 0) {
 			(void)chdir("/"); /* Just in case realpath doesn't */
 			if (debug)
 				(void)fprintf(stderr, "-> stat failed on %s\n",
-				    dirpath);
+				    rdirpath);
 			if (!svc_sendreply(transp, xdr_long, (caddr_t) &bad))
 				syslog(LOG_ERR, "Can't send reply");
 			return;
 		}
 		if (debug)
 			fprintf(stderr,
-			    "-> dirpath: %s\n", dirpath);
+			    "-> dirpath: %s\n", rdirpath);
 		/* Check in the exports list */
 		(void)sigprocmask(SIG_BLOCK, &sighup_mask, NULL);
 		ep = ex_search(&fsb.f_fsidx);
 		hostset = defset = 0;
 		if (ep && (chk_host(ep->ex_defdir, saddr, &defset,
-		   &hostset) || ((dp = dirp_search(ep->ex_dirl, dirpath)) &&
+		   &hostset) || ((dp = dirp_search(ep->ex_dirl, rdirpath)) &&
 		   chk_host(dp, saddr, &defset, &hostset)) ||
 		   (defset && scan_tree(ep->ex_defdir, saddr) == 0 &&
 		   scan_tree(ep->ex_dirl, saddr) == 0))) {
@@ -596,9 +582,9 @@ mntsrv(rqstp, transp)
 			/* Get the file handle */
 			memset(&fhr.fhr_fh, 0, sizeof(fhr.fhr_fh)); /* for v2 */
 			fh_size = sizeof(fhr.fhr_fh);
-			if (getfh(dirpath, &fhr.fhr_fh, &fh_size) < 0) {
+			if (getfh(rdirpath, &fhr.fhr_fh, &fh_size) < 0) {
 				bad = errno;
-				syslog(LOG_ERR, "Can't get fh for %s", dirpath);
+				syslog(LOG_ERR, "Can't get fh for %s", rdirpath);
 				if (!svc_sendreply(transp, xdr_long,
 				    (char *)&bad))
 					syslog(LOG_ERR, "Can't send reply");
@@ -616,9 +602,9 @@ mntsrv(rqstp, transp)
 			if (!svc_sendreply(transp, xdr_fhs, (char *) &fhr))
 				syslog(LOG_ERR, "Can't send reply");
 			if (!lookup_failed)
-				add_mlist(host, dirpath, hostset);
+				add_mlist(host, rdirpath, hostset);
 			else
-				add_mlist(numerichost, dirpath, hostset);
+				add_mlist(numerichost, rdirpath, hostset);
 			if (debug)
 				(void)fprintf(stderr, "Mount successful.\n");
 		} else {
@@ -633,13 +619,13 @@ out:
 			syslog(LOG_ERR, "Can't send reply");
 		return;
 	case MOUNTPROC_UMNT:
-		if (!svc_getargs(transp, xdr_dir, dirpath)) {
+		if (!svc_getargs(transp, xdr_dir, rdirpath)) {
 			svcerr_decode(transp);
 			return;
 		}
 		if (!lookup_failed)
-			ret = del_mlist(host, dirpath, saddr);
-		ret |= del_mlist(numerichost, dirpath, saddr);
+			ret = del_mlist(host, rdirpath, saddr);
+		ret |= del_mlist(numerichost, rdirpath, saddr);
 		if (ret) {
 			svcerr_weakauth(transp);
 			return;
@@ -723,13 +709,13 @@ xdr_mlist(xdrsp, cp)
 	caddr_t cp;
 {
 	struct mountlist *mlp;
-	int true = 1;
-	int false = 0;
+	int trueval = 1;
+	int falseval = 0;
 	char *strp;
 
 	mlp = mlhead;
 	while (mlp) {
-		if (!xdr_bool(xdrsp, &true))
+		if (!xdr_bool(xdrsp, &trueval))
 			return (0);
 		strp = &mlp->ml_host[0];
 		if (!xdr_string(xdrsp, &strp, RPCMNT_NAMELEN))
@@ -739,7 +725,7 @@ xdr_mlist(xdrsp, cp)
 			return (0);
 		mlp = mlp->ml_next;
 	}
-	if (!xdr_bool(xdrsp, &false))
+	if (!xdr_bool(xdrsp, &falseval))
 		return (0);
 	return (1);
 }
@@ -753,7 +739,7 @@ xdr_explist(xdrsp, cp)
 	caddr_t cp;
 {
 	struct exportlist *ep;
-	int false = 0;
+	int falseval = 0;
 	int putdef;
 	sigset_t sighup_mask;
 
@@ -771,7 +757,7 @@ xdr_explist(xdrsp, cp)
 		ep = ep->ex_next;
 	}
 	(void)sigprocmask(SIG_UNBLOCK, &sighup_mask, NULL);
-	if (!xdr_bool(xdrsp, &false))
+	if (!xdr_bool(xdrsp, &falseval))
 		return (0);
 	return (1);
 errout:
@@ -792,15 +778,15 @@ put_exlist(dp, xdrsp, adp, putdefp)
 {
 	struct grouplist *grp;
 	struct hostlist *hp;
-	int true = 1;
-	int false = 0;
+	int trueval = 1;
+	int falseval = 0;
 	int gotalldir = 0;
 	char *strp;
 
 	if (dp) {
 		if (put_exlist(dp->dp_left, xdrsp, adp, putdefp))
 			return (1);
-		if (!xdr_bool(xdrsp, &true))
+		if (!xdr_bool(xdrsp, &trueval))
 			return (1);
 		strp = dp->dp_dirp;
 		if (!xdr_string(xdrsp, &strp, RPCMNT_PATHLEN))
@@ -815,7 +801,7 @@ put_exlist(dp, xdrsp, adp, putdefp)
 			while (hp) {
 				grp = hp->ht_grp;
 				if (grp->gr_type == GT_HOST) {
-					if (!xdr_bool(xdrsp, &true))
+					if (!xdr_bool(xdrsp, &trueval))
 						return (1);
 					strp =
 					  grp->gr_ptr.gt_addrinfo->ai_canonname;
@@ -823,7 +809,7 @@ put_exlist(dp, xdrsp, adp, putdefp)
 							RPCMNT_NAMELEN))
 						return (1);
 				} else if (grp->gr_type == GT_NET) {
-					if (!xdr_bool(xdrsp, &true))
+					if (!xdr_bool(xdrsp, &trueval))
 						return (1);
 					strp = grp->gr_ptr.gt_net.nt_name;
 					if (!xdr_string(xdrsp, &strp,
@@ -837,7 +823,7 @@ put_exlist(dp, xdrsp, adp, putdefp)
 				}
 			}
 		}
-		if (!xdr_bool(xdrsp, &false))
+		if (!xdr_bool(xdrsp, &falseval))
 			return (1);
 		if (put_exlist(dp->dp_right, xdrsp, adp, putdefp))
 			return (1);
@@ -1474,7 +1460,7 @@ netpartcmp(struct sockaddr *s1, struct sockaddr *s2, int bitlen)
 	case AF_INET:
 		src = &((struct sockaddr_in *)s1)->sin_addr;
 		dst = &((struct sockaddr_in *)s2)->sin_addr;
-		if (bitlen > sizeof(((struct sockaddr_in *)s1)->sin_addr) * 8)
+		if (bitlen > (int)sizeof(((struct sockaddr_in *)s1)->sin_addr) * 8)
 			return 1;
 		break;
 	case AF_INET6:
@@ -1483,7 +1469,7 @@ netpartcmp(struct sockaddr *s1, struct sockaddr *s2, int bitlen)
 		if (((struct sockaddr_in6 *)s1)->sin6_scope_id !=
 		    ((struct sockaddr_in6 *)s2)->sin6_scope_id)
 			return 1;
-		if (bitlen > sizeof(((struct sockaddr_in6 *)s1)->sin6_addr) * 8)
+		if (bitlen > (int)sizeof(((struct sockaddr_in6 *)s1)->sin6_addr) * 8)
 			return 1;
 		break;
 	default:
@@ -1791,14 +1777,6 @@ do_opt(line, lineno, cpp, endcpp, ep, grp, has_hostp, exflagsp, cr)
 			opt_flags |= (OP_MAPALL | OP_NORESPORT);
 		} else if (cpoptarg && !strcmp(cpopt, "index")) {
 			ep->ex_indexfile = strdup(cpoptarg);
-#ifdef ISO
-		} else if (cpoptarg && !strcmp(cpopt, "iso")) {
-			if (get_isoaddr(line, lineno, cpoptarg, grp))
-				return (1);
-			*has_hostp = 1;
-			usedarg++;
-			opt_flags |= OP_ISO;
-#endif /* ISO */
 		} else {
 			syslog(LOG_ERR, 
 			    "\"%s\", line %ld: Bad opt %s",
@@ -1916,43 +1894,6 @@ get_ht()
 	return (hp);
 }
 
-#ifdef ISO
-/*
- * Translate an iso address.
- */
-static int
-get_isoaddr(line, lineno, cp, grp)
-	const char *line;
-	size_t lineno;
-	char *cp;
-	struct grouplist *grp;
-{
-	struct iso_addr *isop;
-	struct sockaddr_iso *isoaddr;
-
-	if (grp->gr_type != GT_NULL) {
-		syslog(LOG_ERR,
-		    "\"%s\", line %ld: Bad netgroup type for iso addr %s",
-		    line, (unsigned long)lineno, cp);
-		return (1);
-	}
-	if ((isop = iso_addr(cp)) == NULL) {
-		syslog(LOG_ERR,
-		    "\"%s\", line %ld: Bad iso addr %s",
-		    line, (unsigned long)lineno, cp);
-		return (1);
-	}
-	isoaddr = emalloc(sizeof(struct sockaddr_iso));
-	(void)memset(isoaddr, 0, sizeof(struct sockaddr_iso));
-	(void)memcpy(&isoaddr->siso_addr, isop, sizeof(struct iso_addr));
-	isoaddr->siso_len = sizeof(struct sockaddr_iso);
-	isoaddr->siso_family = AF_ISO;
-	grp->gr_type = GT_ISO;
-	grp->gr_ptr.gt_isoaddr = isoaddr;
-	return (0);
-}
-#endif				/* ISO */
-
 /*
  * Do the nfssvc syscall to push the export info into the kernel.
  */
@@ -2019,15 +1960,6 @@ do_nfssvc(line, lineno, ep, grp, exflags, anoncrp, dirp, dirplen, fsb)
 			export.ex_mask = (struct sockaddr *)&ss;
 			export.ex_masklen = ss.ss_len;
 			break;
-#ifdef ISO
-		case GT_ISO:
-			export.ex_addr =
-			    (struct sockaddr *) grp->gr_ptr.gt_isoaddr;
-			export.ex_addrlen =
-			    sizeof(struct sockaddr_iso);
-			export.ex_masklen = 0;
-			break;
-#endif				/* ISO */
 		default:
 			syslog(LOG_ERR, "\"%s\", line %ld: Bad netgroup type",
 			    line, (unsigned long)lineno);
@@ -2079,7 +2011,7 @@ get_net(cp, net, maskflg)
 	int maskflg;
 {
 	struct netent *np;
-	char *name, *p, *prefp;
+	char *nname, *p, *prefp;
 	struct sockaddr_in sin, *sinp;
 	struct sockaddr *sa;
 	struct addrinfo hints, *ai = NULL;
@@ -2155,14 +2087,14 @@ get_net(cp, net, maskflg)
 		}
 
 		if (np)
-			name = np->n_name;
+			nname = np->n_name;
 		else {
 			if (getnameinfo(sa, sa->sa_len, netname, sizeof netname,
 			    NULL, 0, ninumeric) != 0)
 				strlcpy(netname, "?", sizeof(netname));
-			name = netname;
+			nname = netname;
 		}
-		net->nt_name = estrdup(name);
+		net->nt_name = estrdup(nname);
 		memcpy(&net->nt_net, sa, sa->sa_len);
 	}
 
@@ -2222,13 +2154,13 @@ parsecred(namelist, cr)
 	char *namelist;
 	struct uucred *cr;
 {
-	char *name;
+	char *username;
 	int cnt;
 	char *names;
 	struct passwd *pw;
 	struct group *gr;
 	int ngroups;
-	gid_t groups[NGROUPS + 1];
+	gid_t usergroups[NGROUPS + 1];
 
 	/*
 	 * Set up the unprivileged user.
@@ -2238,30 +2170,30 @@ parsecred(namelist, cr)
 	 * Get the user's password table entry.
 	 */
 	names = strsep(&namelist, " \t\n");
-	name = strsep(&names, ":");
-	if (isdigit((unsigned char)*name) || *name == '-')
-		pw = getpwuid(atoi(name));
+	username = strsep(&names, ":");
+	if (isdigit((unsigned char)*username) || *username == '-')
+		pw = getpwuid(atoi(username));
 	else
-		pw = getpwnam(name);
+		pw = getpwnam(username);
 	/*
 	 * Credentials specified as those of a user.
 	 */
 	if (names == NULL) {
 		if (pw == NULL) {
-			syslog(LOG_ERR, "Unknown user: %s", name);
+			syslog(LOG_ERR, "Unknown user: %s", username);
 			return;
 		}
 		cr->cr_uid = pw->pw_uid;
 		ngroups = NGROUPS + 1;
-		if (getgrouplist(pw->pw_name, pw->pw_gid, groups, &ngroups))
-			syslog(LOG_ERR, "Too many groups");
+		if (getgrouplist(pw->pw_name, pw->pw_gid, usergroups, &ngroups))
+			syslog(LOG_ERR, "Too many groups for user %s", username);
 		/*
 		 * Convert from int's to gid_t's and compress out duplicate
 		 */
 		cr->cr_ngroups = ngroups - 1;
-		cr->cr_gid = groups[0];
+		cr->cr_gid = usergroups[0];
 		for (cnt = 1; cnt < ngroups; cnt++)
-			cr->cr_groups[cnt - 1] = groups[cnt];
+			cr->cr_groups[cnt - 1] = usergroups[cnt];
 		return;
 	}
 	/*
@@ -2270,20 +2202,20 @@ parsecred(namelist, cr)
 	 */
 	if (pw != NULL)
 		cr->cr_uid = pw->pw_uid;
-	else if (isdigit((unsigned char)*name) || *name == '-')
-		cr->cr_uid = atoi(name);
+	else if (isdigit((unsigned char)*username) || *username == '-')
+		cr->cr_uid = atoi(username);
 	else {
-		syslog(LOG_ERR, "Unknown user: %s", name);
+		syslog(LOG_ERR, "Unknown user: %s", username);
 		return;
 	}
 	cr->cr_ngroups = 0;
 	while (names != NULL && *names != '\0' && cr->cr_ngroups < NGROUPS) {
-		name = strsep(&names, ":");
-		if (isdigit((unsigned char)*name) || *name == '-') {
-			cr->cr_groups[cr->cr_ngroups++] = atoi(name);
+		username = strsep(&names, ":");
+		if (isdigit((unsigned char)*username) || *username == '-') {
+			cr->cr_groups[cr->cr_ngroups++] = atoi(username);
 		} else {
-			if ((gr = getgrnam(name)) == NULL) {
-				syslog(LOG_ERR, "Unknown group: %s", name);
+			if ((gr = getgrnam(username)) == NULL) {
+				syslog(LOG_ERR, "Unknown group: %s", username);
 				continue;
 			}
 			cr->cr_groups[cr->cr_ngroups++] = gr->gr_gid;
@@ -2462,10 +2394,6 @@ free_grp(grp)
 		if (grp->gr_ptr.gt_net.nt_name)
 			free(grp->gr_ptr.gt_net.nt_name);
 	}
-#ifdef ISO
-	else if (grp->gr_type == GT_ISO)
-		free(grp->gr_ptr.gt_isoaddr);
-#endif
 	free(grp);
 }
 
@@ -2521,15 +2449,9 @@ check_options(line, lineno, dp)
 		    line, (unsigned long)lineno);
 		return (1);
 	}
-	if ((opt_flags & (OP_NET|OP_ISO)) == (OP_NET|OP_ISO)) {
-		syslog(LOG_ERR,
-		    "\"%s\", line %ld: -net and -iso mutually exclusive",
-		    line, (unsigned long)lineno);
-		return (1);
-	}
 	if ((opt_flags & OP_ALLDIRS) && dp->dp_left) {
 		syslog(LOG_ERR,
-		    "\"%s\", line %ld: -alldir has multiple directories",
+		    "\"%s\", line %ld: -alldirs has multiple directories",
 		    line, (unsigned long)lineno);
 		return (1);
 	}
@@ -2548,7 +2470,7 @@ check_dirpath(line, lineno, dirp)
 {
 	char *cp;
 	struct stat sb;
-	char *file = "";
+	const char *file = "";
 
 	for (cp = dirp + 1; *cp; cp++) {
 		if (*cp == '/') {
@@ -2617,4 +2539,12 @@ bind_resv_port(int sock, sa_family_t family, in_port_t port)
 	}
 	if (bindresvport_sa(sock, sa) == -1)
 		syslog(LOG_ERR, "Cannot bind to reserved port %d (%m)", port);
+}
+
+/* ARGSUSED */
+static void
+no_nfs(int sig)
+{
+	syslog(LOG_ERR, "kernel NFS support not present; exiting");
+	exit(1);
 }

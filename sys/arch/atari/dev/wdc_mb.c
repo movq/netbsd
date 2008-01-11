@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_mb.c,v 1.30 2007/12/04 16:36:54 tsutsui Exp $	*/
+/*	$NetBSD: wdc_mb.c,v 1.34 2009/03/08 05:25:31 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_mb.c,v 1.30 2007/12/04 16:36:54 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_mb.c,v 1.34 2009/03/08 05:25:31 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -68,40 +61,37 @@ __KERNEL_RCSID(0, "$NetBSD: wdc_mb.c,v 1.30 2007/12/04 16:36:54 tsutsui Exp $");
 /*
  * XXX This code currently doesn't even try to allow 32-bit data port use.
  */
-static int	claim_hw __P((struct ata_channel *, int));
-static void	free_hw __P((struct ata_channel *));
-static void	read_multi_2_swap __P((bus_space_tag_t, bus_space_handle_t,
-				bus_size_t, u_int16_t *, bus_size_t));
-static void	write_multi_2_swap __P((bus_space_tag_t, bus_space_handle_t,
-				bus_size_t, const u_int16_t *, bus_size_t));
+static int	claim_hw(struct ata_channel *, int);
+static void	free_hw(struct ata_channel *);
+static void	read_multi_2_swap(bus_space_tag_t, bus_space_handle_t,
+		    bus_size_t, uint16_t *, bus_size_t);
+static void	write_multi_2_swap(bus_space_tag_t, bus_space_handle_t,
+		    bus_size_t, const uint16_t *, bus_size_t);
 
 struct wdc_mb_softc {
 	struct wdc_softc sc_wdcdev;
-	struct	ata_channel *sc_chanlist[1];
-	struct  ata_channel sc_channel;
-	struct	ata_queue sc_chqueue;
-	struct	wdc_regs sc_wdc_regs;
-	void	*sc_ih;
+	struct ata_channel *sc_chanlist[1];
+	struct ata_channel sc_channel;
+	struct ata_queue sc_chqueue;
+	struct wdc_regs sc_wdc_regs;
+	void *sc_ih;
 };
 
-int	wdc_mb_probe	__P((struct device *, struct cfdata *, void *));
-void	wdc_mb_attach	__P((struct device *, struct device *, void *));
+int	wdc_mb_probe(device_t, struct cfdata *, void *);
+void	wdc_mb_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(wdc_mb, sizeof(struct wdc_mb_softc),
+CFATTACH_DECL_NEW(wdc_mb, sizeof(struct wdc_mb_softc),
     wdc_mb_probe, wdc_mb_attach, NULL, NULL);
 
 int
-wdc_mb_probe(parent, cfp, aux)
-	struct device *parent;
-	struct cfdata *cfp;
-	void *aux;
+wdc_mb_probe(device_t parent, cfdata_t cfp, void *aux)
 {
-	static int	wdc_matched = 0;
+	static int wdc_matched = 0;
 	struct ata_channel ch;
 	struct wdc_softc wdc;
 	struct wdc_regs wdr;
-	int	result = 0, i;
-	u_char	sv_ierb;
+	int result = 0, i;
+	uint8_t sv_ierb;
 
 	if ((machineid & ATARI_TT) || strcmp("wdc", aux) || wdc_matched)
 		return 0;
@@ -156,20 +146,19 @@ wdc_mb_probe(parent, cfp, aux)
 
 	if (result)
 		wdc_matched = 1;
-	return (result);
+	return result;
 }
 
 void
-wdc_mb_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+wdc_mb_attach(device_t parent, device_t self, void *aux)
 {
-	struct wdc_mb_softc *sc = (void *)self;
+	struct wdc_mb_softc *sc = device_private(self);
 	struct wdc_regs *wdr;
 	int i;
 
-	printf("\n");
+	aprint_normal("\n");
 
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	sc->sc_wdcdev.regs = wdr = &sc->sc_wdc_regs;
 	wdr->cmd_iot = wdr->ctl_iot =
 	    mb_alloc_bus_space_tag();
@@ -179,15 +168,14 @@ wdc_mb_attach(parent, self, aux)
 	wdr->cmd_iot->abs_wms_2 = write_multi_2_swap;
 	if (bus_space_map(wdr->cmd_iot, FALCON_WD_BASE, FALCON_WD_LEN, 0,
 			  &wdr->cmd_baseioh)) {
-		printf("%s: couldn't map registers\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map registers\n");
 		return;
 	}
 	for (i = 0; i < WDC_NREG; i++) {
 		if (bus_space_subregion(wdr->cmd_iot, wdr->cmd_baseioh,
 		    i * 4, 4, &wdr->cmd_iohs[i]) != 0) {
-			printf("%s: couldn't subregion cmd reg %i\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, i);
+			aprint_error_dev(self,
+			    "couldn't subregion cmd reg %i\n", i);
 			bus_space_unmap(wdr->cmd_iot, wdr->cmd_baseioh,
 			    FALCON_WD_LEN);
 			return;
@@ -197,8 +185,7 @@ wdc_mb_attach(parent, self, aux)
 	if (bus_space_subregion(wdr->cmd_iot,
 	    wdr->cmd_baseioh, FALCON_WD_AUX, 4, &wdr->ctl_ioh)) {
 		bus_space_unmap(wdr->cmd_iot, wdr->cmd_baseioh, FALCON_WD_LEN);
-		printf("%s: couldn't subregion aux reg\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(self, "couldn't subregion aux reg\n");
 		return;
 	}
 
@@ -227,7 +214,7 @@ wdc_mb_attach(parent, self, aux)
 	 * Setup & enable disk related interrupts.
 	 */
 	MFP->mf_ierb |= IB_DINT;
-	MFP->mf_iprb  = (u_int8_t)~IB_DINT;
+	MFP->mf_iprb  = (uint8_t)~IB_DINT;
 	MFP->mf_imrb |= IB_DINT;
 
 	wdcattach(&sc->sc_channel);
@@ -239,10 +226,9 @@ wdc_mb_attach(parent, self, aux)
 static int	wd_lock;
 
 static int
-claim_hw(chp, maysleep)
-struct ata_channel *chp;
-int  maysleep;
+claim_hw(struct ata_channel *chp, int maysleep)
 {
+
 	if (wd_lock != DMA_LOCK_GRANT) {
 		if (wd_lock == DMA_LOCK_REQ) {
 			/*
@@ -259,13 +245,13 @@ int  maysleep;
 }
 
 static void
-free_hw(chp)
-struct ata_channel *chp;
+free_hw(struct ata_channel *chp)
 {
+
 	/*
 	 * Flush pending interrupts before giving-up lock
 	 */
-	MFP->mf_iprb = (u_int8_t)~IB_DINT;
+	MFP->mf_iprb = (uint8_t)~IB_DINT;
 
 	/*
 	 * Only free the lock on a Falcon. On the Hades, keep it.
@@ -284,29 +270,23 @@ struct ata_channel *chp;
 	((u_long)(base) + ((off) << (stride)) + (wm))
 
 static void
-read_multi_2_swap(t, h, o, a, c)
-	bus_space_tag_t		t;
-	bus_space_handle_t	h;
-	bus_size_t		o, c;
-	u_int16_t		*a;
+read_multi_2_swap(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+    uint16_t *a, bus_size_t c)
 {
-	u_int16_t	*ba;
+	volatile uint16_t *ba;
 
-	ba = (u_int16_t *)calc_addr(h, o, t->stride, t->wo_2);
+	ba = (volatile uint16_t *)calc_addr(h, o, t->stride, t->wo_2);
 	for (; c; a++, c--)
 		*a = bswap16(*ba);
 }
 
 static void
-write_multi_2_swap(t, h, o, a, c)
-	bus_space_tag_t		t;
-	bus_space_handle_t	h;
-	bus_size_t		o, c;
-	const u_int16_t		*a;
+write_multi_2_swap(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o,
+    const uint16_t *a, bus_size_t c)
 {
-	u_int16_t	*ba;
+	volatile uint16_t *ba;
 
-	ba = (u_int16_t *)calc_addr(h, o, t->stride, t->wo_2);
+	ba = (volatile uint16_t *)calc_addr(h, o, t->stride, t->wo_2);
 	for (; c; a++, c--)
 		*ba = bswap16(*a);
 }

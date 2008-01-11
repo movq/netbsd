@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fddisubr.c,v 1.74 2007/12/20 21:08:21 dyoung Exp $	*/
+/*	$NetBSD: if_fddisubr.c,v 1.81 2010/04/05 07:22:23 joerg Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -96,15 +96,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fddisubr.c,v 1.74 2007/12/20 21:08:21 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fddisubr.c,v 1.81 2010/04/05 07:22:23 joerg Exp $");
 
+#include "opt_gateway.h"
 #include "opt_inet.h"
 #include "opt_atalk.h"
 #include "opt_iso.h"
 #include "opt_ipx.h"
 #include "opt_mbuftrace.h"
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -126,9 +126,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_fddisubr.c,v 1.74 2007/12/20 21:08:21 dyoung Exp 
 #include <net/if_dl.h>
 #include <net/if_types.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -182,7 +180,6 @@ extern u_char	aarp_org_code[ 3 ];
 #endif /* NETATALK */
 
 
-#include "bpfilter.h"
 
 #define senderr(e) { error = (e); goto bad;}
 
@@ -209,7 +206,7 @@ static int
 fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
     struct rtentry *rt0)
 {
-	u_int16_t etype;
+	uint16_t etype;
 	int error = 0, hdrcmplt = 0;
 	uint8_t esrc[6], edst[6];
 	struct mbuf *m = m0;
@@ -306,8 +303,8 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
                 	memcpy(edst, etherbroadcastaddr, sizeof(edst));
 		else {
 			void *tha = ar_tha(ah);
-
-			KASSERT(tha);
+			if (tha == NULL)
+				return 0;
 			memcpy(edst, tha, sizeof(edst));
 		}
 
@@ -446,7 +443,6 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 		break;
 	}
 
-#if NBPFILTER > 0
 	case AF_IMPLINK:
 	{
 		fh = mtod(m, struct fddi_header *);
@@ -480,7 +476,6 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 			m->m_flags |= (M_BCAST|M_MCAST);
 		goto queue_it;
 	}
-#endif
 	default:
 		printf("%s: can't handle af%d\n", ifp->if_xname,
 		       dst->sa_family);
@@ -499,7 +494,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 		l->llc_control = LLC_UI;
 		l->llc_dsap = l->llc_ssap = LLC_SNAP_LSAP;
 		l->llc_snap.org_code[0] = l->llc_snap.org_code[1] = l->llc_snap.org_code[2] = 0;
-		memcpy(&l->llc_snap.ether_type, &etype, sizeof(u_int16_t));
+		memcpy(&l->llc_snap.ether_type, &etype, sizeof(uint16_t));
 	}
 	/*
 	 * Add local net header.  If no space in first mbuf,
@@ -511,9 +506,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 	fh = mtod(m, struct fddi_header *);
 	fh->fddi_fc = FDDIFC_LLC_ASYNC|FDDIFC_LLC_PRIO4;
  	memcpy(fh->fddi_dhost, edst, sizeof (edst));
-#if NBPFILTER > 0
   queue_it:
-#endif
 	if (hdrcmplt)
 		memcpy(fh->fddi_shost, esrc, sizeof(fh->fddi_shost));
 	else
@@ -521,7 +514,8 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 
 #if NCARP > 0
 	if (ifp0 != ifp && ifp0->if_type == IFT_CARP) {
-		if_set_sadl(ifp0, fh->fddi_shost, sizeof(fh->fddi_shost));
+		if_set_sadl(ifp0, fh->fddi_shost, sizeof(fh->fddi_shost),
+		    false);
 	}
 
 	if (ifp != ifp0)
@@ -588,7 +582,7 @@ fddi_input(struct ifnet *ifp, struct mbuf *m)
 #if defined(INET) || defined(INET6) || defined(NS) || defined(DECNET) || defined(IPX) || defined(NETATALK)
 	case LLC_SNAP_LSAP:
 	{
-		u_int16_t etype;
+		uint16_t etype;
 		if (l->llc_control != LLC_UI || l->llc_ssap != LLC_SNAP_LSAP)
 			goto dropanyway;
 
@@ -596,7 +590,7 @@ fddi_input(struct ifnet *ifp, struct mbuf *m)
 		m_adj(m, sizeof(struct fddi_header));
 
 #ifdef NETATALK
-		if (Bcmp(&(l->llc_snap_org_code)[0], at_org_code,
+		if (memcmp(&(l->llc_snap_org_code)[0], at_org_code,
 			 sizeof(at_org_code)) == 0 &&
 		 	ntohs(l->llc_snap_ether_type) == ETHERTYPE_ATALK) {
 		    inq = &atintrq2;
@@ -605,7 +599,7 @@ fddi_input(struct ifnet *ifp, struct mbuf *m)
 		    break;
 		}
 
-		if (Bcmp(&(l->llc_snap_org_code)[0], aarp_org_code,
+		if (memcmp(&(l->llc_snap_org_code)[0], aarp_org_code,
 			 sizeof(aarp_org_code)) == 0 &&
 			ntohs(l->llc_snap_ether_type) == ETHERTYPE_AARP) {
 		    m_adj( m, sizeof( struct llc ));
@@ -619,8 +613,8 @@ fddi_input(struct ifnet *ifp, struct mbuf *m)
 		m_adj(m, 8);
 #if NCARP > 0
 		if (ifp->if_carp && ifp->if_type != IFT_CARP &&
-		    (carp_input(m, (u_int8_t *)&fh->fddi_shost,
-		    (u_int8_t *)&fh->fddi_dhost, l->llc_snap.ether_type) == 0))
+		    (carp_input(m, (uint8_t *)&fh->fddi_shost,
+		    (uint8_t *)&fh->fddi_dhost, l->llc_snap.ether_type) == 0))
 			return;
 #endif
 
@@ -786,12 +780,10 @@ fddi_ifattach(struct ifnet *ifp, void *lla)
 		max_linkhdr = ALIGN(ifp->if_hdrlen);
 
 	LIST_INIT(&ec->ec_multiaddrs);
-	if_set_sadl(ifp, lla, 6);
+	if_set_sadl(ifp, lla, 6, true);
 
 	ifp->if_broadcastaddr = fddibroadcastaddr;
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_FDDI, sizeof(struct fddi_header));
-#endif /* NBPFILTER > 0 */
+	bpf_attach(ifp, DLT_FDDI, sizeof(struct fddi_header));
 #ifdef MBUFTRACE
 	strlcpy(ec->ec_tx_mowner.mo_name, ifp->if_xname,
 	    sizeof(ec->ec_tx_mowner.mo_name));

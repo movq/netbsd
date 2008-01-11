@@ -1,4 +1,4 @@
-/*	$NetBSD: bonito_pci.c,v 1.4 2005/12/11 12:18:07 christos Exp $	*/
+/*	$NetBSD: bonito_pci.c,v 1.7 2009/08/09 04:09:55 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bonito_pci.c,v 1.4 2005/12/11 12:18:07 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bonito_pci.c,v 1.7 2009/08/09 04:09:55 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: bonito_pci.c,v 1.4 2005/12/11 12:18:07 christos Exp 
 #define	PCI_CONF_LOCK(s)	(s) = splhigh()
 #define	PCI_CONF_UNLOCK(s)	splx((s))
 
-void		bonito_attach_hook(struct device *, struct device *,
+void		bonito_attach_hook(device_t, device_t,
 		    struct pcibus_attach_args *);
 int		bonito_bus_maxdevs(void *, int);
 pcitag_t	bonito_make_tag(void *, int, int, int);
@@ -86,7 +79,7 @@ bonito_pci_init(pci_chipset_tag_t pc, struct bonito_config *bc)
 }
 
 void
-bonito_attach_hook(struct device *parent, struct device *self,
+bonito_attach_hook(device_t parent, device_t self,
     struct pcibus_attach_args *pba)
 {
 }
@@ -117,7 +110,7 @@ bonito_decompose_tag(void *v, pcitag_t tag, int *bp, int *dp, int *fp)
 		*fp = (tag >> 8) & 0x7;
 }
 
-static int
+static bool
 bonito_conf_addr(struct bonito_config *bc, pcitag_t tag, int offset,
     u_int32_t *cfgoff, u_int32_t *pcimap_cfg)
 {
@@ -127,16 +120,15 @@ bonito_conf_addr(struct bonito_config *bc, pcitag_t tag, int offset,
 
 	if (b == 0) {
 		if (d > (31 - bc->bc_adbase))
-			return (1);
-		*cfgoff = (1UL << (d + bc->bc_adbase)) | (f << 8) |
-		    offset;
+			return true;
+		*cfgoff = (1UL << (d + bc->bc_adbase)) | (f << 8) | offset;
 		*pcimap_cfg = 0;
 	} else {
 		*cfgoff = tag | offset;
 		*pcimap_cfg = BONITO_PCIMAPCFG_TYPE1;
 	}
 
-	return (0);
+	return false;
 }
 
 pcireg_t

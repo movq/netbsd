@@ -1,4 +1,4 @@
-/*	$NetBSD: wall.c,v 1.25 2004/10/27 17:49:19 christos Exp $	*/
+/*	$NetBSD: wall.c,v 1.28 2009/04/14 07:54:51 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1990, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)wall.c	8.2 (Berkeley) 11/16/93";
 #endif
-__RCSID("$NetBSD: wall.c,v 1.25 2004/10/27 17:49:19 christos Exp $");
+__RCSID("$NetBSD: wall.c,v 1.28 2009/04/14 07:54:51 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -52,6 +52,7 @@ __RCSID("$NetBSD: wall.c,v 1.25 2004/10/27 17:49:19 christos Exp $");
 #include <sys/time.h>
 #include <sys/uio.h>
 
+#include <ctype.h>
 #include <err.h>
 #include <grp.h>
 #include <errno.h>
@@ -145,6 +146,11 @@ main(int argc, char **argv)
 			if (ingroup == 0)
 				continue;
 		}
+
+		/* skip [xgk]dm/xserver entries (":0", ":1", etc.) */
+		if (ep->line[0] == ':' && isdigit((unsigned char)ep->line[1]))
+			continue;
+
 		if ((p = ttymsg(&iov, 1, ep->line, 60*5)) != NULL)
 			warnx("%s", p);
 	}
@@ -192,8 +198,8 @@ makemsg(const char *fname)
 	time_t now;
 	FILE *fp;
 	int fd;
-	const char *whom;
-	char *p, *tty, tmpname[MAXPATHLEN], lbuf[100],
+	const char *whom, *tty;
+	char *p, tmpname[MAXPATHLEN], lbuf[100],
 	    hostname[MAXHOSTNAMELEN+1];
 
 	(void)snprintf(tmpname, sizeof tmpname, "%s/wall.XXXXXX", _PATH_TMP);
@@ -251,7 +257,7 @@ makemsg(const char *fname)
 
 	if (fstat(fd, &sbuf))
 		err(1, "can't stat temporary file");
-	if (sbuf.st_size > SIZE_T_MAX)
+	if ((uint64_t)sbuf.st_size > SIZE_T_MAX)
 		errx(1, "file too big");
 	mbufsize = sbuf.st_size;
 	if (!(mbuf = malloc(mbufsize)))

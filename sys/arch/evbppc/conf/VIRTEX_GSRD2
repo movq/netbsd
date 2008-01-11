@@ -1,4 +1,4 @@
-#	$NetBSD: VIRTEX_GSRD2,v 1.2 2007/10/17 19:54:16 garbled Exp $
+#	$NetBSD: VIRTEX_GSRD2,v 1.12 2011/03/06 17:08:23 bouyer Exp $
 #
 # VIRTEX_GSRD2
 #
@@ -42,9 +42,6 @@ options 	CONS_ADDR=0x010000 	# offset in OPB window
 #options 	SYSVMSG		# System V message queues
 #options 	SYSVSEM		# System V semaphores
 #options 	SYSVSHM		# System V shared memory
-#options 	SHMMAXPGS=1024	# 1024 pages is the default
-
-#options 	LKM		# loadable kernel modules
 
 #options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -74,7 +71,9 @@ makeoptions	DEBUG="-g"	# compile full symbol table
 #options 	COMPAT_14	# NetBSD 1.4,
 #options 	COMPAT_16	# NetBSD 1.6,
 #options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_30	# NetBSD 3.0,
+options 	COMPAT_40	# NetBSD 4.0,
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
@@ -89,7 +88,6 @@ file-system 	FDESC		# /dev/fd
 #file-system 	KERNFS		# /kern
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 #file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
@@ -97,9 +95,10 @@ file-system	PTYFS		# /dev/pts/N support
 file-system 	TMPFS 		# virtual memory file system
 
 # File system options
-options 	QUOTA		# UFS quotas
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
 options 	FFS_EI		# FFS Endian Independant support
-options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
@@ -130,7 +129,6 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
-options 	NMBCLUSTERS=4096
 
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
@@ -168,7 +166,7 @@ wsdisplay* 	at wsemuldisplaydev?
 makphy* 	at mii? phy ?		# Marvell Semiconductor 88E1000 PHYs
 ukphy*		at mii? phy ?		# generic unknown PHYs
 
-pseudo-device	md		1	# memory disk device
+pseudo-device	md			# memory disk device
 pseudo-device	loop			# network loopback
 pseudo-device	bpfilter	8	# packet filter
 pseudo-device	ipfilter		# IP filter (firewall) and NAT

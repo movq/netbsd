@@ -1,4 +1,4 @@
-/*	$NetBSD: iopctl.c,v 1.15 2007/12/15 16:03:30 perry Exp $	*/
+/*	$NetBSD: iopctl.c,v 1.19 2009/04/15 08:40:59 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,13 +31,12 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: iopctl.c,v 1.15 2007/12/15 16:03:30 perry Exp $");
+__RCSID("$NetBSD: iopctl.c,v 1.19 2009/04/15 08:40:59 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/uio.h>
-#include <sys/device.h>
 
 #include <err.h>
 #include <errno.h>
@@ -63,7 +55,8 @@ const char	*class2str(int);
 void	getparam(int, int, void *, int);
 int	gettid(char **);
 int	main(int, char **);
-int	show(const char *, const char *, ...);
+int	show(const char *, const char *, ...)
+    __attribute__((__format__(__printf__, 2, 3)));
 void	i2ostrvis(const u_char *, int, char *, int);
 void	usage(void);
 
@@ -114,7 +107,8 @@ struct	i2o_status status;
 int
 main(int argc, char **argv)
 {
-	int ch, i;
+	int ch;
+	size_t i;
 	const char *dv;
 	struct iovec iov;
 
@@ -187,7 +181,7 @@ show(const char *hdr, const char *fmt, ...)
 const char *
 class2str(int class)
 {
-	int i;
+	size_t i;
 	
 	for (i = 0; i < sizeof(i2oclass) / sizeof(i2oclass[0]); i++)
 		if (class == i2oclass[i].class)
@@ -314,7 +308,7 @@ showstatus(char **argv)
 	show("i2o version", "%d", (segnumber >> 12) & 15);
 	show("iop state", "%d", (segnumber >> 16) & 255);
 	show("messenger type", "%d", segnumber >> 24);
-	show("inbound frame sz", "%d", le32toh(status.inboundmframesize));
+	show("inbound frame sz", "%d", le16toh(status.inboundmframesize));
 	show("init code", "%d", status.initcode);
 	show("max inbound queue depth", "%d",
 	    le32toh(status.maxinboundmframes));

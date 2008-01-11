@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_irq.S,v 1.10 2008/01/06 03:45:27 matt Exp $	*/
+/*	$NetBSD: ofw_irq.S,v 1.12 2010/12/20 00:25:28 matt Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -75,12 +75,6 @@
 Ldisabled_mask:
 	.word	_C_LABEL(disabled_mask)
 
-Lcurrent_spl_level:	
-	.word	_C_LABEL(current_spl_level)
-
-Lcurrent_intr_depth:
-	.word	_C_LABEL(cpu_info_store) + CI_IDEPTH
-
 Lspl_masks:
 	.word	_C_LABEL(spl_masks)
 
@@ -100,6 +94,7 @@ AST_ALIGNMENT_FAULT_LOCALS
 /*
  * Regsister usage
  *
+ *  r4	- Address of cpu_info
  *  r6  - Address of current handler
  *  r7  - Pointer to handler pointer list
  *  r8  - Current IRQ requests.
@@ -169,13 +164,13 @@ ASENTRY_NP(irq_entry)
 	PUSHFRAMEINSVC			/* Push an interrupt frame */
 
 	/*
-	 *  Can't field this interrupt now if priority is _SPL_CLOCK
+	 *  Can't field this interrupt now if priority is IPL_CLOCK
 	 *  or higher.  For now, we'll just ignore the interrupt.
 	 *  Soon, we will have to schedule it for later action.
 	 */
 	ldr	r0, Lcurrent_spl_level
-	ldr	r0, [r0]
-	cmp	r0, #_SPL_CLOCK
+	ldr	r0, [r4, #CI_CPL]
+	cmp	r0, #IPL_CLOCK
 	blt	ofwtakeint
 
 	PULLFRAMEFROMSVCANDEXIT
@@ -204,10 +199,9 @@ ofwtakeint:
 	 * each time the interrupt handler is nested.
 	 */
 
-	ldr	r0, Lcurrent_intr_depth
-	ldr	r1, [r0]
+	ldr	r1, [r4, #CI_INTR_DEPTH]
 	add	r1, r1, #1
-	str	r1, [r0]
+	str	r1, [r4, #CI_INTR_DEPTH]
 
 	/* Block the current requested interrupts */
 	ldr	r1, Ldisabled_mask
@@ -228,7 +222,7 @@ ofwtakeint:
 	 * This would benefit from a special ffs type routine
 	 */
 
-	mov	r9, #(_SPL_LEVELS - 1)
+	mov	r9, #(NIPL - 1)
 	ldr	r7, Lspl_masks
 
 Lfind_highest_ipl:
@@ -246,8 +240,8 @@ Lfind_highest_ipl:
 	str	r0, [r1]	
 
 	ldr	r0, Lcurrent_spl_level
-	ldr	r1, [r0]
-	str	r9, [r0]
+	ldr	r1, [r4, #CI_CPL]
+	str	r9, [r4, #CI_CPL]
 	stmfd	sp!, {r1}
 
 	/* Update the irq masks */
@@ -271,10 +265,17 @@ irqloop:
 	moveq	r0, r8			/* IRQ requests as arg 0 */
 	beq	_C_LABEL(stray_irqhandler) /* call special handler */
 
-	ldr	r0, Lcnt
-	ldr	r1, [r0, #(V_INTR)]
-	add	r1, r1, #0x00000001
-	str	r1, [r0, #(V_INTR)]
+	ldr	r1, [r4, #(CI_CC_NINTR)]
+	ldr	r2, [r4, #(CI_CC_NINTR+4)]
+#ifdef _ARMEL
+	adds	r1, r1, #0x00000001
+	adc	r2, r2, #0x00000000
+#else
+	adds	r2, r2, #0x00000001
+	adc	r1, r1, #0x00000000
+#endif
+	str	r1, [r4, #(CI_CC_NINTR)]
+	str	r2, [r4, #(CI_CC_NINTR+4)]
 
 irqchainloop:
 	ldr	r0, [r6, #(IH_ARG)]	/* Get argument pointer */
@@ -305,8 +306,7 @@ nextirq:
 	bne	irqloop			/* no - loop back. */
 
 	ldmfd	sp!, {r2}
-	ldr	r1, Lcurrent_spl_level
-	str	r2, [r1]
+	str	r2, [r4, #CI_CPL]
 
 	/* Restore previous disabled mask */
 	ldmfd	sp!, {r2}
@@ -322,10 +322,9 @@ nextirq:
 	msr     cpsr_all, r0
 
 	/* Decrement the nest count */
-	ldr	r0, Lcurrent_intr_depth
-	ldr	r1, [r0]
+	ldr	r1, [r4, #CI_INTR_DEPTH]
 	sub	r1, r1, #1
-	str	r1, [r0]
+	str	r1, [r4, #CI_INTR_DEPTH]
 
 	LOCK_CAS_CHECK
 
@@ -341,9 +340,6 @@ ENTRY(irq_setmasks)
 	/* Do nothing */
 	mov	pc, lr
 
-
-Lcnt:
-	.word	_C_LABEL(uvmexp)
 
 Lirqhandlers:
 	.word	_C_LABEL(irqhandlers)	/* Pointer to array of irqhandlers */

@@ -1,4 +1,4 @@
-/* $NetBSD: ioasic.c,v 1.37 2002/10/02 04:06:40 thorpej Exp $ */
+/* $NetBSD: ioasic.c,v 1.42 2009/03/14 21:04:03 dsl Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,7 +61,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.37 2002/10/02 04:06:40 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.42 2009/03/14 21:04:03 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -86,14 +79,14 @@ __KERNEL_RCSID(0, "$NetBSD: ioasic.c,v 1.37 2002/10/02 04:06:40 thorpej Exp $");
 #include <dev/tc/ioasicvar.h>
 
 /* Definition of the driver for autoconfig. */
-int	ioasicmatch __P((struct device *, struct cfdata *, void *));
-void	ioasicattach __P((struct device *, struct device *, void *));
+int	ioasicmatch(struct device *, struct cfdata *, void *);
+void	ioasicattach(struct device *, struct device *, void *);
 
 CFATTACH_DECL(ioasic, sizeof(struct ioasic_softc),
     ioasicmatch, ioasicattach, NULL, NULL);
 
-int	ioasic_intr __P((void *));
-int	ioasic_intrnull __P((void *));
+int	ioasic_intr(void *);
+int	ioasic_intrnull(void *);
 
 #define	C(x)	((void *)(x))
 
@@ -121,7 +114,7 @@ struct ioasic_dev ioasic_devs[] = {
 int ioasic_ndevs = sizeof(ioasic_devs) / sizeof(ioasic_devs[0]);
 
 struct ioasicintr {
-	int	(*iai_func) __P((void *));
+	int	(*iai_func)(void *);
 	void	*iai_arg;
 	struct evcnt iai_evcnt;
 } ioasicintrs[IOASIC_NCOOKIES];
@@ -132,10 +125,7 @@ tc_addr_t ioasic_base;		/* XXX XXX XXX */
 int ioasicfound;
 
 int
-ioasicmatch(parent, cfdata, aux)
-	struct device *parent;
-	struct cfdata *cfdata;
-	void *aux;
+ioasicmatch(struct device *parent, struct cfdata *cfdata, void *aux)
 {
 	struct tc_attach_args *ta = aux;
 
@@ -154,9 +144,7 @@ ioasicmatch(parent, cfdata, aux)
 }
 
 void
-ioasicattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ioasicattach(struct device *parent, struct device *self, void *aux)
 {
 	struct ioasic_softc *sc = (struct ioasic_softc *)self;
 	struct tc_attach_args *ta = aux;
@@ -222,13 +210,10 @@ ioasicattach(parent, self, aux)
 }
 
 void
-ioasic_intr_establish(ioa, cookie, level, func, arg)
-	struct device *ioa;
-	void *cookie, *arg;
-	tc_intrlevel_t level;
-	int (*func) __P((void *));
+ioasic_intr_establish(device_t ioa, void *cookie, tc_intrlevel_t level,
+		int (*func)(void *), void *arg)
 {
-	struct ioasic_softc *sc = (void *)ioasic_cd.cd_devs[0];
+	struct ioasic_softc *sc = device_lookup_private(&ioasic_cd,0);
 	u_long dev, i, imsk;
 
 	dev = (u_long)cookie;
@@ -255,11 +240,9 @@ ioasic_intr_establish(ioa, cookie, level, func, arg)
 }
 
 void
-ioasic_intr_disestablish(ioa, cookie)
-	struct device *ioa;
-	void *cookie;
+ioasic_intr_disestablish(device_t ioa, void *cookie)
 {
-	struct ioasic_softc *sc = (void *)ioasic_cd.cd_devs[0];
+	struct ioasic_softc *sc = device_lookup_private(&ioasic_cd,0);
 	u_long dev, i, imsk;
 
 	dev = (u_long)cookie;
@@ -286,8 +269,7 @@ ioasic_intr_disestablish(ioa, cookie)
 }
 
 int
-ioasic_intrnull(val)
-	void *val;
+ioasic_intrnull(void *val)
 {
 
 	panic("ioasic_intrnull: uncaught IOASIC intr for cookie %ld",
@@ -298,8 +280,7 @@ ioasic_intrnull(val)
  * ASIC interrupt handler.
  */
 int
-ioasic_intr(val)
-	void *val;
+ioasic_intr(void *val)
 {
 	register struct ioasic_softc *sc = val;
 	register int ifound;

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.53 2007/12/03 09:54:24 isaki Exp $	*/
+/*	$NetBSD: main.c,v 1.58 2010/02/03 15:34:43 roy Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -32,15 +32,15 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.1 (Berkeley) 6/20/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.53 2007/12/03 09:54:24 isaki Exp $");
+__RCSID("$NetBSD: main.c,v 1.58 2010/02/03 15:34:43 roy Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,22 +51,21 @@ __RCSID("$NetBSD: main.c,v 1.53 2007/12/03 09:54:24 isaki Exp $");
 #include <sys/resource.h>
 #include <sys/utsname.h>
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <time.h>
-#include <ctype.h>
+#include <limits.h>
 #include <pwd.h>
 #include <setjmp.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syslog.h>
+#include <term.h>
 #include <time.h>
+#include <ttyent.h>
 #include <unistd.h>
 #include <util.h>
-#include <limits.h>
-#include <ttyent.h>
-#include <termcap.h>
 
 #include "gettytab.h"
 #include "pathnames.h"
@@ -92,7 +91,7 @@ extern char editedhost[];
 
 struct termios tmode, omode;
 
-int crmod, digit, lower, upper;
+int crmod, digit_or_punc, lower, upper;
 
 char	hostname[MAXHOSTNAMELEN + 1];
 struct	utsname kerninfo;
@@ -367,7 +366,7 @@ main(int argc, char *argv[], char *envp[])
 		if (NN) {
 			name[0] = '\0';
 			lower = 1;
-			upper = digit = 0;
+			upper = digit_or_punc = 0;
 		} else if (AL) {
 			const char *p = AL;
 			char *q = name;
@@ -378,7 +377,7 @@ main(int argc, char *argv[], char *envp[])
 				else if (islower((unsigned char)*p))
 					lower = 1;
 				else if (isdigit((unsigned char)*p))
-					digit++;
+					digit_or_punc = 1;
 				*q++ = *p++;
 			}
 		} else if ((rval = getname()) == 2) {
@@ -398,7 +397,7 @@ main(int argc, char *argv[], char *envp[])
 				xputs("user names may not start with '-'.");
 				continue;
 			}
-			if (!(upper || lower || digit))
+			if (!(upper || lower || digit_or_punc))
 				continue;
 			setflags(2);
 			if (crmod) {
@@ -469,7 +468,7 @@ getname(void)
 		syslog(LOG_ERR, "%s: %m", ttyn);
 		exit(1);
 	}
-	crmod = digit = lower = upper = 0;
+	crmod = digit_or_punc = lower = upper = 0;
 	ppp_state = ppp_connection = 0;
 	np = name;
 	for (;;) {
@@ -539,8 +538,8 @@ getname(void)
 			prompt();
 			np = name;
 			continue;
-		} else if (isdigit(c))
-			digit++;
+		} else if (isdigit(c) || c == '_')
+			digit_or_punc = 1;
 		if (IG && (c <= ' ' || c > 0176))
 			continue;
 		*np++ = c;
@@ -678,8 +677,7 @@ putf(const char *cp)
 		case 'd':
 			(void)time(&t);
 			(void)strftime(db, sizeof(db),
-			    /* SCCS eats %M% */
-			    "%l:%M" "%p on %A, %d %B %Y", localtime(&t));
+			    "%l:%M%p on %A, %d %B %Y", localtime(&t));
 			xputs(db);
 			break;
 
@@ -712,8 +710,7 @@ static void
 clearscreen(void)
 {
 	struct ttyent *typ;
-	struct tinfo *tinfo;
-	char *cs;
+	int err;
 
 	if (rawttyn == NULL)
 		return;
@@ -724,12 +721,12 @@ clearscreen(void)
 	    (typ->ty_type[0] == 0))
 		return;
 
-	if (t_getent(&tinfo, typ->ty_type) <= 0)
+	if (setupterm(typ->ty_type, 0, &err) == ERR)
 		return;
 
-	cs = t_agetstr(tinfo, "cl");
-	if (cs == NULL)
-		return;
+	if (clear_screen)
+		putpad(clear_screen);
 
-	putpad(cs);
+	del_curterm(cur_term);
+	cur_term = NULL;
 }

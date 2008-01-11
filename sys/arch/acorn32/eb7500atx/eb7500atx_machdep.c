@@ -1,4 +1,4 @@
-/*	$NetBSD: eb7500atx_machdep.c,v 1.8 2007/10/17 19:52:53 garbled Exp $	*/
+/*	$NetBSD: eb7500atx_machdep.c,v 1.19 2009/12/28 03:22:19 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 2000-2002 Reinoud Zandijk.
@@ -48,13 +48,14 @@
  */
 
 #include "opt_ddb.h"
+#include "opt_modular.h"
 #include "opt_pmap_debug.h"
 #include "vidcvideo.h"
 #include "pckbc.h"
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.8 2007/10/17 19:52:53 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.19 2009/12/28 03:22:19 uebayasi Exp $");
 
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -62,6 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.8 2007/10/17 19:52:53 garble
 #include <sys/proc.h>
 #include <sys/msgbuf.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>
 #include <sys/ksyms.h>
 
 #include <dev/cons.h>
@@ -100,7 +102,6 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.8 2007/10/17 19:52:53 garble
 
 /* static i2c_tag_t acorn32_i2c_tag;*/
 
-#include "opt_ipkdb.h"
 #include "ksyms.h"
 
 /* Kernel text starts at the base of the kernel address space. */
@@ -120,18 +121,13 @@ __KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.8 2007/10/17 19:52:53 garble
  */
 u_int cpu_reset_address = 0x0; /* XXX 0x3800000 too for rev0 RiscPC 600 */
 
-
 #define VERBOSE_INIT_ARM
 
 
 /* Define various stack sizes in pages */
 #define IRQ_STACK_SIZE	1
 #define ABT_STACK_SIZE	1
-#ifdef IPKDB
-#define UND_STACK_SIZE	2
-#else
 #define UND_STACK_SIZE	1
-#endif
 
 
 struct bootconfig bootconfig;	/* Boot config storage */
@@ -152,7 +148,6 @@ paddr_t dma_range_begin;
 paddr_t dma_range_end;
 
 u_int free_pages;
-int physmem = 0;
 paddr_t memoryblock_end;
 
 #ifndef PMAP_STATIC_L1S
@@ -187,7 +182,6 @@ extern int pmap_debug_level;
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 
-struct user *proc0paddr;
 
 #ifdef CPU_SA110
 #define CPU_SA110_CACHE_CLEAN_SIZE (0x4000 * 2)
@@ -258,6 +252,7 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("Halted while still in the ICE age.\n");
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
@@ -298,6 +293,8 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* Run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -393,7 +390,6 @@ initarm(void *cookie)
 	u_int kerneldatasize;
 	u_int l1pagetable;
 	struct exec *kernexec = (struct exec *)KERNEL_TEXT_BASE;
-	pv_addr_t kernel_l1pt = { {0} };
 
 	/*
 	 * Heads up ... Setup the CPU / MMU / TLB functions
@@ -755,22 +751,22 @@ initarm(void *cookie)
 	 * REAL kernel page tables.
 	 */
 
-	/* Switch tables */
-#ifdef VERBOSE_INIT_ARM
-	printf("switching to new L1 page table\n");
-#endif
 #ifdef VERBOSE_INIT_ARM
 	printf("switching domains\n");
 #endif
 	/* be a client to all domains */
 	cpu_domains(0x55555555);
 
-	setttb(kernel_l1pt.pv_pa);
+	/* Switch tables */
+#ifdef VERBOSE_INIT_ARM
+	printf("switching to new L1 page table\n");
+#endif
+	cpu_setttb(kernel_l1pt.pv_pa);
 
 	/*
 	 * We must now clean the cache again....
 	 * Cleaning may be done by reading new data to displace any
-	 * dirty data in the cache. This will have happened in setttb()
+	 * dirty data in the cache. This will have happened in cpu_setttb()
 	 * but since we are boot strapping the addresses used for the read
 	 * may have just been remapped and thus the cache could be out
 	 * of sync. A re-clean after the switch will cure this.
@@ -785,8 +781,7 @@ initarm(void *cookie)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 	/* 
 	 * if there is support for a serial console ...we should now
@@ -908,8 +903,7 @@ initarm(void *cookie)
 #ifdef VERBOSE_INIT_ARM
 	printf("pmap ");
 #endif
-	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 	console_flush();
 
 	/* Setup the IRQ system */
@@ -958,15 +952,8 @@ initarm(void *cookie)
 	    bootconfig.vram[0].address,
 	    bootconfig.vram[0].pages * bootconfig.pagesize);
 
-#ifdef IPKDB
-	/* Initialise ipkdb */
-	ipkdb_init();
-	if (boothowto & RB_KDB)
-		ipkdb_connect(0);
-#endif	/* NIPKDB */
-
-#if NKSYMS || defined(DDB) || defined(LKM)
-	ksyms_init(bootconfig.ksym_end - bootconfig.ksym_start,
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	ksyms_addsyms_elf(bootconfig.ksym_end - bootconfig.ksym_start,
 		(void *) bootconfig.ksym_start, (void *) bootconfig.ksym_end);
 #endif
 

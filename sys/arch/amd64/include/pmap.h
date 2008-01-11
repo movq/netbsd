@@ -1,7 +1,6 @@
-/*	$NetBSD: pmap.h,v 1.18 2008/01/03 19:30:10 ad Exp $	*/
+/*	$NetBSD: pmap.h,v 1.24 2011/02/01 20:09:08 chuck Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgment:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -69,6 +62,8 @@
 
 #ifndef	_AMD64_PMAP_H_
 #define	_AMD64_PMAP_H_
+
+#ifdef __x86_64__
 
 #if defined(_KERNEL_OPT)
 #include "opt_xen.h"
@@ -257,6 +252,7 @@
 #define pmap_pa2pte(a)			(a)
 #define pmap_pte2pa(a)			((a) & PG_FRAME)
 #define pmap_pte_set(p, n)		do { *(p) = (n); } while (0)
+#define pmap_pte_cas(p, o, n)		atomic_cas_64((p), (o), (n))
 #define pmap_pte_testset(p, n)		\
     atomic_swap_ulong((volatile unsigned long *)p, n)
 #define pmap_pte_setbits(p, b)		\
@@ -280,8 +276,22 @@ static __inline void
 pmap_pte_set(pt_entry_t *pte, pt_entry_t npte)
 {
 	int s = splvm();
-	xpq_queue_pte_update((pt_entry_t *)xpmap_ptetomach(pte), npte);
+	xpq_queue_pte_update(xpmap_ptetomach(pte), npte);
 	splx(s);
+}
+
+static __inline pt_entry_t
+pmap_pte_cas(volatile pt_entry_t *ptep, pt_entry_t o, pt_entry_t n)
+{
+	int s = splvm();
+	pt_entry_t opte = *ptep;
+
+	if (opte == o) {
+		xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(ptep)), n);
+		xpq_flush_queue();
+	}
+	splx(s);
+	return opte;
 }
 
 static __inline pt_entry_t
@@ -289,8 +299,7 @@ pmap_pte_testset(volatile pt_entry_t *pte, pt_entry_t npte)
 {
 	int s = splvm();
 	pt_entry_t opte = *pte;
-	xpq_queue_pte_update((pt_entry_t *)xpmap_ptetomach(__UNVOLATILE(pte)),
-	    npte);
+	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)), npte);
 	xpq_flush_queue();
 	splx(s);
 	return opte;
@@ -300,8 +309,7 @@ static __inline void
 pmap_pte_setbits(volatile pt_entry_t *pte, pt_entry_t bits)
 {
 	int s = splvm();
-	xpq_queue_pte_update((pt_entry_t *)xpmap_ptetomach(__UNVOLATILE(pte)),
-	    (*pte) | bits);
+	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)), (*pte) | bits);
 	xpq_flush_queue();
 	splx(s);
 }
@@ -310,7 +318,7 @@ static __inline void
 pmap_pte_clearbits(volatile pt_entry_t *pte, pt_entry_t bits)
 {	
 	int s = splvm();
-	xpq_queue_pte_update((pt_entry_t *)xpmap_ptetomach(__UNVOLATILE(pte)),
+	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)),
 	    (*pte) & ~bits);
 	xpq_flush_queue();
 	splx(s);
@@ -327,5 +335,22 @@ pmap_pte_flush(void)
 
 void pmap_prealloc_lowmem_ptps(void);
 void pmap_changeprot_local(vaddr_t, vm_prot_t);
+
+#include <x86/pmap_pv.h>
+
+#define	__HAVE_VM_PAGE_MD
+#define	VM_MDPAGE_INIT(pg) \
+	memset(&(pg)->mdpage, 0, sizeof((pg)->mdpage)); \
+	PMAP_PAGE_INIT(&(pg)->mdpage.mp_pp)
+
+struct vm_page_md {
+	struct pmap_page mp_pp;
+};
+
+#else	/*	!__x86_64__	*/
+
+#include <i386/pmap.h>
+
+#endif	/*	__x86_64__	*/
 
 #endif	/* _AMD64_PMAP_H_ */

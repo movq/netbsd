@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_time.c,v 1.3 2007/12/22 00:35:32 yamt Exp $	*/
+/*	$NetBSD: subr_time.c,v 1.8 2011/01/26 19:15:13 drochner Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_time.c,v 1.3 2007/12/22 00:35:32 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_time.c,v 1.8 2011/01/26 19:15:13 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -47,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: subr_time.c,v 1.3 2007/12/22 00:35:32 yamt Exp $");
  * argument to callout_reset() from an absolute time.
  */
 int
-hzto(struct timeval *tvp)
+tvhzto(const struct timeval *tvp)
 {
 	struct timeval now, tv;
 
@@ -61,7 +61,7 @@ hzto(struct timeval *tvp)
  * Compute number of ticks in the specified amount of time.
  */
 int
-tvtohz(struct timeval *tv)
+tvtohz(const struct timeval *tv)
 {
 	unsigned long ticks;
 	long sec, usec;
@@ -89,15 +89,18 @@ tvtohz(struct timeval *tv)
 	sec = tv->tv_sec;
 	usec = tv->tv_usec;
 
-	if (usec < 0) {
-		sec--;
-		usec += 1000000;
-	}
+	KASSERT(usec >= 0 && usec < 1000000);
 
-	if (sec < 0 || (sec == 0 && usec <= 0)) {
+	/* catch overflows in conversion time_t->int */
+	if (tv->tv_sec > INT_MAX)
+		return INT_MAX;
+	if (tv->tv_sec < 0)
+		return 0;
+
+	if (sec < 0 || (sec == 0 && usec == 0)) {
 		/*
 		 * Would expire now or in the past.  Return 0 ticks.
-		 * This is different from the legacy hzto() interface,
+		 * This is different from the legacy tvhzto() interface,
 		 * and callers need to check for it.
 		 */
 		ticks = 0;
@@ -116,11 +119,21 @@ tvtohz(struct timeval *tv)
 	return ((int)ticks);
 }
 
+int
+tshzto(const struct timespec *tsp)
+{
+	struct timespec now, ts;
+
+	ts = *tsp;	/* Don't modify original tsp. */
+	getnanotime(&now);
+	timespecsub(&ts, &now, &ts);
+	return tstohz(&ts);
+}
 /*
  * Compute number of ticks in the specified amount of time.
  */
 int
-tstohz(struct timespec *ts)
+tstohz(const struct timespec *ts)
 {
 	struct timeval tv;
 
@@ -158,4 +171,55 @@ itimespecfix(struct timespec *ts)
 	if (ts->tv_sec == 0 && ts->tv_nsec != 0 && ts->tv_nsec < tick * 1000)
 		ts->tv_nsec = tick * 1000;
 	return (0);
+}
+
+int
+inittimeleft(struct timespec *ts, struct timespec *sleepts)
+{
+
+	if (itimespecfix(ts)) {
+		return -1;
+	}
+	getnanouptime(sleepts);
+	return 0;
+}
+
+int
+gettimeleft(struct timespec *ts, struct timespec *sleepts)
+{
+	struct timespec sleptts;
+
+	/*
+	 * Reduce ts by elapsed time based on monotonic time scale.
+	 */
+	getnanouptime(&sleptts);
+	timespecadd(ts, sleepts, ts);
+	timespecsub(ts, &sleptts, ts);
+	*sleepts = sleptts;
+
+	return tstohz(ts);
+}
+
+/*
+ * Calculate delta and convert from struct timespec to the ticks.
+ */
+int
+abstimeout2timo(struct timespec *ts, int *timo)
+{
+	struct timespec tsd;
+	int error;
+
+	getnanotime(&tsd);
+	timespecsub(ts, &tsd, &tsd);
+	if (tsd.tv_sec < 0 || (tsd.tv_sec == 0 && tsd.tv_nsec <= 0)) {
+		return ETIMEDOUT;
+	}
+	error = itimespecfix(&tsd);
+	if (error) {
+		return error;
+	}
+	*timo = tstohz(&tsd);
+	KASSERT(*timo != 0);
+
+	return 0;
 }

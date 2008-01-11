@@ -1,4 +1,4 @@
-/*  $NetBSD: if_wpi.c,v 1.34 2008/01/09 20:15:40 degroote Exp $    */
+/*  $NetBSD: if_wpi.c,v 1.49 2011/04/02 08:11:31 mbalmer Exp $    */
 
 /*-
  * Copyright (c) 2006, 2007
@@ -18,13 +18,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.34 2008/01/09 20:15:40 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.49 2011/04/02 08:11:31 mbalmer Exp $");
 
 /*
  * Driver for Intel PRO/Wireless 3945ABG 802.11 network adapters.
  */
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -34,9 +33,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.34 2008/01/09 20:15:40 degroote Exp $")
 #include <sys/socket.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
+#include <sys/mutex.h>
+#include <sys/once.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
 #include <sys/callout.h>
+#include <sys/proc.h>
 
 #include <sys/bus.h>
 #include <machine/endian.h>
@@ -46,9 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_wpi.c,v 1.34 2008/01/09 20:15:40 degroote Exp $")
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
@@ -91,7 +91,13 @@ static const struct ieee80211_rateset wpi_rateset_11b =
 static const struct ieee80211_rateset wpi_rateset_11g =
 	{ 12, { 2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108 } };
 
-static int  wpi_match(device_t, struct cfdata *, void *);
+static once_t wpi_firmware_init;
+static kmutex_t wpi_firmware_mutex;
+static size_t wpi_firmware_users;
+static uint8_t *wpi_firmware_image;
+static size_t wpi_firmware_size;
+
+static int  wpi_match(device_t, cfdata_t, void *);
 static void wpi_attach(device_t, device_t, void *);
 static int  wpi_detach(device_t , int);
 static int  wpi_dma_contig_alloc(bus_dma_tag_t, struct wpi_dma_info *,
@@ -163,7 +169,7 @@ static int  wpi_reset(struct wpi_softc *);
 static void wpi_hw_config(struct wpi_softc *);
 static int  wpi_init(struct ifnet *);
 static void wpi_stop(struct ifnet *, int);
-static bool wpi_resume(device_t);
+static bool wpi_resume(device_t, const pmf_qual_t *);
 static int	wpi_getrfkill(struct wpi_softc *);
 static void wpi_sysctlattach(struct wpi_softc *);
 
@@ -171,7 +177,7 @@ CFATTACH_DECL_NEW(wpi, sizeof (struct wpi_softc), wpi_match, wpi_attach,
 	wpi_detach, NULL);
 
 static int
-wpi_match(device_t parent, struct cfdata *match __unused, void *aux)
+wpi_match(device_t parent, cfdata_t match __unused, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -188,6 +194,13 @@ wpi_match(device_t parent, struct cfdata *match __unused, void *aux)
 /* Base Address Register */
 #define WPI_PCI_BAR0	0x10
 
+static int
+wpi_attach_once(void)
+{
+	mutex_init(&wpi_firmware_mutex, MUTEX_DEFAULT, IPL_NONE);
+	return 0;
+}
+
 static void
 wpi_attach(device_t parent __unused, device_t self, void *aux)
 {
@@ -203,6 +216,9 @@ wpi_attach(device_t parent __unused, device_t self, void *aux)
 	pcireg_t data;
 	int error, ac, revision;
 
+	RUN_ONCE(&wpi_firmware_init, wpi_attach_once);
+	sc->fw_used = false;
+
 	sc->sc_dev = self;
 	sc->sc_pct = pa->pa_pc;
 	sc->sc_pcitag = pa->pa_tag;
@@ -213,8 +229,6 @@ wpi_attach(device_t parent __unused, device_t self, void *aux)
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof devinfo);
 	revision = PCI_REVISION(pa->pa_class);
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo, revision);
-
-	pci_disable_retry(pa->pa_pc, pa->pa_tag);
 
 	/* enable bus-mastering */
 	data = pci_conf_read(sc->sc_pct, sc->sc_pcitag, PCI_COMMAND_STATUS_REG);
@@ -344,15 +358,14 @@ wpi_attach(device_t parent __unused, device_t self, void *aux)
 
 	wpi_sysctlattach(sc);
 
-	if (!pmf_device_register(self, NULL, wpi_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
-	else
+	if (pmf_device_register(self, NULL, wpi_resume))
 		pmf_class_network_register(self, ifp);
+	else
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
-		sizeof (struct ieee80211_frame) + IEEE80211_RADIOTAP_HDRLEN,
-		&sc->sc_drvbpf);
+	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
+	    sizeof(struct ieee80211_frame) + IEEE80211_RADIOTAP_HDRLEN,
+	    &sc->sc_drvbpf);
 
 	sc->sc_rxtap_len = sizeof sc->sc_rxtapu;
 	sc->sc_rxtap.wr_ihdr.it_len = htole16(sc->sc_rxtap_len);
@@ -361,7 +374,6 @@ wpi_attach(device_t parent __unused, device_t self, void *aux)
 	sc->sc_txtap_len = sizeof sc->sc_txtapu;
 	sc->sc_txtap.wt_ihdr.it_len = htole16(sc->sc_txtap_len);
 	sc->sc_txtap.wt_ihdr.it_present = htole32(WPI_TX_RADIOTAP_PRESENT);
-#endif
 
 	ieee80211_announce(ic);
 
@@ -384,10 +396,8 @@ wpi_detach(device_t self, int flags __unused)
 
 	wpi_stop(ifp, 1);
 
-#if NBPFILTER > 0
 	if (ifp != NULL)
-		bpfdetach(ifp);
-#endif
+		bpf_detach(ifp);
 	ieee80211_ifdetach(&sc->sc_ic);
 	if (ifp != NULL)
 		if_detach(ifp);
@@ -405,6 +415,13 @@ wpi_detach(device_t self, int flags __unused)
 	}
 
 	bus_space_unmap(sc->sc_st, sc->sc_sh, sc->sc_sz);
+
+	if (sc->fw_used) {
+		mutex_enter(&wpi_firmware_mutex);
+		if (--wpi_firmware_users == 0)
+			firmware_free(wpi_firmware_image, wpi_firmware_size);
+		mutex_exit(&wpi_firmware_mutex);
+	}
 
 	return 0;
 }
@@ -517,11 +534,13 @@ wpi_alloc_rbuf(struct wpi_softc *sc)
 {
 	struct wpi_rbuf *rbuf;
 
+	mutex_enter(&sc->rxq.freelist_mtx);
 	rbuf = SLIST_FIRST(&sc->rxq.freelist);
-	if (rbuf == NULL)
-		return NULL;
-	SLIST_REMOVE_HEAD(&sc->rxq.freelist, next);
-	sc->rxq.nb_free_entries --;
+	if (rbuf != NULL) {
+		SLIST_REMOVE_HEAD(&sc->rxq.freelist, next);
+		sc->rxq.nb_free_entries --;
+	}
+	mutex_exit(&sc->rxq.freelist_mtx);
 
 	return rbuf;
 }
@@ -538,7 +557,10 @@ wpi_free_rbuf(struct mbuf* m, void *buf, size_t size, void *arg)
 
 	/* put the buffer back in the free list */
 
+	mutex_enter(&sc->rxq.freelist_mtx);
 	SLIST_INSERT_HEAD(&sc->rxq.freelist, rbuf, next);
+	mutex_exit(&sc->rxq.freelist_mtx);
+	/* No need to protect this with a mutex, see wpi_rx_intr */
 	sc->rxq.nb_free_entries ++;
 
 	if (__predict_true(m != NULL))
@@ -562,6 +584,7 @@ wpi_alloc_rpool(struct wpi_softc *sc)
 	}
 
 	/* ..and split it into 3KB chunks */
+	mutex_init(&ring->freelist_mtx, MUTEX_DEFAULT, IPL_NET);
 	SLIST_INIT(&ring->freelist);
 	for (i = 0; i < WPI_RBUF_COUNT; i++) {
 		rbuf = &ring->rbuf[i];
@@ -790,10 +813,8 @@ wpi_node_alloc(struct ieee80211_node_table *nt __unused)
 {
 	struct wpi_node *wn;
 
-	wn = malloc(sizeof (struct wpi_node), M_DEVBUF, M_NOWAIT);
+	wn = malloc(sizeof (struct wpi_node), M_80211_NODE, M_NOWAIT | M_ZERO);
 
-	if (wn != NULL)
-		memset(wn, 0, sizeof (struct wpi_node));
 	return (struct ieee80211_node *)wn;
 }
 
@@ -1111,6 +1132,74 @@ wpi_load_microcode(struct wpi_softc *sc, const uint8_t *ucode, int size)
 }
 
 static int
+wpi_cache_firmware(struct wpi_softc *sc)
+{
+	firmware_handle_t fw;
+	int error;
+
+	if (sc->fw_used)
+		return 0;
+
+	mutex_enter(&wpi_firmware_mutex);
+	if (wpi_firmware_users++) {
+		mutex_exit(&wpi_firmware_mutex);
+		return 0;
+	}
+
+	/* load firmware image from disk */
+	if ((error = firmware_open("if_wpi","iwlwifi-3945.ucode", &fw)) != 0) {
+		aprint_error_dev(sc->sc_dev, "could not read firmware file\n");
+		goto fail1;
+	}
+
+	wpi_firmware_size = firmware_get_size(fw);
+
+	if (wpi_firmware_size > sizeof (struct wpi_firmware_hdr) +
+	    WPI_FW_MAIN_TEXT_MAXSZ + WPI_FW_MAIN_DATA_MAXSZ +
+	    WPI_FW_INIT_TEXT_MAXSZ + WPI_FW_INIT_DATA_MAXSZ +
+	    WPI_FW_BOOT_TEXT_MAXSZ) {
+		aprint_error_dev(sc->sc_dev, "invalid firmware file\n");
+		error = EFBIG;
+		goto fail1;
+	}
+
+	if (wpi_firmware_size < sizeof (struct wpi_firmware_hdr)) {
+		aprint_error_dev(sc->sc_dev,
+		    "truncated firmware header: %zu bytes\n",
+		    wpi_firmware_size);
+		error = EINVAL;
+		goto fail2;
+	}
+
+	wpi_firmware_image = firmware_malloc(wpi_firmware_size);
+	if (wpi_firmware_image == NULL) {
+		aprint_error_dev(sc->sc_dev, "not enough memory to stock firmware\n");
+		error = ENOMEM;
+		goto fail1;
+	}
+
+	if ((error = firmware_read(fw, 0, wpi_firmware_image, wpi_firmware_size)) != 0) {
+		aprint_error_dev(sc->sc_dev, "can't get firmware\n");
+		goto fail2;
+	}
+
+	sc->fw_used = true;
+	firmware_close(fw);
+	mutex_exit(&wpi_firmware_mutex);
+
+	return 0;
+
+fail2:
+	firmware_free(wpi_firmware_image, wpi_firmware_size);
+fail1:
+	firmware_close(fw);
+	if (--wpi_firmware_users == 0)
+		firmware_free(wpi_firmware_image, wpi_firmware_size);
+	mutex_exit(&wpi_firmware_mutex);
+	return error;
+}
+
+static int
 wpi_load_firmware(struct wpi_softc *sc)
 {
 	struct wpi_dma_info *dma = &sc->fw_dma;
@@ -1119,32 +1208,12 @@ wpi_load_firmware(struct wpi_softc *sc)
 	const uint8_t *boot_text;
 	uint32_t init_textsz, init_datasz, main_textsz, main_datasz;
 	uint32_t boot_textsz;
-	firmware_handle_t fw;
-	u_char *dfw;
-	size_t size;
 	int error;
 
-	/* load firmware image from disk */
-	if ((error = firmware_open("if_wpi","iwlwifi-3945.ucode", &fw) != 0)) {
-		aprint_error_dev(sc->sc_dev, "could not read firmware file\n");
-		goto fail1;
-	}
-	
-	size = firmware_get_size(fw);
+	if ((error = wpi_cache_firmware(sc)) != 0)
+		return error;
 
-	/* extract firmware header information */
-	if (size < sizeof (struct wpi_firmware_hdr)) {
-		aprint_error_dev(sc->sc_dev, "truncated firmware header: %zu bytes\n",
-		    			 size);
-		error = EINVAL;
-		goto fail2;
-	}
-
-	if ((error = firmware_read(fw, 0, &hdr,
-		sizeof (struct wpi_firmware_hdr))) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't get firmware header\n");
-		goto fail2;
-	}
+	memcpy(&hdr, wpi_firmware_image, sizeof(hdr));
 
 	main_textsz = le32toh(hdr.main_textsz);
 	main_datasz = le32toh(hdr.main_datasz);
@@ -1161,32 +1230,21 @@ wpi_load_firmware(struct wpi_softc *sc)
 	    (boot_textsz & 3) != 0) {
 		aprint_error_dev(sc->sc_dev, "invalid firmware header\n");
 		error = EINVAL;
-		goto fail2;
+		goto free_firmware;
 	}
 
 	/* check that all firmware segments are present */
-	if (size < sizeof (struct wpi_firmware_hdr) + main_textsz +
-		main_datasz + init_textsz + init_datasz + boot_textsz) {
-		aprint_error_dev(sc->sc_dev, "firmware file too short: %zu bytes\n",
-		    			 size);
+	if (wpi_firmware_size <
+	    sizeof (struct wpi_firmware_hdr) + main_textsz +
+	    main_datasz + init_textsz + init_datasz + boot_textsz) {
+		aprint_error_dev(sc->sc_dev,
+		    "firmware file too short: %zu bytes\n", wpi_firmware_size);
 		error = EINVAL;
-		goto fail2;
-	}
-
-	dfw = firmware_malloc(size);
-	if (dfw == NULL) {
-		aprint_error_dev(sc->sc_dev, "not enough memory to stock firmware\n");
-		error = ENOMEM;
-		goto fail2;
-	}
-
-	if ((error = firmware_read(fw, 0, dfw, size)) != 0) {
-		aprint_error_dev(sc->sc_dev, "can't get firmware\n");
-		goto fail2;
+		goto free_firmware;
 	}
 
 	/* get pointers to firmware segments */
-	main_text = dfw + sizeof (struct wpi_firmware_hdr);
+	main_text = wpi_firmware_image + sizeof (struct wpi_firmware_hdr);
 	main_data = main_text + main_textsz;
 	init_text = main_data + main_datasz;
 	init_data = init_text + init_textsz;
@@ -1208,7 +1266,7 @@ wpi_load_firmware(struct wpi_softc *sc)
 	/* load firmware boot code */
 	if ((error = wpi_load_microcode(sc, boot_text, boot_textsz)) != 0) {
 		aprint_error_dev(sc->sc_dev, "could not load boot firmware\n");
-		goto fail3;
+		return error;
 	}
 
 	/* now press "execute" ;-) */
@@ -1218,7 +1276,7 @@ wpi_load_firmware(struct wpi_softc *sc)
 	if ((error = tsleep(sc, PCATCH, "wpiinit", hz)) != 0) {
 		/* this isn't what was supposed to happen.. */
 		aprint_error_dev(sc->sc_dev, 
-					"timeout waiting for adapter to initialize\n");
+		    "timeout waiting for adapter to initialize\n");
 	}
 
 	/* copy runtime images into pre-allocated DMA-safe memory */
@@ -1238,13 +1296,17 @@ wpi_load_firmware(struct wpi_softc *sc)
 	if ((error = tsleep(sc, PCATCH, "wpiinit", hz)) != 0) {
 		/* this isn't what was supposed to happen.. */
 		aprint_error_dev(sc->sc_dev, 
-						"timeout waiting for adapter to initialize\n");
+		    "timeout waiting for adapter to initialize\n");
 	}
 
+	return error;
 
-fail3: 	firmware_free(dfw,size);
-fail2:	firmware_close(fw);
-fail1:	return error;
+free_firmware:
+	mutex_enter(&wpi_firmware_mutex);
+	sc->fw_used = false;
+	--wpi_firmware_users;
+	mutex_exit(&wpi_firmware_mutex);
+	return error;
 }
 
 static void
@@ -1361,6 +1423,11 @@ wpi_rx_intr(struct wpi_softc *sc, struct wpi_rx_desc *desc,
 	/* 
 	 * If the number of free entry is too low
 	 * just dup the data->m socket and reuse the same rbuf entry
+	 * Note that thi test is not protected by a mutex because the
+	 * only path that causes nb_free_entries to decrease is through
+	 * this interrupt routine, which is not re-entrent.
+	 * What may not be obvious is that the safe path is if that test
+	 * evaluates as true, so nb_free_entries can grow any time.
 	 */
 	if (sc->rxq.nb_free_entries <= WPI_RBUF_LOW_LIMIT) {
 		
@@ -1409,7 +1476,6 @@ wpi_rx_intr(struct wpi_softc *sc, struct wpi_rx_desc *desc,
 	if (ic->ic_state == IEEE80211_S_SCAN)
 		wpi_fix_channel(ic, m);
 	
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct wpi_rx_radiotap_header *tap = &sc->sc_rxtap;
 
@@ -1445,7 +1511,6 @@ wpi_rx_intr(struct wpi_softc *sc, struct wpi_rx_desc *desc,
 
 		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m);
 	}
-#endif
 
 	/* grab a reference to the source node */
 	wh = mtod(m, struct ieee80211_frame *);
@@ -1751,7 +1816,6 @@ wpi_tx_data(struct wpi_softc *sc, struct mbuf *m0, struct ieee80211_node *ni,
 	rate &= IEEE80211_RATE_VAL;
 
 
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct wpi_tx_radiotap_header *tap = &sc->sc_txtap;
 
@@ -1765,7 +1829,6 @@ wpi_tx_data(struct wpi_softc *sc, struct mbuf *m0, struct ieee80211_node *ni,
 
 		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m0);
 	}
-#endif
 
 	cmd = &ring->cmd[ring->cur];
 	cmd->code = WPI_CMD_TX_DATA;
@@ -1920,10 +1983,7 @@ wpi_start(struct ifnet *ifp)
 				ifp->if_oerrors++;
 				continue;
 			}
-#if NBPFILTER > 0
-			if (ic->ic_rawbpf != NULL)
-				bpf_mtap(ic->ic_rawbpf, m0);
-#endif
+			bpf_mtap3(ic->ic_rawbpf, m0);
 			if (wpi_tx_data(sc, m0, ni, 0) != 0) {
 				ifp->if_oerrors++;
 				break;
@@ -1936,7 +1996,7 @@ wpi_start(struct ifnet *ifp)
 				break;
 
 			if (m0->m_len < sizeof (*eh) &&
-			    (m0 = m_pullup(m0, sizeof (*eh))) != NULL) {
+			    (m0 = m_pullup(m0, sizeof (*eh))) == NULL) {
 				ifp->if_oerrors++;
 				continue;
 			}
@@ -1966,20 +2026,14 @@ wpi_start(struct ifnet *ifp)
 				break;
 			}
 			IFQ_DEQUEUE(&ifp->if_snd, m0);
-#if NBPFILTER > 0
-			if (ifp->if_bpf != NULL)
-				bpf_mtap(ifp->if_bpf, m0);
-#endif
+			bpf_mtap(ifp, m0);
 			m0 = ieee80211_encap(ic, m0, ni);
 			if (m0 == NULL) {
 				ieee80211_free_node(ni);
 				ifp->if_oerrors++;
 				continue;
 			}
-#if NBPFILTER > 0
-			if (ic->ic_rawbpf != NULL)
-				bpf_mtap(ic->ic_rawbpf, m0);
-#endif
+			bpf_mtap3(ic->ic_rawbpf, m0);
 			if (wpi_tx_data(sc, m0, ni, ac) != 0) {
 				ieee80211_free_node(ni);
 				ifp->if_oerrors++;
@@ -2027,6 +2081,8 @@ wpi_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 	case SIOCSIFFLAGS:
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
 		if (ifp->if_flags & IFF_UP) {
 			if (!(ifp->if_flags & IFF_RUNNING))
 				wpi_init(ifp);
@@ -3128,11 +3184,10 @@ wpi_stop(struct ifnet *ifp, int disable)
 }
 
 static bool
-wpi_resume(device_t dv)
+wpi_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct wpi_softc *sc = device_private(dv);
 
-	pci_disable_retry(sc->sc_pct, sc->sc_pcitag);
 	(void)wpi_reset(sc);
 
 	return true;

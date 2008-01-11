@@ -1,4 +1,4 @@
-/* $NetBSD: compat_13_machdep.c,v 1.16 2007/12/20 23:02:38 dsl Exp $ */
+/* $NetBSD: compat_13_machdep.c,v 1.18 2009/11/21 05:35:40 rmind Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -29,14 +29,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.16 2007/12/20 23:02:38 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.18 2009/11/21 05:35:40 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
@@ -66,6 +65,7 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	} */
 	struct sigcontext13 *scp, ksc;
 	struct proc *p = l->l_proc;
+	struct pcb *pcb;
 	sigset13_t mask13;
 	sigset_t mask;
 
@@ -93,13 +93,14 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	alpha_pal_wrusp(ksc.sc_regs[R_SP]);
 
 	/* XXX ksc.sc_ownedfp ? */
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
+	pcb = lwp_getpcb(l);
+	if (pcb->pcb_fpcpu != NULL)
 		fpusave_proc(l, 0);
-	memcpy(&l->l_addr->u_pcb.pcb_fp, (struct fpreg *)ksc.sc_fpregs,
+	memcpy(&pcb->pcb_fp, (struct fpreg *)ksc.sc_fpregs,
 	    sizeof(struct fpreg));
 	/* XXX ksc.sc_fp_control ? */
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	/* Restore signal stack. */
 	if (ksc.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
@@ -112,7 +113,7 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	mask13 = ksc.sc_mask;
 	native_sigset13_to_sigset(&mask13, &mask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

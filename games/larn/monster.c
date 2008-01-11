@@ -1,4 +1,4 @@
-/*	$NetBSD: monster.c,v 1.11 2007/04/22 02:09:02 mouse Exp $	*/
+/*	$NetBSD: monster.c,v 1.17 2009/08/12 08:04:05 dholland Exp $	*/
 
 /*
  * monster.c	Larn is copyrighted 1986 by Noah Morgan.
@@ -100,11 +100,12 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: monster.c,v 1.11 2007/04/22 02:09:02 mouse Exp $");
+__RCSID("$NetBSD: monster.c,v 1.17 2009/08/12 08:04:05 dholland Exp $");
 #endif				/* not lint */
 
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include "header.h"
 #include "extern.h"
 
@@ -114,7 +115,24 @@ struct isave {			/* used for altar reality */
 	short           arg;	/* the type of item or hitpoints of monster */
 };
 
+static int cgood(int, int, int, int);
+static void speldamage(int);
+static void loseint(void);
+static int isconfuse(void);
+static int nospell(int, int);
+static int fullhit(int);
+static void direct(int, int, const char *, int);
+static void ifblind(int, int);
+static void tdirect(int);
+static void omnidirect(int, int, const char *);
 static int dirsub(int *, int *);
+static void dirpoly(int);
+static int hitm(int, int, int);
+static void dropsomething(int);
+static int spattack(int, int, int);
+static void sphboom(int, int);
+static void genmonst(void);
+
 /*
  * createmonster(monstno)	Function to create a monster next to the player
  * 	int monstno;
@@ -130,7 +148,7 @@ createmonster(mon)
 	if (mon < 1 || mon > MAXMONST + 8) {	/* check for monster number
 						 * out of bounds */
 		beep();
-		lprintf("\ncan't createmonst(%d)\n", (long) mon);
+		lprintf("\ncan't createmonst(%ld)\n", (long) mon);
 		nap(3000);
 		return;
 	}
@@ -168,16 +186,15 @@ createmonster(mon)
  * 		  if monst==TRUE check for no monster at this location
  * This routine will return FALSE if at a wall or the dungeon exit on level 1
  */
-int 
-cgood(x, y, itm, monst)
-	int    x, y;
-	int             itm, monst;
+static int 
+cgood(int x, int y, int theitem, int monst)
 {
+#define itm __lose
 	if ((y >= 0) && (y <= MAXY - 1) && (x >= 0) && (x <= MAXX - 1))
 		/* within bounds? */
 		if (item[x][y] != OWALL) /* can't make anything on walls */
 			/* is it free of items? */
-			if (itm == 0 || (item[x][y] == 0))
+			if (theitem == 0 || (item[x][y] == 0))
 				/* is it free of monsters? */
 				if (monst == 0 || (mitem[x][y] == 0))
 					if ((level != 1) || (x != 33) ||
@@ -233,16 +250,16 @@ cast()
 	}
 	lprcat(eys);
 	--c[SPELLS];
-	while ((a = lgetchar()) == 'D') {
+	while ((a = ttgetch()) == 'D') {
 		seemagic(-1);
 		cursors();
 		lprcat(eys);
 	}
 	if (a == '\33')
 		goto over;	/* to escape casting a spell	 */
-	if ((b = lgetchar()) == '\33')
+	if ((b = ttgetch()) == '\33')
 		goto over;	/* to escape casting a spell	 */
-	if ((d = lgetchar()) == '\33') {
+	if ((d = ttgetch()) == '\33') {
 over:		lprcat(aborted);
 		c[SPELLS]++;
 		return;
@@ -270,13 +287,13 @@ over:		lprcat(aborted);
  * Enter with the spell number, returns no value.
  * Please insure that there are 2 spaces before all messages here
  */
-void
-speldamage(x)
-	int             x;
+static void
+speldamage(int x)
 {
 	int    i, j, clev;
 	int             xl, xh, yl, yh;
-	char  *p, *kn, *pm;
+	u_char  *p, *kn, *pm;
+
 	if (x >= SPNUM)
 		return;		/* no such spell */
 	if (c[TIMESTOP]) {
@@ -313,10 +330,10 @@ speldamage(x)
 		c[DEXCOUNT] += 400;
 		return;
 
-	case 3:
+	case 3:		/* sleep		 */
 		i = rnd(3) + 1;
-		p = "  While the %s slept, you smashed it %d times";
-ws:		direct(x, fullhit(i), p, i);	/* sleep	 */
+		direct(x, fullhit(i),
+		       "  While the %s slept, you smashed it %ld times", i);
 		return;
 
 	case 4:		/* charm monster	 */
@@ -329,10 +346,11 @@ ws:		direct(x, fullhit(i), p, i);	/* sleep	 */
 
 		/* ----- LEVEL 2 SPELLS ----- */
 
-	case 6:
+	case 6:		/* web 			*/
 		i = rnd(3) + 2;
-		p = "  While the %s is entangled, you hit %d times";
-		goto ws;	/* web */
+		direct(x, fullhit(i),
+		       "  While the %s is entangled, you hit %ld times", i);
+		return;
 
 	case 7:
 		if (c[STRCOUNT] == 0)
@@ -623,7 +641,7 @@ ws:		direct(x, fullhit(i), p, i);	/* sleep	 */
 		return;
 
 	default:
-		lprintf("  spell %d not available!", (long) x);
+		lprintf("  spell %ld not available!", (long) x);
 		beep();
 		return;
 	};
@@ -634,7 +652,7 @@ ws:		direct(x, fullhit(i), p, i);	/* sleep	 */
  *
  * No arguments and no return value
  */
-void
+static void
 loseint()
 {
 	if (--c[INTELLIGENCE] < 3)
@@ -647,7 +665,7 @@ loseint()
  * This routine prints out a message saying "You can't aim your magic!"
  * returns 0 if not confused, non-zero (time remaining confused) if confused
  */
-int
+static int
 isconfuse()
 {
 	if (c[CONFUSE]) {
@@ -665,7 +683,7 @@ isconfuse()
  *   otherwise returns 0
  * Enter with the spell number in x, and the monster number in monst.
  */
-int
+static int
 nospell(x, monst)
 	int             x, monst;
 {
@@ -687,7 +705,7 @@ nospell(x, monst)
  * Function to return hp damage to monster due to a number of full hits
  * Enter with the number of full hits being done
  */
-int
+static int
 fullhit(xx)
 	int             xx;
 {
@@ -710,10 +728,10 @@ fullhit(xx)
  *   lprintf format string in str, and lprintf's argument in arg.
  * Returns no value.
  */
-void
+static void
 direct(spnum, dam, str, arg)
 	int             spnum, dam, arg;
-	char           *str;
+	const char     *str;
 {
 	int             x, y;
 	int    m;
@@ -775,9 +793,9 @@ direct(spnum, dam, str, arg)
 void
 godirect(spnum, dam, str, delay, cshow)
 	int             spnum, dam, delay;
-	char           *str, cshow;
+	const char     *str, cshow;
 {
-	char  *p;
+	u_char  *p;
 	int    x, y, m;
 	int             dx, dy;
 	if (spnum < 0 || spnum >= SPNUM || str == 0 || delay < 0)
@@ -896,11 +914,11 @@ godirect(spnum, dam, str, delay, cshow)
  * Enter with the coordinates (x,y) of the monster
  * Returns no value.
  */
-void
-ifblind(x, y)
-	int             x, y;
+static void
+ifblind(int x, int y)
 {
-	char           *p;
+	const char *p;
+
 	vxy(&x, &y);		/* verify correct x,y coordinates */
 	if (c[BLINDCOUNT]) {
 		lastnum = 279;
@@ -920,7 +938,7 @@ ifblind(x, y)
  * Enter with the spell number that wants to teleport away
  * Returns no value.
  */
-void
+static void
 tdirect(spnum)
 	int             spnum;
 {
@@ -955,12 +973,11 @@ tdirect(spnum)
  *   and the lprintf string to identify the spell in str.
  * Returns no value.
  */
-void
-omnidirect(spnum, dam, str)
-	int             spnum, dam;
-	char           *str;
+static void
+omnidirect(int spnum, int dam, const char *str)
 {
 	int    x, y, m;
+
 	if (spnum < 0 || spnum >= SPNUM || str == 0)
 		return;		/* bad args */
 	for (x = playerx - 1; x < playerx + 2; x++)
@@ -996,7 +1013,7 @@ dirsub(x, y)
 	int    i;
 	lprcat("\nIn What Direction? ");
 	for (i = 0;;)
-		switch (lgetchar()) {
+		switch (ttgetch()) {
 		case 'b':
 			i++;
 		case 'n':
@@ -1064,7 +1081,7 @@ vxy(x, y)
  * Enter with the spell number in spmun.
  * Returns no value.
  */
-void
+static void
 dirpoly(spnum)
 	int             spnum;
 {
@@ -1150,7 +1167,7 @@ hitmonster(x, y)
  * This routine is used to specifically damage a monster at a location (x,y)
  * Called by hitmonster(x,y)
  */
-int
+static int
 hitm(x, y, amt)
 	int x, y;
 	int amt;
@@ -1284,7 +1301,7 @@ hitplayer(x, y)
  * Enter with the monster number
  * Returns nothing of value.
  */
-void
+static void
 dropsomething(monst)
 	int             monst;
 {
@@ -1337,16 +1354,15 @@ dropgold(amount)
  * Returns nothing of value.
  */
 void
-something(level)
-	int             level;
+something(int cavelevel)
 {
 	int    j;
 	int             i;
-	if (level < 0 || level > MAXLEVEL + MAXVLEVEL)
+	if (cavelevel < 0 || cavelevel > MAXLEVEL + MAXVLEVEL)
 		return;		/* correct level? */
 	if (rnd(101) < 8)
-		something(level);	/* possibly more than one item */
-	j = newobject(level, &i);
+		something(cavelevel);	/* possibly more than one item */
+	j = newobject(cavelevel, &i);
 	createitem(j, i);
 }
 
@@ -1501,12 +1517,13 @@ static char     rustarm[ARMORTYPES][2] = {
 	{ OPLATEARMOR, -9}
 };
 static char     spsel[] = {1, 2, 3, 5, 6, 8, 9, 11, 13, 14};
-int
+static int
 spattack(x, xx, yy)
 	int             x, xx, yy;
 {
 	int    i, j = 0, k, m;
-	char  *p = 0;
+	const char *p = NULL;
+
 	if (c[CANCELLATION])
 		return (0);
 	vxy(&xx, &yy);		/* verify x & y coordinates */
@@ -1863,7 +1880,7 @@ rmsphere(x, y)
  *
  * Enter with the coordinates of the blast, Returns no value
  */
-void
+static void
 sphboom(x, y)
 	int             x, y;
 {
@@ -1891,13 +1908,13 @@ sphboom(x, y)
  *
  * This is done by setting a flag in the monster[] structure
  */
-void
+static void
 genmonst()
 {
 	int    i, j;
 	cursors();
 	lprcat("\nGenocide what monster? ");
-	for (i = 0; (!isalpha(i)) && (i != ' '); i = lgetchar());
+	for (i = 0; (!isalpha(i)) && (i != ' '); i = ttgetch());
 	lprc(i);
 	for (j = 0; j < MAXMONST; j++)	/* search for the monster type */
 		if (monstnamelist[j] == i) {	/* have we found it? */

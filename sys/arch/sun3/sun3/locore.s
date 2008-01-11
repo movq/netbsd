@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.89 2007/10/17 19:57:46 garbled Exp $	*/
+/*	$NetBSD: locore.s,v 1.93 2010/10/15 15:55:53 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -117,7 +117,7 @@ ASGLOBAL(start)
 | We will unscramble which PMEGs we actually need later.
 
 	movl	#(SEGMAP_BASE+0),%a0		| src
-	movl	#(SEGMAP_BASE+KERNBASE),%a1	| dst
+	movl	#(SEGMAP_BASE+KERNBASE3),%a1	| dst
 	movl	#(0x400000/NBSG),%d0		| count
 
 L_per_pmeg:
@@ -152,9 +152,10 @@ L_high_code:
 	movc	%d0,%dfc
 
 | Setup process zero user/kernel stacks.
-	movl	_C_LABEL(proc0paddr),%a1 | get lwp0 pcb addr
+	lea	_C_LABEL(lwp0),%a0	| lwp0
+	movl	%a0@(L_PCB),%a1		| XXXuvm_lwp_getuarea
 	lea	%a1@(USPACE-4),%sp	| set SSP to last word
-	movl	#USRSTACK-4,%a2
+	movl	#USRSTACK3-4,%a2
 	movl	%a2,%usp		| init user SP
 
 | Note curpcb was already set in _bootstrap().
@@ -164,7 +165,7 @@ L_high_code:
 | is finished, to avoid spurrious interrupts.
 
 /*
- * Create a fake exception frame so that cpu_fork() can copy it.
+ * Create a fake exception frame so that cpu_lwp_fork() can copy it.
  * main() nevers returns; we exit to user mode from a forked process
  * later on.
  */
@@ -173,8 +174,7 @@ L_high_code:
 	movw	#PSL_USER,%sp@-		| tf_sr for user mode
 	clrl	%sp@-			| tf_stackadj
 	lea	%sp@(-64),%sp		| tf_regs[16]
-	lea	_C_LABEL(lwp0),%a0	| proc0.p_md.md_regs = 
-	movl	%a1,%a0@(L_MD_REGS)	|   trapframe
+	movl	%a1,%a0@(L_MD_REGS)	| lwp0.p_md.md_regs = trapframe
 	jbsr	_C_LABEL(main)		| main(&trapframe)
 	PANIC("main() returned")
 
@@ -789,7 +789,7 @@ ENTRY(set_segmap_allctx)
 | Not using _C_LABEL() here because these symbols are never
 | referenced by any C code, and if the leading underscore
 | ever goes away, these lines turn into syntax errors...
-	.set	_KERNBASE,KERNBASE
+	.set	_KERNBASE3,KERNBASE3
 	.set	_MONSTART,SUN3_MONSTART
 	.set	_PROM_BASE,SUN3_PROM_BASE
 	.set	_MONEND,SUN3_MONEND

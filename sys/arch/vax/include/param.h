@@ -1,4 +1,4 @@
-/*      $NetBSD: param.h,v 1.54 2006/08/28 13:43:36 yamt Exp $    */
+/*      $NetBSD: param.h,v 1.58 2010/02/08 19:02:32 joerg Exp $    */
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -82,7 +82,7 @@
 
 #define	UPAGES		2		/* pages of u-area */
 #define USPACE		(NBPG*UPAGES)
-#define	REDZONEADDR	(VAX_NBPG*3)	/* Must be > sizeof(struct user) */
+#define	REDZONEADDR	(VAX_NBPG*3)	/* Must be > sizeof(struct pcb) */
 
 #ifndef MSGBUFSIZE
 #define MSGBUFSIZE	NBPG		/* default message buffer size */
@@ -112,18 +112,6 @@
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	512		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	256		/* map size, max cluster allocation */
-#endif
-#endif
-
 /*
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
  * logical pages.
@@ -146,12 +134,13 @@
 
 /* Prototype needed for delay() */
 #ifndef	_LOCORE
-void	delay __P((int));
+void	delay(int);
 /* inline macros used inside kernel */
 #include <machine/macros.h>
 #endif
 
 #define	DELAY(x) delay(x)
+#define	MAXEXEC	1
 #endif /* _KERNEL */
 
 #endif /* _VAX_PARAM_H_ */

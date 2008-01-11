@@ -1,4 +1,4 @@
-/*	$NetBSD: bfs.c,v 1.10 2007/12/15 00:39:35 perry Exp $	*/
+/*	$NetBSD: bfs.c,v 1.13 2010/07/26 13:43:26 njoly Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: bfs.c,v 1.10 2007/12/15 00:39:35 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bfs.c,v 1.13 2010/07/26 13:43:26 njoly Exp $");
 #define	BFS_DEBUG
 
 #include <sys/param.h>
@@ -263,10 +256,12 @@ bfs_file_read(const struct bfs *bfs, const char *fname, void *buf, size_t bufsz,
 
 	p = buf;
 	n = end - start;
-	bfs->io->read_n(bfs->io, p, start, n);
+	if (!bfs->io->read_n(bfs->io, p, start, n))
+		return EIO;
 	/* last sector */
 	n *= DEV_BSIZE;
-	bfs->io->read(bfs->io, tmpbuf, end);
+	if (!bfs->io->read(bfs->io, tmpbuf, end))
+		return EIO;
 	memcpy(p + n, tmpbuf, sz - n);
 
 	if (read_size)
@@ -342,10 +337,6 @@ bfs_file_rename(struct bfs *bfs, const char *from_name, const char *to_name)
 	struct bfs_dirent *dirent;
 	int err = 0;
 
-	if (strlen(to_name) > BFS_FILENAME_MAXLEN) {
-		err =  ENAMETOOLONG;
-		goto out;
-	}
 	if (!bfs_dirent_lookup_by_name(bfs, from_name, &dirent)) {
 		err = ENOENT;
 		goto out;

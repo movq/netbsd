@@ -1,4 +1,6 @@
-# $NetBSD: Makefile,v 1.3 2007/05/28 12:06:27 tls Exp $
+# $NetBSD: Makefile,v 1.5 2009/04/14 22:15:21 lukem Exp $
+
+WARNS?=	2	# XXX -Wextra
 
 NOLINT= # defined
 
@@ -8,8 +10,6 @@ USE_FORT?= yes	# cryptographic software
 
 DIST=		${NETBSDSRCDIR}/crypto/dist
 .PATH: ${DIST}/heimdal/kuser
-
-WARNS?=  1
 
 PROG= kgetcred
 
@@ -27,9 +27,9 @@ CPPFLAGS+=-DHAVE_IPV6
 
 VERS!=	cd ${NETBSDSRCDIR}/lib/libvers && ${PRINTOBJDIR}
 
-LDADD+=	-lkrb5 -lcrypto -lasn1 -lcom_err \
-	-L${VERS} -lvers -lroken -lcrypt
-DPADD+=	${LIBKRB5} ${LIBCRYPTO} ${LIBASN1} ${LIBCOM_ERR} \
-	${VERS}/libvers.a ${LIBROKEN} ${LIBCRYPT}
+LDADD+=	-lkrb5 -lhx509 -lcrypto -lasn1 -lcom_err \
+	-L${VERS} -lvers -lroken -lcrypt -lutil
+DPADD+=	${LIBKRB5} ${LIBHX509} ${LIBCRYPTO} ${LIBASN1} ${LIBCOM_ERR} \
+	${VERS}/libvers.a ${LIBROKEN} ${LIBCRYPT} ${LIBUTIL}
 
 .include <bsd.prog.mk>

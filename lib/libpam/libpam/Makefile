@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.6 2006/01/20 16:52:55 christos Exp $
+# $NetBSD: Makefile,v 1.11 2010/12/10 20:06:17 joerg Exp $
 #-
 # Copyright (c) 1998 Juniper Networks, Inc.
 # All rights reserved.
@@ -139,6 +139,7 @@ MAN=	openpam.3 \
 	pam_vprompt.3
 
 INCS=		security/openpam.h \
+		security/openpam_attr.h \
 		security/openpam_version.h \
 		security/pam_appl.h \
 		security/pam_constants.h \
@@ -169,16 +170,22 @@ STATIC_MODULES+= pam_ssh
 .endif
  
 MODULE_DIR=../modules
+# XXX
+.ifdef _CURDIR
+PAM_DIR=${_CURDIR}
+.else
+PAM_DIR=${.CURDIR}
+.endif
 .for MOD in ${STATIC_MODULES}
-MODOBJDIR!=	cd ${.CURDIR}/${MODULE_DIR}/${MOD} && ${PRINTOBJDIR}
+MODOBJDIR!=	cd ${PAM_DIR}/${MODULE_DIR}/${MOD} && ${PRINTOBJDIR}
 STATIC_MODULE_LIBS:= ${STATIC_MODULE_LIBS} ${MODOBJDIR}/lib${MOD}.a
 .endfor
 
 # XXX Using ${.ALLSRC} in the ld command causes openpam_static.c to be
 # XXX used.  Why??!!  --thorpej
 openpam_static_modules.o: openpam_static.o ${STATIC_MODULE_LIBS}
-	${LD} -o ${.TARGET} -r --whole-archive openpam_static.o \
-	    ${STATIC_MODULE_LIBS}
+	${CC} ${LDFLAGS} -nostdlib -o ${.TARGET} -r -Wl,--whole-archive \
+	    openpam_static.o ${STATIC_MODULE_LIBS}
 
 .include <bsd.lib.mk>
 .PATH.h: ${DIST}/include

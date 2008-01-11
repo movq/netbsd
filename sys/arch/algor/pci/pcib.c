@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.18 2006/05/12 10:58:12 tsutsui Exp $	*/
+/*	$NetBSD: pcib.c,v 1.21 2009/08/19 15:17:00 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.18 2006/05/12 10:58:12 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.21 2009/08/19 15:17:00 dyoung Exp $");
 
 #include "opt_algor_p5064.h" 
 #include "opt_algor_p6032.h"
@@ -126,6 +119,7 @@ CFATTACH_DECL(pcib, sizeof(struct pcib_softc),
 
 void	pcib_isa_attach_hook(struct device *, struct device *,
 	    struct isabus_attach_args *);
+void	pcib_isa_detach_hook(isa_chipset_tag_t, device_t);
 
 int	pcib_intr(void *);
 
@@ -296,8 +290,7 @@ pcib_attach(struct device *parent, struct device *self, void *aux)
 }
 
 void
-pcib_bridge_callback(self)
-	struct device *self;
+pcib_bridge_callback(struct device *self)
 {
 	struct pcib_softc *sc = (struct pcib_softc *)self;
 	struct isabus_attach_args iba;
@@ -324,6 +317,7 @@ pcib_bridge_callback(self)
 
 	iba.iba_ic = &sc->sc_ic;
 	iba.iba_ic->ic_attach_hook = pcib_isa_attach_hook;
+	iba.iba_ic->ic_detach_hook = pcib_isa_detach_hook;
 
 	(void) config_found_ia(&sc->sc_dev, "isabus", &iba, isabusprint);
 }
@@ -331,6 +325,13 @@ pcib_bridge_callback(self)
 void
 pcib_isa_attach_hook(struct device *parent, struct device *self,
     struct isabus_attach_args *iba)
+{
+
+	/* Nothing to do. */
+}
+
+void
+pcib_isa_detach_hook(isa_chipset_tag_t ic, device_t self)
 {
 
 	/* Nothing to do. */

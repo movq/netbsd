@@ -1,4 +1,4 @@
-#	$NetBSD: P6032,v 1.45 2008/01/09 15:45:27 tsutsui Exp $
+#	$NetBSD: P6032,v 1.57 2011/05/17 22:19:37 dyoung Exp $
 #
 # Algorithmics P-6032 kernel.
 #
@@ -7,7 +7,7 @@ include	"arch/algor/conf/std.algor"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"P6032-$Revision: 1.45 $"
+#ident 		"P6032-$Revision: 1.57 $"
 
 maxusers 32
 
@@ -25,7 +25,7 @@ options 	DIAGNOSTIC		# Cheap kernel consistency checks
 options 	DDB			# kernel debugger
 makeoptions	DEBUG="-g"
 #makeoptions	DEBUGLIST="pattern1 pattern2 ..."
-options 	SYMTAB_SPACE=350000
+options 	SYMTAB_SPACE=420000
 
 # File systems
 file-system	FFS		# Fast file system
@@ -42,7 +42,7 @@ file-system	PTYFS		# /dev/pts/N support
 # File system options
 options 	NFSSERVER	# Sun NFS-compatible file system server
 #options 	FFS_EI		# FFS Endian Independant support
-options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
@@ -67,6 +67,7 @@ options 	COMPAT_15
 options 	COMPAT_16
 options 	COMPAT_20
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # System V-like message queues
@@ -77,10 +78,8 @@ options 	SYSVSEM
 
 # System V-like shared memory
 options 	SYSVSHM
-#options 	SHMMAXPGS=1024		# 1024 pages is the default
 
 # Loadable Kernel Modules
-options 	LKM
 
 # Disable kernel security.
 #options 	INSECURE
@@ -343,6 +342,9 @@ fd*	at	fdc? drive ?
 #umodem*	at uhub? port ? configuration ?
 #ucom*	at umodem?
 
+# Option N.V. Wireless WAN modems
+#uhso*	at uhub? port ? configuration ?
+
 # USB Mass Storage
 #umass*	at uhub? port ? configuration ? interface ?
 #atapibus* at umass?
@@ -383,10 +385,10 @@ pseudo-device	ccd		4
 #pseudo-device	cgd		4	# cryptographic disk devices
 #pseudo-device	raid		4		# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 pseudo-device	ipfilter	1
 pseudo-device	loop		1
-pseudo-device	md		1
+pseudo-device	md		
 pseudo-device	ppp		
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	sl		

@@ -1,7 +1,8 @@
-/*	$NetBSD: lfs_syscalls.c,v 1.126 2008/01/02 11:49:12 ad Exp $	*/
+/*	$NetBSD: lfs_syscalls.c,v 1.138 2010/07/01 13:00:57 hannken Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007, 2007, 2008
+ *    The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.126 2008/01/02 11:49:12 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.138 2010/07/01 13:00:57 hannken Exp $");
 
 #ifndef LFS
 # define LFS		/* for prototypes in syscallargs.h */
@@ -138,6 +132,7 @@ sys_lfs_markv(struct lwp *l, const struct sys_lfs_markv_args *uap, register_t *r
 	if ((u_int) blkcnt > LFS_MARKV_MAXBLKCNT)
 		return (EINVAL);
 
+	KERNEL_LOCK(1, NULL);
 	blkiov = lfs_malloc(fs, blkcnt * sizeof(BLOCK_INFO), LFS_NB_BLKIOV);
 	if ((error = copyin(SCARG(uap, blkiov), blkiov,
 			    blkcnt * sizeof(BLOCK_INFO))) != 0)
@@ -148,6 +143,7 @@ sys_lfs_markv(struct lwp *l, const struct sys_lfs_markv_args *uap, register_t *r
 			blkcnt * sizeof(BLOCK_INFO));
     out:
 	lfs_free(fs, blkiov, LFS_NB_BLKIOV);
+	KERNEL_UNLOCK_ONE(NULL);
 	return error;
 }
 #else
@@ -181,6 +177,7 @@ sys_lfs_markv(struct lwp *l, const struct sys_lfs_markv_args *uap, register_t *r
 	if ((u_int) blkcnt > LFS_MARKV_MAXBLKCNT)
 		return (EINVAL);
 
+	KERNEL_LOCK(1, NULL);
 	blkiov = lfs_malloc(fs, blkcnt * sizeof(BLOCK_INFO), LFS_NB_BLKIOV);
 	blkiov15 = lfs_malloc(fs, blkcnt * sizeof(BLOCK_INFO_15), LFS_NB_BLKIOV);
 	if ((error = copyin(SCARG(uap, blkiov), blkiov15,
@@ -213,6 +210,7 @@ sys_lfs_markv(struct lwp *l, const struct sys_lfs_markv_args *uap, register_t *r
     out:
 	lfs_free(fs, blkiov, LFS_NB_BLKIOV);
 	lfs_free(fs, blkiov15, LFS_NB_BLKIOV);
+	KERNEL_UNLOCK_ONE(NULL);
 	return error;
 }
 #endif
@@ -249,12 +247,12 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov,
 	if (fs->lfs_ronly)
 		return EROFS;
 
-	maxino = (fragstoblks(fs, fsbtofrags(fs, VTOI(fs->lfs_ivnode)->i_ffs1_blocks)) -
+	maxino = (fragstoblks(fs, VTOI(fs->lfs_ivnode)->i_ffs1_blocks) -
 		      fs->lfs_cleansz - fs->lfs_segtabsz) * fs->lfs_ifpb;
 
 	cnt = blkcnt;
 
-	if ((error = vfs_busy(mntp, LK_NOWAIT, NULL)) != 0)
+	if ((error = vfs_busy(mntp, NULL)) != 0)
 		return (error);
 
 	/*
@@ -505,7 +503,7 @@ lfs_markv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov,
 
 	lfs_segunlock(fs);
 
-	vfs_unbusy(mntp);
+	vfs_unbusy(mntp, false, NULL);
 	if (error)
 		return (error);
 	else if (do_again)
@@ -523,6 +521,7 @@ err2:
 	 */
 
 err3:
+	KERNEL_UNLOCK_ONE(NULL);
 	/*
 	 * XXX should do segwrite here anyway?
 	 */
@@ -533,7 +532,7 @@ err3:
 	}
 
 	lfs_segunlock(fs);
-	vfs_unbusy(mntp);
+	vfs_unbusy(mntp, false, NULL);
 #ifdef DIAGNOSTIC
 	if (numrefed != 0)
 		panic("lfs_markv: numrefed=%d", numrefed);
@@ -579,6 +578,7 @@ sys_lfs_bmapv(struct lwp *l, const struct sys_lfs_bmapv_args *uap, register_t *r
 	blkcnt = SCARG(uap, blkcnt);
 	if ((u_int) blkcnt > SIZE_T_MAX / sizeof(BLOCK_INFO))
 		return (EINVAL);
+	KERNEL_LOCK(1, NULL);
 	blkiov = lfs_malloc(fs, blkcnt * sizeof(BLOCK_INFO), LFS_NB_BLKIOV);
 	if ((error = copyin(SCARG(uap, blkiov), blkiov,
 			    blkcnt * sizeof(BLOCK_INFO))) != 0)
@@ -589,6 +589,7 @@ sys_lfs_bmapv(struct lwp *l, const struct sys_lfs_bmapv_args *uap, register_t *r
 			blkcnt * sizeof(BLOCK_INFO));
     out:
 	lfs_free(fs, blkiov, LFS_NB_BLKIOV);
+	KERNEL_UNLOCK_ONE(NULL);
 	return error;
 }
 #else
@@ -621,6 +622,7 @@ sys_lfs_bmapv(struct lwp *l, const struct sys_lfs_bmapv_args *uap, register_t *r
 	blkcnt = SCARG(uap, blkcnt);
 	if ((size_t) blkcnt > SIZE_T_MAX / sizeof(BLOCK_INFO))
 		return (EINVAL);
+	KERNEL_LOCK(1, NULL);
 	blkiov = lfs_malloc(fs, blkcnt * sizeof(BLOCK_INFO), LFS_NB_BLKIOV);
 	blkiov15 = lfs_malloc(fs, blkcnt * sizeof(BLOCK_INFO_15), LFS_NB_BLKIOV);
 	if ((error = copyin(SCARG(uap, blkiov), blkiov15,
@@ -653,6 +655,7 @@ sys_lfs_bmapv(struct lwp *l, const struct sys_lfs_bmapv_args *uap, register_t *r
     out:
 	lfs_free(fs, blkiov, LFS_NB_BLKIOV);
 	lfs_free(fs, blkiov15, LFS_NB_BLKIOV);
+	KERNEL_UNLOCK_ONE(NULL);
 	return error;
 }
 #endif
@@ -679,7 +682,7 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 		return (ENOENT);
 
 	ump = VFSTOUFS(mntp);
-	if ((error = vfs_busy(mntp, LK_NOWAIT, NULL)) != 0)
+	if ((error = vfs_busy(mntp, NULL)) != 0)
 		return (error);
 
 	cnt = blkcnt;
@@ -757,7 +760,7 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 					continue;
 				} else {
 					KASSERT(VOP_ISLOCKED(vp));
-					VOP_UNLOCK(vp, 0);
+					VOP_UNLOCK(vp);
 					numrefed++;
 				}
 			}
@@ -819,7 +822,7 @@ lfs_bmapv(struct proc *p, fsid_t *fsidp, BLOCK_INFO *blkiov, int blkcnt)
 		panic("lfs_bmapv: numrefed=%d", numrefed);
 #endif
 
-	vfs_unbusy(mntp);
+	vfs_unbusy(mntp, false, NULL);
 
 	return 0;
 }
@@ -857,13 +860,15 @@ sys_lfs_segclean(struct lwp *l, const struct sys_lfs_segclean_args *uap, registe
 	fs = VFSTOUFS(mntp)->um_lfs;
 	segnum = SCARG(uap, segment);
 
-	if ((error = vfs_busy(mntp, LK_NOWAIT, NULL)) != 0)
+	if ((error = vfs_busy(mntp, NULL)) != 0)
 		return (error);
 
+	KERNEL_LOCK(1, NULL);
 	lfs_seglock(fs, SEGM_PROT);
 	error = lfs_do_segclean(fs, segnum);
 	lfs_segunlock(fs);
-	vfs_unbusy(mntp);
+	KERNEL_UNLOCK_ONE(NULL);
+	vfs_unbusy(mntp, false, NULL);
 	return error;
 }
 
@@ -950,6 +955,7 @@ lfs_segwait(fsid_t *fsidp, struct timeval *tv)
 	u_long timeout;
 	int error;
 
+	KERNEL_LOCK(1, NULL);
 	if (fsidp == NULL || (mntp = vfs_getvfs(fsidp)) == NULL)
 		addr = &lfs_allclean_wakeup;
 	else
@@ -960,6 +966,7 @@ lfs_segwait(fsid_t *fsidp, struct timeval *tv)
 	 */
 	timeout = tvtohz(tv);
 	error = tsleep(addr, PCATCH | PVFS, "segment", timeout);
+	KERNEL_UNLOCK_ONE(NULL);
 	return (error == ERESTART ? EINTR : 0);
 }
 
@@ -973,7 +980,8 @@ lfs_segwait(fsid_t *fsidp, struct timeval *tv)
  * -1/errno is return on error.
  */
 int
-sys_lfs_segwait(struct lwp *l, const struct sys_lfs_segwait_args *uap, register_t *retval)
+sys___lfs_segwait50(struct lwp *l, const struct sys___lfs_segwait50_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(fsid_t *) fsidp;
@@ -1010,7 +1018,6 @@ sys_lfs_segwait(struct lwp *l, const struct sys_lfs_segwait_args *uap, register_
  * we lfs_vref, and it is the caller's responsibility to lfs_vunref
  * when finished.
  */
-extern kmutex_t ufs_hashlock;
 
 int
 lfs_fasthashget(dev_t dev, ino_t ino, struct vnode **vpp)
@@ -1133,7 +1140,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 			ufs_ihashrem(ip);
 
 			/* Unlock and discard unneeded inode. */
-			lockmgr(&vp->v_lock, LK_RELEASE, &vp->v_interlock);
+			VOP_UNLOCK(vp);
 			lfs_vunref(vp);
 			*vpp = NULL;
 			return (error);
@@ -1144,7 +1151,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 		retries = 0;
 	    again:
 		error = bread(ump->um_devvp, fsbtodb(fs, daddr), fs->lfs_ibsize,
-			      NOCRED, &bp);
+			      NOCRED, 0, &bp);
 		if (error) {
 			DLOG((DLOG_CLEAN, "lfs_fastvget: bread failed (%d)\n",
 			      error));
@@ -1156,7 +1163,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 			ufs_ihashrem(ip);
 
 			/* Unlock and discard unneeded inode. */
-			lockmgr(&vp->v_lock, LK_RELEASE, &vp->v_interlock);
+			VOP_UNLOCK(vp);
 			lfs_vunref(vp);
 			brelse(bp, 0);
 			*vpp = NULL;
@@ -1181,7 +1188,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 	*vpp = vp;
 
 	KASSERT(VOP_ISLOCKED(vp));
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	return (0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: table.c,v 1.9 2006/03/18 23:23:33 christos Exp $	*/
+/*	$NetBSD: table.c,v 1.11 2010/03/22 05:10:19 mrg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,13 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)table.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: table.c,v 1.9 2006/03/18 23:23:33 christos Exp $");
+__RCSID("$NetBSD: table.c,v 1.11 2010/03/22 05:10:19 mrg Exp $");
 #endif
 #endif /* not lint */
 
 #include "back.h"
 
-const char   *const help2[] = {
+static const char *const help2[] = {
 	"   Enter moves as <s>-<f> or <s>/<r> where <s> is the starting",
 	"position, <f> is the finishing position, and <r> is the roll.",
 	"Remember, each die roll must be moved separately.",
@@ -76,6 +76,9 @@ static const struct state atmata[] = {
 	{'0', 4, 61},	{' ', 6, 3},	{',', 6, 3},	{'-', 5, 39},
 	{'\n', 0, -1},	{'.', 0, 0}
 };
+
+static int dotable(int, int);
+static int rsetbrd(void);
 
 int
 checkmove(int ist)
@@ -194,7 +197,7 @@ dochar:
 	goto dochar;
 }
 
-int
+static int
 dotable(int c, int i)
 {
 	int     a;
@@ -259,7 +262,7 @@ dotable(int c, int i)
 					curmove(20, 0);
 				else
 					writec('\n');
-				(void) text(help2);
+				(void) wrtext(help2);
 				if (tflag) {
 					curmove(cturn == -1 ? 18 : 19, 39);
 				} else {
@@ -288,7 +291,7 @@ dotable(int c, int i)
 	return (-5);
 }
 
-int
+static int
 rsetbrd(void)
 {
 	int     i, j, n;

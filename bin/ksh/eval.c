@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.10 2007/01/28 22:30:12 cbiere Exp $	*/
+/*	$NetBSD: eval.c,v 1.12 2009/11/24 16:00:42 seanb Exp $	*/
 
 /*
  * Expansion - quoting, separation, substitution, globbing
@@ -6,7 +6,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: eval.c,v 1.10 2007/01/28 22:30:12 cbiere Exp $");
+__RCSID("$NetBSD: eval.c,v 1.12 2009/11/24 16:00:42 seanb Exp $");
 #endif
 
 
@@ -605,21 +605,6 @@ expand(cp, wp, f)
 			if (!quote)
 				switch (c) {
 				  case '[':
-					{
-						const char *p = sp;
-						bool_t special = FALSE;
-						while (*p != EOS) {
-							if (p[0] == CHAR &&
-								p[1] == ']') {
-								special = TRUE;
-								break;
-							}
-								
-							p += 2;
-						}
-						if (!special)
-							break;
-					}
 				  case NOT:
 				  case '-':
 				  case ']':
@@ -1208,10 +1193,10 @@ debunk(dp, sp, dlen)
 	char *d, *s;
 
 	if ((s = strchr(sp, MAGIC))) {
-		if (s - sp >= dlen)
+		if (s - sp >= (ptrdiff_t)dlen)
 			return dp;
 		memcpy(dp, sp, s - sp);
-		for (d = dp + (s - sp); *s && (d - dp < dlen); s++)
+		for (d = dp + (s - sp); *s && (d - dp < (ptrdiff_t)dlen); s++)
 			if (!ISMAGIC(*s) || !(*++s & 0x80)
 			    || !strchr("*+?@! ", *s & 0x7f))
 				*d++ = *s;
@@ -1219,7 +1204,7 @@ debunk(dp, sp, dlen)
 				/* extended pattern operators: *+?@! */
 				if ((*s & 0x7f) != ' ')
 					*d++ = *s & 0x7f;
-				if (d - dp < dlen)
+				if (d - dp < (ptrdiff_t)dlen)
 					*d++ = '(';
 			}
 		*d = '\0';

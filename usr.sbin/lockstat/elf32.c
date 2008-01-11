@@ -1,4 +1,4 @@
-/*	$NetBSD: elf32.c,v 1.6 2007/07/14 13:30:43 ad Exp $	*/
+/*	$NetBSD: elf32.c,v 1.9 2011/02/05 13:32:32 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,7 +65,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: elf32.c,v 1.6 2007/07/14 13:30:43 ad Exp $");
+__RCSID("$NetBSD: elf32.c,v 1.9 2011/02/05 13:32:32 yamt Exp $");
 #endif
 
 #ifndef ELFSIZE
@@ -155,7 +148,7 @@ NAME(loadsym)(int fd)
 
 	if ((symp = malloc(symhdr.sh_size)) == NULL)
 		err(EXIT_FAILURE, "malloc (symbol table)");
-	sz = pread(fd, symp, symhdr.sh_size, symhdr.sh_offset	);
+	sz = pread(fd, symp, symhdr.sh_size, symhdr.sh_offset);
 	if (sz != symhdr.sh_size)
 		err(EXIT_FAILURE, "pread (symbol table)");
 
@@ -175,7 +168,8 @@ NAME(findsym)(findsym_t find, char *name, uintptr_t *start, uintptr_t *end)
 {
 	static int lastptr[FIND_MAX];
 	uintptr_t sa, ea;
-	int i, rv, st, off;
+	int i, rv, off;
+	Elf_Byte st;
 
 	switch (find) {
 	case LOCK_BYNAME:

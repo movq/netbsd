@@ -1,4 +1,4 @@
-/*	$NetBSD: sa11x0_ost.c,v 1.20 2006/09/24 15:40:14 peter Exp $	*/
+/*	$NetBSD: sa11x0_ost.c,v 1.28 2009/08/09 06:12:33 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sa11x0_ost.c,v 1.20 2006/09/24 15:40:14 peter Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sa11x0_ost.c,v 1.28 2009/08/09 06:12:33 kiyohara Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -57,19 +57,17 @@ __KERNEL_RCSID(0, "$NetBSD: sa11x0_ost.c,v 1.20 2006/09/24 15:40:14 peter Exp $"
 #include <arm/sa11x0/sa11x0_var.h>
 #include <arm/sa11x0/sa11x0_ostreg.h>
 
-static int	saost_match(struct device *, struct cfdata *, void *);
-static void	saost_attach(struct device *, struct device *, void *);
+static int	saost_match(device_t, cfdata_t, void *);
+static void	saost_attach(device_t, device_t, void *);
 
-#ifdef __HAVE_TIMECOUNTER
 static void	saost_tc_init(void);
-#endif /* __HAVE_TIMECOUNTER */
 
 static uint32_t	gettick(void);
 static int	clockintr(void *);
 static int	statintr(void *);
 
 struct saost_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
@@ -81,43 +79,55 @@ struct saost_softc {
 
 static struct saost_softc *saost_sc = NULL;
 
+#if defined(CPU_XSCALE_PXA270) && defined(CPU_XSCALE_PXA250)
+#include <arm/xscale/pxa2x0cpu.h> 
+static uint32_t freq;
+#define TIMER_FREQUENCY         freq
+#elif defined(CPU_XSCALE_PXA270)
+#define TIMER_FREQUENCY         3250000         /* PXA270 uses 3.25MHz */
+#else
 #define TIMER_FREQUENCY         3686400         /* 3.6864MHz */
+#endif
 
 #ifndef STATHZ
 #define STATHZ	64
 #endif
 
-CFATTACH_DECL(saost, sizeof(struct saost_softc),
+CFATTACH_DECL_NEW(saost, sizeof(struct saost_softc),
     saost_match, saost_attach, NULL, NULL);
 
 static int
-saost_match(struct device *parent, struct cfdata *match, void *aux)
+saost_match(device_t parent, cfdata_t match, void *aux)
 {
+	struct sa11x0_attach_args *sa = aux;
 
+	if (strcmp(sa->sa_name, match->cf_name) != 0)
+		return 0;
 	return 1;
 }
 
 static void
-saost_attach(struct device *parent, struct device *self, void *aux)
+saost_attach(device_t parent, device_t self, void *aux)
 {
-	struct saost_softc *sc = (struct saost_softc *)self;
+	struct saost_softc *sc = device_private(self);
 	struct sa11x0_attach_args *sa = aux;
 
-	printf("\n");
+	aprint_normal("\n");
 
+	sc->sc_dev = self;
 	sc->sc_iot = sa->sa_iot;
 
 	saost_sc = sc;
 
 	if (bus_space_map(sa->sa_iot, sa->sa_addr, sa->sa_size, 0, 
 	    &sc->sc_ioh))
-		panic("%s: Cannot map registers", self->dv_xname);
+		panic("%s: Cannot map registers", device_xname(self));
 
 	/* disable all channel and clear interrupt status */
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, SAOST_IR, 0);
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, SAOST_SR, 0xf);
 
-	printf("%s: SA-11x0 OS Timer\n", sc->sc_dev.dv_xname);
+	aprint_normal_dev(self, "SA-11x0 OS Timer\n");
 }
 
 static int
@@ -218,9 +228,12 @@ cpu_initclocks(void)
 
 	stathz = STATHZ;
 	profhz = stathz;
+#if defined(CPU_XSCALE_PXA270) && defined(CPU_XSCALE_PXA250)
+	TIMER_FREQUENCY = (CPU_IS_PXA250) ? 3686400 : 3250000;
+#endif
 	sc->sc_statclock_step = TIMER_FREQUENCY / stathz;
 
-	printf("clock: hz=%d stathz=%d\n", hz, stathz);
+	aprint_normal("clock: hz=%d stathz=%d\n", hz, stathz);
 
 	/* Use the channels 0 and 1 for hardclock and statclock, respectively */
 	sc->sc_clock_count = TIMER_FREQUENCY / hz;
@@ -239,12 +252,9 @@ cpu_initclocks(void)
 	/* Zero the counter value */
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, SAOST_CR, 0);
 
-#ifdef __HAVE_TIMECOUNTER
 	saost_tc_init();
-#endif /* __HAVE_TIMECOUNTER */
 }
 
-#ifdef __HAVE_TIMECOUNTER
 static u_int
 saost_tc_get_timecount(struct timecounter *tc)
 {
@@ -256,15 +266,19 @@ saost_tc_init(void)
 {
 	static struct timecounter saost_tc = {
 		.tc_get_timecount = saost_tc_get_timecount,
-		.tc_frequency = TIMER_FREQUENCY,
 		.tc_counter_mask = ~0,
 		.tc_name = "saost_count",
+#if !(defined(CPU_XSCALE_PXA270) && defined(CPU_XSCALE_PXA250))
+		.tc_frequency = TIMER_FREQUENCY,
+#endif
 		.tc_quality = 100,
 	};
 
+#if defined(CPU_XSCALE_PXA270) && defined(CPU_XSCALE_PXA250)
+	saost_tc.tc_frequency = TIMER_FREQUENCY,
+#endif
 	tc_init(&saost_tc);
 }
-#endif /* __HAVE_TIMECOUNTER */
 
 static uint32_t
 gettick(void)
@@ -280,49 +294,11 @@ gettick(void)
 	return counter;
 }
 
-#ifndef __HAVE_TIMECOUNTER
-void
-microtime(struct timeval *tvp)
-{
-	struct saost_softc *sc = saost_sc;
-	int s, tm, deltatm;
-	static struct timeval lasttime;
-
-	if (sc == NULL) {
-		tvp->tv_sec = 0;
-		tvp->tv_usec = 0;
-		return;
-	}
-
-	s = splhigh();
-	tm = bus_space_read_4(sc->sc_iot, sc->sc_ioh, SAOST_CR);
-
-	deltatm = sc->sc_clock_count - tm;
-
-	*tvp = time;
-	tvp->tv_usec++;		/* XXX */
-	while (tvp->tv_usec >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-
-	if (tvp->tv_sec == lasttime.tv_sec &&
-		tvp->tv_usec <= lasttime.tv_usec &&
-		(tvp->tv_usec = lasttime.tv_usec + 1) >= 1000000)
-	{
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	lasttime = *tvp;
-	splx(s);
-}
-#endif /* !__HAVE_TIMECOUNTER */
-
 void
 delay(u_int usecs)
 {
 	uint32_t xtick, otick, delta;
-	int j, csec, usec;
+	int csec, usec;
 
 	csec = usecs / 10000;
 	usec = usecs % 10000;
@@ -331,9 +307,11 @@ delay(u_int usecs)
 	    + (TIMER_FREQUENCY / 100) * usec / 10000;
 
 	if (saost_sc == NULL) {
+		volatile int k;
+		int j;
 		/* clock isn't initialized yet */
 		for (; usecs > 0; usecs--)
-			for (j = 100; j > 0; j--)
+			for (j = 100; j > 0; j--, k--)
 				continue;
 		return;
 	}
@@ -341,8 +319,6 @@ delay(u_int usecs)
 	otick = gettick();
 
 	while (1) {
-		for (j = 100; j > 0; j--)
-			continue;
 		xtick = gettick();
 		delta = xtick - otick;
 		if (delta > usecs)
@@ -351,17 +327,3 @@ delay(u_int usecs)
 		otick = xtick;
 	}
 }
-
-#ifndef __HAVE_GENERIC_TODR
-void
-resettodr(void)
-{
-}
-
-void
-inittodr(time_t base)
-{
-	time.tv_sec = base;
-	time.tv_usec = 0;
-}
-#endif /* !__HAVE_GENERIC_TODR */

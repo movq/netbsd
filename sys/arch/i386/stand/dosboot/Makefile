@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.23 2003/04/01 21:25:35 mycroft Exp $
+#	$NetBSD: Makefile,v 1.26 2011/05/20 22:29:55 joerg Exp $
 
-S=	${.CURDIR}/../../../../
+S=	${.CURDIR}/../../../..
 
 BASE= dosboot
 PROG= ${BASE}.com
@@ -8,6 +8,9 @@ NOMAN=	# defined
 NEWVERSWHAT=	"DOS Boot"
 STARTFILE=	${DOSSTART}
 RELOC=		0x100
+
+AFLAGS.dosboot.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+AFLAGS.start_dos.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
 
 SRCS= main.c devopen.c exec.c
 
@@ -31,6 +34,10 @@ SAMISCMAKEFLAGS= SA_USE_CREAD=yes SA_INCLUDE_NET=no
 I386MISCMAKEFLAGS= I386_INCLUDE_DOS=yes
 
 VERSIONFILE= ${.CURDIR}/version
+
+PIE_CFLAGS=
+PIE_LDFLAGS=
+PIE_AFLAGS=
 
 .include <bsd.own.mk>
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: edid.9,v 1.2 2006/12/23 06:36:19 wiz Exp $
+.\"	$NetBSD: edid.9,v 1.4 2010/12/02 12:54:13 wiz Exp $
 .\"
 .\" Copyright 2006 Itronix Inc.
 .\" All rights reserved.
@@ -95,13 +95,6 @@ The
 function returns zero if the data was successfully parsed, and
 non-zero otherwise.
 .Sh CODE REFERENCES
-This section describes places within the
-.Nx
-source tree where actual code implementing or using the
-EDID subsystem can be found.
-All pathnames are relative to
-.Pa /usr/src .
-.Pp
 The EDID subsystem is implemented within the file
 .Pa sys/dev/videomode/edid.c .
 .Pp
@@ -129,7 +122,6 @@ to retrieve and print information about a monitor:
 .Ed
 .Sh SEE ALSO
 .Xr ddc 9 ,
-.Xr edid 9 ,
 .Xr iic 9
 .Sh HISTORY
 These routines were added in

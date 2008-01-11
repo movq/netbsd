@@ -1,4 +1,4 @@
-/*	$NetBSD: OsdSchedule.c,v 1.5 2007/12/21 18:42:38 jmcneill Exp $	*/
+/*	$NetBSD: OsdSchedule.c,v 1.16 2011/02/17 10:35:50 jmcneill Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: OsdSchedule.c,v 1.5 2007/12/21 18:42:38 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: OsdSchedule.c,v 1.16 2011/02/17 10:35:50 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -58,6 +58,8 @@ __KERNEL_RCSID(0, "$NetBSD: OsdSchedule.c,v 1.5 2007/12/21 18:42:38 jmcneill Exp
 
 #include <dev/sysmon/sysmon_taskq.h>
 
+extern int acpi_suspended;
+
 #define	_COMPONENT	ACPI_OS_SERVICES
 ACPI_MODULE_NAME("SCHEDULE")
 
@@ -72,30 +74,9 @@ static kmutex_t		acpi_osd_sleep_mtx;
 void
 acpi_osd_sched_init(void)
 {
-
-	ACPI_FUNCTION_TRACE(__func__);
-
 	sysmon_task_queue_init();
 	mutex_init(&acpi_osd_sleep_mtx, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&acpi_osd_sleep_cv, "acpislp");
-
-	return_VOID;
-}
-
-/*
- * acpi_osd_sched_fini:
- *
- *	Clean up the ACPICA Osd scheduler.  Called from AcpiOsdTerminate().
- */
-void
-acpi_osd_sched_fini(void)
-{
-
-	ACPI_FUNCTION_TRACE(__func__);
-
-	sysmon_task_queue_fini();
-
-	return_VOID;
 }
 
 /*
@@ -106,13 +87,7 @@ acpi_osd_sched_fini(void)
 ACPI_THREAD_ID
 AcpiOsGetThreadId(void)
 {
-
-	/* XXX ACPI CA can call this function in interrupt context */
-	if (curlwp == NULL)
-		return 1;
-
-	/* XXX Bleh, we're not allowed to return 0 (how stupid!) */
-	return (curlwp->l_proc->p_pid + 1);
+	return (ACPI_THREAD_ID)(uintptr_t)curlwp;
 }
 
 /*
@@ -125,8 +100,6 @@ AcpiOsExecute(ACPI_EXECUTE_TYPE Type, ACPI_OSD_EXEC_CALLBACK Function,
     void *Context)
 {
 	int pri;
-
-	ACPI_FUNCTION_TRACE(__func__);
 
 	switch (Type) {
 	case OSL_GPE_HANDLER:
@@ -144,18 +117,18 @@ AcpiOsExecute(ACPI_EXECUTE_TYPE Type, ACPI_OSD_EXEC_CALLBACK Function,
 		pri = 0;
 		break;
 	default:
-		return_ACPI_STATUS(AE_BAD_PARAMETER);
+		return AE_BAD_PARAMETER;
 	}
 
 	switch (sysmon_task_queue_sched(pri, Function, Context)) {
 	case 0:
-		return_ACPI_STATUS(AE_OK);
+		return AE_OK;
 
 	case ENOMEM:
-		return_ACPI_STATUS(AE_NO_MEMORY);
+		return AE_NO_MEMORY;
 
 	default:
-		return_ACPI_STATUS(AE_BAD_PARAMETER);
+		return AE_BAD_PARAMETER;
 	}
 }
 
@@ -167,12 +140,15 @@ AcpiOsExecute(ACPI_EXECUTE_TYPE Type, ACPI_OSD_EXEC_CALLBACK Function,
 void
 AcpiOsSleep(ACPI_INTEGER Milliseconds)
 {
-	ACPI_FUNCTION_TRACE(__func__);
 
-	mutex_enter(&acpi_osd_sleep_mtx);
-	cv_timedwait_sig(&acpi_osd_sleep_cv, &acpi_osd_sleep_mtx,
-	    MAX(mstohz(Milliseconds), 1));
-	mutex_exit(&acpi_osd_sleep_mtx);
+	if (cold || doing_shutdown || acpi_suspended)
+		DELAY(Milliseconds * 1000);
+	else {
+		mutex_enter(&acpi_osd_sleep_mtx);
+		cv_timedwait_sig(&acpi_osd_sleep_cv, &acpi_osd_sleep_mtx,
+		    MAX(mstohz(Milliseconds), 1));
+		mutex_exit(&acpi_osd_sleep_mtx);
+	}
 }
 
 /*
@@ -184,23 +160,7 @@ void
 AcpiOsStall(UINT32 Microseconds)
 {
 
-	ACPI_FUNCTION_TRACE(__func__);
-
-	/*
-	 * sleep(9) isn't safe because AcpiOsStall may be called
-	 * with interrupt-disabled. (eg. by AcpiEnterSleepState)
-	 * we should watch out for long stall requests.
-	 */
-#ifdef ACPI_DEBUG
-	if (Microseconds > 1000)
-		ACPI_DEBUG_PRINT((ACPI_DB_INFO, "long stall: %uus\n",
-		    Microseconds));
-#endif
-
 	delay(Microseconds);
-
-	return_VOID;
-
 }
 
 /*
@@ -222,5 +182,5 @@ AcpiOsGetTimer(void)
 	t = (UINT64)10 * tv.tv_usec;
 	t += (UINT64)10000000 * tv.tv_sec;
 
-	return (t);
+	return t;
 }

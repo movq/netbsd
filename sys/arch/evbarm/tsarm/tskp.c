@@ -1,4 +1,4 @@
-/* $NetBSD: tskp.c,v 1.5 2007/01/24 13:08:13 hubertf Exp $ */
+/* $NetBSD: tskp.c,v 1.7 2009/03/14 15:36:05 dsl Exp $ */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tskp.c,v 1.5 2007/01/24 13:08:13 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tskp.c,v 1.7 2009/03/14 15:36:05 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -113,10 +106,7 @@ CFATTACH_DECL(tskp, sizeof(struct tskp_softc),
     tskp_match, tskp_attach, NULL, NULL);
 
 static int
-tskp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+tskp_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return 1;
 }
@@ -134,10 +124,7 @@ tskp_match(parent, match, aux)
 	(EP93XX_GPIO_ ## x), GPIO_GET(x) & (~(y)))
 
 static void
-tskp_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+tskp_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct tskp_softc *sc = (void *)self;
 	struct tspld_attach_args *taa = aux;
@@ -168,9 +155,7 @@ tskp_attach(parent, self, aux)
 }
 
 static void
-tskp_scankeys(mxkp_sc, keys)
-	struct matrixkp_softc *mxkp_sc;
-	u_int32_t *keys;
+tskp_scankeys(struct matrixkp_softc *mxkp_sc, u_int32_t *keys)
 {
 	struct tskp_softc *sc = (void *)mxkp_sc->sc_dev;
 	u_int32_t pos;

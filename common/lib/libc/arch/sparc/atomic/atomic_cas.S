@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic_cas.S,v 1.4 2007/12/08 22:53:33 ad Exp $	*/
+/*	$NetBSD: atomic_cas.S,v 1.11 2011/02/22 18:45:10 pooka Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,9 +29,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/param.h>
 #include "atomic_op_asm.h"
 
-#if defined(_KERNEL)
+#if defined(_HARDKERNEL)
 
 #include <machine/psl.h>
 
@@ -58,26 +52,40 @@
 	nop								;\
 	nop
 
-#else	/* _KERNEL */
+#else	/* _HARDKERNEL */
 
 #define	MULTIPROCESSOR	1
 #define	DISABLE_INTERRUPTS		/* nothing */
 #define	RESTORE_INTERRUPTS		/* nothing */
 
-#endif	/* _KERNEL */
+#endif	/* _HARDKERNEL */
 
 #if defined(MULTIPROCESSOR)
 	.section .bss
 	.align	1024
+#ifdef PIC
+	.globl _C_LABEL(_atomic_cas_locktab)
+#endif
 OTYPE(_C_LABEL(_atomic_cas_locktab))
 _C_LABEL(_atomic_cas_locktab):
 	.space	1024
+
+#ifdef PIC
+/* o4 is not used for PSR in PIC cases, so we can use it here */
+#define GETLOCKTAB							\
+	PIC_PROLOGUE(%o3,%o4)						;\
+	set _C_LABEL(_atomic_cas_locktab), %o4				;\
+	ld [%o3 + %o4], %o3
+#else
+#define GETLOCKTAB							\
+	sethi	%hi(_C_LABEL(_atomic_cas_locktab)), %o3
+#endif
 
 #define	ACQUIRE_INTERLOCK						 \
 	DISABLE_INTERRUPTS						;\
 	srl	%o0, 3, %o5			/* get lock address */	;\
 	and	%o5, 1023, %o5						;\
-	sethi	%hi(_C_LABEL(_atomic_cas_locktab)), %o3			;\
+	GETLOCKTAB							;\
 	add	%o5, %o3, %o5						;\
 									;\
 	/* %o5 has interlock address */					;\
@@ -117,7 +125,7 @@ _C_LABEL(_atomic_cas_locktab):
  * XXX NOTE!  The interlock trick only works if EVERYTHING writes to
  * XXX the memory cell through this code path!
  */
-ENTRY_NOPROFILE(_atomic_cas_32)
+ENTRY(_atomic_cas_32)
 	ACQUIRE_INTERLOCK
 	! %o4 has saved PSR value
 	! %o5 has interlock address
@@ -139,3 +147,12 @@ ATOMIC_OP_ALIAS(atomic_cas_ulong,_atomic_cas_32)
 STRONG_ALIAS(_atomic_cas_ulong,_atomic_cas_32)
 ATOMIC_OP_ALIAS(atomic_cas_ptr,_atomic_cas_32)
 STRONG_ALIAS(_atomic_cas_ptr,_atomic_cas_32)
+
+ATOMIC_OP_ALIAS(atomic_cas_32_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_32_ni,_atomic_cas_32)
+ATOMIC_OP_ALIAS(atomic_cas_uint_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_uint_ni,_atomic_cas_32)
+ATOMIC_OP_ALIAS(atomic_cas_ulong_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_ulong_ni,_atomic_cas_32)
+ATOMIC_OP_ALIAS(atomic_cas_ptr_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_ptr_ni,_atomic_cas_32)

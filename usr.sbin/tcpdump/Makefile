@@ -1,4 +1,6 @@
-#	$NetBSD: Makefile,v 1.46 2008/01/07 16:10:57 christos Exp $	
+#	$NetBSD: Makefile,v 1.51 2010/12/17 09:54:28 jruoho Exp $	
+
+WARNS?=	1	# XXX: out of date third-party program 
 
 .include <bsd.own.mk>
 
@@ -11,6 +13,7 @@ PROG=	tcpdump
 MAN=	tcpdump.8 
 
 SRCS=	addrtoname.c cpack.c gmpls.c gmt2local.c machdep.c oui.c parsenfsfh.c \
+		pf_print_state.c \
 	print-802_11.c print-ah.c print-aodv.c print-ap1394.c print-arcnet.c \
 	print-arp.c \
 	print-ascii.c print-atalk.c print-atm.c print-bfd.c print-bgp.c \
@@ -22,7 +25,7 @@ SRCS=	addrtoname.c cpack.c gmpls.c gmt2local.c machdep.c oui.c parsenfsfh.c \
 	print-ipx.c print-isakmp.c print-isoclns.c print-krb.c \
 	print-l2tp.c print-lane.c print-ldp.c print-llc.c print-lwres.c \
 	print-msdp.c print-mobile.c print-mobility.c print-mpls.c print-nfs.c \
-	print-ntp.c print-null.c print-ospf.c print-pflog.c \
+	print-ntp.c print-null.c print-ospf.c print-pflog.c print-pfsync.c \
 	print-pim.c print-ppp.c print-pppoe.c print-pptp.c \
 	print-radius.c print-raw.c print-rip.c print-rsvp.c print-rx.c \
 	print-sctp.c print-sl.c print-sll.c print-smb.c print-snmp.c \
@@ -43,12 +46,13 @@ SRCS+=	version.c
 
 version.c: VERSION
 	${_MKTARGET_CREATE}
-	sed -e 's/.*/char version[] = "&";/' ${.ALLSRC} > ${.TARGET}
+	${TOOL_SED} -e 's/.*/char version[] = "&";/' ${.ALLSRC} > ${.TARGET}
 
 LDADD+=	-lpcap -ll
 DPADD+=	${LIBPCAP} ${LIBL}
 
 CPPFLAGS+=	-I${.CURDIR} -I${SRCDIR} -I${NETBSDSRCDIR}/sys/dist/pf
+CPPFLAGS+=  -I${NETBSDSRCDIR}/dist/pf/sbin/pfctl
 
 AWKS= atime.awk packetdat.awk stime.awk send-ack.awk   
 
@@ -73,6 +77,9 @@ CPPFLAGS+=-DLBL_ALIGN=1
 CPPFLAGS+=-DTCPDUMP_DO_SMB=1
 CPPFLAGS+=-D_U_="__attribute__((unused))"
 
+CPPFLAGS+=-DWITH_USER=\"_tcpdump\"
+CPPFLAGS+=-DWITH_CHROOT=\"/var/chroot/tcpdump\"
+
 .if (${USE_INET6} != "no")
 SRCS+=	print-ip6.c print-ip6opts.c print-ripng.c print-icmp6.c print-frag6.c \
 	print-rt6.c print-ospf6.c print-dhcp6.c
@@ -86,7 +93,7 @@ LDADD+=	-lcrypto -lcrypt
 DPADD+=	${LIBCRYPTO} ${LIBCRYPT}
 .endif
 
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 COPTS+=	-fno-strict-aliasing
 .for f in print-802_11 print-esp print-fr print-radius print-telnet tcpdump util
 COPTS.${f}.c+=  -Wno-pointer-sign

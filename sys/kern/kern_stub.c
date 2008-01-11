@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_stub.c,v 1.5 2007/12/20 23:03:09 dsl Exp $	*/
+/*	$NetBSD: kern_stub.c,v 1.32 2011/05/31 23:28:53 dyoung Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,17 +62,26 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_stub.c,v 1.5 2007/12/20 23:03:09 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_stub.c,v 1.32 2011/05/31 23:28:53 dyoung Exp $");
 
 #include "opt_ptrace.h"
 #include "opt_ktrace.h"
+#include "opt_sa.h"
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
+#include <sys/fstypes.h>
 #include <sys/signalvar.h>
-#include <sys/syscallargs.h>
+#include <sys/syscall.h>
 #include <sys/ktrace.h>
+#include <sys/intr.h>
+#include <sys/cpu.h>
+#include <sys/module.h>
+#include <sys/bus.h>
+#include <sys/userconf.h>
+
+bool default_bus_space_is_equal(bus_space_tag_t, bus_space_tag_t);
 
 /*
  * Nonexistent system call-- signal process (may want to handle it).  Flag
@@ -102,12 +104,11 @@ __weak_alias(ktr_mibio,nullop);
 __weak_alias(ktr_namei,nullop);
 __weak_alias(ktr_namei2,nullop);
 __weak_alias(ktr_psig,nullop);
+__weak_alias(ktr_saupcall,nullop);
 __weak_alias(ktr_syscall,nullop);
 __weak_alias(ktr_sysret,nullop);
 __weak_alias(ktr_kuser,nullop);
-__weak_alias(ktr_mmsg,nullop);
 __weak_alias(ktr_mib,nullop);
-__weak_alias(ktr_mool,nullop);
 __weak_alias(ktr_execarg,nullop);
 __weak_alias(ktr_execenv,nullop);
 
@@ -120,9 +121,26 @@ __weak_alias(ktruser,enosys);
 __weak_alias(ktr_point,nullop);
 #endif	/* KTRACE */
 
+__weak_alias(device_register, voidop);
+__weak_alias(device_register_post_config, voidop);
+__weak_alias(spldebug_start, voidop);
+__weak_alias(spldebug_stop, voidop);
+__weak_alias(machdep_init,nullop);
+__weak_alias(pci_chipset_tag_create, eopnotsupp);
+__weak_alias(pci_chipset_tag_destroy, voidop);
+__weak_alias(bus_space_tag_create, eopnotsupp);
+__weak_alias(bus_space_tag_destroy, voidop);
+__weak_alias(bus_space_is_equal, default_bus_space_is_equal);
+__weak_alias(userconf_bootinfo, voidop);
+__weak_alias(userconf_init, voidop);
+__weak_alias(userconf_prompt, voidop);
+
+__weak_alias(kobj_renamespace, nullop);
+
+#if !defined(KERN_SA)
 /*
- * Scheduler activations system calls.  These need to remain until libc's
- * major version is bumped.
+ * Scheduler activations system calls.  These need to remain, even when
+ * KERN_SA isn't defined, until libc's major version is bumped.
  */
 __strong_alias(sys_sa_register,sys_nosys);
 __strong_alias(sys_sa_stacks,sys_nosys);
@@ -132,14 +150,49 @@ __strong_alias(sys_sa_yield,sys_nosys);
 __strong_alias(sys_sa_preempt,sys_nosys);
 __strong_alias(sys_sa_unblockyield,sys_nosys);
 
-/* ARGSUSED */
+/*
+ * Stubs for compat_netbsd32.
+ */
+__strong_alias(dosa_register,sys_nosys);
+__strong_alias(sa_stacks1,sys_nosys);
+#endif
+
+/*
+ * Stubs for architectures that do not support kernel preemption.
+ */
+#ifndef __HAVE_PREEMPTION
+bool
+cpu_kpreempt_enter(uintptr_t where, int s)
+{
+
+	return false;
+}
+
+void
+cpu_kpreempt_exit(uintptr_t where)
+{
+
+}
+
+bool
+cpu_kpreempt_disabled(void)
+{
+
+	return true;
+}
+#else
+# ifndef MULTIPROCESSOR
+#   error __HAVE_PREEMPTION requires MULTIPROCESSOR
+# endif
+#endif	/* !__HAVE_PREEMPTION */
+
 int
 sys_nosys(struct lwp *l, const void *v, register_t *retval)
 {
 
-	mutex_enter(&proclist_mutex);
+	mutex_enter(proc_lock);
 	psignal(l->l_proc, SIGSYS);
-	mutex_exit(&proclist_mutex);
+	mutex_exit(proc_lock);
 	return ENOSYS;
 }
 
@@ -197,6 +250,14 @@ eopnotsupp(void)
 }
 
 /*
+ * Generic null operation, void return value.
+ */
+void
+voidop(void)
+{
+}
+
+/*
  * Generic null operation, always returns success.
  */
 /*ARGSUSED*/
@@ -205,4 +266,11 @@ nullop(void *v)
 {
 
 	return (0);
+}
+
+bool
+default_bus_space_is_equal(bus_space_tag_t t1, bus_space_tag_t t2)
+{
+
+	return memcmp(&t1, &t2, sizeof(t1)) == 0;
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: irongate.c,v 1.13 2005/12/11 12:16:17 christos Exp $ */
+/* $NetBSD: irongate.c,v 1.15 2011/05/17 17:34:47 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: irongate.c,v 1.13 2005/12/11 12:16:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irongate.c,v 1.15 2011/05/17 17:34:47 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -184,7 +177,7 @@ irongate_attach(struct device *parent, struct device *self, void *aux)
 	pba.pba_pc = &icp->ic_pc;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 
 	if (pci_get_capability(&icp->ic_pc, tag, PCI_CAP_AGP,

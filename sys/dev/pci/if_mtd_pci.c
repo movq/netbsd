@@ -1,4 +1,4 @@
-/* $NetBSD: if_mtd_pci.c,v 1.10 2007/10/19 12:00:46 ad Exp $ */
+/* $NetBSD: if_mtd_pci.c,v 1.15 2009/11/26 15:17:09 njoly Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
 /* TODO: Check why in IO space, the MII won't work. Memory mapped works */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mtd_pci.c,v 1.10 2007/10/19 12:00:46 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mtd_pci.c,v 1.15 2009/11/26 15:17:09 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -74,15 +67,14 @@ static struct mtd_pci_device_id mtd_ids[] = {
 	{ 0, 0 }
 };
 
-static int	mtd_pci_match(struct device *, struct cfdata *, void *);
-static void	mtd_pci_attach(struct device *, struct device *, void *);
+static int	mtd_pci_match(device_t, cfdata_t, void *);
+static void	mtd_pci_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(mtd_pci, sizeof(struct mtd_softc), mtd_pci_match, mtd_pci_attach,
     NULL, NULL);
 
 static int
-mtd_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+mtd_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	struct mtd_pci_device_id *id;
@@ -96,10 +88,10 @@ mtd_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-mtd_pci_attach(struct device *parent, struct device *self, void *aux)
+mtd_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args * const pa = aux;
-	struct mtd_softc * const sc = (void *)self;
+	struct mtd_softc * const sc = device_private(self);
 	pci_intr_handle_t ih;
 	const char *intrstring = NULL;
 	bus_space_tag_t iot, memt;
@@ -123,8 +115,7 @@ mtd_pci_attach(struct device *parent, struct device *self, void *aux)
 		sc->bus_tag = iot;
 		sc->bus_handle = ioh;
 	} else {
-		printf("%s: could not map memory or i/o space\n",
-			sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "could not map memory or i/o space\n");
 		return;
 	}
 	sc->dma_tag = pa->pa_dmat;
@@ -133,20 +124,19 @@ mtd_pci_attach(struct device *parent, struct device *self, void *aux)
 	mtd_config(sc);
 
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: could not map interrupt\n", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "could not map interrupt\n");
 		return;
 	}
 	intrstring = pci_intr_string(pa->pa_pc, ih);
 
 	if (pci_intr_establish(pa->pa_pc, ih, IPL_NET, mtd_irq_h, sc) == NULL) {
-		printf("%s: could not establish interrupt", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "could not establish interrupt");
 		if (intrstring != NULL)
-			printf(" at %s", intrstring);
-		printf("\n");
+			aprint_error(" at %s", intrstring);
+		aprint_error("\n");
 		return;
 	} else {
-		printf("%s: using %s for interrupt\n",
-			sc->dev.dv_xname,
+		aprint_normal_dev(&sc->dev, "using %s for interrupt\n",
 			intrstring ? intrstring : "unknown interrupt");
 	}
 }

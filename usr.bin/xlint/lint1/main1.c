@@ -1,4 +1,4 @@
-/*	$NetBSD: main1.c,v 1.17 2006/11/08 18:31:15 christos Exp $	*/
+/*	$NetBSD: main1.c,v 1.19 2008/07/31 15:21:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: main1.c,v 1.17 2006/11/08 18:31:15 christos Exp $");
+__RCSID("$NetBSD: main1.c,v 1.19 2008/07/31 15:21:34 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -47,6 +47,7 @@ __RCSID("$NetBSD: main1.c,v 1.17 2006/11/08 18:31:15 christos Exp $");
 #include <unistd.h>
 #include <errno.h>
 #include <limits.h>
+#include <signal.h>
 
 #include "lint1.h"
 
@@ -105,6 +106,10 @@ int	tflag;
 
 /* Enable C9X extensions */
 int	Sflag;
+
+/* Picky flag */
+int	Pflag;
+
 /*
  * Complain about functions and external variables used and not defined,
  * or defined and not used.
@@ -119,9 +124,18 @@ int	zflag = 1;
 
 err_set	msgset;
 
+sig_atomic_t fpe;
+
 static	void	usage(void);
 
 int main(int, char *[]);
+
+/*ARGSUSED*/
+static void
+sigfpe(int s)
+{
+	fpe = 1;
+}
 
 int
 main(int argc, char *argv[])
@@ -132,7 +146,7 @@ main(int argc, char *argv[])
 	setprogname(argv[0]);
 
 	ERR_ZERO(&msgset);
-	while ((c = getopt(argc, argv, "abcdeghmprstuvwyzFSX:")) != -1) {
+	while ((c = getopt(argc, argv, "abcdeghmprstuvwyzFPSX:")) != -1) {
 		switch (c) {
 		case 'a':	aflag++;	break;
 		case 'b':	bflag = 1;	break;
@@ -143,6 +157,7 @@ main(int argc, char *argv[])
 		case 'g':	gflag = 1;	break;
 		case 'h':	hflag = 1;	break;
 		case 'p':	pflag = 1;	break;
+		case 'P':	Pflag = 1;	break;
 		case 'r':	rflag = 1;	break;
 		case 's':	sflag = 1;	break;
 		case 'S':	Sflag = 1;	break;
@@ -198,6 +213,7 @@ main(int argc, char *argv[])
 	if (yflag)
 		yydebug = 1;
 
+	(void)signal(SIGFPE, sigfpe);
 	initmem();
 	initdecl();
 	initscan();

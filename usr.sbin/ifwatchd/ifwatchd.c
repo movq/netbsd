@@ -1,4 +1,4 @@
-/*	$NetBSD: ifwatchd.c,v 1.21 2007/12/22 00:57:15 dyoung Exp $	*/
+/*	$NetBSD: ifwatchd.c,v 1.25 2011/02/04 14:31:23 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -90,11 +83,6 @@ static int check_is_connected(const char * ifname, int def_retvalue);
 #define	if_is_connected(X)	1
 #define	if_is_not_connected(X)	1
 #endif
-
-/* stolen from /sbin/route */
-#define ROUNDUP(a) \
-	((a) > 0 ? (1 + (((a) - 1) | (sizeof(long) - 1))) : sizeof(long))
-#define ADVANCE(x, n) (x += ROUNDUP((n)->sa_len))
 
 /* global variables */
 static int verbose = 0, quiet = 0;
@@ -280,9 +268,17 @@ dispatch(void *msg, size_t len)
 		ifmp = (struct if_msghdr*)msg;
 		check_carrier(ifmp->ifm_index, ifmp->ifm_data.ifi_link_state);
 		return;
+	case RTM_ADD:
+	case RTM_DELETE:
+	case RTM_CHANGE:
+	case RTM_LOSING:
+	case RTM_REDIRECT:
+	case RTM_MISS:
+	case RTM_IEEE80211:
+		return;
 	}
 	if (verbose)
-		printf("unknown message ignored\n");
+		printf("unknown message ignored (%d)\n", hd->rtm_type);
 	return;
 
 work:
@@ -316,7 +312,7 @@ check_addrs(char *cp, int addrs, enum event ev)
 			ifa = sa;
 		else if (i == RTA_BRD)
 			brd = sa;
-		ADVANCE(cp, sa);
+		RT_ADVANCE(cp, sa);
 	}
 	if (ifa != NULL) {
 		ifname = if_indextoname(ifndx, ifname_buf);
@@ -337,7 +333,7 @@ invoke_script(struct sockaddr *sa, struct sockaddr *dest, enum event ev,
     int ifindex, const char *ifname_hint)
 {
 	char addr[NI_MAXHOST], daddr[NI_MAXHOST], ifname_buf[IFNAMSIZ];
-	const char *ifname;
+	const char * volatile ifname;
 	const char *script;
 	int status;
 
@@ -523,12 +519,12 @@ free_interfaces(void)
 }
 
 static int
-find_interface(int index)
+find_interface(int idx)
 {
 	struct interface_data * p;
 
 	SLIST_FOREACH(p, &ifs, next)
-		if (p->index == index)
+		if (p->index == idx)
 			return 1;
 	return 0;
 }
@@ -601,7 +597,7 @@ out:
 static int
 check_is_connected(const char *ifname, int def_retval)
 {
-	int s, err;
+	int s, error;
 	struct spppstatus oldstatus;
 	struct spppstatusncp status;
 
@@ -613,10 +609,10 @@ check_is_connected(const char *ifname, int def_retval)
 	s = socket(AF_INET, SOCK_DGRAM, 0);
 	if (s < 0)
 		return 1;	/* no idea how to handle this... */
-	err = ioctl(s, SPPPGETSTATUSNCP, &status);
-	if (err != 0) {
-		err = ioctl(s, SPPPGETSTATUS, &oldstatus);
-		if (err != 0) {
+	error = ioctl(s, SPPPGETSTATUSNCP, &status);
+	if (error != 0) {
+		error = ioctl(s, SPPPGETSTATUS, &oldstatus);
+		if (error != 0) {
 			/* not if_spppsubr.c based - return default */
 			close(s);
 			return def_retval;

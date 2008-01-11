@@ -1,4 +1,4 @@
-/*	$NetBSD: vme_two.c,v 1.6 2007/10/19 12:00:37 ad Exp $	*/
+/*	$NetBSD: vme_two.c,v 1.8 2009/03/14 15:36:19 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme_two.c,v 1.6 2007/10/19 12:00:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme_two.c,v 1.8 2009/03/14 15:36:19 dsl Exp $");
 
 #include "vmetwo.h"
 
@@ -66,8 +59,7 @@ void vmetwo_slave_range(struct vmetwo_softc *, int, vme_am_t,
 
 /* ARGSUSED */
 void
-vmetwo_init(sc)
-	struct vmetwo_softc *sc;
+vmetwo_init(struct vmetwo_softc *sc)
 {
 	u_int32_t reg;
 	int i;
@@ -175,10 +167,7 @@ vmetwo_init(sc)
 }
 
 void
-vmetwo_master_range(sc, range, vr)
-	struct vmetwo_softc *sc;
-	int range;
-	struct mvmebus_range *vr;
+vmetwo_master_range(struct vmetwo_softc *sc, int range, struct mvmebus_range *vr)
 {
 	u_int32_t start, end, attr;
 	u_int32_t reg;
@@ -272,11 +261,7 @@ vmetwo_master_range(sc, range, vr)
 }
 
 void
-vmetwo_slave_range(sc, range, am, vr)
-	struct vmetwo_softc *sc;
-	int range;
-	vme_am_t am;
-	struct mvmebus_range *vr;
+vmetwo_slave_range(struct vmetwo_softc *sc, int range, vme_am_t am, struct mvmebus_range *vr)
 {
 	u_int32_t reg;
 

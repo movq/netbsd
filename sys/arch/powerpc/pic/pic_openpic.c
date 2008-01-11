@@ -1,4 +1,4 @@
-/*	$NetBSD: pic_openpic.c,v 1.3 2007/12/11 18:04:20 garbled Exp $ */
+/*	$NetBSD: pic_openpic.c,v 1.5 2008/04/29 06:53:02 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -12,9 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_openpic.c,v 1.3 2007/12/11 18:04:20 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_openpic.c,v 1.5 2008/04/29 06:53:02 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -45,28 +42,27 @@ __KERNEL_RCSID(0, "$NetBSD: pic_openpic.c,v 1.3 2007/12/11 18:04:20 garbled Exp 
 
 #include "opt_interrupt.h"
 
-void openpic_set_priority(int cpu, int pri);
 static void opic_enable_irq(struct pic_ops *, int, int);
 static void opic_disable_irq(struct pic_ops *, int);
-static int  opic_get_irq(struct pic_ops *, int);
-static void opic_ack_irq(struct pic_ops *, int);
 static void opic_establish_irq(struct pic_ops*, int, int, int);
-static void opic_finish_setup(struct pic_ops *);
-
-volatile unsigned char *openpic_base;
 
 struct pic_ops *
 setup_openpic(void *addr, int passthrough)
 {
+	struct openpic_ops *opicops;
 	struct pic_ops *pic;
 	int irq;
 	u_int x;
 
 	openpic_base = (void *)addr;
-	pic = malloc(sizeof(struct pic_ops), M_DEVBUF, M_NOWAIT);
-	KASSERT(pic != NULL);
+	opicops = malloc(sizeof(struct openpic_ops), M_DEVBUF, M_NOWAIT);
+	KASSERT(opicops != NULL);
+	pic = &opicops->pic;
 
 	x = openpic_read(OPENPIC_FEATURE);
+	if (((x & 0x07ff0000) >> 16) == 0)
+		panic("setup_openpic() called on distributed openpic");
+	
 	aprint_normal("OpenPIC Version 1.%d: "
 	    "Supports %d CPUs and %d interrupt sources.\n",
 	    x & 0xff, ((x & 0x1f00) >> 8) + 1, ((x & 0x07ff0000) >> 16) + 1);
@@ -80,6 +76,10 @@ setup_openpic(void *addr, int passthrough)
 	pic->pic_ack_irq = opic_ack_irq;
 	pic->pic_establish_irq = opic_establish_irq;
 	pic->pic_finish_setup = opic_finish_setup;
+	opicops->isu = NULL;
+	opicops->nrofisus = 0; /* internal only */
+	opicops->flags = 0; /* no flags (yet) */
+	opicops->irq_per = NULL; /* internal ISU only */
 	strcpy(pic->pic_name, "openpic");
 	pic_add(pic);
 
@@ -137,24 +137,6 @@ setup_openpic(void *addr, int passthrough)
 }
 
 static void
-opic_finish_setup(struct pic_ops *pic)
-{
-	uint32_t cpumask = 0;
-	int i;
-
-#ifdef OPENPIC_DISTRIBUTE
-	for (i = 0; i < ncpu; i++)
-		cpumask |= (1 << cpu_info[i].ci_cpuid);
-#else
-	cpumask = 1;
-#endif
-	for (i = 0; i < pic->pic_numintrs; i++) {
-		/* send all interrupts to all active CPUs */
-		openpic_write(OPENPIC_IDEST(i), cpumask);
-	}
-}
-
-static void
 opic_establish_irq(struct pic_ops *pic, int irq, int type, int pri)
 {
 	int realpri = max(1, min(15, pri));
@@ -168,18 +150,8 @@ opic_establish_irq(struct pic_ops *pic, int irq, int type, int pri)
 	x |= realpri << OPENPIC_PRIORITY_SHIFT;
 	openpic_write(OPENPIC_SRC_VECTOR(irq), x);
 
-	aprint_debug("%s: setting IRQ %d to priority %d\n", __func__, irq, realpri);
-}
-
-void
-openpic_set_priority(int cpu, int pri)
-{
-	u_int x;
-
-	x = openpic_read(OPENPIC_CPU_PRIORITY(cpu));
-	x &= ~OPENPIC_CPU_PRIORITY_MASK;
-	x |= pri;
-	openpic_write(OPENPIC_CPU_PRIORITY(cpu), x);
+	aprint_debug("%s: setting IRQ %d to priority %d\n", __func__, irq,
+	    realpri);
 }
 
 static void
@@ -200,18 +172,4 @@ opic_disable_irq(struct pic_ops *pic, int irq)
 	x = openpic_read(OPENPIC_SRC_VECTOR(irq));
 	x |= OPENPIC_IMASK;
 	openpic_write(OPENPIC_SRC_VECTOR(irq), x);
-}
-
-static int
-opic_get_irq(struct pic_ops *pic, int mode)
-{
-
-	return openpic_read_irq(cpu_number());
-}
-
-static void
-opic_ack_irq(struct pic_ops *pic, int irq)
-{
-
-	openpic_eoi(cpu_number());
 }

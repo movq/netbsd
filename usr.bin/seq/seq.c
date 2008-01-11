@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgment:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,9 +29,9 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 2005\n\
-	The NetBSD Foundation, Inc.  All rights reserved.\n");
-__RCSID("$NetBSD: seq.c,v 1.2 2005/01/20 09:20:03 wiz Exp $");
+__COPYRIGHT("@(#) Copyright (c) 2005\
+ The NetBSD Foundation, Inc.  All rights reserved.");
+__RCSID("$NetBSD: seq.c,v 1.7 2010/05/27 08:40:19 dholland Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -169,6 +162,8 @@ main(int argc, char *argv[])
 		if (!valid_format(fmt))
 			errx(1, "invalid format string: `%s'", fmt);
 		fmt = unescape(fmt);
+		if (!valid_format(fmt))
+			errx(1, "invalid format string");
 		/*
 	         * XXX to be bug for bug compatible with Plan 9 add a
 		 * newline if none found at the end of the format string.
@@ -235,39 +230,56 @@ numeric(const char *s)
 int
 valid_format(const char *fmt)
 {
-	int conversions = 0;
+	unsigned conversions = 0;
 
 	while (*fmt != '\0') {
 		/* scan for conversions */
-		if (*fmt != '\0' && *fmt != '%') {
-			do {
-				fmt++;
-			} while (*fmt != '\0' && *fmt != '%');
+		if (*fmt != '%') {
+			fmt++;
+			continue;
 		}
-		/* scan a conversion */
-		if (*fmt != '\0') {
-			do {
+		fmt++;
+
+		/* allow %% but not things like %10% */
+		if (*fmt == '%') {
+			fmt++;
+			continue;
+		}
+
+		/* flags */
+		while (*fmt != '\0' && strchr("#0- +'", *fmt)) {
+			fmt++;
+		}
+
+		/* field width */
+		while (*fmt != '\0' && strchr("0123456789", *fmt)) {
+			fmt++;
+		}
+
+		/* precision */
+		if (*fmt == '.') {
+			fmt++;
+			while (*fmt != '\0' && strchr("0123456789", *fmt)) {
 				fmt++;
+			}
+		}
 
-				/* ok %% */
-				if (*fmt == '%') {
-					fmt++;
-					break;
-				}
-				/* valid conversions */
-				if (strchr("eEfgG", *fmt) &&
-				    conversions++ < 1) {
-					fmt++;
-					break;
-				}
-				/* flags, width and precsision */
-				if (isdigit((unsigned char)*fmt) ||
-				    strchr("+- 0#.", *fmt))
-					continue;
-
-				/* oops! bad conversion format! */
-				return (0);
-			} while (*fmt != '\0');
+		/* conversion */
+		switch (*fmt) {
+		    case 'A':
+		    case 'a':
+		    case 'E':
+		    case 'e':
+		    case 'F':
+		    case 'f':
+		    case 'G':
+		    case 'g':
+			/* floating point formats are accepted */
+			conversions++;
+			break;
+		    default:
+			/* anything else is not */
+			return 0;
 		}
 	}
 
@@ -336,6 +348,7 @@ unescape(char *orig)
 				c |= (*cp - '0');
 			}
 			*orig = c;
+			--cp;
 			continue;
 		case 'x':	/* hexidecimal number */
 			cp++;	/* skip 'x' */
@@ -350,6 +363,7 @@ unescape(char *orig)
 					    'A') + 10);
 			}
 			*orig = c;
+			--cp;
 			continue;
 		default:
 			--cp;

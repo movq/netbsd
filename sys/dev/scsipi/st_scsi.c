@@ -1,4 +1,4 @@
-/*	$NetBSD: st_scsi.c,v 1.26 2006/11/16 01:33:26 christos Exp $ */
+/*	$NetBSD: st_scsi.c,v 1.32 2009/12/06 22:48:17 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: st_scsi.c,v 1.26 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: st_scsi.c,v 1.32 2009/12/06 22:48:17 dyoung Exp $");
 
 #include "opt_scsi.h"
 #include "rnd.h"
@@ -74,16 +67,15 @@ __KERNEL_RCSID(0, "$NetBSD: st_scsi.c,v 1.26 2006/11/16 01:33:26 christos Exp $"
 #include <dev/scsipi/scsi_tape.h>
 #include <dev/scsipi/stvar.h>
 
-static int	st_scsibus_match(struct device *, struct cfdata *, void *);
-static void	st_scsibus_attach(struct device *, struct device *, void *);
+static int	st_scsibus_match(device_t, cfdata_t, void *);
+static void	st_scsibus_attach(device_t, device_t, void *);
 static int	st_scsibus_ops(struct st_softc *, int, int);
 static int	st_scsibus_read_block_limits(struct st_softc *, int);
 static int	st_scsibus_mode_sense(struct st_softc *, int);
-static int	st_scsibus_mode_select(struct st_softc *, int);
 static int	st_scsibus_cmprss(struct st_softc *, int, int);
 
 CFATTACH_DECL(st_scsibus, sizeof(struct st_softc),
-    st_scsibus_match, st_scsibus_attach, stdetach, stactivate);
+    st_scsibus_match, st_scsibus_attach, stdetach, NULL);
 
 static const struct scsipi_inquiry_pattern st_scsibus_patterns[] = {
 	{T_SEQUENTIAL, T_REMOV,
@@ -91,7 +83,7 @@ static const struct scsipi_inquiry_pattern st_scsibus_patterns[] = {
 };
 
 static int
-st_scsibus_match(struct device *parent, struct cfdata *match,
+st_scsibus_match(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
@@ -108,7 +100,7 @@ st_scsibus_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-st_scsibus_attach(struct device *parent, struct device *self, void *aux)
+st_scsibus_attach(device_t parent, device_t self, void *aux)
 {
 	struct st_softc *st = device_private(self);
 
@@ -125,7 +117,7 @@ st_scsibus_ops(struct st_softc *st, int op, int flags)
 	case ST_OPS_MODESENSE:
 		return st_scsibus_mode_sense(st, flags);
 	case ST_OPS_MODESELECT:
-		return st_scsibus_mode_select(st, flags);
+		return st_mode_select(st, flags);
 	case ST_OPS_CMPRSS_ON:
 	case ST_OPS_CMPRSS_OFF:
 		return st_scsibus_cmprss(st, flags,
@@ -159,8 +151,7 @@ st_scsibus_read_block_limits(struct st_softc *st, int flags)
 	 */
 	error = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
 	    (void *)&block_limits, sizeof(block_limits),
-	    ST_RETRIES, ST_CTL_TIME, NULL,
-	    flags | XS_CTL_DATA_IN | XS_CTL_DATA_ONSTACK);
+	    ST_RETRIES, ST_CTL_TIME, NULL, flags | XS_CTL_DATA_IN);
 	if (error)
 		return (error);
 
@@ -194,7 +185,9 @@ st_scsibus_mode_sense(struct st_softc *st, int flags)
 	} scsipi_sense;
 	struct scsipi_periph *periph = st->sc_periph;
 
-	scsipi_sense_len = 12 + st->page_0_size;
+	scsipi_sense_len = sizeof(scsipi_sense.header) +
+			   sizeof(scsipi_sense.blk_desc) +
+			   st->page_0_size;
 
 	/*
 	 * Set up a mode sense
@@ -203,7 +196,7 @@ st_scsibus_mode_sense(struct st_softc *st, int flags)
 	 * it away.
 	 */
 	error = scsipi_mode_sense(st->sc_periph, 0, SMS_PCTRL_CURRENT,
-	    &scsipi_sense.header, scsipi_sense_len, flags | XS_CTL_DATA_ONSTACK,
+	    &scsipi_sense.header, scsipi_sense_len, flags,
 	    ST_RETRIES, ST_CTL_TIME);
 	if (error)
 		return (error);
@@ -227,59 +220,6 @@ st_scsibus_mode_sense(struct st_softc *st, int flags)
 		    st->page_0_size);
 	periph->periph_flags |= PERIPH_MEDIA_LOADED;
 	return (0);
-}
-
-/*
- * Send a filled out parameter structure to the drive to
- * set it into the desire modes etc.
- */
-static int
-st_scsibus_mode_select(struct st_softc *st, int flags)
-{
-	u_int scsi_select_len;
-	struct scsi_select {
-		struct scsi_mode_parameter_header_6 header;
-		struct scsi_general_block_descriptor blk_desc;
-		u_char sense_data[MAX_PAGE_0_SIZE];
-	} scsi_select;
-	struct scsipi_periph *periph = st->sc_periph;
-
-	scsi_select_len = 12 + st->page_0_size;
-
-	/*
-	 * This quirk deals with drives that have only one valid mode
-	 * and think this gives them license to reject all mode selects,
-	 * even if the selected mode is the one that is supported.
-	 */
-	if (st->quirks & ST_Q_UNIMODAL) {
-		SC_DEBUG(periph, SCSIPI_DB3,
-		    ("not setting density 0x%x blksize 0x%x\n",
-		    st->density, st->blksize));
-		return (0);
-	}
-
-	/*
-	 * Set up for a mode select
-	 */
-	memset(&scsi_select, 0, scsi_select_len);
-	scsi_select.header.blk_desc_len = sizeof(struct scsi_general_block_descriptor);
-	scsi_select.header.dev_spec &= ~SMH_DSP_BUFF_MODE;
-	scsi_select.blk_desc.density = st->density;
-	if (st->flags & ST_DONTBUFFER)
-		scsi_select.header.dev_spec |= SMH_DSP_BUFF_MODE_OFF;
-	else
-		scsi_select.header.dev_spec |= SMH_DSP_BUFF_MODE_ON;
-	if (st->flags & ST_FIXEDBLOCKS)
-		_lto3b(st->blksize, scsi_select.blk_desc.blklen);
-	if (st->page_0_size)
-		memcpy(scsi_select.sense_data, st->sense_data, st->page_0_size);
-
-	/*
-	 * do the command
-	 */
-	return scsipi_mode_select(periph, 0, &scsi_select.header,
-	    scsi_select_len, flags | XS_CTL_DATA_ONSTACK,
-	    ST_RETRIES, ST_CTL_TIME);
 }
 
 static int
@@ -311,8 +251,7 @@ st_scsibus_cmprss(struct st_softc *st, int flags, int onoff)
 again:
 	memset(&scsi_pdata, 0, scsi_dlen);
 	error = scsipi_mode_sense(periph, byte2, page,
-	    &scsi_pdata.header, scsi_dlen, flags | XS_CTL_DATA_ONSTACK,
-	    ST_RETRIES, ST_CTL_TIME);
+	    &scsi_pdata.header, scsi_dlen, flags, ST_RETRIES, ST_CTL_TIME);
 
 	if (error) {
 		if (byte2 != SMS_DBD) {
@@ -391,7 +330,7 @@ again:
 	 * Do the command
 	 */
 	error = scsipi_mode_select(periph, SMS_PF, &scsi_pdata.header,
-	    scsi_dlen, flags | XS_CTL_DATA_ONSTACK, ST_RETRIES, ST_CTL_TIME);
+	    scsi_dlen, flags, ST_RETRIES, ST_CTL_TIME);
 
 	if (error && (page & SMS_PAGE_MASK) == 0xf) {
 		/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.35 2008/01/04 15:55:33 yamt Exp $	*/
+/*	$NetBSD: proc.h,v 1.38 2011/01/14 02:06:26 rmind Exp $	*/
 
 /*
  * Copyright (c) 1991 Regents of the University of California.
@@ -34,20 +34,21 @@
 #ifndef _I386_PROC_H_
 #define _I386_PROC_H_
 
-#ifdef _KERNEL_OPT
-#include "opt_noredzone.h"
-#endif
-
-#include <sys/user.h> /* for sizeof(struct user) */
 #include <machine/frame.h>
+#include <machine/pcb.h>
 
 /*
  * Machine-dependent part of the lwp structure for i386.
  */
+struct pmap;
+struct vm_page;
+
 struct mdlwp {
 	struct	trapframe *md_regs;	/* registers on current frame */
 	int	md_flags;		/* machine-dependent flags */
 	volatile int md_astpending;	/* AST pending for this process */
+	struct pmap *md_gc_pmap;	/* pmap being garbage collected */
+	struct vm_page *md_gc_ptp;	/* pages from pmap g/c */
 };
 
 /* md_flags */
@@ -63,9 +64,10 @@ struct mdproc {
 /* md_flags */
 #define MDP_USEDMTRR	0x0002	/* has set volatile MTRRs */
 
-/* kernel stack params */
-#define	UAREA_USER_OFFSET	(USPACE - ALIGN(sizeof(struct user)))
-#define	KSTACK_LOWEST_ADDR(l)	((void *)USER_TO_UAREA((l)->l_addr))
-#define	KSTACK_SIZE		UAREA_USER_OFFSET
+/* Kernel stack parameters. */
+#define	UAREA_PCB_OFFSET	(USPACE - ALIGN(sizeof(struct pcb)))
+#define	KSTACK_LOWEST_ADDR(l)	\
+    ((void *)((vaddr_t)(l)->l_addr - UAREA_PCB_OFFSET))
+#define	KSTACK_SIZE		UAREA_PCB_OFFSET
 
 #endif /* _I386_PROC_H_ */

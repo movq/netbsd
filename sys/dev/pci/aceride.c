@@ -1,4 +1,4 @@
-/*	$NetBSD: aceride.c,v 1.24 2008/01/01 14:57:06 chris Exp $	*/
+/*	$NetBSD: aceride.c,v 1.30 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aceride.c,v 1.24 2008/01/01 14:57:06 chris Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aceride.c,v 1.30 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,21 +36,22 @@ __KERNEL_RCSID(0, "$NetBSD: aceride.c,v 1.24 2008/01/01 14:57:06 chris Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_acer_reg.h>
 
-static int acer_pcib_match(struct pci_attach_args *);
+static int acer_pcib_match(const struct pci_attach_args *);
 static void acer_do_reset(struct ata_channel *, int);
-static void acer_chip_map(struct pciide_softc*, struct pci_attach_args*);
+static void acer_chip_map(struct pciide_softc*, const struct pci_attach_args*);
 static void acer_setup_channel(struct ata_channel*);
 static int  acer_pci_intr(void *);
+static int  acer_dma_init(void *, int, int, void *, size_t, int);
 
-static int  aceride_match(struct device *, struct cfdata *, void *);
-static void aceride_attach(struct device *, struct device *, void *);
+static int  aceride_match(device_t, cfdata_t, void *);
+static void aceride_attach(device_t, device_t, void *);
 
 struct aceride_softc {
 	struct pciide_softc pciide_sc;
 	struct pci_attach_args pcib_pa;
 };
 
-CFATTACH_DECL(aceride, sizeof(struct aceride_softc),
+CFATTACH_DECL_NEW(aceride, sizeof(struct aceride_softc),
     aceride_match, aceride_attach, NULL, NULL);
 
 static const struct pciide_product_desc pciide_acer_products[] =  {
@@ -72,8 +68,7 @@ static const struct pciide_product_desc pciide_acer_products[] =  {
 };
 
 static int
-aceride_match(struct device *parent, struct cfdata *match,
-    void *aux)
+aceride_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -87,18 +82,19 @@ aceride_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-aceride_attach(struct device *parent, struct device *self, void *aux)
+aceride_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_acer_products));
-
 }
 
 static int
-acer_pcib_match(struct pci_attach_args *pa)
+acer_pcib_match(const struct pci_attach_args *pa)
 {
 	/*
 	 * we need to access the PCI config space of the pcib, see
@@ -107,26 +103,25 @@ acer_pcib_match(struct pci_attach_args *pa)
 	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_BRIDGE &&
 	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_BRIDGE_ISA &&
 	    PCI_VENDOR(pa->pa_id) == PCI_VENDOR_ALI &&
-	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_ALI_M1543)
+	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_ALI_M1533)
 		return 1;
 	return 0;
 }
 
 static void
-acer_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+acer_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	pcireg_t cr, interface;
-	bus_size_t cmdsize, ctlsize;
 	pcireg_t rev = PCI_REVISION(pa->pa_class);
 	struct aceride_softc *acer_sc = (struct aceride_softc *)sc;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 	sc->sc_wdcdev.sc_atac.atac_cap = ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
@@ -144,6 +139,12 @@ acer_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 				sc->sc_wdcdev.sc_atac.atac_udma_cap = 2;
 		}
 		sc->sc_wdcdev.irqack = pciide_irqack;
+		if (rev <= 0xc4) {
+			sc->sc_wdcdev.dma_init = acer_dma_init;
+			aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+			 "using PIO transfers above 137GB as workaround for "
+			 "48bit DMA access bug, expect reduced performance\n");
+		}
 	}
 
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 4;
@@ -177,7 +178,7 @@ acer_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		bool force_compat_mode;
 		bool property_is_set;
 		property_is_set = prop_dictionary_get_bool(
-				device_properties(&sc->sc_wdcdev.sc_atac.atac_dev),
+				device_properties(sc->sc_wdcdev.sc_atac.atac_dev),
 				"ali1543-ide-force-compat-mode",
 				&force_compat_mode);
 		if (property_is_set && force_compat_mode) {
@@ -203,8 +204,8 @@ acer_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	if (rev == 0xC3) {
 		/* install reset bug workaround */
 		if (pci_find_device(&acer_sc->pcib_pa, acer_pcib_match) == 0) {
-			printf("%s: WARNING: can't find pci-isa bridge\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+			aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+			    "WARNING: can't find pci-isa bridge\n");
 		} else
 			sc->sc_wdcdev.reset = acer_do_reset;
 	}
@@ -215,13 +216,13 @@ acer_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
 		if ((interface & PCIIDE_CHAN_EN(channel)) == 0) {
-			aprint_normal("%s: %s channel ignored (disabled)\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+			aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+			    "%s channel ignored (disabled)\n", cp->name);
 			cp->ata_channel.ch_flags |= ATACH_DISABLED;
 			continue;
 		}
 		/* newer controllers seems to lack the ACER_CHIDS. Sigh */
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
+		pciide_mapchan(pa, cp, interface,
 		     (rev >= 0xC2) ? pciide_pci_intr : acer_pci_intr);
 	}
 }
@@ -365,12 +366,25 @@ acer_pci_intr(void *arg)
 		if (chids & ACER_CHIDS_INT(i)) {
 			crv = wdcintr(wdc_cp);
 			if (crv == 0) {
-				printf("%s:%d: bogus intr\n",
-				    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, i);
+				aprint_error("%s:%d: bogus intr\n",
+				    device_xname(
+				      sc->sc_wdcdev.sc_atac.atac_dev), i);
 				pciide_irqack(wdc_cp);
 			} else
 				rv = 1;
 		}
 	}
 	return rv;
+}
+
+static int
+acer_dma_init(void *v, int channel, int drive, void *databuf,
+    size_t datalen, int flags)
+{
+
+	/* use PIO for LBA48 transfer */
+	if (flags & WDC_DMA_LBA48)
+		return EINVAL;
+
+	return pciide_dma_init(v, channel, drive, databuf, datalen, flags);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: device.c,v 1.9 2003/11/10 08:51:52 wiz Exp $	*/
+/*	$NetBSD: device.c,v 1.11 2009/11/17 18:58:07 drochner Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: device.c,v 1.9 2003/11/10 08:51:52 wiz Exp $");
+__RCSID("$NetBSD: device.c,v 1.11 2009/11/17 18:58:07 drochner Exp $");
 #endif
 
 #include "os.h"
@@ -43,7 +38,7 @@ __RCSID("$NetBSD: device.c,v 1.9 2003/11/10 08:51:52 wiz Exp $");
 
 struct	if_info *iflist;		/* Interface List		*/
 
-void	deviceOpen __P((char *, u_short, int));
+void	deviceOpen(const char *, u_short, int);
 
 #ifdef	DEV_NEW_CONF
 /*
@@ -51,9 +46,7 @@ void	deviceOpen __P((char *, u_short, int));
  */
 
 void
-deviceEthAddr(ifname, eaddr)
-	char *ifname;
-        u_char *eaddr;
+deviceEthAddr(const char *ifname, u_char *eaddr)
 {
 	struct sockaddr_dl *sdl;
 	struct ifaddrs *ifap, *ifa;
@@ -79,10 +72,7 @@ deviceEthAddr(ifname, eaddr)
 #endif	/* DEV_NEW_CONF */
 
 void
-deviceOpen(ifname, proto, trans)
-	char	*ifname;
-	u_short	 proto;
-	int	 trans;
+deviceOpen(const char *ifname, u_short proto, int trans)
 {
 	struct if_info *p, tmp;
 
@@ -132,8 +122,7 @@ deviceOpen(ifname, proto, trans)
 }
 
 void
-deviceInitOne(ifname)
-	char	*ifname;
+deviceInitOne(const char *ifname)
 {
 	char	interface[IFNAME_SIZE];
 	struct if_info *p;

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.33 2006/05/11 23:16:28 mrg Exp $
+#	$NetBSD: Makefile,v 1.36 2009/07/26 01:58:20 dholland Exp $
 
 .include <bsd.own.mk>
 
@@ -16,9 +16,5 @@ DPADD+= ${LIBCRYPT}
 
 #LINKS=  ${BINDIR}/ed ${BINDIR}/red
 #MLINKS= ed.1 red.1
-
-.if ${HAVE_GCC} == 4
-COPTS.cbc.c+=	-Wno-pointer-sign
-.endif
 
 .include <bsd.prog.mk>

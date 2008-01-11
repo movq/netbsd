@@ -1,4 +1,4 @@
-/* $NetBSD: params.c,v 1.21 2007/11/11 22:44:12 christos Exp $ */
+/* $NetBSD: params.c,v 1.24 2008/09/12 16:51:55 christos Exp $ */
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: params.c,v 1.21 2007/11/11 22:44:12 christos Exp $");
+__RCSID("$NetBSD: params.c,v 1.24 2008/09/12 16:51:55 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -159,7 +152,7 @@ params_filldefaults(struct params *p)
 	if (p->verify_method == VERIFY_UNKNOWN)
 		p->verify_method = VERIFY_NONE;
 	if (!p->ivmeth)
-		p->ivmeth = string_fromcharstar("encblkno");
+		p->ivmeth = string_fromcharstar("encblkno1");
 	if (p->keylen == (size_t)-1) {
 		i = crypt_defaults_lookup(string_tocharstar(p->algorithm));
 		if (i != (size_t)-1) {
@@ -185,6 +178,11 @@ params_filldefaults(struct params *p)
 int
 params_verify(const struct params *p)
 {
+	static const char *encblkno[] = {
+	    "encblkno", "encblkno1", "encblkno8"
+	};
+	static size_t i;
+	const char *meth;
 
 	if (!p->algorithm) {
 		warnx("unspecified algorithm");
@@ -203,9 +201,15 @@ params_verify(const struct params *p)
 		warnx("unspecified IV method");
 		return 0;
 	}
-	if (strcmp("encblkno", string_tocharstar(p->ivmeth)))
-		warnx("unknown IV method \"%s\" (warning)",
-		    string_tocharstar(p->ivmeth));
+
+	meth = string_tocharstar(p->ivmeth);
+	for (i = 0; i < __arraycount(encblkno); i++)
+		if (strcmp(encblkno[i], meth) == 0)
+			break;
+
+	if (i == __arraycount(encblkno))
+		warnx("unknown IV method \"%s\" (warning)", meth);
+
 	if (p->keylen == (size_t)-1) {
 		warnx("unspecified key length");
 		return 0;
@@ -301,6 +305,7 @@ keygen_new(void)
 	kg->kg_iterations = (size_t)-1;
 	kg->kg_salt = NULL;
 	kg->kg_key = NULL;
+	kg->kg_cmd = NULL;
 	kg->next = NULL;
 	return kg;
 }
@@ -313,6 +318,7 @@ keygen_free(struct keygen *kg)
 		return;
 	bits_free(kg->kg_salt);
 	bits_free(kg->kg_key);
+	string_free(kg->kg_cmd);
 	keygen_free(kg->next);
 	free(kg);
 }
@@ -340,6 +346,8 @@ keygen_verify(const struct keygen *kg)
 			warnx("keygen pkcs5_pbkdf2 must provide a salt");
 			return 0;
 		}
+		if (kg->kg_cmd)
+			warnx("keygen pkcs5_pbkdf2 does not need a `cmd'");
 		break;
 	case KEYGEN_PKCS5_PBKDF2_SHA1:
 		if (kg->kg_iterations == (size_t)-1) {
@@ -352,6 +360,8 @@ keygen_verify(const struct keygen *kg)
 			warnx("keygen pkcs5_pbkdf2/sha1 must provide a salt");
 			return 0;
 		}
+		if (kg->kg_cmd)
+			warnx("keygen pkcs5_pbkdf2/sha1 does not need a `cmd'");
 		break;
 	case KEYGEN_STOREDKEY:
 		if (kg->kg_iterations != (size_t)-1)
@@ -362,6 +372,8 @@ keygen_verify(const struct keygen *kg)
 		}
 		if (kg->kg_salt)
 			warnx("keygen storedkey does not need `salt'");
+		if (kg->kg_cmd)
+			warnx("keygen storedkey does not need `cmd'");
 		break;
 	case KEYGEN_RANDOMKEY:
 	case KEYGEN_URANDOMKEY:
@@ -371,6 +383,20 @@ keygen_verify(const struct keygen *kg)
 			warnx("keygen [u]randomkey does not need `key'");
 		if (kg->kg_salt)
 			warnx("keygen [u]randomkey does not need `salt'");
+		if (kg->kg_cmd)
+			warnx("keygen [u]randomkey does not need `cmd'");
+		break;
+	case KEYGEN_SHELL_CMD:
+		if (kg->kg_iterations != (size_t)-1)
+			warnx("keygen shell_cmd does not need `iterations'");
+		if (kg->kg_key)
+			warnx("keygen shell_cmd does not need `key'");
+		if (kg->kg_salt)
+			warnx("keygen shell_cmd does not need `salt'");
+		if (!kg->kg_cmd) {
+			warnx("keygen shell_cmd must provide a `cmd'");
+			return 0;
+		}
 		break;
 	}
 	return keygen_verify(kg->next);
@@ -406,6 +432,7 @@ keygen_filldefaults(struct keygen *kg, size_t keylen)
 	switch (kg->kg_method) {
 	case KEYGEN_RANDOMKEY:
 	case KEYGEN_URANDOMKEY:
+	case KEYGEN_SHELL_CMD:
 		break;
 	case KEYGEN_PKCS5_PBKDF2_OLD:
 	case KEYGEN_PKCS5_PBKDF2_SHA1:
@@ -456,6 +483,9 @@ keygen_combine(struct keygen *kg1, struct keygen *kg2)
 	if (kg2->kg_key)
 		bits_assign(&kg1->kg_key, kg2->kg_key);
 
+	if (kg2->kg_cmd)
+		string_assign(&kg1->kg_cmd, kg2->kg_cmd);
+
 	return kg1;
 }
 
@@ -475,6 +505,8 @@ keygen_method(string_t *in)
 		kg->kg_method = KEYGEN_STOREDKEY;
 	if (!strcmp("urandomkey", kgm))
 		kg->kg_method = KEYGEN_URANDOMKEY;
+	if (!strcmp("shell_cmd", kgm))
+		kg->kg_method = KEYGEN_SHELL_CMD;
 
 	string_free(in);
 
@@ -529,6 +561,15 @@ keygen_key(bits_t *in)
 	struct keygen *kg = keygen_new();
 
 	kg->kg_key = in;
+	return kg;
+}
+
+struct keygen *
+keygen_cmd(string_t *in)
+{
+	struct keygen *kg = keygen_new();
+
+	kg->kg_cmd = in;
 	return kg;
 }
 

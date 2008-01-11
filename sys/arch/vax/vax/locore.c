@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.c,v 1.73 2007/03/04 19:21:55 christos Exp $	*/
+/*	$NetBSD: locore.c,v 1.79 2010/12/14 23:44:49 matt Exp $	*/
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -32,26 +32,20 @@
  /* All bugs are subject to removal without further notice */
 		
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore.c,v 1.73 2007/03/04 19:21:55 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore.c,v 1.79 2010/12/14 23:44:49 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 
 #include <sys/param.h>
-#include <sys/reboot.h>
-#include <sys/device.h>
 #include <sys/systm.h>
-#include <sys/user.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 #include <sys/proc.h>
+#include <sys/reboot.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
 #include <machine/sid.h>
-#include <machine/param.h>
-#include <machine/vmparam.h>
-#include <machine/pcb.h>
-#include <machine/pte.h>
-#include <machine/pmap.h>
 #include <machine/nexus.h>
 #include <machine/rpb.h>
 
@@ -62,31 +56,31 @@ void	main(void);
 
 extern	paddr_t avail_end;
 paddr_t esym;
-struct user *proc0paddr;
 
 /*
  * The strict CPU-dependent information is set up here, in
  * form of a pointer to a struct that is specific for each CPU.
  */
-extern struct cpu_dep ka780_calls;
-extern struct cpu_dep ka750_calls;
-extern struct cpu_dep ka860_calls;
-extern struct cpu_dep ka820_calls;
-extern struct cpu_dep ka6400_calls;
-extern struct cpu_dep ka88_calls;
-extern struct cpu_dep ka43_calls;
-extern struct cpu_dep ka46_calls;
-extern struct cpu_dep ka48_calls;
-extern struct cpu_dep vxt_calls;
-extern struct cpu_dep ka49_calls;
-extern struct cpu_dep ka53_calls;
-extern struct cpu_dep ka410_calls;
-extern struct cpu_dep ka610_calls;
-extern struct cpu_dep ka630_calls;
-extern struct cpu_dep ka650_calls;
-extern struct cpu_dep ka660_calls;
-extern struct cpu_dep ka670_calls;
-extern struct cpu_dep ka680_calls;
+extern const struct cpu_dep ka780_calls;
+extern const struct cpu_dep ka750_calls;
+extern const struct cpu_dep ka730_calls;
+extern const struct cpu_dep ka860_calls;
+extern const struct cpu_dep ka820_calls;
+extern const struct cpu_dep ka6400_calls;
+extern const struct cpu_dep ka88_calls;
+extern const struct cpu_dep ka43_calls;
+extern const struct cpu_dep ka46_calls;
+extern const struct cpu_dep ka48_calls;
+extern const struct cpu_dep vxt_calls;
+extern const struct cpu_dep ka49_calls;
+extern const struct cpu_dep ka53_calls;
+extern const struct cpu_dep ka410_calls;
+extern const struct cpu_dep ka610_calls;
+extern const struct cpu_dep ka630_calls;
+extern const struct cpu_dep ka650_calls;
+extern const struct cpu_dep ka660_calls;
+extern const struct cpu_dep ka670_calls;
+extern const struct cpu_dep ka680_calls;
 
 /*
  * Start is called from boot; the first routine that is called
@@ -97,8 +91,10 @@ extern struct cpu_dep ka680_calls;
 void
 _start(struct rpb *prpb)
 {
-	extern void *scratch;
+	extern uintptr_t scratch;
+	struct pcb *pcb0;
 	struct pte *pt;
+	vaddr_t uv;
 
 	mtpr(AST_NO, PR_ASTLVL); /* Turn off ASTs */
 
@@ -123,6 +119,12 @@ _start(struct rpb *prpb)
 	case VAX_BTYP_750:
 		dep_call = &ka750_calls;
 		strcpy(cpu_model, "VAX 11/750");
+		break;
+#endif
+#if VAX730 || VAXANY
+	case VAX_BTYP_730:
+		dep_call = &ka730_calls;
+		strcpy(cpu_model, "VAX 11/730");
 		break;
 #endif
 #if VAX8600 || VAXANY
@@ -312,15 +314,17 @@ _start(struct rpb *prpb)
 	 *
 	 * In post-1.4 a RPB is always provided from the boot blocks.
 	 */
+	uv = uvm_lwp_getuarea(&lwp0);
+	uv += REDZONEADDR;
 #if defined(COMPAT_14)
 	if (prpb == 0) {
-		memset((char *)proc0paddr + REDZONEADDR, 0, sizeof(struct rpb));
-		prpb = (struct rpb *)(proc0paddr + REDZONEADDR);
+		memset((void *)uv, 0, sizeof(struct rpb));
+		prpb = (struct rpb *)uv;
 		prpb->pfncnt = avail_end >> VAX_PGSHIFT;
 		prpb->rpb_base = (void *)-1;	/* RPB is fake */
 	} else
 #endif
-	memcpy((char *)proc0paddr + REDZONEADDR, prpb, sizeof(struct rpb));
+	memcpy((void *)uv, prpb, sizeof(struct rpb));
 	if (prpb->pfncnt)
 		avail_end = prpb->pfncnt << VAX_PGSHIFT;
 	else
@@ -330,15 +334,14 @@ _start(struct rpb *prpb)
 
 	avail_end &= ~PGOFSET; /* be sure */
 
-	lwp0.l_addr = (void *)proc0paddr; /* XXX */
-
 	pmap_bootstrap();
 
 	/* Now running virtual. set red zone for proc0 */
-	pt = kvtopte((u_int)lwp0.l_addr + REDZONEADDR);
+	pt = kvtopte(uv);
 	pt->pg_v = 0;
 
-	((struct pcb *)proc0paddr)->framep = scratch;
+	pcb0 = lwp_getpcb(&lwp0);
+	pcb0->framep = (void *)scratch;
 
 	/*
 	 * Change mode down to userspace is done by faking a stack

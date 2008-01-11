@@ -1,4 +1,6 @@
-# $NetBSD: Makefile,v 1.16 2006/08/31 07:18:39 he Exp $
+# $NetBSD: Makefile,v 1.18 2009/04/14 22:15:27 lukem Exp $
+
+WARNS?=	1	# XXX -Wextra -Wshadow
 
 NOLINT= # defined
 
@@ -6,8 +8,6 @@ NOLINT= # defined
 
 DIST=		${NETBSDSRCDIR}/crypto/dist
 .PATH: ${DIST}/heimdal/kdc
-
-WARNS?=  1
 
 PROG= string2key
 MAN=  string2key.8
@@ -28,9 +28,9 @@ CPPFLAGS+=-DHAVE_IPV6
 
 VERS!=	cd ${NETBSDSRCDIR}/lib/libvers && ${PRINTOBJDIR}
 
-LDADD+=	-lkrb5 -lcrypto -lasn1 -lcom_err -L${VERS} -lvers \
-	-lroken -lcrypt -lutil
-DPADD+=	${LIBKRB5} ${LIBCRYPTO} ${LIBASN1} ${LIBCOM_ERR} ${VERS}/libvers.a \
-	${LIBROKEN} ${LIBCRYPT} ${LIBUTIL}
+LDADD+=	-lkrb5 -lhx509 -lcrypto -lasn1 -lcom_err -L${VERS} \
+	-lvers -lroken -lcrypt -lutil
+DPADD+=	${LIBKRB5} ${LIBHX509} ${LIBCRYPTO} ${LIBASN1} ${LIBCOM_ERR} \
+	${VERS}/libvers.a ${LIBROKEN} ${LIBCRYPT} ${LIBUTIL}
 
 .include <bsd.prog.mk>

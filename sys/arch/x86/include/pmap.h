@@ -1,7 +1,6 @@
-/*	$NetBSD: pmap.h,v 1.9 2008/01/08 22:24:09 yamt Exp $	*/
+/*	$NetBSD: pmap.h,v 1.38 2011/05/07 23:59:13 jym Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgment:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -74,8 +67,6 @@
 #ifndef _X86_PMAP_H_
 #define	_X86_PMAP_H_
 
-#define ptei(VA)	(((VA_SIGN_POS(VA)) & L1_MASK) >> L1_SHIFT)
-
 /*
  * pl*_pi: index in the ptp page for a pde mapping a VA.
  * (pl*_i below is the index in the virtual array of all pdes per level)
@@ -87,6 +78,8 @@
 
 /*
  * pl*_i: generate index into pde/pte arrays in virtual space
+ *
+ * pl_i(va, X) == plX_i(va) <= pl_i_roundup(va, X)
  */
 #define pl1_i(VA)	(((VA_SIGN_POS(VA)) & L1_FRAME) >> L1_SHIFT)
 #define pl2_i(VA)	(((VA_SIGN_POS(VA)) & L2_FRAME) >> L2_SHIFT)
@@ -106,13 +99,18 @@
 
 #define ptp_va2o(va, lvl)	(pl_i(va, (lvl)+1) * PAGE_SIZE)
 
+/* size of a PDP: usually one page, except for PAE */
+#ifdef PAE
+#define PDP_SIZE 4
+#else
+#define PDP_SIZE 1
+#endif
+
+
 #if defined(_KERNEL)
 /*
  * pmap data structures: see pmap.c for details of locking.
  */
-
-struct pmap;
-typedef struct pmap *pmap_t;
 
 /*
  * we maintain a list of all non-kernel pmaps
@@ -139,7 +137,7 @@ struct pmap {
 #define	pm_lock	pm_obj[0].vmobjlock
 	LIST_ENTRY(pmap) pm_list;	/* list (lck by pm_list lock) */
 	pd_entry_t *pm_pdir;		/* VA of PD (lck by object lock) */
-	paddr_t pm_pdirpa;		/* PA of PD (read-only after create) */
+	paddr_t pm_pdirpa[PDP_SIZE];	/* PA of PDs (read-only after create) */
 	struct vm_page *pm_ptphint[PTP_LEVELS-1];
 					/* pointer to a PTP in our pmap */
 	struct pmap_statistics pm_stats;  /* pmap stats (lck by object lock) */
@@ -150,41 +148,40 @@ struct pmap {
 	int pm_flags;			/* see below */
 
 	union descriptor *pm_ldt;	/* user-set LDT */
-	int pm_ldt_len;			/* number of LDT entries */
+	size_t pm_ldt_len;		/* size of LDT in bytes */
 	int pm_ldt_sel;			/* LDT selector */
 	uint32_t pm_cpus;		/* mask of CPUs using pmap */
 	uint32_t pm_kernel_cpus;	/* mask of CPUs using kernel part
 					 of pmap */
 };
 
-/* pm_flags */
-#define	PMF_USER_LDT	0x01	/* pmap has user-set LDT */
-#define	PMF_USER_XPIN	0x02	/* pmap pdirpa is pinned (Xen) */
-
+/* macro to access pm_pdirpa slots */
+#ifdef PAE
+#define pmap_pdirpa(pmap, index) \
+	((pmap)->pm_pdirpa[l2tol3(index)] + l2tol2(index) * sizeof(pd_entry_t))
+#else
+#define pmap_pdirpa(pmap, index) \
+	((pmap)->pm_pdirpa[0] + (index) * sizeof(pd_entry_t))
+#endif
 
 /*
- * for each managed physical page we maintain a list of <PMAP,VA>'s
- * which it is mapped at.  the list is headed by a pv_head structure.
- * there is one pv_head per managed phys page (allocated at boot time).
- * the pv_head structure points to a list of pv_entry structures (each
- * describes one mapping).
+ * MD flags that we use for pmap_enter and pmap_kenter_pa:
  */
-
-struct pv_entry {			/* locked by its list's pvh_lock */
-	SPLAY_ENTRY(pv_entry) pv_node;	/* splay-tree node */
-	struct pmap *pv_pmap;		/* the pmap */
-	vaddr_t pv_va;			/* the virtual address */
-	struct vm_page *pv_ptp;		/* the vm_page of the PTP */
-};
 
 /*
  * global kernel variables
  */
 
-/* PDPpaddr: is the physical address of the kernel's PDP */
+/*
+ * PDPpaddr is the physical address of the kernel's PDP.
+ * - i386 non-PAE and amd64: PDPpaddr corresponds directly to the %cr3
+ * value associated to the kernel process, proc0.
+ * - i386 PAE: it still represents the PA of the kernel's PDP (L2). Due to
+ * the L3 PD, it cannot be considered as the equivalent of a %cr3 any more.
+ * - Xen: it corresponds to the PFN of the kernel's PDP.
+ */
 extern u_long PDPpaddr;
 
-extern struct pmap kernel_pmap_store;	/* kernel pmap */
 extern int pmap_pg_g;			/* do we support PG_G? */
 extern long nkptp[PTP_LEVELS];
 
@@ -192,7 +189,6 @@ extern long nkptp[PTP_LEVELS];
  * macros
  */
 
-#define	pmap_kernel()			(&kernel_pmap_store)
 #define	pmap_resident_count(pmap)	((pmap)->pm_stats.resident_count)
 #define	pmap_wired_count(pmap)		((pmap)->pm_stats.wired_count)
 
@@ -202,9 +198,18 @@ extern long nkptp[PTP_LEVELS];
 #define pmap_is_modified(pg)		pmap_test_attrs(pg, PG_M)
 #define pmap_is_referenced(pg)		pmap_test_attrs(pg, PG_U)
 #define pmap_move(DP,SP,D,L,S)
-#define pmap_phys_address(ppn)		x86_ptob(ppn)
+#define pmap_phys_address(ppn)		(x86_ptob(ppn) & ~X86_MMAP_FLAG_MASK)
+#define pmap_mmap_flags(ppn)		x86_mmap_flags(ppn)
 #define pmap_valid_entry(E) 		((E) & PG_V) /* is PDE or PTE valid? */
 
+#if defined(__x86_64__) || defined(PAE)
+#define X86_MMAP_FLAG_SHIFT	(64 - PGSHIFT)
+#else
+#define X86_MMAP_FLAG_SHIFT	(32 - PGSHIFT)
+#endif
+
+#define X86_MMAP_FLAG_MASK	0xf
+#define X86_MMAP_FLAG_PREFETCH	0x1
 
 /*
  * prototypes
@@ -220,13 +225,30 @@ bool		pmap_test_attrs(struct vm_page *, unsigned);
 void		pmap_write_protect(struct pmap *, vaddr_t, vaddr_t, vm_prot_t);
 void		pmap_load(void);
 paddr_t		pmap_init_tmp_pgtbl(paddr_t);
+void		pmap_remove_all(struct pmap *);
+void		pmap_ldt_sync(struct pmap *);
+
+void		pmap_emap_enter(vaddr_t, paddr_t, vm_prot_t);
+void		pmap_emap_remove(vaddr_t, vsize_t);
+void		pmap_emap_sync(bool);
+
+void		pmap_map_ptes(struct pmap *, struct pmap **, pd_entry_t **,
+		    pd_entry_t * const **);
+void		pmap_unmap_ptes(struct pmap *, struct pmap *);
+
+int		pmap_pdes_invalid(vaddr_t, pd_entry_t * const *, pd_entry_t *);
+
+u_int		x86_mmap_flags(paddr_t);
 
 vaddr_t reserve_dumppages(vaddr_t); /* XXX: not a pmap fn */
 
 void	pmap_tlb_shootdown(pmap_t, vaddr_t, vaddr_t, pt_entry_t);
 void	pmap_tlb_shootwait(void);
 
+#define	__HAVE_PMAP_EMAP
+
 #define PMAP_GROWKERNEL		/* turn on pmap_growkernel interface */
+#define PMAP_FORK		/* turn on pmap_fork interface */
 
 /*
  * Do idle page zero'ing uncached to avoid polluting the cache.
@@ -238,11 +260,10 @@ bool	pmap_pageidlezero(paddr_t);
  * inline functions
  */
 
-/*ARGSUSED*/
-static __inline void
-pmap_remove_all(struct pmap *pmap)
+__inline static bool __unused
+pmap_pdes_valid(vaddr_t va, pd_entry_t * const *pdes, pd_entry_t *lastpde)
 {
-	/* Nothing. */
+	return pmap_pdes_invalid(va, pdes, lastpde) == 0;
 }
 
 /*
@@ -346,14 +367,16 @@ paddr_t vtophys(vaddr_t);
 vaddr_t	pmap_map(vaddr_t, paddr_t, paddr_t, vm_prot_t);
 void	pmap_cpu_init_early(struct cpu_info *);
 void	pmap_cpu_init_late(struct cpu_info *);
-void	sse2_zero_page(void *);
-void	sse2_copy_page(void *, void *);
+bool	sse2_idlezero_page(void *);
 
 
 #ifdef XEN
 
+#include <sys/bitops.h>
+
 #define XPTE_MASK	L1_FRAME
-#define XPTE_SHIFT	9
+/* Selects the index of a PTE in (A)PTE_BASE */
+#define XPTE_SHIFT	(L1_SHIFT - ilog2(sizeof(pt_entry_t)))
 
 /* PTE access inline fuctions */
 
@@ -385,7 +408,7 @@ xpmap_update (pt_entry_t *pte, pt_entry_t npte)
 {
         int s = splvm();
 
-        xpq_queue_pte_update((pt_entry_t *) xpmap_ptetomach(pte), npte);
+        xpq_queue_pte_update(xpmap_ptetomach(pte), npte);
         xpq_flush_queue();
         splx(s);
 }
@@ -394,14 +417,16 @@ xpmap_update (pt_entry_t *pte, pt_entry_t npte)
 /* Xen helpers to change bits of a pte */
 #define XPMAP_UPDATE_DIRECT	1	/* Update direct map entry flags too */
 
-/* pmap functions with machine addresses */
-void	pmap_kenter_ma(vaddr_t, paddr_t, vm_prot_t);
-int	pmap_enter_ma(struct pmap *, vaddr_t, paddr_t, paddr_t,
-	    vm_prot_t, int, int);
-bool	pmap_extract_ma(pmap_t, vaddr_t, paddr_t *);
 paddr_t	vtomach(vaddr_t);
+#define vtomfn(va) (vtomach(va) >> PAGE_SHIFT)
 
 #endif	/* XEN */
+
+/* pmap functions with machine addresses */
+void	pmap_kenter_ma(vaddr_t, paddr_t, vm_prot_t, u_int);
+int	pmap_enter_ma(struct pmap *, vaddr_t, paddr_t, paddr_t,
+	    vm_prot_t, u_int, int);
+bool	pmap_extract_ma(pmap_t, vaddr_t, paddr_t *);
 
 /*
  * Hooks for the pool allocator.

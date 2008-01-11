@@ -567,6 +567,8 @@
 .as doc-str-St--p1003.1-2001   " (\*[Lq]\)\*[Px]\*[doc-str-St].1\*[Rq])
 .ds doc-str-St--p1003.1-2004   \*[doc-Tn-font-size]\%IEEE\*[doc-str-St] Std 1003.1-2004
 .as doc-str-St--p1003.1-2004   " (\*[Lq]\)\*[Px]\*[doc-str-St].1\*[Rq])
+.ds doc-str-St--p1003.1-2008   \*[doc-Tn-font-size]\%IEEE\*[doc-str-St] Std 1003.1-2008
+.as doc-str-St--p1003.1-2008   " (\*[Lq]\)\*[Px]\*[doc-str-St].1\*[Rq])
 .
 .\" POSIX Part 2: Shell and Utilities
 .ds doc-str-St--p1003.2        \*[doc-Tn-font-size]\%IEEE\*[doc-str-St] Std 1003.2
@@ -684,6 +686,7 @@
 .ds doc-str-Lb-libcrypt    Crypt Library (libcrypt, \-lcrypt)
 .ds doc-str-Lb-libcurses   Curses Library (libcurses, \-lcurses)
 .ds doc-str-Lb-libedit     Command Line Editor Library (libedit, \-ledit)
+.ds doc-str-Lb-libelf      ELF Object Manipulation Library (libelf, \-lelf)
 .ds doc-str-Lb-libevent    Event Notification Library (libevent, \-levent)
 .ds doc-str-Lb-libform     Curses Form Library (libform, \-lform)
 .ds doc-str-Lb-libi386     i386 Architecture Library (libi386, \-li386)

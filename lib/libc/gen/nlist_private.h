@@ -1,4 +1,4 @@
-/* $NetBSD: nlist_private.h,v 1.17 2003/07/26 19:24:43 salo Exp $ */
+/* $NetBSD: nlist_private.h,v 1.21 2011/01/17 23:32:31 matt Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou
@@ -41,9 +41,11 @@
 #  define	NLIST_ELF64
 #  define	NLIST_ELF32
 #elif defined(__mips__)
-#  define	NLIST_AOUT
 #  define	NLIST_ECOFF
 #  define	NLIST_ELF32
+#  ifndef __mips_o32
+#    define	NLIST_ELF64
+#  endif
 #elif defined(__arm__) || defined(__i386__) || defined (__m68k__) || \
     defined(__powerpc__) || defined(__vax__)
 #  define	NLIST_AOUT
@@ -67,7 +69,9 @@
 /* #define	NLIST_ELF64 */
 #endif
 
-#define	ISLAST(p)	(p->n_un.n_name == 0 || p->n_un.n_name[0] == 0)
+#define	ISLAST(p)	(N_NAME(p) == 0 || N_NAME(p)[0] == 0)
+
+struct nlist;
 
 #ifdef NLIST_AOUT
 int	__fdnlist_aout __P((int, struct nlist *));

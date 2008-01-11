@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctlgetmibinfo.c,v 1.5 2005/06/12 05:21:27 lukem Exp $ */
+/*	$NetBSD: sysctlgetmibinfo.c,v 1.9 2010/12/13 23:10:13 pooka Exp $ */
 
 /*-
  * Copyright (c) 2003,2004 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,13 +31,15 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: sysctlgetmibinfo.c,v 1.5 2005/06/12 05:21:27 lukem Exp $");
+__RCSID("$NetBSD: sysctlgetmibinfo.c,v 1.9 2010/12/13 23:10:13 pooka Exp $");
 #endif /* LIBC_SCCS and not lint */
 
+#ifndef RUMP_ACTION
 #include "namespace.h"
 #ifdef _REENTRANT
 #include "reentrant.h"
 #endif /* _REENTRANT */
+#endif /* RUMP_ACTION */
 #include <sys/param.h>
 #include <sys/sysctl.h>
 
@@ -49,9 +48,14 @@ __RCSID("$NetBSD: sysctlgetmibinfo.c,v 1.5 2005/06/12 05:21:27 lukem Exp $");
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef RUMP_ACTION
+#include <rump/rump_syscalls.h>
+#define sysctl(a,b,c,d,e,f) rump_sys___sysctl(a,b,c,d,e,f)
+#else
 #ifdef __weak_alias
 __weak_alias(__learn_tree,___learn_tree)
 __weak_alias(sysctlgetmibinfo,_sysctlgetmibinfo)
+#endif
 #endif
 
 /*
@@ -127,7 +131,8 @@ relearnhead(void)
 {
 	struct sysctlnode *h, *i, *o, qnode;
 	size_t si, so;
-	int rc, name, nlen, olen, ni, oi, t;
+	int rc, name, nlen, olen, ni, oi;
+	uint32_t t;
 
 	/*
 	 * if there's nothing there, there's no need to expend any
@@ -267,7 +272,7 @@ int
 __learn_tree(int *name, u_int namelen, struct sysctlnode *pnode)
 {
 	struct sysctlnode qnode;
-	int rc;
+	uint32_t rc;
 	size_t sz;
 
 	if (pnode == NULL)
@@ -401,8 +406,8 @@ sysctlgetmibinfo_unlocked(const char *gname, int *iname, u_int *namelenp,
 #endif /* _REENTRANT */
 {
 	struct sysctlnode *pnode, *node;
-	int name[CTL_MAXNAME], ni, n, haven;
-	u_int nl;
+	int name[CTL_MAXNAME], n, haven;
+	u_int ni, nl;
 	intmax_t q;
 	char sep[2], token[SYSCTL_NAMELEN],
 		pname[SYSCTL_NAMELEN * CTL_MAXNAME + CTL_MAXNAME];
@@ -420,7 +425,7 @@ sysctlgetmibinfo_unlocked(const char *gname, int *iname, u_int *namelenp,
 		}
 		else {
 			/* this is just someone being silly */
-			if (SYSCTL_VERS((*rnode)->sysctl_flags) != v)
+			if (SYSCTL_VERS((*rnode)->sysctl_flags) != (uint32_t)v)
 				return (EINVAL);
 
 			/* XXX later deal with other people's trees */
@@ -479,7 +484,7 @@ sysctlgetmibinfo_unlocked(const char *gname, int *iname, u_int *namelenp,
 				return (-1);
 			}
 		}
-		else if (dot - piece > sizeof(token) - 1) {
+		else if (dot - piece > (intptr_t)(sizeof(token) - 1)) {
 			COPY_OUT_DATA(token, cname, csz, namelenp, nl);
 			errno = ENAMETOOLONG;
 			return (-1);

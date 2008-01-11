@@ -1,4 +1,4 @@
-/*	$NetBSD: varpush.c,v 1.8 2004/01/27 20:30:30 jsm Exp $	*/
+/*	$NetBSD: varpush.c,v 1.10 2009/05/25 23:34:50 dholland Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993
@@ -34,12 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)varpush.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: varpush.c,v 1.8 2004/01/27 20:30:30 jsm Exp $");
+__RCSID("$NetBSD: varpush.c,v 1.10 2009/05/25 23:34:50 dholland Exp $");
 #endif
 #endif /* not lint */
 
-# include	<paths.h>
-# include	"mille.h"
+#include <paths.h>
+#include "mille.h"
 
 /*
  * @(#)varpush.c	1.1 (Berkeley) 4/1/82
@@ -50,9 +50,7 @@ __RCSID("$NetBSD: varpush.c,v 1.8 2004/01/27 20:30:30 jsm Exp $");
  * channel file.  func() is either read or write.
  */
 bool
-varpush(file, func)
-	int	file;
-	ssize_t	(*func)(int, const struct iovec *, int); 
+varpush(int file, ssize_t (*func)(int, const struct iovec *, int))
 {
 	int		temp;
 	const struct iovec vec[] = {

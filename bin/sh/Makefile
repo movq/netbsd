@@ -1,9 +1,7 @@
-#	$NetBSD: Makefile,v 1.81 2007/03/25 06:30:37 apb Exp $
+#	$NetBSD: Makefile,v 1.95 2011/05/26 12:56:24 joerg Exp $
 #	@(#)Makefile	8.4 (Berkeley) 5/5/95
 
 .include <bsd.own.mk>
-
-WARNS=4
 
 YHEADER=1
 PROG=	sh
@@ -17,11 +15,15 @@ SRCS=	${SHSRCS} ${GENSRCS}
 
 DPSRCS+=${GENHDRS}
 
-LDADD+=	-ll -ledit -ltermcap
-DPADD+=	${LIBL} ${LIBEDIT} ${LIBTERMCAP}
+LDADD+=	-ll -ledit -lterminfo
+DPADD+=	${LIBL} ${LIBEDIT} ${LIBTERMINFO}
 
 LFLAGS=	-8	# 8-bit lex scanner for arithmetic
-YFLAGS=	-d
+
+# Environment for scripts executed during build.
+SCRIPT_ENV= \
+	AWK=${TOOL_AWK:Q} \
+	SED=${TOOL_SED:Q}
 
 # The .depend file can get references to these temporary files
 .OPTIONAL: lex.yy.c y.tab.c
@@ -33,7 +35,8 @@ YFLAGS+=-l
 
 CPPFLAGS+=-DSHELL -I. -I${.CURDIR}
 #XXX: For testing only.
-#CPPFLAGS+=-DDEBUG=1
+#CPPFLAGS+=-DDEBUG=2
+#COPTS+=-g
 #CFLAGS+=-funsigned-char
 #TARGET_CHARFLAG?= -DTARGET_CHAR="unsigned char" -funsigned-char
 
@@ -52,25 +55,22 @@ CLEANFILES+= trace
 
 token.h: mktokens
 	${_MKTARGET_CREATE}
-	${HOST_SH} ${.ALLSRC}
+	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC}
 
-builtins.h: builtins.c
+.ORDER: builtins.h builtins.c
+builtins.h builtins.c: mkbuiltins shell.h builtins.def
 	${_MKTARGET_CREATE}
-
-builtins.c: mkbuiltins shell.h builtins.def
-	${_MKTARGET_CREATE}
-	${HOST_SH} ${.ALLSRC} ${.OBJDIR}
+	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC} ${.OBJDIR}
 	[ -f builtins.h ]
 
 init.c: mkinit.sh ${SHSRCS}
 	${_MKTARGET_CREATE}
-	${HOST_SH} ${.ALLSRC}
+	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC}
 
-nodes.h: nodes.c
-
-nodes.c: mknodes.sh nodetypes nodes.c.pat
+.ORDER: nodes.h nodes.c
+nodes.c nodes.h: mknodes.sh nodetypes nodes.c.pat
 	${_MKTARGET_CREATE}
-	${HOST_SH} ${.ALLSRC} ${.OBJDIR}
+	${SCRIPT_ENV} ${HOST_SH} ${.ALLSRC} ${.OBJDIR}
 	[ -f nodes.h ]
 
 .if ${USETOOLS} == "yes"
@@ -78,4 +78,11 @@ COMPATOBJDIR!=	cd ${NETBSDSRCDIR}/tools/compat && ${PRINTOBJDIR}
 NBCOMPATLIB=	-L${COMPATOBJDIR} -lnbcompat
 .endif
 
+.if make(install)
+SUBDIR+=USD.doc
+.endif
+
+CWARNFLAGS.clang+=	-Wno-uninitialized
+
 .include <bsd.prog.mk>
+.include <bsd.subdir.mk>

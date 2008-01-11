@@ -1,4 +1,4 @@
-# 	$NetBSD: TADPOLE3GX,v 1.42 2007/10/17 19:57:11 garbled Exp $
+# 	$NetBSD: TADPOLE3GX,v 1.53 2011/03/06 17:08:31 bouyer Exp $
 
 include "arch/sparc/conf/std.sparc"
 
@@ -39,7 +39,7 @@ options 	WSDISPLAY_COMPAT_USL		# VT handling
 
 options 	WSDISPLAY_DEFAULTSCREENS=1
 
-options		SPARCBOOK_CMD		# enable screen switching with lAlt-Fn
+options 	SPARCBOOK_CMD		# enable screen switching with lAlt-Fn
 #options 	FONT_GALLANT12x22	# the console font
 options 	FONT_BOLD8x16		# a somewhat smaller font
 
@@ -64,13 +64,11 @@ options 	KTRACE
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
-#options 	SHMMAXPGS=1024	# 1024 pages is the default
 
 ## Loadable kernel module support; still under development.
-options 	LKM
 
 options 	USERCONF	# userconf(4) support
-#options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
+#options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 ## NFS boot options; tries DHCP/BOOTP then BOOTPARAM
@@ -83,8 +81,8 @@ options 	NFS_BOOT_DHCP
 ## The DDB in-kernel debugger runs at panic (unless DDB_ONPANIC=0), or at
 ## serial console break or keyboard reset, where the PROM would normally
 ## intercept.  DDB_HISTORY_SIZE adds up/down arrow command history.
-#options 	DDB			# kernel dynamic debugger
-#options 	DDB_HISTORY_SIZE=100	# enable history editing in DDB
+options 	DDB			# kernel dynamic debugger
+options 	DDB_HISTORY_SIZE=100	# enable history editing in DDB
 #options 	DDB_ONPANIC=1		# see also sysctl(8): `ddb.onpanic'
 
 ## You may also use gdb, on another computer connected to this machine over
@@ -110,6 +108,8 @@ makeoptions	DEBUG="-g"
 ## Enable (possibly expensive) debugging code that may also display messages
 ## on the system console
 #options 	DEBUG
+#options 	LOCKDEBUG
+#options 	SYSCALL_DEBUG
 
 ## Make SCSI error messages more verbose when explaining their meanings.
 options 	SCSIVERBOSE
@@ -144,10 +144,11 @@ options 	COMPAT_16	# NetBSD 1.6 binary compatibility
 options 	COMPAT_20	# NetBSD 2.0 binary compatibility
 options 	COMPAT_30	# NetBSD 3.0 binary compatibility
 options 	COMPAT_40	# NetBSD 4.0 binary compatibility
+options 	COMPAT_50	# NetBSD 5.0 binary compatibility
 options 	COMPAT_SUNOS	# SunOS 4.x binary compatibility
 options 	COMPAT_SVR4	# SunOS 5.x binary compatibility
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
-options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
+options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 ## File systems.  You probably need at least one of FFS or NFS.
 file-system	FFS		# Berkeley Fast Filesystem
@@ -158,7 +159,6 @@ file-system	MFS		# memory-based filesystem
 #file-system	FDESC		# user file descriptor filesystem
 #file-system	UMAPFS		# uid/gid remapping filesystem
 #file-system	LFS		# Log-based filesystem (still experimental)
-#file-system	PORTAL		# portal filesystem (still experimental)
 file-system	PROCFS		# /proc
 file-system	CD9660		# ISO 9660 + Rock Ridge file system
 #file-system	UNION		# union file system
@@ -167,7 +167,8 @@ file-system	PTYFS		# /dev/pts/N support
 
 ## File system options.
 options 	NFSSERVER	# Sun NFS-compatible filesystem server
-options 	QUOTA		# FFS quotas
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
@@ -185,6 +186,8 @@ options 	NTP		# Network Time Protocol in-kernel support
 options 	PFIL_HOOKS	# Add pfil(9) hooks, intended for custom LKMs.
 options 	IPFILTER_LOG	# Add ipmon(8) logging for ipfilter device
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
+#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 options 	PPP_BSDCOMP	# Add BSD compression to ppp device
 options 	PPP_DEFLATE	# Add deflate (libz) compression to ppp device
 options 	PPP_FILTER	# Add active filters for ppp (via bpf)
@@ -296,7 +299,7 @@ pseudo-device	vnd
 ## Memory disk device, used on boot floppies with compressed
 ## kernel-plus-root-disk images.
 
-#pseudo-device	md	1
+#pseudo-device	md	
 
 
 #### Network interfaces
@@ -343,14 +346,14 @@ pseudo-device	ipfilter
 
 ## /dev/audio support
 
-#options	DBRI_DEBUG	# noisy debug output from the dbri driver
-options		DBRI_BIG_BUFFER	# use bigger DMA buffers, for slow CPUs
+#options 	DBRI_DEBUG	# noisy debug output from the dbri driver
+options 	DBRI_BIG_BUFFER	# use bigger DMA buffers, for slow CPUs
 dbri0		at sbus0 slot ? offset ?		# SUNW,DBRI[s3|e]
 audio*		at audiobus?
 
 # Tadpole 3GX/3GS (P9100 -- P Nine One Zero Zero -> pnozz)
 pnozz0 at sbus? slot ? offset ?
-#options	PNOZZ_EMUL_CG3		# emulate a CG3 for Xsun instead of 
+#options 	PNOZZ_EMUL_CG3		# emulate a CG3 for Xsun instead of 
 					# running natively
 
 wsdisplay* 	at wsemuldisplaydev? console ?
@@ -370,7 +373,7 @@ pseudo-device	pty			# pseudo-ttys (for network, etc.)
 pseudo-device	rnd
 
 pseudo-device	clockctl		# user control of clock subsystem
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 
 pseudo-device	wsmux			# mouse and keyboard multiplexor
 pseudo-device	wsfont

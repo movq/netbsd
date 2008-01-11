@@ -1,4 +1,4 @@
-/*	$NetBSD: btdevctl.c,v 1.6 2007/11/19 19:49:58 plunky Exp $	*/
+/*	$NetBSD: btdevctl.c,v 1.9 2011/03/20 19:46:13 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,9 +32,10 @@
  */
 
 #include <sys/cdefs.h>
-__COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc.\n"
-	    "All rights reserved.\n");
-__RCSID("$NetBSD: btdevctl.c,v 1.6 2007/11/19 19:49:58 plunky Exp $");
+__COPYRIGHT("@(#) Copyright (c) 2006 The NetBSD Foundation, Inc.\
+  @(#) Copyright (c) 2006 Itronix, Inc.\
+  All rights reserved.");
+__RCSID("$NetBSD: btdevctl.c,v 1.9 2011/03/20 19:46:13 plunky Exp $");
 
 #include <prop/proplib.h>
 #include <sys/ioctl.h>
@@ -157,9 +158,6 @@ main(int argc, char *argv[])
 			printf("Performing SDP query for service '%s'..\n", service);
 
 		dev = cfg_query(&laddr, &raddr, service);
-		if (dev == NULL)
-			errx(EXIT_FAILURE, "%s/%s not found", bt_ntoa(&raddr, NULL), service);
-
 		set = true;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ipw.c,v 1.36 2007/12/20 21:08:19 dyoung Exp $	*/
+/*	$NetBSD: if_ipw.c,v 1.52 2010/11/15 05:57:07 uebayasi Exp $	*/
 /*	FreeBSD: src/sys/dev/ipw/if_ipw.c,v 1.15 2005/11/13 17:17:40 damien Exp 	*/
 
 /*-
@@ -29,14 +29,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ipw.c,v 1.36 2007/12/20 21:08:19 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ipw.c,v 1.52 2010/11/15 05:57:07 uebayasi Exp $");
 
 /*-
  * Intel(R) PRO/Wireless 2100 MiniPCI driver
  * http://www.intel.com/network/connectivity/products/wireless/prowireless_mobile.htm
  */
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -47,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ipw.c,v 1.36 2007/12/20 21:08:19 dyoung Exp $");
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/conf.h>
+#include <sys/proc.h>
 
 #include <sys/bus.h>
 #include <machine/endian.h>
@@ -56,9 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ipw.c,v 1.36 2007/12/20 21:08:19 dyoung Exp $");
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
@@ -88,13 +86,14 @@ int ipw_debug = 0;
 #define DPRINTFN(n, x)
 #endif
 
+/* Permit loading the Intel firmware */
+static int ipw_accept_eula;
+
 static int	ipw_dma_alloc(struct ipw_softc *);
 static void	ipw_release(struct ipw_softc *);
-static int	ipw_match(struct device *, struct cfdata *, void *);
-static void	ipw_attach(struct device *, struct device *, void *);
-static int	ipw_detach(struct device *, int);
-
-static bool	ipw_resume(device_t);
+static int	ipw_match(device_t, cfdata_t, void *);
+static void	ipw_attach(device_t, device_t, void *);
+static int	ipw_detach(device_t, int);
 
 static int	ipw_media_change(struct ifnet *);
 static void	ipw_media_status(struct ifnet *, struct ifmediareq *);
@@ -157,8 +156,7 @@ CFATTACH_DECL(ipw, sizeof (struct ipw_softc), ipw_match, ipw_attach,
     ipw_detach, NULL);
 
 static int
-ipw_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ipw_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -173,9 +171,9 @@ ipw_match(struct device *parent, struct cfdata *match,
 #define IPW_PCI_BAR0	0x10
 
 static void
-ipw_attach(struct device *parent, struct device *self, void *aux)
+ipw_attach(device_t parent, device_t self, void *aux)
 {
-	struct ipw_softc *sc = (struct ipw_softc *)self;
+	struct ipw_softc *sc = device_private(self);
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ifnet *ifp = &sc->sc_if;
 	struct pci_attach_args *pa = aux;
@@ -201,52 +199,45 @@ ipw_attach(struct device *parent, struct device *self, void *aux)
 	data |= PCI_COMMAND_MASTER_ENABLE;
 	pci_conf_write(sc->sc_pct, pa->pa_tag, PCI_COMMAND_STATUS_REG, data);
 
-	pci_disable_retry(sc->sc_pct, sc->sc_pcitag);
-
 	/* map the register window */
 	error = pci_mapreg_map(pa, IPW_PCI_BAR0, PCI_MAPREG_TYPE_MEM |
 	    PCI_MAPREG_MEM_TYPE_32BIT, 0, &memt, &memh, &base, &sc->sc_sz);
 	if (error != 0) {
-		aprint_error("%s: could not map memory space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not map memory space\n");
 		return;
 	}
 
 	sc->sc_st = memt;
 	sc->sc_sh = memh;
 	sc->sc_dmat = pa->pa_dmat;
-	strlcpy(sc->sc_fwname, "ipw2100-1.2.fw", sizeof(sc->sc_fwname));
+	sc->sc_fwname = "ipw2100-1.2.fw";
 
 	/* disable interrupts */
 	CSR_WRITE_4(sc, IPW_CSR_INTR_MASK, 0);
 
 	if (pci_intr_map(pa, &ih) != 0) {
-		aprint_error("%s: could not map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not map interrupt\n");
 		return;
 	}
 
 	intrstr = pci_intr_string(sc->sc_pct, ih);
 	sc->sc_ih = pci_intr_establish(sc->sc_pct, ih, IPL_NET, ipw_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: could not establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not establish interrupt");
 		if (intrstr != NULL)
 			aprint_error(" at %s", intrstr);
 		aprint_error("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	if (ipw_reset(sc) != 0) {
-		aprint_error("%s: could not reset adapter\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not reset adapter\n");
 		goto fail;
 	}
 
 	if (ipw_dma_alloc(sc) != 0) {
-		aprint_error("%s: could not allocate DMA resources\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not allocate DMA resources\n");
 		goto fail;
 	}
 
@@ -258,7 +249,7 @@ ipw_attach(struct device *parent, struct device *self, void *aux)
 	ifp->if_start = ipw_start;
 	ifp->if_watchdog = ipw_watchdog;
 	IFQ_SET_READY(&ifp->if_snd);
-	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 
 	ic->ic_ifp = ifp;
 	ic->ic_phytype = IEEE80211_T_DS;
@@ -303,7 +294,7 @@ ipw_attach(struct device *parent, struct device *self, void *aux)
 	if (!(ipw_read_prom_word(sc, IPW_EEPROM_RADIO) & 8))
 		sc->flags |= IPW_FLAG_HAS_RADIO_SWITCH;
 
-	aprint_normal("%s: 802.11 address %s\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(&sc->sc_dev, "802.11 address %s\n",
 	    ether_sprintf(ic->ic_myaddr));
 
 	if_attach(ifp);
@@ -315,9 +306,8 @@ ipw_attach(struct device *parent, struct device *self, void *aux)
 
 	ieee80211_media_init(ic, ipw_media_change, ipw_media_status);
 
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
-	    sizeof (struct ieee80211_frame) + 64, &sc->sc_drvbpf);
+	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
+	    sizeof(struct ieee80211_frame) + 64, &sc->sc_drvbpf);
 
 	sc->sc_rxtap_len = sizeof sc->sc_rxtapu;
 	sc->sc_rxtap.wr_ihdr.it_len = htole16(sc->sc_rxtap_len);
@@ -326,7 +316,6 @@ ipw_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_txtap_len = sizeof sc->sc_txtapu;
 	sc->sc_txtap.wt_ihdr.it_len = htole16(sc->sc_txtap_len);
 	sc->sc_txtap.wt_ihdr.it_present = htole32(IPW_TX_RADIOTAP_PRESENT);
-#endif
 
 	/*
 	 * Add a few sysctl knobs.
@@ -334,10 +323,10 @@ ipw_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	sc->dwelltime = 100;
 
-	if (!pmf_device_register(self, NULL, ipw_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
-	else
+	if (pmf_device_register(self, NULL, NULL))
 		pmf_class_network_register(self, ifp);
+	else
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	ieee80211_announce(ic);
 
@@ -349,16 +338,14 @@ fail:	ipw_detach(self, 0);
 static int
 ipw_detach(struct device* self, int flags)
 {
-	struct ipw_softc *sc = (struct ipw_softc *)self;
+	struct ipw_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_if;
 
 	if (ifp->if_softc) {
 		ipw_stop(ifp, 1);
 		ipw_free_firmware(sc);
 
-#if NBPFILTER > 0
-		bpfdetach(ifp);
-#endif
+		bpf_detach(ifp);
 		ieee80211_ifdetach(&sc->sc_ic);
 		if_detach(ifp);
 
@@ -389,32 +376,28 @@ ipw_dma_alloc(struct ipw_softc *sc)
 	error = bus_dmamap_create(sc->sc_dmat, IPW_TBD_SZ, 1, IPW_TBD_SZ, 0,
 	    BUS_DMA_NOWAIT, &sc->tbd_map);
 	if (error != 0) {
-		aprint_error("%s: could not create tbd dma map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not create tbd dma map\n");
 		goto fail;
 	}
 
 	error = bus_dmamem_alloc(sc->sc_dmat, IPW_TBD_SZ, PAGE_SIZE, 0,
 	    &sc->tbd_seg, 1, &nsegs, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not allocate tbd dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not allocate tbd dma memory\n");
 		goto fail;
 	}
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->tbd_seg, nsegs, IPW_TBD_SZ,
 	    (void **)&sc->tbd_list, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not map tbd dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not map tbd dma memory\n");
 		goto fail;
 	}
 
 	error = bus_dmamap_load(sc->sc_dmat, sc->tbd_map, sc->tbd_list,
 	    IPW_TBD_SZ, NULL, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not load tbd dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not load tbd dma memory\n");
 		goto fail;
 	}
 
@@ -426,32 +409,28 @@ ipw_dma_alloc(struct ipw_softc *sc)
 	error = bus_dmamap_create(sc->sc_dmat, IPW_RBD_SZ, 1, IPW_RBD_SZ, 0,
 	    BUS_DMA_NOWAIT, &sc->rbd_map);
 	if (error != 0) {
-		aprint_error("%s: could not create rbd dma map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not create rbd dma map\n");
 		goto fail;
 	}
 
 	error = bus_dmamem_alloc(sc->sc_dmat, IPW_RBD_SZ, PAGE_SIZE, 0,
 	    &sc->rbd_seg, 1, &nsegs, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not allocate rbd dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not allocate rbd dma memory\n");
 		goto fail;
 	}
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->rbd_seg, nsegs, IPW_RBD_SZ,
 	    (void **)&sc->rbd_list, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not map rbd dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not map rbd dma memory\n");
 		goto fail;
 	}
 
 	error = bus_dmamap_load(sc->sc_dmat, sc->rbd_map, sc->rbd_list,
 	    IPW_RBD_SZ, NULL, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not load rbd dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not load rbd dma memory\n");
 		goto fail;
 	}
 
@@ -463,32 +442,28 @@ ipw_dma_alloc(struct ipw_softc *sc)
 	error = bus_dmamap_create(sc->sc_dmat, IPW_STATUS_SZ, 1, IPW_STATUS_SZ,
 	    0, BUS_DMA_NOWAIT, &sc->status_map);
 	if (error != 0) {
-		aprint_error("%s: could not create status dma map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not create status dma map\n");
 		goto fail;
 	}
 
 	error = bus_dmamem_alloc(sc->sc_dmat, IPW_STATUS_SZ, PAGE_SIZE, 0,
 	    &sc->status_seg, 1, &nsegs, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not allocate status dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not allocate status dma memory\n");
 		goto fail;
 	}
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->status_seg, nsegs,
 	    IPW_STATUS_SZ, (void **)&sc->status_list, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not map status dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not map status dma memory\n");
 		goto fail;
 	}
 
 	error = bus_dmamap_load(sc->sc_dmat, sc->status_map, sc->status_list,
 	    IPW_STATUS_SZ, NULL, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not load status dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not load status dma memory\n");
 		goto fail;
 	}
 
@@ -500,32 +475,28 @@ ipw_dma_alloc(struct ipw_softc *sc)
 	error = bus_dmamap_create(sc->sc_dmat, sizeof (struct ipw_cmd),
 	    1, sizeof (struct ipw_cmd), 0, BUS_DMA_NOWAIT, &sc->cmd_map);
 	if (error != 0) {
-		aprint_error("%s: could not create cmd dma map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not create cmd dma map\n");
 		goto fail;
 	}
 
 	error = bus_dmamem_alloc(sc->sc_dmat, sizeof (struct ipw_cmd),
 	    PAGE_SIZE, 0, &sc->cmd_seg, 1, &nsegs, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not allocate cmd dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not allocate cmd dma memory\n");
 		goto fail;
 	}
 
 	error = bus_dmamem_map(sc->sc_dmat, &sc->cmd_seg, nsegs,
 	    sizeof (struct ipw_cmd), (void **)&sc->cmd, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not map cmd dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not map cmd dma memory\n");
 		goto fail;
 	}
 
 	error = bus_dmamap_load(sc->sc_dmat, sc->cmd_map, &sc->cmd,
 	    sizeof (struct ipw_cmd), NULL, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not map cmd dma memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not map cmd dma memory\n");
 		return error;
 	}
 
@@ -538,8 +509,7 @@ ipw_dma_alloc(struct ipw_softc *sc)
 	    sizeof(struct ipw_hdr), 0, BUS_DMA_NOWAIT,
 	    &sc->hdr_map);
 	if (error != 0) {
-		aprint_error("%s: could not create hdr dma map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not create hdr dma map\n");
 		goto fail;
 	}
 
@@ -547,8 +517,7 @@ ipw_dma_alloc(struct ipw_softc *sc)
 	    IPW_NDATA * sizeof(struct ipw_hdr), PAGE_SIZE, 0, &sc->hdr_seg,
 	    1, &nsegs, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not allocate hdr memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not allocate hdr memory\n");
 		goto fail;
 	}
 
@@ -556,16 +525,14 @@ ipw_dma_alloc(struct ipw_softc *sc)
 	    IPW_NDATA * sizeof(struct ipw_hdr), (void **)&sc->hdr_list,
 	    BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not map hdr memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not map hdr memory\n");
 		goto fail;
 	}
 
 	error = bus_dmamap_load(sc->sc_dmat, sc->hdr_map, sc->hdr_list,
 	    IPW_NDATA * sizeof(struct ipw_hdr), NULL, BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not load hdr memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not load hdr memory\n");
 		goto fail;
 	}
 
@@ -593,8 +560,7 @@ ipw_dma_alloc(struct ipw_softc *sc)
 		error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
 		    IPW_MAX_NSEG, MCLBYTES, 0, BUS_DMA_NOWAIT, &sbuf->map);
 		if (error != 0) {
-			aprint_error("%s: could not create txbuf dma map\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "could not create txbuf dma map\n");
 			goto fail;
 		}
 		TAILQ_INSERT_TAIL(&sc->sc_free_sbuf, sbuf, next);
@@ -619,8 +585,7 @@ ipw_dma_alloc(struct ipw_softc *sc)
 
 		MGETHDR(sbuf->m, M_DONTWAIT, MT_DATA);
 		if (sbuf->m == NULL) {
-			aprint_error("%s: could not allocate rx mbuf\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "could not allocate rx mbuf\n");
 			error = ENOMEM;
 			goto fail;
 		}
@@ -628,8 +593,7 @@ ipw_dma_alloc(struct ipw_softc *sc)
 		MCLGET(sbuf->m, M_DONTWAIT);
 		if (!(sbuf->m->m_flags & M_EXT)) {
 			m_freem(sbuf->m);
-			aprint_error("%s: could not allocate rx mbuf cluster\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "could not allocate rx mbuf cluster\n");
 			error = ENOMEM;
 			goto fail;
 		}
@@ -639,8 +603,7 @@ ipw_dma_alloc(struct ipw_softc *sc)
 		error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1, MCLBYTES,
 		    0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW, &sbuf->map);
 		if (error != 0) {
-			aprint_error("%s: could not create rxbuf dma map\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "could not create rxbuf dma map\n");
 			m_freem(sbuf->m);
 			goto fail;
 		}
@@ -650,8 +613,7 @@ ipw_dma_alloc(struct ipw_softc *sc)
 		if (error != 0) {
 			bus_dmamap_destroy(sc->sc_dmat, sbuf->map);
 			m_freem(sbuf->m);
-			aprint_error("%s: could not map rxbuf dma memory\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "could not map rxbuf dma memory\n");
 			goto fail;
 		}
 
@@ -742,16 +704,6 @@ ipw_release(struct ipw_softc *sc)
 
 }
 
-static bool
-ipw_resume(device_t dv)
-{
-	struct ipw_softc *sc = device_private(dv);
-
-	pci_disable_retry(sc->sc_pct, sc->sc_pcitag);
-
-	return true;
-}
-
 static int
 ipw_media_change(struct ifnet *ifp)
 {
@@ -832,6 +784,21 @@ ipw_newstate(struct ieee80211com *ic, enum ieee80211_state nstate,
 	struct ieee80211_node *ni;
 	uint8_t macaddr[IEEE80211_ADDR_LEN];
 	uint32_t len;
+	struct ipw_rx_radiotap_header *wr = &sc->sc_rxtap;
+	struct ipw_tx_radiotap_header *wt = &sc->sc_txtap;
+
+	switch (nstate) {
+	case IEEE80211_S_INIT:
+		break;
+	default:
+		KASSERT(ic->ic_curchan != IEEE80211_CHAN_ANYC);
+		KASSERT(ic->ic_curchan != NULL);
+		wt->wt_chan_freq = htole16(ic->ic_curchan->ic_freq);
+		wt->wt_chan_flags = htole16(ic->ic_curchan->ic_flags);
+		wr->wr_chan_freq = htole16(ic->ic_curchan->ic_freq);
+		wr->wr_chan_flags = htole16(ic->ic_curchan->ic_flags);
+		break;
+	}
 
 	switch (nstate) {
 	case IEEE80211_S_RUN:
@@ -1041,16 +1008,14 @@ ipw_data_intr(struct ipw_softc *sc, struct ipw_status *status,
 	 */
 	MGETHDR(mnew, M_DONTWAIT, MT_DATA);
 	if (mnew == NULL) {
-		aprint_error("%s: could not allocate rx mbuf\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not allocate rx mbuf\n");
 		ifp->if_ierrors++;
 		return;
 	}
 
 	MCLGET(mnew, M_DONTWAIT);
 	if (!(mnew->m_flags & M_EXT)) {
-		aprint_error("%s: could not allocate rx mbuf cluster\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not allocate rx mbuf cluster\n");
 		m_freem(mnew);
 		ifp->if_ierrors++;
 		return;
@@ -1065,8 +1030,7 @@ ipw_data_intr(struct ipw_softc *sc, struct ipw_status *status,
 	error = bus_dmamap_load_mbuf(sc->sc_dmat, sbuf->map, mnew,
 	    BUS_DMA_READ | BUS_DMA_NOWAIT);
 	if (error != 0) {
-		aprint_error("%s: could not load rx buf DMA map\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not load rx buf DMA map\n");
 		m_freem(mnew);
 
 		/* try to reload the old mbuf */
@@ -1075,7 +1039,7 @@ ipw_data_intr(struct ipw_softc *sc, struct ipw_status *status,
 		if (error != 0) {
 			/* very unlikely that it will fail... */
 			panic("%s: unable to remap rx buf",
-			    sc->sc_dev.dv_xname);
+			    device_xname(&sc->sc_dev));
 		}
 		ifp->if_ierrors++;
 		return;
@@ -1093,18 +1057,13 @@ ipw_data_intr(struct ipw_softc *sc, struct ipw_status *status,
 	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = m->m_len = le32toh(status->len);
 
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct ipw_rx_radiotap_header *tap = &sc->sc_rxtap;
 
-		tap->wr_flags = 0;
 		tap->wr_antsignal = status->rssi;
-		tap->wr_chan_freq = htole16(ic->ic_bss->ni_chan->ic_freq);
-		tap->wr_chan_flags = htole16(ic->ic_bss->ni_chan->ic_flags);
 
 		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_rxtap_len, m);
 	}
-#endif
 
 	if (ic->ic_state == IEEE80211_S_SCAN)
 		ipw_fix_channel(ic, m);
@@ -1172,8 +1131,8 @@ ipw_rx_intr(struct ipw_softc *sc)
 			break;
 
 		default:
-			aprint_error("%s: unknown status code %u\n",
-			    sc->sc_dev.dv_xname, le16toh(status->code));
+			aprint_error_dev(&sc->sc_dev, "unknown status code %u\n",
+			    le16toh(status->code));
 		}
 
 		sbd->bd->flags = 0;
@@ -1275,8 +1234,7 @@ ipw_intr(void *arg)
 	CSR_WRITE_4(sc, IPW_CSR_INTR_MASK, 0);
 
 	if (r & (IPW_INTR_FATAL_ERROR | IPW_INTR_PARITY_ERROR)) {
-		aprint_error("%s: fatal error\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "fatal error\n");
 		sc->sc_ic.ic_ifp->if_flags &= ~IFF_UP;
 		ipw_stop(&sc->sc_if, 1);
 	}
@@ -1369,17 +1327,11 @@ ipw_tx_start(struct ifnet *ifp, struct mbuf *m0, struct ieee80211_node *ni)
 		wh = mtod(m0, struct ieee80211_frame *);
 	}
 
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf != NULL) {
 		struct ipw_tx_radiotap_header *tap = &sc->sc_txtap;
 
-		tap->wt_flags = 0;
-		tap->wt_chan_freq = htole16(ic->ic_bss->ni_chan->ic_freq);
-		tap->wt_chan_flags = htole16(ic->ic_bss->ni_chan->ic_flags);
-
 		bpf_mtap2(sc->sc_drvbpf, tap, sc->sc_txtap_len, m0);
 	}
-#endif
 
 	shdr = TAILQ_FIRST(&sc->sc_free_shdr);
 	sbuf = TAILQ_FIRST(&sc->sc_free_sbuf);
@@ -1403,8 +1355,8 @@ ipw_tx_start(struct ifnet *ifp, struct mbuf *m0, struct ieee80211_node *ni)
 
 	error = bus_dmamap_load_mbuf(sc->sc_dmat, sbuf->map, m0, BUS_DMA_NOWAIT);
 	if (error != 0 && error != EFBIG) {
-		aprint_error("%s: could not map mbuf (error %d)\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "could not map mbuf (error %d)\n",
+		    error);
 		m_freem(m0);
 		return error;
 	}
@@ -1437,8 +1389,7 @@ ipw_tx_start(struct ifnet *ifp, struct mbuf *m0, struct ieee80211_node *ni)
 		error = bus_dmamap_load_mbuf(sc->sc_dmat, sbuf->map, m0,
 		    BUS_DMA_WRITE | BUS_DMA_NOWAIT);
 		if (error != 0) {
-			aprint_error("%s: could not map mbuf (error %d)\n",
-			    sc->sc_dev.dv_xname, error);
+			aprint_error_dev(&sc->sc_dev, "could not map mbuf (error %d)\n", error);
 			m_freem(m0);
 			return error;
 		}
@@ -1546,10 +1497,7 @@ ipw_start(struct ifnet *ifp)
 			continue;
 		}
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf != NULL)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 
 		m0 = ieee80211_encap(ic, m0, ni);
 		if (m0 == NULL) {
@@ -1557,10 +1505,7 @@ ipw_start(struct ifnet *ifp)
 			continue;
 		}
 
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf != NULL)
-			bpf_mtap(ic->ic_rawbpf, m0);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m0);
 
 		if (ipw_tx_start(ifp, m0, ni) != 0) {
 			ieee80211_free_node(ni);
@@ -1583,8 +1528,7 @@ ipw_watchdog(struct ifnet *ifp)
 
 	if (sc->sc_tx_timer > 0) {
 		if (--sc->sc_tx_timer == 0) {
-			aprint_error("%s: device timeout\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "device timeout\n");
 			ifp->if_oerrors++;
 			ifp->if_flags &= ~IFF_UP;
 			ipw_stop(ifp, 1);
@@ -1655,6 +1599,8 @@ ipw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 	case SIOCSIFFLAGS:
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
 		if (ifp->if_flags & IFF_UP) {
 			if (!(ifp->if_flags & IFF_RUNNING))
 				ipw_init(ifp);
@@ -1683,14 +1629,11 @@ ipw_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	case SIOCSIFMEDIA:
 		if (ifr->ifr_media & IFM_IEEE80211_ADHOC)
-			strlcpy(sc->sc_fwname, "ipw2100-1.2-i.fw",
-			    sizeof(sc->sc_fwname));
+			sc->sc_fwname = "ipw2100-1.2-i.fw";
 		else if (ifr->ifr_media & IFM_IEEE80211_MONITOR)
-			strlcpy(sc->sc_fwname, "ipw2100-1.2-p.fw",
-			    sizeof(sc->sc_fwname));
+			sc->sc_fwname = "ipw2100-1.2-p.fw";
 		else
-			strlcpy(sc->sc_fwname, "ipw2100-1.2.fw",
-			    sizeof(sc->sc_fwname));
+			sc->sc_fwname = "ipw2100-1.2.fw";
 
 		ipw_free_firmware(sc);
 		/* FALLTRHOUGH */
@@ -1766,8 +1709,7 @@ ipw_stop_master(struct ipw_softc *sc)
 		DELAY(10);
 	}
 	if (ntries == 50)
-		aprint_error("%s: timeout waiting for master\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "timeout waiting for master\n");
 
 	CSR_WRITE_4(sc, IPW_CSR_RST, CSR_READ_4(sc, IPW_CSR_RST) |
 	    IPW_RST_PRINCETON_RESET);
@@ -1848,8 +1790,7 @@ ipw_load_ucode(struct ipw_softc *sc, u_char *uc, int size)
 		DELAY(10);
 	}
 	if (ntries == 10) {
-		aprint_error("%s: timeout waiting for ucode to initialize\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "timeout waiting for ucode to initialize\n");
 		return EIO;
 	}
 
@@ -1893,8 +1834,8 @@ ipw_load_firmware(struct ipw_softc *sc, u_char *fw, int size)
 
 	/* wait at most one second for firmware initialization to complete */
 	if ((error = tsleep(sc, 0, "ipwinit", hz)) != 0) {
-		aprint_error("%s: timeout waiting for firmware initialization "
-		    "to complete\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "timeout waiting for firmware initialization "
+		    "to complete\n");
 		return error;
 	}
 
@@ -1918,6 +1859,12 @@ ipw_cache_firmware(struct ipw_softc *sc)
 	int error;
 
 	ipw_free_firmware(sc);
+
+	if (ipw_accept_eula == 0) {
+		aprint_error_dev(&sc->sc_dev,
+		    "EULA not accepted; please see the ipw(4) man page.\n");
+		return EPERM;
+	}
 
 	if ((error = firmware_open("if_ipw", sc->sc_fwname, &fwh)) != 0)
 		goto fail0;
@@ -2029,7 +1976,6 @@ ipw_config(struct ipw_softc *sc)
 	}
 
 	DPRINTF(("Setting MAC to %s\n", ether_sprintf(ic->ic_myaddr)));
-	if_set_sadl(ifp, ic->ic_myaddr, IEEE80211_ADDR_LEN);
 	error = ipw_cmd(sc, IPW_CMD_SET_MAC_ADDRESS, ic->ic_myaddr,
 	    IEEE80211_ADDR_LEN);
 	if (error != 0)
@@ -2197,8 +2143,8 @@ ipw_init(struct ifnet *ifp)
 
 	if (!(sc->flags & IPW_FLAG_FW_CACHED)) {
 		if (ipw_cache_firmware(sc) != 0) {
-			aprint_error("%s: could not cache the firmware (%s)\n",
-			    sc->sc_dev.dv_xname, sc->sc_fwname);
+			aprint_error_dev(&sc->sc_dev, "could not cache the firmware (%s)\n",
+			    sc->sc_fwname);
 			goto fail;
 		}
 	}
@@ -2206,14 +2152,12 @@ ipw_init(struct ifnet *ifp)
 	ipw_stop(ifp, 0);
 
 	if (ipw_reset(sc) != 0) {
-		aprint_error("%s: could not reset adapter\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not reset adapter\n");
 		goto fail;
 	}
 
 	if (ipw_load_ucode(sc, fw->ucode, fw->ucode_size) != 0) {
-		aprint_error("%s: could not load microcode\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not load microcode\n");
 		goto fail;
 	}
 
@@ -2240,8 +2184,7 @@ ipw_init(struct ifnet *ifp)
 	CSR_WRITE_4(sc, IPW_CSR_STATUS_BASE, sc->status_map->dm_segs[0].ds_addr);
 
 	if (ipw_load_firmware(sc, fw->main, fw->main_size) != 0) {
-		aprint_error("%s: could not load firmware\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "could not load firmware\n");
 		goto fail;
 	}
 
@@ -2254,8 +2197,7 @@ ipw_init(struct ifnet *ifp)
 	ipw_write_table1(sc, IPW_INFO_LOCK, 0);
 
 	if (ipw_config(sc) != 0) {
-		aprint_error("%s: device configuration failed\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "device configuration failed\n");
 		goto fail;
 	}
 
@@ -2312,4 +2254,34 @@ ipw_write_mem_1(struct ipw_softc *sc, bus_size_t offset, uint8_t *datap,
 		CSR_WRITE_4(sc, IPW_CSR_INDIRECT_ADDR, offset & ~3);
 		CSR_WRITE_1(sc, IPW_CSR_INDIRECT_DATA + (offset & 3), *datap);
 	}
+}
+
+SYSCTL_SETUP(sysctl_hw_ipw_accept_eula_setup, "sysctl hw.ipw.accept_eula")
+{
+	const struct sysctlnode *rnode;
+	const struct sysctlnode *cnode;
+
+	sysctl_createv(NULL, 0, NULL, &rnode,
+		CTLFLAG_PERMANENT,
+		CTLTYPE_NODE, "hw",
+		NULL,
+		NULL, 0,
+		NULL, 0,
+		CTL_HW, CTL_EOL);
+
+	sysctl_createv(NULL, 0, &rnode, &rnode,
+		CTLFLAG_PERMANENT,
+		CTLTYPE_NODE, "ipw",
+		NULL,
+		NULL, 0,
+		NULL, 0,
+		CTL_CREATE, CTL_EOL);
+
+	sysctl_createv(NULL, 0, &rnode, &cnode,
+		CTLFLAG_PERMANENT | CTLFLAG_READWRITE,
+		CTLTYPE_INT, "accept_eula",
+		SYSCTL_DESCR("Accept Intel EULA and permit use of ipw(4) firmware"),
+		NULL, 0,
+		&ipw_accept_eula, sizeof(ipw_accept_eula),
+		CTL_CREATE, CTL_EOL);
 }

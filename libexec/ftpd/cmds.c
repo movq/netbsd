@@ -1,7 +1,7 @@
-/*	$NetBSD: cmds.c,v 1.24 2006/02/01 14:20:12 christos Exp $	*/
+/*	$NetBSD: cmds.c,v 1.30 2009/03/15 07:48:36 lukem Exp $	*/
 
 /*
- * Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999-2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -97,7 +90,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: cmds.c,v 1.24 2006/02/01 14:20:12 christos Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.30 2009/03/15 07:48:36 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -200,7 +193,7 @@ delete(const char *name)
 void
 feat(void)
 {
-	int i;
+	size_t i;
 
 	reply(-211, "Features supported");
 	cprintf(stdout, " MDTM\r\n");
@@ -346,7 +339,7 @@ opts(const char *command)
 			/* special case: MLST */
 	if (strcasecmp(command, "MLST") == 0) {
 		int	 enabled[FACTTABSIZE];
-		int	 i, onedone;
+		size_t	 i, onedone;
 		size_t	 len;
 		char	*p;
 
@@ -512,9 +505,9 @@ statfilecmd(const char *filename)
 	FILE *fin;
 	int c;
 	int atstart;
-	char *argv[] = { INTERNAL_LS, "-lgA", "", NULL };
+	const char *argv[] = { INTERNAL_LS, "-lgA", "", NULL };
 
-	argv[2] = (char *)filename;
+	argv[2] = filename;
 	fin = ftpd_popen(argv, "r", STDOUT_FILENO);
 	reply(-211, "status of %s:", filename);
 /* XXX: use fgetln() or fparseln() here? */
@@ -767,9 +760,10 @@ fact_type(const char *fact, FILE *fd, factelem *fe)
 		break;
 	case S_IFBLK:
 	case S_IFCHR:
-		cprintf(fd, "OS.unix=%s-%d/%d",
+		cprintf(fd, "OS.unix=%s-" ULLF "/" ULLF,
 		    S_ISBLK(fe->stat->st_mode) ? "blk" : "chr",
-		    major(fe->stat->st_rdev), minor(fe->stat->st_rdev));
+		    (ULLT)major(fe->stat->st_rdev),
+		    (ULLT)minor(fe->stat->st_rdev));
 		break;
 	default:
 		cprintf(fd, "OS.unix=UNKNOWN(0%o)", fe->stat->st_mode & S_IFMT);
@@ -807,7 +801,8 @@ static void
 mlsname(FILE *fp, factelem *fe)
 {
 	char realfile[MAXPATHLEN];
-	int i, userf = 0;
+	int userf = 0;
+	size_t i;
 
 	for (i = 0; i < FACTTABSIZE; i++) {
 		if (facttab[i].enabled)
@@ -886,7 +881,7 @@ discover_path(last_path, new_path)
 		nomorelink = 1;
 		
 		while ((cp = strstr(++cp, "/")) != NULL) {
-			sz1 = (u_long)cp - (u_long)tp;
+			sz1 = (unsigned long)cp - (unsigned long)tp;
 			if (sz1 > MAXPATHLEN)
 				goto bad;
 			*cp = 0;
@@ -924,7 +919,8 @@ discover_path(last_path, new_path)
 			} else {			
 				/* relative link */
 				for (cq = cp - 1; *cq != '/'; cq--);
-				if (strlen(tp) - ((u_long)cq - (u_long)cp)
+				if (strlen(tp) -
+				    ((unsigned long)cq - (unsigned long)cp)
 				    + 1 + sz2 > MAXPATHLEN)
 					goto bad;
 				(void)memmove(cq + 1 + sz2, 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pfour_subr.c,v 1.5 2005/12/11 12:23:56 christos Exp $ */
+/*	$NetBSD: pfour_subr.c,v 1.7 2009/03/14 15:36:21 dsl Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pfour_subr.c,v 1.5 2005/12/11 12:23:56 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pfour_subr.c,v 1.7 2009/03/14 15:36:21 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,8 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: pfour_subr.c,v 1.5 2005/12/11 12:23:56 christos Exp 
 #include <dev/sun/fbvar.h>
 
 void
-fb_setsize_pfour(fb)
-	struct fbdevice *fb;
+fb_setsize_pfour(struct fbdevice *fb)
 {
 #if defined(SUN4)
 	volatile u_int32_t pfour;
@@ -139,8 +131,7 @@ fb_setsize_pfour(fb)
  *	otherwise returns pfour ID
  */
 int
-fb_pfour_id(va)
-	volatile void *va;
+fb_pfour_id(volatile void *va)
 {
 #if defined(SUN4)
 	volatile u_int32_t val, save, *pfour = va;
@@ -170,8 +161,7 @@ fb_pfour_id(va)
  * Return the status of the video enable.
  */
 int
-fb_pfour_get_video(fb)
-	struct fbdevice *fb;
+fb_pfour_get_video(struct fbdevice *fb)
 {
 
 	return ((*fb->fb_pfour & PFOUR_REG_VIDEO) != 0);
@@ -181,9 +171,7 @@ fb_pfour_get_video(fb)
  * Enable or disable the framebuffer.
  */
 void
-fb_pfour_set_video(fb, enable)
-	struct fbdevice *fb;
-	int enable;
+fb_pfour_set_video(struct fbdevice *fb, int enable)
 {
 	volatile u_int32_t pfour;
 

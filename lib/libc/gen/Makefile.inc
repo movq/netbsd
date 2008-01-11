@@ -1,11 +1,12 @@
-#	$NetBSD: Makefile.inc,v 1.159 2007/12/14 17:26:19 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.178 2011/03/26 19:51:42 christos Exp $
 #	from: @(#)Makefile.inc	8.6 (Berkeley) 5/4/95
 
 # gen sources
 .PATH: ${ARCHDIR}/gen ${.CURDIR}/gen
 
 SRCS+= 	_errno.c alarm.c alphasort.c arc4random.c assert.c basename.c clock.c \
-	closedir.c closefrom.c confstr.c ctermid.c ctype_.c daemon.c \
+	closedir.c closefrom.c \
+	confstr.c ctermid.c ctype_.c daemon.c \
 	dehumanize_number.c devname.c dirname.c disklabel.c err.c errx.c \
 	errlist.c errno.c execl.c execle.c execlp.c execv.c execvp.c \
 	extattr.c fmtcheck.c fmtmsg.c fnmatch.c fstab.c ftok.c \
@@ -15,12 +16,12 @@ SRCS+= 	_errno.c alarm.c alphasort.c arc4random.c assert.c basename.c clock.c \
 	getloadavg.c getlogin.c getmntinfo.c \
 	getnetgrent.c getpagesize.c \
 	getpass.c getprogname.c getpwent.c getttyent.c \
-	getusershell.c glob.c humanize_number.c initgroups.c \
+	getusershell.c glob.c humanize_number.c initdir.c initgroups.c \
 	isascii.c isatty.c isctype.c lockf.c nftw.c \
 	nice.c nlist.c nlist_aout.c \
 	nlist_coff.c nlist_ecoff.c nlist_elf32.c nlist_elf64.c opendir.c \
-	pause.c popen.c psignal.c pthread_atfork.c pwcache.c \
-	pw_scan.c raise.c randomid.c readdir.c rewinddir.c \
+	pause.c popen.c psignal.c pthread_atfork.c ptree.c pwcache.c \
+	pw_scan.c raise.c randomid.c rb.c readdir.c rewinddir.c \
 	scandir.c seekdir.c setdomainname.c \
 	sethostname.c setjmperr.c setmode.c setproctitle.c setprogname.c \
 	shquote.c shquotev.c sighold.c sigignore.c siginterrupt.c \
@@ -50,8 +51,9 @@ COPTS.execlp.c = -Wno-stack-protector
 
 .include "${ARCHDIR}/gen/Makefile.inc"
 
-MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 confstr.3 \
-	ctermid.3 ctype.3 daemon.3 devname.3 directory.3 dirname.3 \
+MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 \
+	confstr.3 \
+	cpuset.3 ctermid.3 ctype.3 daemon.3 devname.3 directory.3 dirname.3 \
 	endutxent.3 err.3 exec.3 extattr.3 \
 	fmtcheck.3 fmtmsg.3 fnmatch.3 fpclassify.3 fpgetmask.3 \
 	ftok.3 fts.3 ftw.3 \
@@ -76,9 +78,13 @@ MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 confstr.3 \
 	wordexp.3
 
 MLINKS+=bswap.3 bswap16.3 bswap.3 bswap32.3 bswap.3 bswap64.3
+MLINKS+=cpuset.3 cpuset_create.3 cpuset.3 cpuset_destroy.3 \
+	cpuset.3 cpuset_zero.3 cpuset.3 cpuset_set.3 cpuset.3 cpuset_clr.3 \
+	cpuset.3 cpuset_isset.3 cpuset.3 cpuset_size.3
 MLINKS+=directory.3 closedir.3 directory.3 dirfd.3 directory.3 opendir.3 \
 	directory.3 readdir.3 directory.3 readdir_r.3 directory.3 \
-	rewinddir.3 directory.3 seekdir.3 directory.3 telldir.3
+	rewinddir.3 directory.3 seekdir.3 directory.3 telldir.3 \
+	directory.3 fdopendir.3	
 MLINKS+=endutxent.3 getutxent.3 endutxent.3 getutxid.3 \
 	endutxent.3 getutxline.3 endutxent.3 pututxline.3 \
 	endutxent.3 setutxent.3
@@ -90,7 +96,8 @@ MLINKS+=extattr.3 extattr_namespace_to_string.3 \
 	extattr.3 extattr_string_to_namespace.3
 MLINKS+=fpgetmask.3 fpgetround.3 fpgetmask.3 fpgetsticky.3 \
 	fpgetmask.3 fpsetmask.3  fpgetmask.3 fpsetround.3 \
-	fpgetmask.3 fpsetsticky.3
+	fpgetmask.3 fpsetsticky.3 fpgetmask.3 fpgetprec.3 \
+	fpgetmask.3 fpsetprec.3
 MLINKS+=fts.3 fts_open.3 fts.3 fts_read.3 fts.3 fts_children.3 \
 	fts.3 fts_set.3 fts.3 fts_close.3
 MLINKS+=ftw.3 nftw.3
@@ -122,10 +129,11 @@ MLINKS+=getttyent.3 endttyent.3 getttyent.3 getttynam.3 \
 	getttyent.3 setttyent.3 getttyent.3 setttyentpath.3
 MLINKS+=getusershell.3 endusershell.3 getusershell.3 setusershell.3
 MLINKS+=glob.3 globfree.3
+MLINKS+=glob.3 glob_pattern_p.3
 MLINKS+=humanize_number.3 dehumanize_number.3
 MLINKS+=makecontext.3 swapcontext.3
 MLINKS+=popen.3 pclose.3
-MLINKS+=psignal.3 sys_siglist.3 psignal.3 sys_signame.3
+MLINKS+=psignal.3 sys_siglist.3 psignal.3 sys_signame.3 psignal.3 psiginfo.3
 MLINKS+=pwcache.3 user_from_uid.3 pwcache.3 group_from_gid.3
 MLINKS+=pwcache.3 uid_from_user.3 pwcache.3 gid_from_group.3
 MLINKS+=pwcache.3 pwcache_userdb.3 pwcache.3 pwcache_groupdb.3
@@ -146,7 +154,22 @@ MLINKS+=syslog.3 closelog.3 syslog.3 openlog.3 syslog.3 setlogmask.3 \
 	syslog.3 vsyslog.3
 MLINKS+=syslog.3 closelog_r.3 syslog.3 openlog_r.3 syslog.3 setlogmask_r.3 \
 	syslog.3 syslog_r.3 syslog.3 vsyslog_r.3
+MLINKS+=syslog.3 syslogp.3 syslog.3 syslogp_r.3 \
+	syslog.3 vsyslogp.3 syslog.3 vsyslogp_r.3
 MLINKS+=ttyname.3 isatty.3 ttyname.3 ttyslot.3 ttyname.3 ttyname_r.3
-MLINKS+=unvis.3 strunvis.3
+MLINKS+=unvis.3 strunvis.3 unvis.3 strunvisx.3
+MLINKS+=unvis.3 strnunvis.3 unvis.3 strnunvisx.3
 MLINKS+=vis.3 svis.3 vis.3 strvis.3 vis.3 strvisx.3 vis.3 strsvis.3 \
-	vis.3 strsvisx.3
+	vis.3 strsvisx.3 vis.3 nvis.3
+MLINKS+=vis.3 snvis.3 vis.3 strnvis.3 vis.3 strnvisx.3 vis.3 strsnvis.3 \
+	vis.3 strsnvisx.3
+
+CPPFLAGS.ctype_.c+=	-I${LIBCDIR}/locale
+CPPFLAGS.isctype.c+=	-I${LIBCDIR}/locale
+CPPFLAGS.tolower_.c+=	-I${LIBCDIR}/locale
+CPPFLAGS.toupper_.c+=	-I${LIBCDIR}/locale
+
+errlist.c: errlist.awk ${NETBSDSRCDIR}/sys/sys/errno.h
+	${TOOL_AWK} -f ${.ALLSRC} > ${.TARGET}
+
+CLEANFILES+= errlist.c

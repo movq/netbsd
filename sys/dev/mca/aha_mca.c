@@ -1,4 +1,4 @@
-/*	$NetBSD: aha_mca.c,v 1.17 2007/10/19 12:00:34 ad Exp $	*/
+/*	$NetBSD: aha_mca.c,v 1.22 2009/09/22 13:22:53 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2000-2002 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aha_mca.c,v 1.17 2007/10/19 12:00:34 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aha_mca.c,v 1.22 2009/09/22 13:22:53 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,15 +77,14 @@ __KERNEL_RCSID(0, "$NetBSD: aha_mca.c,v 1.17 2007/10/19 12:00:34 ad Exp $");
 
 #define	AHA_ISA_IOSIZE	4
 
-int	aha_mca_probe(struct device *, struct cfdata *, void *);
-void	aha_mca_attach(struct device *, struct device *, void *);
+static int	aha_mca_probe(device_t, cfdata_t, void *);
+static void	aha_mca_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(aha_mca, sizeof(struct aha_softc),
+CFATTACH_DECL_NEW(aha_mca, sizeof(struct aha_softc),
     aha_mca_probe, aha_mca_attach, NULL, NULL);
 
 int
-aha_mca_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+aha_mca_probe(device_t parent, cfdata_t match, void *aux)
 {
 	register struct mca_attach_args *ma = aux;
 
@@ -97,7 +96,7 @@ aha_mca_probe(struct device *parent, struct cfdata *match,
 
 
 void
-aha_mca_attach(struct device *parent, struct device *self, void *aux)
+aha_mca_attach(device_t parent, device_t self, void *aux)
 {
 	struct mca_attach_args *ma = aux;
 	struct aha_softc *sc = device_private(self);
@@ -106,6 +105,8 @@ aha_mca_attach(struct device *parent, struct device *self, void *aux)
 	struct aha_probe_data apd;
 	mca_chipset_tag_t mc = ma->ma_mc;
 	bus_addr_t iobase;
+
+	sc->sc_dev =self;
 
 	/*
 	 * POS registers differ much between 8003 and 8013, so they are
@@ -151,7 +152,7 @@ aha_mca_attach(struct device *parent, struct device *self, void *aux)
 		 ((ma->ma_pos[3] & 0x40) >> 4);
 
 	if (bus_space_map(iot, iobase, AHA_ISA_IOSIZE, 0, &ioh)) {
-		printf("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map i/o space\n");
 		return;
 	}
 
@@ -166,8 +167,7 @@ aha_mca_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_ih = mca_intr_establish(mc, apd.sc_irq, IPL_BIO, aha_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt\n");
 		return;
 	}
 

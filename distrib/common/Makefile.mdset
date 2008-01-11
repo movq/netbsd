@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.mdset,v 1.30 2007/09/08 14:25:09 chris Exp $
+#	$NetBSD: Makefile.mdset,v 1.35 2011/01/01 16:56:18 jym Exp $
 #
 # Makefile snippet to ${TOOL_MDSETIMAGE} file system images into kernels
 #
@@ -28,6 +28,9 @@
 #	MDSET_NOGZIP			If defined, don't gzip any kernels.
 #
 #	MDSET_NOGZIP.${FILENAME}	If defined, don't gzip ${FILENAME}
+#
+#	MDSET_NOIMAGE.${FILENAME}	If defined, don't add ${IMAGE} to
+#					${FILENAME}
 #
 #	MDSET_NOSTRIP			If defined, don't strip any kernels.
 #
@@ -102,7 +105,7 @@ KERNELS+=	${_KERNEL.${_K}.${_F}}.${_S}.gz
 ${_KERNEL.${_K}.${_F}}.${_S}.gz: ${_KERNEL.${_K}.${_F}}.${_S}
 	${_MKTARGET_CREATE}
 	-rm -f ${.TARGET}
-	gzip -9c ${.ALLSRC} > ${.TARGET}
+	gzip -9nc ${.ALLSRC} > ${.TARGET}
 .endif							# }
 
 .endfor							# }
@@ -120,13 +123,29 @@ _POST.${_KERNEL.${_K}.${_F}}:= ${MDSET_POST}
 
 CLEANFILES+=	${_KERNEL.${_K}.${_F}}
 
+.if defined(MDSET_NOIMAGE.${_FILENAME})
+${_I}=
+.endif
+
+# Darwin requires a special hack - this is documented in
+# doc/HACKS, and just works around the problems described more
+# fully in http://mail-index.netbsd.org/current-users/2008/06/27/msg003242.html
+OPSYS!= uname -s
+.if ${OPSYS} == "Darwin"
+MDSETIMAGEFLAGS=
+.else
+MDSETIMAGEFLAGS=-v
+.endif
+
 ${_KERNEL.${_K}.${_F}}: .NOTMAIN ${_KERNNAME.${_K}.${_F}} ${_I}
 	${_MKTARGET_CREATE} "(from: ${.ALLSRC})"
 	@rm -f ${.TARGET} ${.TARGET}.tmp ${.TARGET}.symbols.gz
 	@cp ${_KERNNAME.${_K}.${_F}} ${.TARGET}.tmp
-	${TOOL_MDSETIMAGE} -v ${.TARGET}.tmp ${_I}
+.if !defined(MDSET_NOIMAGE.${_FILENAME})
+	${TOOL_MDSETIMAGE} ${MDSETIMAGEFLAGS} ${.TARGET}.tmp ${_I}
+.endif
 .if !defined(MDSET_NOSYMBOLS.${_FILENAME}) && !defined(MDSET_NOSYMBOLS)
-	${NM} ${.TARGET}.tmp | gzip -9 > ${.TARGET}.symbols.gz
+	${NM} ${.TARGET}.tmp | gzip -9n > ${.TARGET}.symbols.gz
 .endif
 .if !defined(MDSET_NOSTRIP.${_FILENAME}) && !defined(MDSET_NOSTRIP)
 	${STRIP} -R .comment -R .ident ${.TARGET}.tmp
@@ -144,7 +163,7 @@ KERNELS+=	${_KERNEL.${_K}.${_F}}.gz
 ${_KERNEL.${_K}.${_F}}.gz: ${_KERNEL.${_K}.${_F}}
 	${_MKTARGET_CREATE}
 	-rm -f ${.TARGET}
-	gzip -9c ${.ALLSRC} > ${.TARGET}
+	gzip -9nc ${.ALLSRC} > ${.TARGET}
 .endif							# }
 
 .endfor							# }
@@ -156,7 +175,7 @@ realall: ${KERNELS}
 .if defined(MDSET_RELEASEDIR)
 release:: check_RELEASEDIR .WAIT ${KERNELS}
 	${RELEASE_INSTALL} ${KERNELS} ${KERNELSYMS} \
-	    ${RELEASEDIR}/${MACHINE}/${MDSET_RELEASEDIR}
+	    ${RELEASEDIR}/${RELEASEMACHINEDIR}/${MDSET_RELEASEDIR}
 .endif
 
 

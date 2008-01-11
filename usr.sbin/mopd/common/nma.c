@@ -1,4 +1,4 @@
-/*	$NetBSD: nma.c,v 1.3 1997/10/16 23:24:48 lukem Exp $	*/
+/*	$NetBSD: nma.c,v 1.5 2009/10/20 00:51:13 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 Mats O Jansson.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: nma.c,v 1.3 1997/10/16 23:24:48 lukem Exp $");
+__RCSID("$NetBSD: nma.c,v 1.5 2009/10/20 00:51:13 snj Exp $");
 #endif
 
 #include "os.h"
@@ -40,8 +35,8 @@ __RCSID("$NetBSD: nma.c,v 1.3 1997/10/16 23:24:48 lukem Exp $");
 
 struct commDev {
 	int		val;
-	char		*sname;
-	char		*name;
+	const char	*sname;
+	const char	*name;
 };
 
 struct commDev nmaCommDev[] = {
@@ -192,7 +187,7 @@ struct commDev nmaCommDev[] = {
 	{ 0, 0, 0 },
 };
 
-char *
+const char *
 nmaGetShort(devno)
 	int devno;
 {
@@ -209,7 +204,7 @@ nmaGetShort(devno)
 	return(current->sname);
 }
 
-char *
+const char *
 nmaGetDevice(devno)
 	int devno;
 {

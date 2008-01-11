@@ -1,4 +1,4 @@
-/* $NetBSD: drvctl.c,v 1.5 2006/09/22 04:37:36 thorpej Exp $ */
+/* $NetBSD: drvctl.c,v 1.10 2009/04/20 21:41:50 dyoung Exp $ */
 
 /*
  * Copyright (c) 2004
@@ -26,6 +26,7 @@
  * SUCH DAMAGE.
  */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -35,7 +36,7 @@
 #include <sys/ioctl.h>
 #include <sys/drvctlio.h>
 
-#define OPTS "dra:p"
+#define OPTS "QRSa:dlnpr"
 
 #define	OPEN_MODE(mode)							\
 	(((mode) == 'd' || (mode) == 'r') ? O_RDWR			\
@@ -49,7 +50,12 @@ usage(void)
 
 	fprintf(stderr, "Usage: %s -r [-a attribute] busdevice [locator ...]\n"
 	    "       %s -d device\n"
-	    "       %s -p device\n",
+	    "       %s [-n] -l [device]\n"
+	    "       %s -p device\n"
+	    "       %s -Q device\n"
+	    "       %s -R device\n"
+	    "       %s -S device\n",
+	    getprogname(), getprogname(), getprogname(), getprogname(),
 	    getprogname(), getprogname(), getprogname());
 	exit(1);
 }
@@ -57,25 +63,42 @@ usage(void)
 int
 main(int argc, char **argv)
 {
+	bool nflag = false;
 	int c, mode;
 	char *attr = 0;
 	extern char *optarg;
 	extern int optind;
 	int fd, res;
+	size_t children;
+	struct devpmargs paa = {.devname = "", .flags = 0};
+	struct devlistargs laa = {.l_devname = "", .l_childname = NULL,
+				  .l_children = 0};
 	struct devdetachargs daa;
 	struct devrescanargs raa;
 	int *locs, i;
+	prop_dictionary_t command_dict, args_dict, results_dict,
+			  data_dict;
+	prop_string_t string;
+	prop_number_t number;
+	char *xml;
 
 	mode = 0;
 	while ((c = getopt(argc, argv, OPTS)) != -1) {
 		switch (c) {
+		case 'Q':
+		case 'R':
+		case 'S':
 		case 'd':
-		case 'r':
+		case 'l':
 		case 'p':
+		case 'r':
 			mode = c;
 			break;
 		case 'a':
 			attr = optarg;
+			break;
+		case 'n':
+			nflag = true;
 			break;
 		case '?':
 		default:
@@ -86,20 +109,63 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	if (argc < 1 || mode == 0)
+	if ((argc < 1 && mode != 'l') || mode == 0)
 		usage();
 
 	fd = open(DRVCTLDEV, OPEN_MODE(mode), 0);
 	if (fd < 0)
 		err(2, "open %s", DRVCTLDEV);
 
-	if (mode == 'd') {
+	switch (mode) {
+	case 'Q':
+		paa.flags = DEVPM_F_SUBTREE;
+		/*FALLTHROUGH*/
+	case 'R':
+		strlcpy(paa.devname, argv[0], sizeof(paa.devname));
+
+		if (ioctl(fd, DRVRESUMEDEV, &paa) == -1)
+			err(3, "DRVRESUMEDEV");
+		break;
+	case 'S':
+		strlcpy(paa.devname, argv[0], sizeof(paa.devname));
+
+		if (ioctl(fd, DRVSUSPENDDEV, &paa) == -1)
+			err(3, "DRVSUSPENDDEV");
+		break;
+	case 'd':
 		strlcpy(daa.devname, argv[0], sizeof(daa.devname));
 
-		res = ioctl(fd, DRVDETACHDEV, &daa);
-		if (res)
+		if (ioctl(fd, DRVDETACHDEV, &daa) == -1)
 			err(3, "DRVDETACHDEV");
-	} else if (mode == 'r') {
+		break;
+	case 'l':
+		if (argc == 0)
+			*laa.l_devname = '\0';
+		else
+			strlcpy(laa.l_devname, argv[0], sizeof(laa.l_devname));
+
+		if (ioctl(fd, DRVLISTDEV, &laa) == -1)
+			err(3, "DRVLISTDEV");
+
+		children = laa.l_children;
+
+		laa.l_childname = malloc(children * sizeof(laa.l_childname[0]));
+		if (laa.l_childname == NULL)
+			err(5, "DRVLISTDEV");
+		if (ioctl(fd, DRVLISTDEV, &laa) == -1)
+			err(3, "DRVLISTDEV");
+		if (laa.l_children > children)
+			err(6, "DRVLISTDEV: number of children grew");
+
+		for (i = 0; i < (int)laa.l_children; i++) {
+			if (!nflag) {
+				printf("%s ",
+				    (argc == 0) ? "root" : laa.l_devname);
+			}
+			printf("%s\n", laa.l_childname[i]);
+		}
+		break;
+	case 'r':
 		memset(&raa, 0, sizeof(raa));
 		strlcpy(raa.busname, argv[0], sizeof(raa.busname));
 		if (attr)
@@ -114,15 +180,10 @@ main(int argc, char **argv)
 			raa.locators = locs;
 		}
 
-		res = ioctl(fd, DRVRESCANBUS, &raa);
-		if (res)
+		if (ioctl(fd, DRVRESCANBUS, &raa) == -1)
 			err(3, "DRVRESCANBUS");
-	} else if (mode == 'p') {
-		prop_dictionary_t command_dict, args_dict, results_dict,
-				  data_dict;
-		prop_string_t string;
-		prop_number_t number;
-		char *xml;
+		break;
+	case 'p':
 
 		command_dict = prop_dictionary_create();
 		args_dict = prop_dictionary_create();
@@ -164,8 +225,10 @@ main(int argc, char **argv)
 		printf("Properties for device `%s':\n%s",
 		       argv[0], xml);
 		free(xml);
-	} else
+		break;
+	default:
 		errx(4, "unknown command");
+	}
 
 	return (0);
 }

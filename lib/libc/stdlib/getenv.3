@@ -1,4 +1,4 @@
-.\"	$NetBSD: getenv.3,v 1.19 2005/09/26 10:56:54 wiz Exp $
+.\"	$NetBSD: getenv.3,v 1.25 2010/10/26 22:34:33 wiz Exp $
 .\"
 .\" Copyright (c) 1988, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\"     from: @(#)getenv.3	8.2 (Berkeley) 12/11/93
 .\"
-.Dd September 25, 2005
+.Dd October 25, 2010
 .Dt GETENV 3
 .Os
 .Sh NAME
@@ -54,7 +54,7 @@
 .Ft int
 .Fn setenv "const char *name" "const char *value" "int overwrite"
 .Ft int
-.Fn putenv "const char *string"
+.Fn putenv "char *string"
 .Ft int
 .Fn unsetenv "const char *name"
 .Sh DESCRIPTION
@@ -62,16 +62,14 @@ These functions set, unset and fetch environment variables from the
 host
 .Em environment list .
 For compatibility with differing environment conventions,
-the given arguments
+the
+.Fn getenv
+or
+.Fn getenv_r
+given argument
 .Ar name
-and
-.Ar value
-may be appended and prepended,
-respectively,
-with an equal sign
-.Dq Li \&= ,
-except for
-.Fn unsetenv .
+may be appended with an equal sign
+.Dq Li \&= .
 .Pp
 The
 .Fn getenv
@@ -120,11 +118,18 @@ to the given
 .Pp
 The
 .Fn putenv
-function takes an argument of the form ``name=value'' and is
-equivalent to:
-.Bd -literal -offset indent
-setenv(name, value, 1);
-.Ed
+function takes an argument of the form
+.Dq name=value
+and it will set the environment variable
+.Dq name
+equal to
+.Dq value
+by altering an existing entry, or creating a new one if an existing
+one does not exist.
+The actual string argument passed to
+.Fn putenv
+will become part of the environment.
+If one changes the string, the environment will also change.
 .Pp
 The
 .Fn unsetenv
@@ -153,11 +158,25 @@ is successful, the string returned should be considered read-only.
 The
 .Fa name
 argument to
+.Fn setenv
+or
 .Fn unsetenv
 is a null pointer, points to an empty string, or points to a string
 containing an
 .Dq Li \&=
 character.
+The
+.Fa value
+argument to
+.Fn setenv
+is a null pointer.
+The
+.Fa string
+argument to
+.Fn putenv
+is a null pointer, or points to a string that either starts with a
+.Dq Li \&=
+character or does not contain one at all.
 .It Bq Er ENOMEM
 The function
 .Fn setenv
@@ -165,6 +184,7 @@ or
 .Fn putenv
 failed because they were unable to allocate memory for the environment.
 .El
+.Pp
 The function
 .Fn getenv_r
 can return the following errors:

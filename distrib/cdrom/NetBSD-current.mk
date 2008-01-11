@@ -1,4 +1,4 @@
-# $NetBSD: NetBSD-current.mk,v 1.6 2007/03/08 13:51:51 bouyer Exp $
+# $NetBSD: NetBSD-current.mk,v 1.8 2010/10/05 14:16:20 tsutsui Exp $
 #
 # Configuration file for NetBSD-current.
 
@@ -12,15 +12,13 @@ INTFILES.alpha=		netbsd.alpha:alpha/installation/instkernel/netbsd.gz,link \
 			boot:alpha/binary/sets/base.tgz,./usr/mdec/boot
 
 # cats needs an a.out kernel to boot from
-INTFILES.cats=		netbsd.cats:cats/binary/kernel/netbsd.aout-INSTALL.gz
+INTFILES.cats=		netbsd.cats:cats/binary/kernel/netbsd-INSTALL.aout.gz
 
 # BOOTFILE.i386 is relative to CD staging root
 BOOTFILE.i386=		boot.i386
 INTFILES.i386=		boot.i386:i386/binary/sets/base.tgz,./usr/mdec/bootxx_cd9660 \
 			boot:i386/binary/sets/base.tgz,./usr/mdec/boot \
-			netbsd:i386/binary/kernel/netbsd-INSTALL_LARGE.gz,link \
-			nblaptop:i386/binary/kernel/netbsd-INSTALL_LAPTOP.gz,link \
-			nbnoacpi:i386/binary/kernel/netbsd-INSTALL.gz,link
+			netbsd:i386/binary/kernel/netbsd-INSTALL.gz,link
 
 # BOOTFILE.amd64 is relative to CD staging root
 BOOTFILE.amd64=		boot.amd64

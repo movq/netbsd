@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_param.h,v 1.21 2006/08/04 22:42:36 he Exp $	*/
+/*	$NetBSD: uvm_param.h,v 1.25 2010/11/14 04:31:02 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -72,7 +72,6 @@
 #endif
 #ifdef _KERNEL
 #include <sys/types.h>
-#include <sys/lock.h>
 #include <machine/vmparam.h>
 #include <sys/resourcevar.h>
 #endif
@@ -146,9 +145,13 @@
  * have ones that are compile-time constants.
  */
 #if !defined(PAGE_SIZE)
-#define	PAGE_SIZE	uvmexp.pagesize		/* size of page */
-#define	PAGE_MASK	uvmexp.pagemask		/* size of page - 1 */
-#define	PAGE_SHIFT	uvmexp.pageshift	/* bits to shift for pages */
+extern int *uvmexp_pagesize;
+extern int *uvmexp_pagemask;
+extern int *uvmexp_pageshift;
+#define	PAGE_SIZE	(*uvmexp_pagesize)	/* size of page */
+#define	PAGE_MASK	(*uvmexp_pagemask)	/* size of page - 1 */
+#define	PAGE_SHIFT	(*uvmexp_pageshift)	/* bits to shift for pages */
+#define	__uvmexp_pagesize
 #endif /* PAGE_SIZE */
 
 #endif /* _KERNEL */
@@ -245,6 +248,7 @@
 
 extern int		ubc_nwins;	/* number of UBC mapping windows */
 extern int		ubc_winshift;	/* shift for a UBC mapping window */
+extern u_int		uvm_emap_size;	/* size of emap */
 
 #else
 /* out-of-kernel versions of round_page and trunc_page */

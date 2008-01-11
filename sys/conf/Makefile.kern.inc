@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.kern.inc,v 1.104 2007/11/29 01:39:27 jnemeth Exp $
+#	$NetBSD: Makefile.kern.inc,v 1.138 2011/05/30 03:12:43 joerg Exp $
 #
 # This file contains common `MI' targets and definitions and it is included
 # at the bottom of each `MD' ${MACHINE}/conf/Makefile.${MACHINE}.
@@ -57,48 +57,51 @@ S!=	cd ../../../..; pwd
 INCLUDES?=	-I. ${EXTRA_INCLUDES} -I${S}/../common/include -I$S/arch \
 		-I$S -nostdinc
 CPPFLAGS+=	${INCLUDES} ${IDENT} ${PARAM} -D_KERNEL -D_KERNEL_OPT
+CPPFLAGS+=	-std=gnu99
 DEFCOPTS?=	-O2
 COPTS?=		${DEFCOPTS}
 DBG=		# might contain unwanted -Ofoo
 DEFWARNINGS?=	yes
 .if (${DEFWARNINGS} == "yes")
-. if !defined(NOGCCERROR)
-CWARNFLAGS+=	-Werror
-. endif
 CWARNFLAGS+=	-Wall -Wno-main -Wno-format-zero-length -Wpointer-arith
 CWARNFLAGS+=	-Wmissing-prototypes -Wstrict-prototypes
 CWARNFLAGS+=	-Wswitch -Wshadow
 CWARNFLAGS+=	-Wcast-qual -Wwrite-strings
-# Add -Wno-sign-compare.  -Wsign-compare is included in -Wall as of GCC 3.3,
-# but our sources aren't up for it yet.
-CWARNFLAGS+=	-Wno-sign-compare
-. if ${HAVE_GCC} > 3
+CWARNFLAGS+=	-Wno-unreachable-code
+. if (defined(HAVE_GCC) && ${HAVE_GCC} > 3) || defined(HAVE_PCC)
 CWARNFLAGS+=	-Wno-pointer-sign -Wno-attributes
-.  if ${MACHINE} == "i386" || ${MACHINE_ARCH} == "sparc64" || ${MACHINE} == "prep"
+.  if ${MACHINE} == "i386" || ${MACHINE_ARCH} == "x86_64" || \
+	${MACHINE_ARCH} == "sparc64" || ${MACHINE} == "prep"
 CWARNFLAGS+=	-Wextra -Wno-unused-parameter
 .  endif
 . endif
+# Add -Wno-sign-compare.  -Wsign-compare is included in -Wall as of GCC 3.3,
+# but our sources aren't up for it yet.
+CWARNFLAGS+=	-Wno-sign-compare
 .endif
 
+CWARNFLAGS.clang+=	-Wno-unknown-pragmas -Wno-conversion \
+			-Wno-self-assign -Wno-array-bounds
+
 CFLAGS+=	-ffreestanding -fno-zero-initialized-in-bss
-CFLAGS+=	${CPUFLAGS} ${DEBUG} ${COPTS} ${CWARNFLAGS}
-AFLAGS+=	${CPUFLAGS} -D_LOCORE -Wa,-fatal-warnings
+CFLAGS+=	${DEBUG} ${COPTS}
+AFLAGS+=	-D_LOCORE -Wa,--fatal-warnings
 
 # XXX
-.if ${HAVE_GCC} > 3
+.if defined(HAVE_GCC) && ${HAVE_GCC} > 3
 CFLAGS+=	-fno-strict-aliasing
 .endif
 
 .if ${USE_SSP:Uno} == "yes"
-CFLAGS+=-fstack-protector -Wstack-protector --param ssp-buffer-size=1
-LDFLAGS+=-fstack-protector -Wstack-protector --param ssp-buffer-size=1
+COPTS.kern_ssp.c+=	-fno-stack-protector -D__SSP__
 .endif
 
 # If we want the bpendtsleep: label in kern_synch.c, we need to use
 # -fno-reorder-blocks.  Don't make this a config(1) defflag without
 # making sure this fragment remains valid.
-.if ${HAVE_GCC} > 3 && !empty(${CFLAGS:M-DKERN_SYNCH_BPENDTSLEEP_LABEL})
-CFLAGS.kern_synch.c+=	-fno-reorder-blocks
+.if defined(HAVE_GCC) && ${HAVE_GCC} > 3 && \
+	!empty(${CFLAGS:M-DKERN_SYNCH_BPENDTSLEEP_LABEL})
+COPTS.kern_synch.c+=	-fno-reorder-blocks
 .endif
 
 # Use the per-source COPTS variables to add -g to just those
@@ -110,20 +113,36 @@ COPTS.${j}+=-g
 . endfor
 .endfor
 
+# Always compile debugsyms.c with debug information.
+# This allows gdb to use type informations.
+#
+COPTS.debugsyms.c+=	-g
+
+# Add CTF sections for DTrace
+.if defined(CTFCONVERT)
+COMPILE_CTFCONVERT=	${_MKSHECHO}\
+			${CTFCONVERT} ${CTFFLAGS} ${.TARGET} && \
+			${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.else
+COMPILE_CTFCONVERT=	${_MKSHECHO}
+.endif
+
 # compile rules: rules are named ${TYPE}_${SUFFIX} where TYPE is NORMAL or
 # NOPROF and SUFFIX is the file suffix, capitalized (e.g. C for a .c file).
-NORMAL_C?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}"; \
+NORMAL_C?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}" && \
 		${_MKSHECHO}\
-		${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} -c $<; \
-		${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} -c $<
-NOPROF_C?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}"; \
+		${CC} ${COPTS.${<:T}} ${CFLAGS} ${CPPFLAGS} ${PROF} -c $< && \
+		${CC} ${COPTS.${<:T}} ${CFLAGS} ${CPPFLAGS} ${PROF} -c $< && \
+		${COMPILE_CTFCONVERT}
+NOPROF_C?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}" && \
 		${_MKSHECHO}\
-		${CC} ${CFLAGS} ${CPPFLAGS} -c $<; \
-		${CC} ${CFLAGS} ${CPPFLAGS} -c $<
-NORMAL_S?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}"; \
+		${CC} ${COPTS.${<:T}} ${CFLAGS} ${CPPFLAGS} -c $< && \
+		${CC} ${COPTS.${<:T}} ${CFLAGS} ${CPPFLAGS} -c $< && \
+		${COMPILE_CTFCONVERT}
+NORMAL_S?=	@${_MKSHMSG} "compile  ${.CURDIR:T}/${.TARGET}" && \
 		${_MKSHECHO}\
-		${CC} ${AFLAGS} ${CPPFLAGS} -c $<; \
-		${CC} ${AFLAGS} ${CPPFLAGS} -c $<
+		${CC} ${AFLAGS} ${AFLAGS.${<:T}} ${CPPFLAGS} -c $< && \
+		${CC} ${AFLAGS} ${AFLAGS.${<:T}} ${CPPFLAGS} -c $<
 
 ##
 ## (3) libkern and compat
@@ -187,14 +206,24 @@ ${_cfile:T:R}.o: ${_cfile}
 #	${SYSTEM_LD_HEAD}
 #	${SYSTEM_LD} swapxxx.o
 #	${SYSTEM_LD_TAIL}
-SYSTEM_OBJ?=	${MD_OBJS} ${MI_OBJS} ${OBJS} ${SYSLIBCOMPAT} ${LIBKERN}
+SYSTEM_OBJ?=	${MD_OBJS} ${MI_OBJS} ${OBJS:O} ${SYSLIBCOMPAT} ${LIBKERN}
 SYSTEM_DEP?=	Makefile ${SYSTEM_OBJ:O} .gdbinit
+.if defined(KERNLDSCRIPT)
+SYSTEM_DEP+=	${KERNLDSCRIPT}
+.endif
+.if defined(CTFMERGE)
+SYSTEM_CTFMERGE= ${CTFMERGE} ${CTFFLAGS} -o ${.TARGET} ${SYSTEM_OBJ} ${EXTRA_OBJ} vers.o
+.else
+SYSTEM_CTFMERGE= ${_MKSHECHO}
+.endif
 SYSTEM_LD_HEAD?=@rm -f $@
 SYSTEM_LD?=	@${_MKSHMSG} "   link  ${.CURDIR:T}/${.TARGET}"; \
 		${_MKSHECHO}\
 		${LD} -Map $@.map --cref ${LINKFLAGS} -o $@ '$${SYSTEM_OBJ}' '$${EXTRA_OBJ}' vers.o; \
 		${LD} -Map $@.map --cref ${LINKFLAGS} -o $@ ${SYSTEM_OBJ} ${EXTRA_OBJ} vers.o
-SYSTEM_LD_TAIL?=@${SIZE} $@; chmod 755 $@
+SYSTEM_LD_TAIL?=@${TOOL_SED} '/const char sccs/!d;s/.*@(.)//;s/\\.*//' vers.c; \
+		${SIZE} $@; chmod 755 $@; \
+		${SYSTEM_CTFMERGE}
 
 TEXTADDR?=	${LOADADDRESS}			# backwards compatibility
 LINKTEXT?=	${TEXTADDR:C/.+/-Ttext &/}
@@ -217,14 +246,21 @@ DEBUG?=
 SYSTEM_LD_TAIL+=${SYSTEM_LD_TAIL_DEBUG}
 LINKFLAGS+=	${LINKFLAGS_DEBUG}
 EXTRA_KERNELS+= ${KERNELS:@.KERNEL.@${.KERNEL.}.gdb@}
+CTFFLAGS+=	-g
+SYSTEM_LD_TAIL+=; \
+	if grep '^\#define.*SYMTAB_SPACE' opt_ddbparam.h > /dev/null; then \
+		echo "${DBSYM} $@.gdb"; \
+		${DBSYM} $@.gdb || exit 1; \
+	fi
+
 .elifndef PROF
 LINKFLAGS+=	${LINKFLAGS_NORMAL}
 .endif
 
 SYSTEM_LD_TAIL+=; \
-	if grep -q '^\#define.*SYMTAB_SPACE' opt_ddbparam.h; then \
+	if grep '^\#define.*SYMTAB_SPACE' opt_ddbparam.h > /dev/null; then \
 		echo "${DBSYM} $@"; \
-		${DBSYM} $@; \
+		${DBSYM} $@ || exit 1; \
 	fi
 
 SYSTEM_LD_HEAD+=${SYSTEM_LD_HEAD_EXTRA}
@@ -243,20 +279,21 @@ assym.h: ${GENASSYM_CONF} ${GENASSYM_EXTRAS}
 ${MD_SFILES:C/\.[Ss]/.o/} ${SFILES:C/\.[Ss]/.o/}: assym.h
 .endif
 
+MKREPRO?=no
+
+.if ${MKREPRO} == "yes"
+_NVFLAGS=-r
+.else
+_NVFLAGS=
+.endif
+
 .if !target(vers.o)
 newvers: vers.o
 vers.o: ${SYSTEM_DEP} ${SYSTEM_SWAP_DEP} $S/conf/newvers.sh $S/conf/osrelease.sh
 	${_MKMSG_CREATE} vers.c
-	${HOST_SH} $S/conf/newvers.sh
+	${HOST_SH} $S/conf/newvers.sh ${_NVFLAGS}
 	${_MKTARGET_COMPILE}
 	${CC} ${CFLAGS} ${CPPFLAGS} ${PROF} -c vers.c
-.endif
-
-.if !target(config_time.h)
-EXTRA_CLEAN+= config_time.h
-config_time.h: Makefile
-	${_MKTARGET_CREATE}
-	cp config_time.src config_time.h
 .endif
 
 .if defined(MEMORY_DISK_IMAGE)
@@ -322,27 +359,29 @@ SRCS=${SSRCS} ${CSRCS}
 DEPS=	${SRCS:T:O:u:R:S/$/.d/g}
 
 .for _s in ${SSRCS}
-${_s:T:R}.d: ${_s} assym.h config_time.h
+${_s:T:R}.d: ${_s} assym.h
 	${_MKTARGET_CREATE}
 	${MKDEP} -f ${.TARGET} -- ${MKDEP_AFLAGS} \
 	    ${CPPFLAGS} ${CPPFLAGS.${_s:T}} ${_s}
 .endfor
 .for _s in ${CSRCS}
-${_s:T:R}.d: ${_s} config_time.h
+${_s:T:R}.d: ${_s}
 	${_MKTARGET_CREATE}
 	${MKDEP} -f ${.TARGET} -- ${MKDEP_CFLAGS} \
 	    ${CPPFLAGS} ${CPPFLAGS.${_s:T}} ${_s}
 .endfor
 
-assym.d: assym.h config_time.h
+assym.d: assym.h
 	${_MKTARGET_CREATE}
 	cat ${GENASSYM_CONF} ${GENASSYM_EXTRAS} | \
 	    ${GENASSYM} -- ${MKDEP} -f assym.dep -- \
 	    ${CFLAGS} ${CPPFLAGS}
-	sed -e 's/.*\.o:.*\.c/assym.h:/' < assym.dep >${.TARGET}
+	${TOOL_SED} -e 's/.*\.o:.*\.c/assym.h:/' < assym.dep >${.TARGET}
 	rm -f assym.dep
 
-.depend: ${DEPS} assym.d
+DEPS+=	assym.d
+
+.depend: ${DEPS}
 	${_MKTARGET_CREATE}
 	echo "${.ALLSRC}" | ${MKDEP} -D
 .endif
@@ -360,7 +399,7 @@ LOBJS?= ${_lsrc:T:S/.c$/.ln/g} ${LIBKERNLN} ${SYSLIBCOMPATLN}
 LintStub_${_sfile:T:R}.c: ${_sfile} assym.h
 	${_MKTARGET_COMPILE}
 	${CC} -E -C ${AFLAGS} ${CPPFLAGS} ${_sfile} | \
-	      awk -f $S/kern/genlintstub.awk >${.TARGET}
+	      ${TOOL_AWK} -f $S/kern/genlintstub.awk >${.TARGET}
 .endfor
 
 .for _cfile in ${CFILES} ${LINTSTUBS} ${MI_CFILES} ${MD_CFILES}
@@ -372,6 +411,13 @@ ${_cfile:T:R}.ln: ${_cfile}
 lint: ${LOBJS}
 	${LINT} ${KERNLINTFLAGS} ${CPPFLAGS:M-[IDU]*} ${LOBJS}
 .endif
+
+# Attempt to do a syntax-only compile of the entire kernel as one entity.
+# Alas, bugs in the GCC C frontend prevent this from completely effective
+# but information can be gleaned from the output.
+syntax-only: ${CFILES} ${MD_CFILES}
+	${CC} -fsyntax-only -combine ${CFLAGS} ${CPPFLAGS} \
+		${CFILES} ${MD_CFILES}
 
 # List of kernel images that will be installed into the root file system.
 # Some platforms may need to install more than one (e.g. a netbsd.aout file
@@ -403,14 +449,16 @@ EXTRA_CLEAN+= cscope.out cscope.tmp
 .if !target(cscope.out)
 cscope.out: Makefile depend
 	${_MKTARGET_CREATE}
-	@sed 's/[^:]*://;s/^ *//;s/ *\\ *$$//;' lib/kern/.depend | \
-	tr -s ' ' '\n' | sed 's|^\([^.\\]\)|lib/kern/\1|;s|^../../||;' > \
-	cscope.tmp
-	@sed 's/[^:]*://;s/^ *//;s/ *\\ *$$//;' lib/compat/.depend | \
-	tr -s ' ' '\n' | sed 's|^\([^.\\]\)|lib/compat/\1|;s|^../../||;' >> \
-	cscope.tmp
+	@${TOOL_SED} 's/[^:]*://;s/^ *//;s/ *\\ *$$//;' lib/kern/.depend \
+	    | tr -s ' ' '\n' \
+	    | ${TOOL_SED} ';s|^../../||;' \
+	    > cscope.tmp
+	@${TOOL_SED} 's/[^:]*://;s/^ *//;s/ *\\ *$$//;' lib/compat/.depend \
+	    | tr -s ' ' '\n' \
+	    | ${TOOL_SED} 's|^../../||;' \
+	    >> cscope.tmp
 	@echo ${SRCS} | cat - cscope.tmp | tr -s ' ' '\n' | sort -u | \
-	${CSCOPE} -k -i - -b `echo ${INCLUDES} | sed s/-nostdinc//`
+	    ${CSCOPE} -k -i - -b `echo ${INCLUDES} | ${TOOL_SED} s/-nostdinc//`
 #	cscope doesn't write cscope.out if it's uptodate, so ensure
 #	make doesn't keep calling cscope when not needed.
 	@rm -f cscope.tmp; touch cscope.out
@@ -428,10 +476,16 @@ mkid: ID
 
 ID: Makefile depend
 	${_MKTARGET_CREATE}
-	@${MKID} `sed 's/[^:]*://;s/^ *//;s/ *\\\\ *$$//;' lib/kern/.depend \
-	lib/compat/.depend | tr ' ' '\n' | sed "s|^../../||" | sort -u` \
-	`sed 's/[^:]*://;s/^ *//;s/ *\\\\ *$$//;' .depend | tr ' ' '\n' \
-	| sort -u`
+	@${MKID} \
+	    `${TOOL_SED} 's/[^:]*://;s/^ *//;s/ *\\\\ *$$//;' \
+			lib/kern/.depend lib/compat/.depend \
+		    | tr ' ' '\n' \
+		    | ${TOOL_SED} "s|^../../||" \
+		    | sort -u` \
+	    `${TOOL_SED} 's/[^:]*://;s/^ *//;s/ *\\\\ *$$//;' \
+			.depend \
+		    | tr ' ' '\n' \
+		    | sort -u`
 
 .endif
 
@@ -452,12 +506,12 @@ EXTRA_CLEAN+= .gdbinit
 
 # The following files use alloca(3) or variable array allocations.
 # Their full name is noted as documentation.
-VARSTACK=dev/cgd.c kern/uipc_socket.c miscfs/genfs/genfs_vnops.c \
+VARSTACK=kern/uipc_socket.c miscfs/genfs/genfs_vnops.c \
     nfs/nfs_bio.c uvm/uvm_bio.c \
     uvm/uvm_pager.c dev/ic/aic7xxx.c dev/ic/aic79xx.c arch/xen/i386/gdt.c \
     dev/ofw/ofw_subr.c
 
-. if ${HAVE_GCC} > 3
+. if (defined(HAVE_GCC) && ${HAVE_GCC} > 3) || defined(HAVE_PCC)
 .for __varstack in ${VARSTACK}
 COPTS.${__varstack:T} += -Wno-stack-protector
 .endfor
@@ -467,6 +521,8 @@ AFLAGS+=	${AOPTS.${.IMPSRC:T}}
 CFLAGS+=	${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}}
 CPPFLAGS+=	${CPPFLAGS.${.IMPSRC:T}}
 CWARNFLAGS+=	${CWARNFLAGS.${.IMPSRC:T}}
+
+.include <bsd.files.mk>
 
 ##
 ## the end

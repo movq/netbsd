@@ -1,4 +1,4 @@
-/*	$NetBSD: bdes.c,v 1.6 2004/10/30 17:02:20 dsl Exp $	*/
+/*	$NetBSD: bdes.c,v 1.8 2009/04/14 10:11:28 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -38,15 +38,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)bdes.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: bdes.c,v 1.6 2004/10/30 17:02:20 dsl Exp $");
+__RCSID("$NetBSD: bdes.c,v 1.8 2009/04/14 10:11:28 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -124,7 +124,7 @@ __RCSID("$NetBSD: bdes.c,v 1.6 2004/10/30 17:02:20 dsl Exp $");
  */
 #define	READ(buf, n)	fread(buf, sizeof(char), n, stdin)
 #define WRITE(buf,n)						\
-		if (fwrite(buf, sizeof(char), n, stdout) != n)	\
+		if (fwrite(buf, sizeof(char), n, stdout) != (size_t)n)	\
 			bdes_err(bn, NULL);
 
 /*

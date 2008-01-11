@@ -1,4 +1,4 @@
-/*	$NetBSD: epsoc.c,v 1.6 2006/03/08 23:46:22 lukem Exp $	*/
+/*	$NetBSD: epsoc.c,v 1.10 2009/10/23 00:39:30 snj Exp $	*/
 
 /*
  * Copyright (c) 2004 Jesse Off
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epsoc.c,v 1.6 2006/03/08 23:46:22 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epsoc.c,v 1.10 2009/10/23 00:39:30 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -185,11 +178,7 @@ epsoc_attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-epsoc_submatch(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+epsoc_submatch(struct device *parent, struct cfdata *cf, const int *ldesc, void *aux)
 {
 	struct epsoc_attach_args *sa = aux;
 
@@ -203,11 +192,7 @@ epsoc_submatch(parent, cf, ldesc, aux)
 }
 
 int
-epsoc_search(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+epsoc_search(struct device *parent, struct cfdata *cf, const int *ldesc, void *aux)
 {
 	struct epsoc_attach_args *sa = aux;
 
@@ -222,9 +207,7 @@ epsoc_search(parent, cf, ldesc, aux)
 }
 
 static int
-epsoc_print(aux, name)
-	void *aux;
-	const char *name;
+epsoc_print(void *aux, const char *name)
 {
         struct epsoc_attach_args *sa = (struct epsoc_attach_args*)aux;
 

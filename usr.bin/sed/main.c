@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.17 2006/06/18 05:16:41 gdamore Exp $	*/
+/*	$NetBSD: main.c,v 1.21 2010/02/19 16:35:27 tnn Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -73,15 +73,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 1/3/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.17 2006/06/18 05:16:41 gdamore Exp $");
+__RCSID("$NetBSD: main.c,v 1.21 2010/02/19 16:35:27 tnn Exp $");
 #endif
 #endif /* not lint */
 
@@ -90,6 +90,7 @@ __RCSID("$NetBSD: main.c,v 1.17 2006/06/18 05:16:41 gdamore Exp $");
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <regex.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -135,7 +136,7 @@ int aflag, eflag, nflag, ere;
  * Current file and line number; line numbers restart across compilation
  * units, but span across input files.
  */
-char *fname;			/* File name. */
+const char *fname;			/* File name. */
 u_long linenum;
 int lastline;			/* TRUE on the last line of the last file */
 
@@ -150,7 +151,7 @@ main(int argc, char *argv[])
 
 	setprogname(*argv);
 	fflag = 0;
-	while ((c = getopt(argc, argv, "ae:f:nE")) != -1)
+	while ((c = getopt(argc, argv, "ae:f:nrE")) != -1)
 		switch (c) {
 		case 'a':
 			aflag = 1;
@@ -166,13 +167,14 @@ main(int argc, char *argv[])
 		case 'n':
 			nflag = 1;
 			break;
+		case 'r':
 		case 'E':
 			ere = REG_EXTENDED;
 			break;
 		default:
 		case '?':
 			(void)fprintf(stderr,
-"usage:\t%s [-aEn] script [file ...]\n\t%s [-aEn] [-e script] ... [-f script_file] ... [file ...]\n",
+"usage:\t%s [-aEnr] script [file ...]\n\t%s [-aEnr] [-e script] ... [-f script_file] ... [file ...]\n",
 			    getprogname(), getprogname());
 			exit(1);
 		}
@@ -205,13 +207,17 @@ main(int argc, char *argv[])
  * together.  Empty strings and files are ignored.
  */
 char *
-cu_fgets(char *buf, int n)
+cu_fgets(char **outbuf, size_t *outsize)
 {
 	static enum {ST_EOF, ST_FILE, ST_STRING} state = ST_EOF;
 	static FILE *f;		/* Current open file */
 	static char *s;		/* Current pointer inside string */
 	static char string_ident[30];
+	size_t len;
 	char *p;
+
+	if (*outbuf == NULL)
+		*outsize = 0;
 
 again:
 	switch (state) {
@@ -230,7 +236,7 @@ again:
 		case CU_STRING:
 			if ((snprintf(string_ident,
 			    sizeof(string_ident), "\"%s\"", script->s)) >=
-			    sizeof(string_ident) - 1)
+			    (int)(sizeof(string_ident) - 1))
 				(void)strcpy(string_ident +
 				    sizeof(string_ident) - 6, " ...\"");
 			fname = string_ident;
@@ -239,11 +245,18 @@ again:
 			goto again;
 		}
 	case ST_FILE:
-		if ((p = fgets(buf, n, f)) != NULL) {
+		if ((p = fgetln(f, &len)) != NULL) {
 			linenum++;
-			if (linenum == 1 && buf[0] == '#' && buf[1] == 'n')
+			if (len >= *outsize) {
+				free(*outbuf);
+				*outsize = ROUNDLEN(len + 1);
+				*outbuf = xmalloc(*outsize);
+			}
+			memcpy(*outbuf, p, len);
+			(*outbuf)[len] = '\0';
+			if (linenum == 1 && p[0] == '#' && p[1] == 'n')
 				nflag = 1;
-			return (p);
+			return (*outbuf);
 		}
 		script = script->next;
 		(void)fclose(f);
@@ -252,12 +265,15 @@ again:
 	case ST_STRING:
 		if (linenum == 0 && s[0] == '#' && s[1] == 'n')
 			nflag = 1;
-		p = buf;
+		p = *outbuf;
+		len = *outsize;
 		for (;;) {
-			if (n-- <= 1) {
-				*p = '\0';
-				linenum++;
-				return (buf);
+			if (len <= 1) {
+				*outbuf = xrealloc(*outbuf,
+				    *outsize + _POSIX2_LINE_MAX);
+				p = *outbuf + *outsize - len;
+				len += _POSIX2_LINE_MAX;
+				*outsize += _POSIX2_LINE_MAX;
 			}
 			switch (*s) {
 			case '\0':
@@ -269,16 +285,17 @@ again:
 					script = script->next;
 					*p = '\0';
 					linenum++;
-					return (buf);
+					return (*outbuf);
 				}
 			case '\n':
 				*p++ = '\n';
 				*p = '\0';
 				s++;
 				linenum++;
-				return (buf);
+				return (*outbuf);
 			default:
 				*p++ = *s++;
+				len--;
 			}
 		}
 	}

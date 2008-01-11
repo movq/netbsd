@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.33 2007/12/03 16:18:47 tsutsui Exp $	*/
+/*	$NetBSD: intr.c,v 1.40 2010/12/20 00:25:33 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.33 2007/12/03 16:18:47 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.40 2010/12/20 00:25:33 matt Exp $");
 
 #define _HP300_INTR_H_PRIVATE
 
@@ -51,8 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.33 2007/12/03 16:18:47 tsutsui Exp $");
 #include <sys/vmmeter.h>
 #include <sys/cpu.h>
 #include <sys/intr.h>
-
-#include <uvm/uvm_extern.h>
 
 /*
  * The location and size of the autovectored interrupt portion
@@ -73,11 +64,18 @@ static const char *hp300_intr_names[NISR] = {
 	"nmi",
 };
 
-u_short hp300_ipl2psl[NIPL];
-volatile uint8_t ssir;
+const uint16_t ipl2psl_table[NIPL] = {
+	[IPL_NONE]       = 0,
+	[IPL_SOFTCLOCK]  = PSL_S|PSL_IPL1,
+	[IPL_SOFTNET]    = PSL_S|PSL_IPL1,
+	[IPL_SOFTSERIAL] = PSL_S|PSL_IPL1,
+	[IPL_SOFTBIO]    = PSL_S|PSL_IPL1,
+	[IPL_VM]         = PSL_S|PSL_IPL5,
+	[IPL_SCHED]      = PSL_S|PSL_IPL6,
+	[IPL_HIGH]       = PSL_S|PSL_IPL7,
+};
 int idepth;
 
-void	intr_computeipl(void);
 void	netintr(void);
 
 void
@@ -94,56 +92,6 @@ intr_init(void)
 		    NULL, hp300_intr_names[i], "intr");
 	}
 
-	/* Default interrupt priorities. */
-	hp300_ipl2psl[IPL_NONE]       = 0;
-	hp300_ipl2psl[IPL_SOFTCLOCK]  = PSL_S|PSL_IPL1;
-	hp300_ipl2psl[IPL_SOFTNET]    = PSL_S|PSL_IPL1;
-	hp300_ipl2psl[IPL_SOFTSERIAL] = PSL_S|PSL_IPL1;
-	hp300_ipl2psl[IPL_SOFTBIO]    = PSL_S|PSL_IPL1;
-	hp300_ipl2psl[IPL_VM]         = PSL_S|PSL_IPL3;
-	hp300_ipl2psl[IPL_SCHED]      = PSL_S|PSL_IPL6;
-	hp300_ipl2psl[IPL_HIGH]       = PSL_S|PSL_IPL7;
-}
-
-/*
- * Scan all of the ISRs, recomputing the interrupt levels for the spl*()
- * calls.  This doesn't have to be fast.
- */
-void
-intr_computeipl(void)
-{
-	struct hp300_intrhand *ih;
-	int ipl;
-
-	/* Start with low values. */
-	hp300_ipl2psl[IPL_VM] = PSL_S|PSL_IPL3;
-
-	for (ipl = 0; ipl < NISR; ipl++) {
-		for (ih = LIST_FIRST(&hp300_intr_list[ipl].hi_q); ih != NULL;
-		    ih = LIST_NEXT(ih, ih_q)) {
-			/*
-			 * Bump up the level for a given priority,
-			 * if necessary.
-			 */
-			switch (ih->ih_priority) {
-			case IPL_VM:
-				if (ipl > PSLTOIPL(hp300_ipl2psl[IPL_VM]))
-					hp300_ipl2psl[IPL_VM] = IPLTOPSL(ipl);
-				break;
-			default:
-				printf("priority = %d\n", ih->ih_priority);
-				panic("intr_computeipl: bad priority");
-			}
-		}
-	}
-}
-
-void
-intr_printlevels(void)
-{
-
-	printf("interrupt levels: vm = %d\n",
-	    PSLTOIPL(hp300_ipl2psl[IPL_VM]));
 }
 
 /*
@@ -185,7 +133,7 @@ intr_establish(int (*func)(void *), void *arg, int ipl, int priority)
 
 	if (LIST_FIRST(&hp300_intr_list[ipl].hi_q) == NULL) {
 		LIST_INSERT_HEAD(&hp300_intr_list[ipl].hi_q, newih, ih_q);
-		goto compute;
+		goto done;
 	}
 
 	/*
@@ -199,7 +147,7 @@ intr_establish(int (*func)(void *), void *arg, int ipl, int priority)
 	    curih = LIST_NEXT(curih,ih_q)) {
 		if (newih->ih_priority > curih->ih_priority) {
 			LIST_INSERT_BEFORE(curih, newih, ih_q);
-			goto compute;
+			goto done;
 		}
 	}
 
@@ -209,9 +157,7 @@ intr_establish(int (*func)(void *), void *arg, int ipl, int priority)
 	 */
 	LIST_INSERT_AFTER(curih, newih, ih_q);
 
- compute:
-	/* Compute new interrupt levels. */
-	intr_computeipl();
+ done:
 	return newih;
 }
 
@@ -225,7 +171,6 @@ intr_disestablish(void *arg)
 
 	LIST_REMOVE(ih, ih_q);
 	free(ih, M_DEVBUF);
-	intr_computeipl();
 }
 
 /*
@@ -240,8 +185,6 @@ intr_dispatch(int evec /* format | vector offset */)
 	int handled, ipl, vec;
 	static int straycount, unexpected;
 
-	idepth++;
-
 	vec = (evec & 0xfff) >> 2;
 #ifdef DIAGNOSTIC
 	if ((vec < ISRLOC) || (vec >= (ISRLOC + NISR)))
@@ -250,7 +193,7 @@ intr_dispatch(int evec /* format | vector offset */)
 	ipl = vec - ISRLOC;
 
 	hp300_intr_list[ipl].hi_evcnt.ev_count++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	list = &hp300_intr_list[ipl];
 	if (LIST_FIRST(&list->hi_q) == NULL) {
@@ -272,13 +215,4 @@ intr_dispatch(int evec /* format | vector offset */)
 		panic("intr_dispatch: too many stray interrupts");
 	else
 		printf("intr_dispatch: stray level %d interrupt\n", ipl);
-
-	idepth--;
-}
-
-bool
-cpu_intr_p(void)
-{
-
-	return idepth != 0;
 }

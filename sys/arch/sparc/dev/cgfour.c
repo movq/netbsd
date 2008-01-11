@@ -1,4 +1,4 @@
-/*	$NetBSD: cgfour.c,v 1.43 2007/03/04 06:00:43 christos Exp $	*/
+/*	$NetBSD: cgfour.c,v 1.45 2008/06/11 21:25:31 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -109,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgfour.c,v 1.43 2007/03/04 06:00:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgfour.c,v 1.45 2008/06/11 21:25:31 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -211,7 +204,7 @@ static void
 cgfourattach(struct device *parent, struct device *self, void *aux)
 {
 #if defined(SUN4)
-	struct cgfour_softc *sc = (struct cgfour_softc *)self;
+	struct cgfour_softc *sc = device_private(self);
 	union obio_attach_args *uoba = aux;
 	struct obio4_attach_args *oba = &uoba->uoba_oba4;
 	bus_space_handle_t bh;
@@ -326,7 +319,7 @@ cgfouropen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	int unit = minor(dev);
 
-	if (unit >= cgfour_cd.cd_ndevs || cgfour_cd.cd_devs[unit] == NULL)
+	if (device_lookup(&cgfour_cd, unit) == NULL)
 		return (ENXIO);
 	return (0);
 }
@@ -335,7 +328,7 @@ int
 cgfourioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
 #if defined(SUN4)
-	struct cgfour_softc *sc = cgfour_cd.cd_devs[minor(dev)];
+	struct cgfour_softc *sc = device_lookup_private(&cgfour_cd, minor(dev));
 	struct fbgattr *fba;
 	int error;
 
@@ -402,7 +395,7 @@ cgfourioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 paddr_t
 cgfourmmap(dev_t dev, off_t off, int prot)
 {
-	struct cgfour_softc *sc = cgfour_cd.cd_devs[minor(dev)];
+	struct cgfour_softc *sc = device_lookup_private(&cgfour_cd, minor(dev));
 	off_t poff;
 
 #define START_ENABLE	(128*1024)
@@ -460,7 +453,7 @@ static void
 cgfourunblank(struct device *dev)
 {
 
-	cgfour_set_video((struct cgfour_softc *)dev, 1);
+	cgfour_set_video(device_private(dev), 1);
 }
 
 static int

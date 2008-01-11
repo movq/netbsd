@@ -1,4 +1,4 @@
-/*	$NetBSD: devname.c,v 1.16 2004/12/16 04:33:03 atatat Exp $	*/
+/*	$NetBSD: devname.c,v 1.21 2010/03/23 20:28:59 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,7 +67,7 @@
 #if 0
 static char sccsid[] = "@(#)devname.c	8.2 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: devname.c,v 1.16 2004/12/16 04:33:03 atatat Exp $");
+__RCSID("$NetBSD: devname.c,v 1.21 2010/03/23 20:28:59 drochner Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -90,10 +83,6 @@ __RCSID("$NetBSD: devname.c,v 1.16 2004/12/16 04:33:03 atatat Exp $");
 #include <string.h>
 #include <stdlib.h>
 #include <err.h>
-
-#ifdef __weak_alias
-__weak_alias(devname,_devname)
-#endif
 
 #define	DEV_SZ		317	/* show be prime for best results */
 #define	VALID		1	/* entry and devname are valid */
@@ -115,12 +104,17 @@ devname(dev, type)
 		mode_t type;
 		dev_t dev;
 	} bkey;
+	struct {
+		mode_t type;
+		int32_t dev;
+	} obkey;
 	static DB *db;
 	static int failure;
 	DBT data, key;
 	DEVC *ptr, **pptr;
 	static DEVC **devtb = NULL;
-	static dev_t pts = (dev_t)~1;
+	static devmajor_t pts;
+	static int pts_valid = 0;
 
 	if (!db && !failure &&
 	    !(db = dbopen(_PATH_DEVDB, O_RDONLY, 0, DB_HASH, NULL))) {
@@ -129,7 +123,7 @@ devname(dev, type)
 	}
 	/* initialise dev cache */
 	if (!failure && devtb == NULL) {
-		devtb = (DEVC **)calloc(DEV_SZ, sizeof(DEVC *));
+		devtb = calloc(DEV_SZ, sizeof(DEVC *));
 		if (devtb == NULL)
 			failure= 1;
 	}
@@ -137,7 +131,7 @@ devname(dev, type)
 		return (NULL);
 
 	/* see if we have this dev/type cached */
-	pptr = devtb + ((dev + type) % DEV_SZ);
+	pptr = devtb + (size_t)((dev + type) % DEV_SZ);
 	ptr = *pptr;
 
 	if (ptr && ptr->valid > 0 && ptr->dev == dev && ptr->type == type) {
@@ -147,19 +141,20 @@ devname(dev, type)
 	}
 
 	if (ptr == NULL)
-		*pptr = ptr = (DEVC *)malloc(sizeof(DEVC));
+		*pptr = ptr = malloc(sizeof(DEVC));
 
 	/*
 	 * Keys are a mode_t followed by a dev_t.  The former is the type of
 	 * the file (mode & S_IFMT), the latter is the st_rdev field.  Be
 	 * sure to clear any padding that may be found in bkey.
 	 */
-	memset(&bkey, 0, sizeof(bkey));
+	(void)memset(&bkey, 0, sizeof(bkey));
 	bkey.dev = dev;
 	bkey.type = type;
 	key.data = &bkey;
 	key.size = sizeof(bkey);
 	if ((db->get)(db, &key, &data, 0) == 0) {
+found_it:
 		if (ptr == NULL)
 			return (char *)data.data;
 		ptr->dev = dev;
@@ -168,16 +163,28 @@ devname(dev, type)
 		ptr->name[NAME_MAX - 1] = '\0';
 		ptr->valid = VALID;
 	} else {
+		/* Look for a 32 bit dev_t. */
+		(void)memset(&obkey, 0, sizeof(obkey));
+		obkey.dev = (int32_t)(uint32_t)dev;
+		obkey.type = type;
+		key.data = &obkey;
+		key.size = sizeof(obkey);
+		if ((db->get)(db, &key, &data, 0) == 0)
+			goto found_it;
+
 		if (ptr == NULL)
 			return (NULL);
 		ptr->valid = INVALID;
 		if (type == S_IFCHR) {
-			if (pts == (dev_t)~1)
+			if (!pts_valid) {
 				pts = getdevmajor("pts", S_IFCHR);
-			if (pts != (dev_t)~0 && major(dev) == pts) {
+				pts_valid = 1;
+			}
+			if (pts != NODEVMAJOR && major(dev) == pts) {
 				(void)snprintf(ptr->name, sizeof(ptr->name),
 				    "%s%d", _PATH_DEV_PTS +
-				    sizeof(_PATH_DEV) - 1, minor(dev));
+				    sizeof(_PATH_DEV) - 1,
+				    minor(dev));
 				ptr->valid = VALID;
 			}
 		}

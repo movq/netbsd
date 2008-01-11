@@ -1,4 +1,4 @@
-/*	$NetBSD: spl.S,v 1.16 2008/01/10 20:14:11 ad Exp $	*/
+/*	$NetBSD: spl.S,v 1.24 2011/03/18 15:18:16 joerg Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 /*
- * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -50,13 +50,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,7 +79,7 @@
 
 #ifndef XEN
 /*
- * softintr()
+ * Xsoftintr()
  *
  * Switch to the LWP assigned to handle interrupts from the given
  * source.  We borrow the VM context from the interrupted LWP.
@@ -106,8 +99,8 @@ IDTVEC(softintr)
 	movl	$IPL_HIGH,CPUVAR(ILEVEL)
 	movq	CPUVAR(CURLWP),%r15
 	movq	IS_LWP(%rax),%rdi	/* switch to handler LWP */
-	movq	L_ADDR(%rdi),%rdx
-	movq	L_ADDR(%r15),%rcx
+	movq	L_PCB(%rdi),%rdx
+	movq	L_PCB(%r15),%rcx
 	movq	%rdi,CPUVAR(CURLWP)
 	movq	%rsp,PCB_RSP(%rcx)
 	movq	%rbp,PCB_RBP(%rcx)
@@ -116,12 +109,12 @@ IDTVEC(softintr)
 	movq	%r15,%rdi		/* interrupted LWP */
 	movl	IS_MAXLEVEL(%rax),%esi	/* ipl to run at */
 	call	_C_LABEL(softint_dispatch)/* run handlers */
-	movq	L_ADDR(%r15),%rcx
+	cli
+	movq	L_PCB(%r15),%rcx
 	movq	PCB_RSP(%rcx),%rsp
 	xchgq	%r15,CPUVAR(CURLWP)	/* must be globally visible */
 	popq	%r15			/* unwind switchframe */
 	addq	$(5 * 8),%rsp
-	cli
 	jmp	*%r13			/* back to splx/doreti */
 
 /*
@@ -147,6 +140,39 @@ NENTRY(softint_trigger)
 	orl	%edi,CPUVAR(IPENDING)	/* atomic on local cpu */
 	ret
 
+
+/*
+ * Xpreemptrecurse()
+ *
+ * Handles preemption interrupts via Xspllower().
+ */
+IDTVEC(preemptrecurse)
+	movl	$IPL_PREEMPT, CPUVAR(ILEVEL)
+	sti
+	xorq	%rdi, %rdi
+	call	_C_LABEL(kpreempt)
+	cli
+	jmp	*%r13
+
+/*
+ * Xpreemptresume()
+ *
+ * Handles preemption interrupts via Xdoreti().
+ */
+IDTVEC(preemptresume)
+	movl	$IPL_PREEMPT, CPUVAR(ILEVEL)
+	sti
+	testq   $SEL_RPL, TF_CS(%rsp)
+	jnz	1f
+	movq	TF_RIP(%rsp), %rdi
+	call	_C_LABEL(kpreempt)		# from kernel
+	cli
+	jmp	*%r13
+1:
+	call	_C_LABEL(preempt)		# from user
+	cli
+	jmp	*%r13
+
 /*
  * int splraise(int s);
  */
@@ -167,7 +193,7 @@ ENTRY(splraise)
 ENTRY(spllower)
 	cmpl	CPUVAR(ILEVEL), %edi
 	jae	1f
-	movl	CPUVAR(IUNMASK)(,%edi,4), %edx
+	movl	CPUVAR(IUNMASK)(,%rdi,4), %edx
 	pushf
 	cli
 	testl	CPUVAR(IPENDING), %edx
@@ -183,6 +209,10 @@ ENTRY(spllower)
 	nop
 	nop
 	.align	16
+#ifdef GPROF
+	nop
+	.align	16
+#endif
 LABEL(spllower_end)
 
 #endif /* !XEN */
@@ -199,7 +229,7 @@ ENTRY(cx8_spllower)
 	movl	CPUVAR(ILEVEL),%edx
 	movq	%rbx,%r8
 	cmpl	%edx,%edi			/* new level is lower? */
-	jae,pn	1f
+	jae	1f
 0:
 	movl	CPUVAR(IPENDING),%eax
 	movl	%edi,%ecx
@@ -209,9 +239,9 @@ ENTRY(cx8_spllower)
 	 * On the P4 this jump is cheaper than patching in junk
 	 * using cmov.  Is cmpxchg expensive if it fails?
 	 */
-	jnz,pn	2f
+	jnz	2f
 	cmpxchg8b CPUVAR(ISTATE)		/* swap in new ilevel */
-	jnz,pn	0b
+	jnz	0b
 1:
 	movq	%r8,%rbx
 	ret
@@ -235,7 +265,7 @@ LABEL(cx8_spllower_end)
  * It is important that the bit scan instruction is bsr, it will get
  * the highest 2 bits (currently the IPI and clock handlers) first,
  * to avoid deadlocks where one CPU sends an IPI, another one is at
- * splipi() and defers it, lands in here via splx(), and handles
+ * splhigh() and defers it, lands in here via splx(), and handles
  * a lower-prio one first, which needs to take the kernel lock -->
  * the sending CPU will never see the that CPU accept the IPI
  * (see pmap_tlb_shootnow).
@@ -321,4 +351,11 @@ NENTRY(call_evtchn_do_event)
 	call    _C_LABEL(evtchn_do_event)
 	decl	CPUVAR(IDEPTH)
 	ret
-#endif
+#ifdef DOM0OPS
+NENTRY(call_xenevt_event)
+	incl	CPUVAR(IDEPTH)
+	call    _C_LABEL(xenevt_event)
+	decl	CPUVAR(IDEPTH)
+	ret
+#endif /* DOM0OPS */
+#endif /* XEN */

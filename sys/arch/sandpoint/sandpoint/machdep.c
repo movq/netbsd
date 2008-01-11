@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.40 2007/12/12 04:24:57 nisimura Exp $	*/
+/*	$NetBSD: machdep.c,v 1.56 2011/04/19 18:06:19 phx Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,11 +32,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.40 2007/12/12 04:24:57 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.56 2011/04/19 18:06:19 phx Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
+#include "opt_interrupt.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -55,10 +57,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.40 2007/12/12 04:24:57 nisimura Exp $"
 #include <sys/syslog.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 
-#include <uvm/uvm.h>
 #include <uvm/uvm_extern.h>
 
 #include <net/netisr.h>
@@ -97,20 +98,21 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.40 2007/12/12 04:24:57 nisimura Exp $"
 #include "ksyms.h"
 
 char bootinfo[BOOTINFO_MAXSIZE];
+void (*md_reboot)(int);
 
 void initppc(u_int, u_int, u_int, void *);
 void consinit(void);
 void sandpoint_bus_space_init(void);
 size_t mpc107memsize(void);
 
-#define	OFMEMREGIONS	32
-struct mem_region physmemr[OFMEMREGIONS], availmemr[OFMEMREGIONS];
+/* we support single chunk of memory */
+struct mem_region physmemr[2], availmemr[2];
 
 paddr_t avail_end;
 struct pic_ops *isa_pic = NULL;
 extern int primary_pic;
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 extern void *startsym, *endsym;
 #endif
 
@@ -122,6 +124,11 @@ void
 initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 {
 	struct btinfo_magic *bi_magic = btinfo;
+	struct btinfo_memory *meminfo;
+	struct btinfo_clock *clockinfo;
+	size_t memsize;
+	u_long ticks;
+	extern u_long ticks_per_sec, ns_per_tick;
 
 	if ((unsigned)btinfo != 0 && (unsigned)btinfo < startkernel
 	    && bi_magic->magic == BOOTINFO_MAGIC)
@@ -129,41 +136,28 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 	else
 		args = RB_SINGLE;	/* boot via S-record loader */
 		
-	/*
-	 * Determine real size by analysing SDRAM control registers. 
-	 */
-	{
-		struct btinfo_memory *meminfo;
-		size_t memsize;
+	meminfo = lookup_bootinfo(BTINFO_MEMORY);
+	if (meminfo)
+		memsize = meminfo->memsize & ~PGOFSET;
+	else
+		memsize = mpc107memsize();
+	physmemr[0].start = 0;
+	physmemr[0].size = memsize;
+	physmemr[1].size = 0;
+	availmemr[0].start = (endkernel + PGOFSET) & ~PGOFSET;
+	availmemr[0].size = memsize - availmemr[0].start;
+	availmemr[1].size = 0;
+	avail_end = physmemr[0].start + physmemr[0].size; /* XXX */
 
-		meminfo = lookup_bootinfo(BTINFO_MEMORY);
-		if (meminfo)
-			memsize = meminfo->memsize & ~PGOFSET;
-		else
-			memsize = mpc107memsize();
-		physmemr[0].start = 0;
-		physmemr[0].size = memsize;
-		availmemr[0].start = (endkernel + PGOFSET) & ~PGOFSET;
-		availmemr[0].size = memsize - availmemr[0].start;
-	}
-	avail_end = physmemr[0].start + physmemr[0].size;    /* XXX temporary */
-
-	/*
-	 * Get CPU clock
-	 */
-	{
-		struct btinfo_clock *clockinfo;
-		u_long ticks;
-		extern u_long ticks_per_sec, ns_per_tick;
-
+	clockinfo = lookup_bootinfo(BTINFO_CLOCK);
+	if (clockinfo)
+		ticks = clockinfo->ticks_per_sec;
+	else {
 		ticks = 1000000000;	/* 100 MHz */
 		ticks /= 4;		/* 4 cycles per DEC tick */
-		clockinfo = lookup_bootinfo(BTINFO_CLOCK);
-		if (clockinfo)
-			ticks = clockinfo->ticks_per_sec;
-		ticks_per_sec = ticks;
-		ns_per_tick = 1000000000 / ticks_per_sec;
 	}
+	ticks_per_sec = ticks;
+	ns_per_tick = 1000000000 / ticks_per_sec;
 
 	/*
 	 * boothowto
@@ -189,9 +183,13 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 	cn_tab = &kcomcons;
 	(*cn_tab->cn_init)(&kcomcons);
 
-	ksyms_init((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	ksyms_addsyms_elf((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+#endif
+#ifdef DDB
 	if (boothowto & RB_KDB)
 		Debugger();
+#endif
 #endif
 
 	/* Initialize bus_space */
@@ -206,8 +204,8 @@ initppc(u_int startkernel, u_int endkernel, u_int args, void *btinfo)
 	/* Initialize pmap module */
 	pmap_bootstrap(startkernel, endkernel);
 
-#if 0 /* NKSYMS || defined(DDB) || defined(LKM) */
-	ksyms_init((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
+#if 0 /* NKSYMS || defined(DDB) || defined(MODULAR) */
+	ksyms_addsyms_elf((int)((u_int)endsym - (u_int)startsym), startsym, endsym);
 #endif
 #ifdef IPKDB
 	/*
@@ -248,16 +246,20 @@ cpu_startup(void)
 	 */
 	baseaddr = (void *)(SANDPOINT_BUS_SPACE_EUMB + 0x40000);
 	pic_init();
-	isa_pic = setup_i8259();
-	(void)setup_openpic(baseaddr, 0);
-	primary_pic = 1;
 
-#if (NPCIB > 0)
+#ifdef PIC_I8259
+	isa_pic = setup_i8259();
+	(void)setup_mpcpic(baseaddr);
+	primary_pic = 1;
 	/*
 	 * set up i8259 as a cascade on EPIC irq 0.
 	 * XXX exceptional SP2 has 17
 	 */
 	intr_establish(16, IST_LEVEL, IPL_NONE, pic_handle_intr, isa_pic);
+#else
+	mpcpic_reserv16();
+	(void)setup_mpcpic(baseaddr);
+	primary_pic = 0;
 #endif
 
 	oea_install_extint(pic_ext_intr);
@@ -270,7 +272,7 @@ cpu_startup(void)
 	/*
 	 * Now allow hardware interrupts.
 	 */
-	splhigh();
+	splraise(-1);
 	__asm volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0"
 	    :	"=r"(msr)
 	    :	"K"(PSL_EE));
@@ -355,7 +357,9 @@ consinit(void)
 void
 cpu_reboot(int howto, char *what)
 {
+	extern void jump_to_ppc_reset_entry(void);	/* from locore.S */
 	static int syncing;
+	register_t msr;
 
 	boothowto = howto;
 	if ((howto & RB_NOSYNC) == 0 && syncing == 0) {
@@ -365,32 +369,63 @@ cpu_reboot(int howto, char *what)
 	}	    
 	
 	/* Disable intr */
-	splhigh();	
+	/* splhigh(); */
 	
 	/* Do dump if requested */
 	if ((howto & (RB_DUMP | RB_HALT)) == RB_DUMP)
 		oea_dumpsys();
 	
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 	 
-	if (howto & RB_HALT) {
+	if ((howto & RB_POWERDOWN) == RB_HALT) {
 		printf("\n");
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cnpollc(1);	/* for proper keyboard command handling */
 		cngetc();  
 		cnpollc(0);
+		howto = RB_AUTOBOOT;
 	}
-    
-	printf("rebooting...\n\n");
 
-#if 1
-{ extern void sandpoint_reboot(void);
-	sandpoint_reboot();
+	if (md_reboot != NULL)
+		(*md_reboot)(howto);
+
+	/*
+	 * No reboot method defined. So we disable the MMU and jump
+	 * through the firmware's reset vector.
+	 */
+	msr = mfmsr();
+	msr &= ~PSL_EE;
+	mtmsr(msr);
+	__asm volatile("mtspr %0,%1" : : "K"(81), "r"(0));
+	msr &= ~(PSL_ME | PSL_DR | PSL_IR);
+	mtmsr(msr);
+	jump_to_ppc_reset_entry();
+	for (;;);
 }
-#endif
-	while (1);
+
+#ifdef MODULAR
+void
+module_init_md(void)
+{
+        struct btinfo_modulelist *module;
+	struct bi_modulelist_entry *bi, *biend;
+
+        module = lookup_bootinfo(BTINFO_MODULELIST);
+        if (module == NULL)
+		return;
+	bi = (struct bi_modulelist_entry *)(module + 1);
+	biend = bi + module->num;
+	while (bi < biend) {
+		printf("module %s at 0x%08x size %x\n", 
+		    bi->kmod, bi->base, bi->len);
+		/* module_prime((void *)bi->base, bi->len); */
+		bi += 1;
+	}
 }
+#endif /* MODULAR */
 
 struct powerpc_bus_space sandpoint_io_space_tag = {
 	_BUS_SPACE_LITTLE_ENDIAN|_BUS_SPACE_IO_TYPE,
@@ -494,37 +529,6 @@ mpc107memsize(void)
 	return (end + 1); /* recongize this as the amount of SDRAM */
 }
 
-/* XXX needs to make openpic.c implementation-neutral XXX */
-
-unsigned epicsteer[] = {
-	0x10200,	/* external irq 0 direct/serial */
-	0x10220,	/* external irq 1 direct/serial */
-	0x10240,	/* external irq 2 direct/serial */
-	0x10260,	/* external irq 3 direct/serial */
-	0x10280,	/* external irq 4 direct/serial */
-	0x102a0,	/* external irq 5 serial mode */
-	0x102c0,	/* external irq 6 serial mode */
-	0x102e0,	/* external irq 7 serial mode */
-	0x10300,	/* external irq 8 serial mode */
-	0x10320,	/* external irq 9 serial mode */
-	0x10340,	/* external irq 10 serial mode */
-	0x10360,	/* external irq 11 serial mode */
-	0x10380,	/* external irq 12 serial mode */
-	0x103a0,	/* external irq 13 serial mode */
-	0x103c0,	/* external irq 14 serial mode */
-	0x103e0,	/* external irq 15 serial mode */
-	0x11020,	/* I2C */
-	0x11040,	/* DMA 0 */
-	0x11060,	/* DMA 1 */
-	0x110c0,	/* MU/I2O */
-	0x01120,	/* Timer 0 */
-	0x01160,	/* Timer 1 */
-	0x011a0,	/* Timer 2 */
-	0x011e0,	/* Timer 3 */
-	0x11120,	/* DUART 0, MPC8245 */
-	0x11140,	/* DUART 1, MPC8245 */
-};
-
 /* XXX XXX debug purpose only XXX XXX */
 
 static dev_type_cninit(kcomcninit);
@@ -616,4 +620,23 @@ kcomcnputc(dev_t dev, int c)
 static void
 kcomcnpollc(dev_t dev, int on)
 {
+}
+
+SYSCTL_SETUP(sysctl_machdep_prodfamily, "sysctl machdep prodfamily")
+{
+	const struct sysctlnode *mnode, *node;
+	struct btinfo_prodfamily *pfam;
+
+	pfam = lookup_bootinfo(BTINFO_PRODFAMILY);
+	if (pfam != NULL) {
+		sysctl_createv(NULL, 0, NULL, &mnode,
+		    CTLFLAG_PERMANENT, CTLTYPE_NODE, "machdep", NULL,
+		    NULL, 0, NULL, 0, CTL_MACHDEP, CTL_EOL);
+
+		sysctl_createv(NULL, 0, &mnode, &node,
+		    CTLFLAG_PERMANENT, CTLTYPE_STRING, "prodfamily",
+		    SYSCTL_DESCR("Board family name."),
+		    NULL, 0, pfam->name, 0,
+		    CTL_CREATE, CTL_EOL);
+	}
 }

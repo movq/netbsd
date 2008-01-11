@@ -1,4 +1,4 @@
-/*	$NetBSD: locore2.c,v 1.33 2007/03/04 06:00:55 christos Exp $	*/
+/*	$NetBSD: locore2.c,v 1.38 2009/11/30 16:09:14 he Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.33 2007/03/04 06:00:55 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.38 2009/11/30 16:09:14 he Exp $");
 
 #include "opt_ddb.h"
 
@@ -45,7 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.33 2007/03/04 06:00:55 christos Exp $"
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
-#include <sys/user.h>
 #define ELFSIZE 32
 #include <sys/exec_elf.h>
 
@@ -84,7 +76,6 @@ int mmutype = MMU_68030;
  * Now our own stuff.
  */
 
-struct user *proc0paddr;	/* proc[0] pcb address (u-area VA) */
 extern struct pcb *curpcb;
 
 /* First C code called by locore.s */
@@ -176,16 +167,16 @@ _vm_init(void)
 	 * fault handler works in case we hit an early bug.
 	 * (The fault handler may reference lwp0 stuff.)
 	 */
-	proc0paddr = (struct user *) nextva;
+	uvm_lwp_setuarea(&lwp0, nextva);
+	memset((void *)nextva, 0, USPACE);
+
 	nextva += USPACE;
-	memset((void *)proc0paddr, 0, USPACE);
-	lwp0.l_addr = proc0paddr;
 
 	/*
 	 * Now that lwp0 exists, make it the "current" one.
 	 */
 	curlwp = &lwp0;
-	curpcb = &proc0paddr->u_pcb;
+	curpcb = lwp_getpcb(&lwp0);
 
 	/* This does most of the real work. */
 	pmap_bootstrap(nextva);

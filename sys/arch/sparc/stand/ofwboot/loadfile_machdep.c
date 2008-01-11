@@ -1,4 +1,4 @@
-/*	$NetBSD: loadfile_machdep.c,v 1.4 2007/10/17 19:57:16 garbled Exp $	*/
+/*	$NetBSD: loadfile_machdep.c,v 1.10 2011/05/21 16:32:00 nakayama Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,7 @@
  */
 
 #include <lib/libsa/stand.h>
+#include <lib/libkern/libkern.h>
 
 #include <machine/pte.h>
 #include <machine/cpu.h>
@@ -77,7 +71,9 @@ static void*	ofw_memcpy(void *, const void *, size_t);
 static void*	ofw_memset(void *, int, size_t);
 static void	ofw_freeall(void);
 
+#if 0
 static int	nop_mapin(vaddr_t, vsize_t);
+#endif
 static ssize_t	nop_read(int, void *, size_t);
 static void*	nop_memcpy(void *, const void *, size_t);
 static void*	nop_memset(void *, int, size_t);
@@ -188,22 +184,22 @@ tlb_init(void)
 			if (_prom_getprop(child, "upa-portid", &cpu,
 			    sizeof(cpu)) == -1 && _prom_getprop(child, "portid",
 			    &cpu, sizeof(cpu)) == -1)
-				panic("main: prom_getprop");
+				panic("tlb_init: prom_getprop");
 			if (cpu == bootcpu)
 				break;
 		}
 	}
 	if (cpu != bootcpu)
-		panic("init_tlb: no node for bootcpu?!?!");
+		panic("tlb_init: no node for bootcpu?!?!");
 	if (_prom_getprop(child, "#dtlb-entries", &dtlb_slot_max,
 	    sizeof(dtlb_slot_max)) == -1 ||
 	    _prom_getprop(child, "#itlb-entries", &itlb_slot_max,
 	    sizeof(itlb_slot_max)) == -1)
-		panic("init_tlb: prom_getprop");
+		panic("tlb_init: prom_getprop");
 	dtlb_store = alloc(dtlb_slot_max * sizeof(*dtlb_store));
 	itlb_store = alloc(itlb_slot_max * sizeof(*itlb_store));
 	if (dtlb_store == NULL || itlb_store == NULL) {
-		panic("init_tlb: malloc");
+		panic("tlb_init: malloc");
 	}
 
 	dtlb_slot = itlb_slot = 0;
@@ -215,14 +211,15 @@ tlb_init(void)
 static int
 mmu_mapin(vaddr_t rva, vsize_t len)
 {
-	int64_t data;
-	vaddr_t va, pa, mva;
+	uint64_t data;
+	paddr_t pa;
+	vaddr_t va, mva;
 
 	len  = roundup2(len + (rva & PAGE_MASK_4M), PAGE_SIZE_4M);
 	rva &= ~PAGE_MASK_4M;
 
 	tlb_init();
-	for (pa = (vaddr_t)-1; len > 0; rva = va) {
+	for (pa = (paddr_t)-1; len > 0; rva = va) {
 		if ( (len = kvamap_extract(rva, len, &va)) == 0) {
 			/* The rest is already mapped */
 			break;
@@ -231,13 +228,11 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 		if (dtlb_va_to_pa(va) == (u_long)-1 ||
 		    itlb_va_to_pa(va) == (u_long)-1) {
 			/* Allocate a physical page, claim the virtual area */
-			if (pa == (vaddr_t)-1) {
-				pa = (vaddr_t)OF_alloc_phys(PAGE_SIZE_4M,
-				    PAGE_SIZE_4M);
-				if (pa == (vaddr_t)-1)
+			if (pa == (paddr_t)-1) {
+				pa = OF_alloc_phys(PAGE_SIZE_4M, PAGE_SIZE_4M);
+				if (pa == (paddr_t)-1)
 					panic("out of memory");
-				mva = (vaddr_t)OF_claim_virt(va,
-				    PAGE_SIZE_4M, 0);
+				mva = OF_claim_virt(va, PAGE_SIZE_4M);
 				if (mva != va) {
 					panic("can't claim virtual page "
 					    "(wanted %#lx, got %#lx)",
@@ -256,7 +251,8 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 			if (itlb_slot >= itlb_slot_max)
 				panic("mmu_mapin: out of itlb_slots");
 
-			DPRINTF(("mmu_mapin: %p:%p\n", va, pa));
+			DPRINTF(("mmu_mapin: 0x%lx:0x%x.0x%x\n", va,
+			    hi(pa), lo(pa)));
 
 			data = TSB_DATA(0,		/* global */
 					PGSZ_4M,	/* 4mb page */
@@ -274,7 +270,7 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 			dtlb_store[dtlb_slot].te_va = va;
 			dtlb_slot++;
 			dtlb_enter(va, hi(data), lo(data));
-			pa = (vaddr_t)-1;
+			pa = (paddr_t)-1;
 		}
 
 		kvamap_enter(va, PAGE_SIZE_4M);
@@ -283,7 +279,7 @@ mmu_mapin(vaddr_t rva, vsize_t len)
 		va += PAGE_SIZE_4M;
 	}
 
-	if (pa != (vaddr_t)-1) {
+	if (pa != (paddr_t)-1) {
 		OF_free_phys(pa, PAGE_SIZE_4M);
 	}
 
@@ -440,10 +436,21 @@ sparc64_finalize_tlb(u_long data_va)
 {
 	int i;
 	int64_t data;
+	bool writable_text = false;
 
 	for (i = 0; i < dtlb_slot; i++) {
-		if (dtlb_store[i].te_va >= data_va)
-			continue;
+		if (dtlb_store[i].te_va >= data_va) {
+			/*
+			 * If (for whatever reason) the start of the
+			 * writable section is right at the start of
+			 * the kernel, we need to map it into the ITLB
+			 * nevertheless (and don't make it readonly).
+			 */
+			if (i == 0 && dtlb_store[i].te_va == data_va)
+				writable_text = true;
+			else
+				continue;
+		}
 
 		data = TSB_DATA(0,		/* global */
 				PGSZ_4M,	/* 4mb page */
@@ -456,11 +463,14 @@ sparc64_finalize_tlb(u_long data_va)
 				0		/* endianness */
 				);
 		data |= TLB_L | TLB_CV; /* locked, virt.cache */
-		dtlb_replace(dtlb_store[i].te_va, hi(data), lo(data));
+		if (!writable_text)
+			dtlb_replace(dtlb_store[i].te_va, hi(data), lo(data));
 		itlb_store[itlb_slot] = dtlb_store[i];
 		itlb_slot++;
 		itlb_enter(dtlb_store[i].te_va, hi(data), lo(data));
 	}
+	if (writable_text)
+		printf("WARNING: kernel text mapped writable!\n");
 }
 
 /*

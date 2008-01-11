@@ -1,4 +1,4 @@
-/*	$NetBSD: wdogctl.c,v 1.17 2006/08/13 23:24:53 wiz Exp $	*/
+/*	$NetBSD: wdogctl.c,v 1.19 2011/01/04 23:48:44 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2000 Zembu Labs, Inc.
@@ -35,7 +35,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: wdogctl.c,v 1.17 2006/08/13 23:24:53 wiz Exp $");
+__RCSID("$NetBSD: wdogctl.c,v 1.19 2011/01/04 23:48:44 wiz Exp $");
 #endif
 
 
@@ -84,7 +84,7 @@ main(int argc, char *argv[])
 {
 	enum cmd command = CMD_NONE;
 	int period_flag = 0;
-	int ch;
+	int ch, tmp;
 	u_int period = WDOG_PERIOD_DEFAULT;
 
 	while ((ch = getopt(argc, argv, "Adekp:utx")) != -1) {
@@ -119,9 +119,10 @@ main(int argc, char *argv[])
 
 		case 'p':
 			period_flag = 1;
-			period = atoi(optarg);
-			if (period == -1)
+			tmp = atoi(optarg);
+			if (tmp < 0)
 				usage();
+			period = (unsigned int)tmp;
 			break;
 
 		case 'x':
@@ -199,6 +200,8 @@ enable_kernel(const char *name, u_int period)
 
 	if (ioctl(fd, WDOGIOC_SMODE, &wm) == -1)
 		err(EXIT_FAILURE, "WDOGIOC_SMODE");
+
+	(void)close(fd);
 }
 
 void
@@ -218,6 +221,8 @@ enable_ext(const char *name, u_int period)
 	if (ioctl(fd, WDOGIOC_TICKLE) == -1)
 		syslog(LOG_EMERG, "unable to tickle watchdog timer %s: %m",
 		    wm.wm_name);
+
+	(void)close(fd);
 	return;
 }
 
@@ -315,6 +320,8 @@ tickle_ext()
 		err(EXIT_FAILURE, "open %s", _PATH_WATCHDOG);
 	if (ioctl(fd, WDOGIOC_TICKLE) == -1)
 		fprintf(stderr, "Cannot tickle timer\n");
+
+	(void)close(fd);
 }
 
 void
@@ -330,6 +337,7 @@ disable(void)
 
 	if (ioctl(fd, WDOGIOC_WHICH, &wm) == -1) {
 		printf("No watchdog timer running.\n");
+		(void)close(fd);
 		return;
 	}
 	mode = wm.wm_mode & WDOG_MODE_MASK;

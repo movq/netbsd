@@ -1,4 +1,4 @@
-/*	$NetBSD: xen_debug.c,v 1.5 2007/11/22 16:17:09 bouyer Exp $	*/
+/*	$NetBSD: xen_debug.c,v 1.7 2009/10/23 02:32:34 snj Exp $	*/
 
 /*
  *
@@ -13,11 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Christian Limpach.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -56,7 +51,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xen_debug.c,v 1.5 2007/11/22 16:17:09 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xen_debug.c,v 1.7 2009/10/23 02:32:34 snj Exp $");
 
 #define XENDEBUG
 
@@ -106,7 +101,7 @@ void failsafe_callback(void);
 
 void xen_dbglow_init(void);
 void
-xen_dbglow_init()
+xen_dbglow_init(void)
 {
 	start_info_t *si;
 #if 0

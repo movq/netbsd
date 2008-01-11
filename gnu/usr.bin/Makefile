@@ -1,18 +1,19 @@
-#	$NetBSD: Makefile,v 1.127 2007/06/21 12:51:06 skrll Exp $
+#	$NetBSD: Makefile,v 1.134 2011/04/21 14:26:34 joerg Exp $
 
-# for OBJECT_FMT
 .include <bsd.own.mk>
 
 SUBDIR+=	bc
-.if ${MKBINUTILS} != "no"
-SUBDIR+=	binutils
+SUBDIR+=	c89 c99
+SUBDIR+=	dc diffutils gkermit
+SUBDIR+=	rcs send-pr texinfo
+
+.if ${MKBSDGREP} == "no"
+SUBDIR+=	grep
 .endif
-SUBDIR+=	c89
-.if ${MKCVS} != "no"
-SUBDIR+=	xcvs
+
+.if ${MKGROFF} != "no"
+SUBDIR+=	groff
 .endif
-SUBDIR+=	dc diffutils gkermit grep
-SUBDIR+=	groff rcs send-pr texinfo
 
 SUBDIR+=	gettext
 

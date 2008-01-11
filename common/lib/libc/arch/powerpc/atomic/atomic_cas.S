@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic_cas.S,v 1.2 2007/11/28 21:39:49 ad Exp $	*/
+/*	$NetBSD: atomic_cas.S,v 1.7 2011/01/15 07:31:11 matt Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,16 +31,19 @@
 
 #include "atomic_op_asm.h"
 
-	.text
+__RCSID("$NetBSD: atomic_cas.S,v 1.7 2011/01/15 07:31:11 matt Exp $")
 
-ENTRY_NOPROFILE(_atomic_cas_32)
-1:	lwarx	r10,0,r3
-	cmpw	r10,r4
+	.text
+ENTRY(_atomic_cas_32)
+1:	lwarx	%r10,0,%r3
+	cmpw	%r10,%r4
 	bne-	2f
-	stwcx.	r5,0,r3
+	stwcx.	%r5,0,%r3
 	bne-	1b
-2:	mr	r3,r10
+2:	mr	%r3,%r10
 	blr
+END(_atomic_cas_32)
+
 ATOMIC_OP_ALIAS(atomic_cas_32,_atomic_cas_32)
 ATOMIC_OP_ALIAS(atomic_cas_uint,_atomic_cas_32)
 STRONG_ALIAS(_atomic_cas_uint,_atomic_cas_32)
@@ -56,4 +52,15 @@ ATOMIC_OP_ALIAS(atomic_cas_ulong,_atomic_cas_32)
 STRONG_ALIAS(_atomic_cas_ulong,_atomic_cas_32)
 ATOMIC_OP_ALIAS(atomic_cas_ptr,_atomic_cas_32)
 STRONG_ALIAS(_atomic_cas_ptr,_atomic_cas_32)
+#endif
+
+ATOMIC_OP_ALIAS(atomic_cas_32_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_32_ni,_atomic_cas_32)
+ATOMIC_OP_ALIAS(atomic_cas_uint_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_uint_ni,_atomic_cas_32)
+#if !defined(_LP64)
+ATOMIC_OP_ALIAS(atomic_cas_ulong_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_ulong_ni,_atomic_cas_32)
+ATOMIC_OP_ALIAS(atomic_cas_ptr_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_ptr_ni,_atomic_cas_32)
 #endif

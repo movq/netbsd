@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.5 2007/02/22 05:31:53 thorpej Exp $	*/
+/*	$NetBSD: boot.c,v 1.7 2008/07/16 14:45:17 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,8 +45,7 @@
 
 extern const char bootprog_name[];
 extern const char bootprog_rev[];
-extern const char bootprog_date[];
-extern const char bootprog_maker[];
+extern const char bootprog_kernrev[];
 
 struct cmd_batch_tab cmd_batch_tab[] = {
 	/* func    argc   argp... */
@@ -89,8 +81,8 @@ main(int a0, int v0, int v1)
 	console_init();
 
 	printf("\n");
-	printf("%s boot, Revision %s\n", bootprog_name, bootprog_rev);
-	printf("(%s, %s)\n", bootprog_date, bootprog_maker);
+	printf("%s boot, Revision %s (from NetBSD %s)\n",
+	    bootprog_name, bootprog_rev, bootprog_kernrev);
 
 
 	/* Inquire IPL activated device */
@@ -189,8 +181,8 @@ cmd_info(int argc, char *argp[], int interactive)
 	int i, size, total;
 	struct sbdinfo *sbd = SBD_INFO;
 
-	printf("\n>> %s boot, rev. %s [%s, %s] <<\n", bootprog_name,
-	    bootprog_rev, bootprog_date, bootprog_maker);
+	printf("\n>> %s boot, Revision %s (from NetBSD %s) <<\n",
+	    bootprog_name, bootprog_rev, bootprog_kernrev);
 
 	printf("IPL args: 0x%x 0x%x 0x%x\n", ipl_args.a0, ipl_args.v0,
 	    ipl_args.v1);

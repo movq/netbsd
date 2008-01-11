@@ -1,4 +1,4 @@
-/*	$NetBSD: boca.c,v 1.49 2007/10/19 12:00:15 ad Exp $	*/
+/*	$NetBSD: boca.c,v 1.53 2009/05/12 09:10:15 cegger Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: boca.c,v 1.49 2007/10/19 12:00:15 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: boca.c,v 1.53 2009/05/12 09:10:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,8 +67,8 @@ struct boca_softc {
 	callout_t fixup;
 };
 
-int bocaprobe(struct device *, struct cfdata *, void *);
-void bocaattach(struct device *, struct device *, void *);
+int bocaprobe(device_t, cfdata_t, void *);
+void bocaattach(device_t, device_t, void *);
 int bocaintr(void *);
 void boca_fixup(void *);
 
@@ -76,8 +76,7 @@ CFATTACH_DECL(boca, sizeof(struct boca_softc),
     bocaprobe, bocaattach, NULL, NULL);
 
 int
-bocaprobe(struct device *parent, struct cfdata *self,
-    void *aux)
+bocaprobe(device_t parent, cfdata_t self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -148,7 +147,7 @@ out:
 }
 
 void
-bocaattach(struct device *parent, struct device *self, void *aux)
+bocaattach(device_t parent, device_t self, void *aux)
 {
 	struct boca_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
@@ -166,8 +165,7 @@ bocaattach(struct device *parent, struct device *self, void *aux)
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 			&sc->sc_slaveioh[i])) {
-			printf("%s: can't map i/o space for slave %d\n",
-			     sc->sc_dev.dv_xname, i);
+			aprint_error_dev(&sc->sc_dev, "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}
@@ -192,8 +190,7 @@ bocaattach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-bocaintr(arg)
-	void *arg;
+bocaintr(void *arg)
 {
 	struct boca_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -209,7 +206,7 @@ bocaintr(arg)
 		if (bits & (1 << (n))) { \
 			if (comintr(sc->sc_slaves[n]) == 0) { \
 				printf("%s: bogus intr for port %d\n", \
-				    sc->sc_dev.dv_xname, n); \
+				    device_xname(&sc->sc_dev), n); \
 			} \
 		}
 		TRY(0);
@@ -230,8 +227,7 @@ bocaintr(arg)
 }
 
 void
-boca_fixup(v)
-	void *v;
+boca_fixup(void *v)
 {
 	struct boca_softc *sc = v;
 	int alive = sc->sc_alive;

@@ -1,4 +1,4 @@
-/*	$NetBSD: undefined.c,v 1.32 2007/11/05 20:43:02 ad Exp $	*/
+/*	$NetBSD: undefined.c,v 1.41 2011/04/07 11:02:24 matt Exp $	*/
 
 /*
  * Copyright (c) 2001 Ben Harris.
@@ -54,14 +54,13 @@
 #include <sys/kgdb.h>
 #endif
 
-__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.32 2007/11/05 20:43:02 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.41 2011/04/07 11:02:24 matt Exp $");
 
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/signal.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/syslog.h>
 #include <sys/vmmeter.h>
 #ifdef FAST_FPE
@@ -101,7 +100,7 @@ install_coproc_handler(int coproc, undef_handler_t handler)
 	KASSERT(handler != NULL); /* Used to be legal. */
 
 	/* XXX: M_TEMP??? */
-	MALLOC(uh, struct undefined_handler *, sizeof(*uh), M_TEMP, M_WAITOK);
+	uh = malloc(sizeof(*uh), M_TEMP, M_WAITOK);
 	uh->uh_handler = handler;
 	install_coproc_handler_static(coproc, uh);
 	return uh;
@@ -120,15 +119,60 @@ remove_coproc_handler(void *cookie)
 	struct undefined_handler *uh = cookie;
 
 	LIST_REMOVE(uh, uh_link);
-	FREE(uh, M_TEMP);
+	free(uh, M_TEMP);
 }
 
+static int
+cp15_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
+{
+	struct lwp * const l = curlwp;
+
+#ifdef THUMB_CODE
+	if (frame->tf_spsr & PSR_T_bit)
+		return 1;
+#endif
+	if (code != FAULT_USER)
+		return 1;
+
+	/*
+	 * Don't overwrite sp, pc, etc.
+	 */
+	const u_int regno = (insn >> 12) & 15;
+	if (regno > 12)
+		return 1;
+
+	/*
+	 * Get a pointer to the register used in the instruction to be emulated.
+	 */
+	register_t * const regp = &frame->tf_r0 + regno;
+
+	/*
+	 * Handle MRC p15, 0, <Rd>, c13, c0, 3 (Read User read-only thread id)
+	 */
+	if ((insn & 0xffff0fff) == 0xee1d0f70) {
+		*regp = (uintptr_t)l->l_private;
+		return 0;
+	}
+
+	/*
+	 * Handle {MRC,MCR} p15, 0, <Rd>, c13, c0, 2 (User read/write thread id)
+	 */
+	if ((insn & 0xffef0fff) == 0xee0d0f50) {
+		struct pcb * const pcb = lwp_getpcb(l);
+		if (insn & 0x00100000)
+			*regp = pcb->pcb_user_pid_rw;
+		else
+			pcb->pcb_user_pid_rw = *regp;
+		return 0;
+	}
+
+	return 1;
+}
 
 static int
 gdb_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
 {
-	struct lwp *l;
-	l = (curlwp == NULL) ? &lwp0 : curlwp;
+	struct lwp * const l = curlwp;
 
 #ifdef THUMB_CODE
 	if (frame->tf_spsr & PSR_T_bit) {
@@ -150,9 +194,7 @@ gdb_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
 				ksi.ksi_code = TRAP_BRKPT;
 				ksi.ksi_addr = (u_int32_t *)addr;
 				ksi.ksi_trap = 0;
-				KERNEL_LOCK(1, l);
 				trapsignal(l, &ksi);
-				KERNEL_UNLOCK_LAST(l);
 				return 0;
 			}
 #ifdef KGDB
@@ -163,19 +205,24 @@ gdb_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
 	return 1;
 }
 
+static struct undefined_handler cp15_uh;
 static struct undefined_handler gdb_uh;
 #ifdef THUMB_CODE
 static struct undefined_handler gdb_uh_thumb;
 #endif
 
 void
-undefined_init()
+undefined_init(void)
 {
 	int loop;
 
 	/* Not actually necessary -- the initialiser is just NULL */
 	for (loop = 0; loop < NUM_UNKNOWN_HANDLERS; ++loop)
 		LIST_INIT(&undefined_handlers[loop]);
+
+	/* Install handler for CP15 emulation */
+	cp15_uh.uh_handler = cp15_trapper;
+	install_coproc_handler_static(SYSTEM_COPROC, &cp15_uh);
 
 	/* Install handler for GDB breakpoints */
 	gdb_uh.uh_handler = gdb_trapper;
@@ -205,8 +252,7 @@ undefinedinstruction(trapframe_t *frame)
 	if ((frame->tf_r15 & R15_IRQ_DISABLE) == 0)
 		int_on();
 #else
-	if (!(frame->tf_spsr & I32_bit))
-		enable_interrupts(I32_bit);
+	restore_interrupts(frame->tf_spsr & IF32_bits);
 #endif
 
 #ifndef acorn26
@@ -227,7 +273,7 @@ undefinedinstruction(trapframe_t *frame)
 #endif
 
 	/* Get the current lwp/proc structure or lwp0/proc0 if there is none. */
-	l = curlwp == NULL ? &lwp0 : curlwp;
+	l = curlwp;
 
 #ifdef __PROG26
 	if ((frame->tf_r15 & R15_MODE) == R15_MODE_USR) {
@@ -258,9 +304,7 @@ undefinedinstruction(trapframe_t *frame)
 			ksi.ksi_signo = SIGILL;
 			ksi.ksi_code = ILL_ILLOPC;
 			ksi.ksi_addr = (u_int32_t *)(intptr_t) fault_pc;
-			KERNEL_LOCK(1, l);
 			trapsignal(l, &ksi);
-			KERNEL_UNLOCK_LAST(l);
 			userret(l);
 			return;
 		}
@@ -277,7 +321,7 @@ undefinedinstruction(trapframe_t *frame)
 	}
 
 	/* Update vmmeter statistics */
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 
 #ifdef THUMB_CODE
 	if (frame->tf_spsr & PSR_T_bit) {
@@ -306,12 +350,13 @@ undefinedinstruction(trapframe_t *frame)
 	}
 
 	if (user) {
+		struct pcb *pcb = lwp_getpcb(l);
 		/*
 		 * Modify the fault_code to reflect the USR/SVC state at
 		 * time of fault.
 		 */
 		fault_code = FAULT_USER;
-		l->l_addr->u_pcb.pcb_tf = frame;
+		pcb->pcb_tf = frame;
 	} else
 		fault_code = 0;
 
@@ -359,9 +404,7 @@ undefinedinstruction(trapframe_t *frame)
 		ksi.ksi_code = ILL_ILLOPC;
 		ksi.ksi_addr = (u_int32_t *)fault_pc;
 		ksi.ksi_trap = fault_instruction;
-		KERNEL_LOCK(1, l);
 		trapsignal(l, &ksi);
-		KERNEL_UNLOCK_LAST(l);
 	}
 
 	if ((fault_code & FAULT_USER) == 0)
@@ -370,12 +413,10 @@ undefinedinstruction(trapframe_t *frame)
 #ifdef FAST_FPE
 	/* Optimised exit code */
 	{
-
 		/*
 		 * Check for reschedule request, at the moment there is only
 		 * 1 ast so this code should always be run
 		 */
-
 		if (curcpu()->ci_want_resched) {
 			/*
 			 * We are being preempted.
@@ -386,7 +427,6 @@ undefinedinstruction(trapframe_t *frame)
 		/* Invoke MI userret code */
 		mi_userret(l);
 	}
-
 #else
 	userret(l);
 #endif

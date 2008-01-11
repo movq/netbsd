@@ -1,4 +1,4 @@
-/*	$NetBSD: mgnsc.c,v 1.42 2007/03/05 20:31:04 he Exp $ */
+/*	$NetBSD: mgnsc.c,v 1.45 2010/12/20 00:25:26 matt Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -58,14 +58,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mgnsc.c,v 1.42 2007/03/05 20:31:04 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mgnsc.c,v 1.45 2010/12/20 00:25:26 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -127,7 +125,8 @@ mgnscattach(struct device *pdp, struct device *dp, void *auxp)
 	sc->sc_ctest7 = SIOP_CTEST7_TT1;
 	sc->sc_dcntl = 0x00;
 
-	alloc_sicallback();
+	sc->sc_siop_si = softint_establish(SOFTINT_BIO,
+	    (void (*)(void *))siopintr, sc);
 
 	/*
 	 * Fill in the scsipi_adapter.
@@ -167,9 +166,8 @@ mgnscattach(struct device *pdp, struct device *dp, void *auxp)
 /*
  * Level 6 interrupt processing for the Magnum/40 SCSI. Because the
  * level 6 interrupt is above splbio, the interrupt status is saved
- * and an sicallback to the level 2 interrupt handler scheduled.
- * This way, the actual processing of the interrupt can be deferred
- * until splbio is unblocked.
+ * and a softint scheduled.  This way, the actual processing of the
+ * interrupt can be deferred until splbio is unblocked.
  */
 
 int
@@ -199,7 +197,7 @@ mgnsc_dmaintr(void *arg)
 	rp->siop_sien = 0;
 	rp->siop_dien = 0;
 	sc->sc_flags |= SIOP_INTDEFER | SIOP_INTSOFF;
-	add_sicallback((sifunc_t)siopintr, sc, NULL);
+	softint_schedule(sc->sc_siop_si);
 	return (1);
 }
 
@@ -208,10 +206,13 @@ void
 mgnsc_dump(void)
 {
 	extern struct cfdriver mgnsc_cd;
+	struct siop_softc *sc;
 	int i;
 
-	for (i = 0; i < mgnsc_cd.cd_ndevs; ++i)
-		if (mgnsc_cd.cd_devs[i])
-			siop_dump(mgnsc_cd.cd_devs[i]);
+	for (i = 0; i < mgnsc_cd.cd_ndevs; ++i) {
+		sc = device_lookup_private(&mgnsc_cd, i);
+		if (sc != NULL)
+			siop_dump(sc);
+	}
 }
 #endif

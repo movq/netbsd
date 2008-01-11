@@ -1,4 +1,4 @@
-/*	$NetBSD: use.c,v 1.7 2007/12/27 23:53:01 dholland Exp $	*/
+/*	$NetBSD: use.c,v 1.10 2009/08/12 08:44:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)use.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: use.c,v 1.7 2007/12/27 23:53:01 dholland Exp $");
+__RCSID("$NetBSD: use.c,v 1.10 2009/08/12 08:44:45 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,10 +64,19 @@ boolean see_invisible = 0;
 short extra_hp = 0;
 boolean detect_monster = 0;
 boolean con_mon = 0;
-const char *strange_feeling = "you have a strange feeling for a moment, then it passes";
+
+static const char strange_feeling[] = 
+	"you have a strange feeling for a moment, then it passes";
+
+static const char *get_ench_color(void);
+static void go_blind(void);
+static void hold_monster(void);
+static void idntfy(void);
+static void potion_heal(int);
+static void uncurse_all(void);
 
 void
-quaff()
+quaff(void)
 {
 	short ch;
 	object *obj;
@@ -162,7 +171,7 @@ quaff()
 			}
 			break;
 		case SEE_INVISIBLE:
-			messagef(0, "hmm, this potion tastes like %sjuice", 
+			messagef(0, "hmm, this potion tastes like %sjuice",
 				 fruit);
 			if (blind) {
 				unblind();
@@ -179,7 +188,7 @@ quaff()
 }
 
 void
-read_scroll()
+read_scroll(void)
 {
 	short ch;
 	object *obj;
@@ -273,7 +282,7 @@ read_scroll()
 			break;
 		case CON_MON:
 			con_mon = 1;
-			messagef(0, "your hands glow %sfor a moment", 
+			messagef(0, "your hands glow %sfor a moment",
 				 get_ench_color());
 			break;
 	}
@@ -288,10 +297,7 @@ read_scroll()
  */
 
 void
-vanish(obj, rm, pack)
-	object *obj;
-	short rm;
-	object *pack;
+vanish(object *obj, short rm, object *pack)
 {
 	if (obj->quantity > 1) {
 		obj->quantity--;
@@ -307,13 +313,12 @@ vanish(obj, rm, pack)
 		free_object(obj);
 	}
 	if (rm) {
-		(void) reg_move();
+		(void)reg_move();
 	}
 }
 
-void
-potion_heal(extra)
-	int extra;
+static void
+potion_heal(int extra)
 {
 	float ratio;
 	short add;
@@ -337,7 +342,7 @@ potion_heal(extra)
 		if (extra) {
 			ratio += ratio;
 		}
-		add = (short)(ratio * ((float)rogue.hp_max - rogue.hp_current));
+		add = (short)(ratio * (rogue.hp_max - rogue.hp_current));
 		rogue.hp_current += add;
 		if (rogue.hp_current > rogue.hp_max) {
 			rogue.hp_current = rogue.hp_max;
@@ -347,7 +352,7 @@ potion_heal(extra)
 		unblind();
 	}
 	if (confused && extra) {
-			unconfuse();
+		unconfuse();
 	} else if (confused) {
 		confused = (confused / 2) + 1;
 	}
@@ -358,8 +363,8 @@ potion_heal(extra)
 	}
 }
 
-void
-idntfy()
+static void
+idntfy(void)
 {
 	short ch;
 	object *obj;
@@ -387,7 +392,7 @@ AGAIN:
 }
 
 void
-eat()
+eat(void)
 {
 	short ch;
 	short moves;
@@ -426,8 +431,8 @@ eat()
 	vanish(obj, 1, &rogue.pack);
 }
 
-void
-hold_monster()
+static void
+hold_monster(void)
 {
 	short i, j;
 	short mcount = 0;
@@ -460,7 +465,7 @@ hold_monster()
 }
 
 void
-tele()
+tele(void)
 {
 	mvaddch(rogue.row, rogue.col, get_dungeon_char(rogue.row, rogue.col));
 
@@ -473,7 +478,7 @@ tele()
 }
 
 void
-hallucinate()
+hallucinate(void)
 {
 	object *obj, *monster;
 	short ch;
@@ -503,7 +508,7 @@ hallucinate()
 }
 
 void
-unhallucinate()
+unhallucinate(void)
 {
 	halluc = 0;
 	relight();
@@ -511,7 +516,7 @@ unhallucinate()
 }
 
 void
-unblind()
+unblind(void)
 {
 	blind = 0;
 	messagef(1, "the veil of darkness lifts");
@@ -525,7 +530,7 @@ unblind()
 }
 
 void
-relight()
+relight(void)
 {
 	if (cur_room == PASSAGE) {
 		light_passage(rogue.row, rogue.col);
@@ -536,7 +541,7 @@ relight()
 }
 
 void
-take_a_nap()
+take_a_nap(void)
 {
 	short i;
 
@@ -550,8 +555,8 @@ take_a_nap()
 	messagef(0, "%s", you_can_move_again);
 }
 
-void
-go_blind()
+static void
+go_blind(void)
 {
 	short i, j;
 
@@ -582,32 +587,32 @@ go_blind()
 	mvaddch(rogue.row, rogue.col, rogue.fchar);
 }
 
-const char *
-get_ench_color()
+static const char *
+get_ench_color(void)
 {
 	if (halluc) {
 		return(id_potions[get_rand(0, POTIONS-1)].title);
 	} else if (con_mon) {
 		return("red ");
-	} 
+	}
 	return("blue ");
 }
 
 void
-cnfs()
+cnfs(void)
 {
 	confused += get_rand(12, 22);
 }
 
 void
-unconfuse()
+unconfuse(void)
 {
 	confused = 0;
 	messagef(1, "you feel less %s now", (halluc ? "trippy" : "confused"));
 }
 
-void
-uncurse_all()
+static void
+uncurse_all(void)
 {
 	object *obj;
 

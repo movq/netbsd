@@ -1,4 +1,4 @@
-/* $NetBSD: fattr.c,v 1.7 2007/03/10 00:30:36 hubertf Exp $ */
+/* $NetBSD: fattr.c,v 1.10 2009/06/19 12:55:45 stacktic Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fattr.c,v 1.7 2007/03/10 00:30:36 hubertf Exp $");
+__RCSID("$NetBSD: fattr.c,v 1.10 2009/06/19 12:55:45 stacktic Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -49,7 +42,7 @@ __RCSID("$NetBSD: fattr.c,v 1.7 2007/03/10 00:30:36 hubertf Exp $");
 #include <string.h>
 #include <unistd.h>
 
-#include "fattr.h"
+#include "mountprog.h"
 
 int
 a_num(const char *s, const char *id_type)
@@ -89,7 +82,7 @@ a_mask(const char *s)
 	int rv;
 	char *ep;
 
-	rv = strtol(optarg, &ep, 8);
+	rv = strtol(s, &ep, 8);
 	if (s == ep || *ep || rv < 0)
 		errx(1, "invalid file mode: %s", s);
 	return rv;

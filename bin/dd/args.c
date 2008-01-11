@@ -1,4 +1,4 @@
-/*	$NetBSD: args.c,v 1.26 2006/01/09 10:17:05 apb Exp $	*/
+/*	$NetBSD: args.c,v 1.34 2011/02/04 19:42:12 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)args.c	8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: args.c,v 1.26 2006/01/09 10:17:05 apb Exp $");
+__RCSID("$NetBSD: args.c,v 1.34 2011/02/04 19:42:12 pooka Exp $");
 #endif
 #endif /* not lint */
 
@@ -86,8 +86,10 @@ static const struct arg {
 	{ "files",	f_files,	C_FILES, C_FILES },
 	{ "ibs",	f_ibs,		C_IBS,	 C_BS|C_IBS },
 	{ "if",		f_if,		C_IF,	 C_IF },
+	{ "iseek",	f_skip,		C_SKIP,	 C_SKIP },
 	{ "obs",	f_obs,		C_OBS,	 C_BS|C_OBS },
 	{ "of",		f_of,		C_OF,	 C_OF },
+	{ "oseek",	f_seek,		C_SEEK,	 C_SEEK },
 	{ "progress",	f_progress,	0,	 0 },
 	{ "seek",	f_seek,		C_SEEK,	 C_SEEK },
 	{ "skip",	f_skip,		C_SKIP,	 C_SKIP },
@@ -105,6 +107,12 @@ jcl(char **argv)
 	in.dbsz = out.dbsz = 512;
 
 	while ((oper = *++argv) != NULL) {
+		if ((oper = strdup(oper)) == NULL) {
+			errx(EXIT_FAILURE,
+			    "unable to allocate space for the argument %s",
+			    *argv);
+			/* NOTREACHED */
+		}
 		if ((arg = strchr(oper, '=')) == NULL) {
 			errx(EXIT_FAILURE, "unknown operand %s", oper);
 			/* NOTREACHED */
@@ -115,9 +123,8 @@ jcl(char **argv)
 			/* NOTREACHED */
 		}
 		tmp.name = oper;
-		if (!(ap = (struct arg *)bsearch(&tmp, args,
-		    sizeof(args)/sizeof(struct arg), sizeof(struct arg),
-		    c_arg))) {
+		if (!(ap = bsearch(&tmp, args,
+		    __arraycount(args), sizeof(*args), c_arg))) {
 			errx(EXIT_FAILURE, "unknown operand %s", tmp.name);
 			/* NOTREACHED */
 		}
@@ -322,14 +329,14 @@ f_conv(char *arg)
 
 	while (arg != NULL) {
 		tmp.name = strsep(&arg, ",");
-		if (!(cp = (struct conv *)bsearch(&tmp, clist,
-		    sizeof(clist)/sizeof(struct conv), sizeof(struct conv),
-		    c_conv))) {
+		if (!(cp = bsearch(&tmp, clist,
+		    __arraycount(clist), sizeof(*clist), c_conv))) {
 			errx(EXIT_FAILURE, "unknown conversion %s", tmp.name);
 			/* NOTREACHED */
 		}
 		if (ddflags & cp->noset) {
-			errx(EXIT_FAILURE, "%s: illegal conversion combination", tmp.name);
+			errx(EXIT_FAILURE,
+			    "%s: illegal conversion combination", tmp.name);
 			/* NOTREACHED */
 		}
 		ddflags |= cp->set;

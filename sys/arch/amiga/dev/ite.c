@@ -1,6 +1,7 @@
-/*	$NetBSD: ite.c,v 1.82 2007/12/02 04:21:22 mhitch Exp $ */
+/*	$NetBSD: ite.c,v 1.92 2011/04/24 16:26:52 rmind Exp $ */
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -35,44 +36,6 @@
  *	from: Utah Hdr: ite.c 1.1 90/07/09
  *	@(#)ite.c 7.6 (Berkeley) 5/16/91
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the University of
- *      California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	from: Utah Hdr: ite.c 1.1 90/07/09
- *	@(#)ite.c 7.6 (Berkeley) 5/16/91
- */
 
 /*
  * ite - bitmaped terminal.
@@ -83,7 +46,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.82 2007/12/02 04:21:22 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.92 2011/04/24 16:26:52 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -102,9 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.82 2007/12/02 04:21:22 mhitch Exp $");
 #include <amiga/amiga/color.h>	/* DEBUG */
 #include <amiga/amiga/custom.h>	/* DEBUG */
 #include <amiga/amiga/device.h>
-#if defined(__m68k__)
 #include <amiga/amiga/isr.h>
-#endif
 #include <amiga/dev/iteioctl.h>
 #include <amiga/dev/itevar.h>
 #include <amiga/dev/kbdmap.h>
@@ -242,7 +203,7 @@ iteattach(struct device *pdp, struct device *dp, void *auxp)
 			 * console reinit copy params over.
 			 * and console always gets keyboard
 			 */
-			bcopy(&con_itesoftc.grf, &ip->grf,
+			memcpy(&ip->grf, &con_itesoftc.grf,
 			    (char *)&ip[1] - (char *)&ip->grf);
 			con_itesoftc.grf = NULL;
 			kbd_ite = ip;
@@ -250,7 +211,6 @@ iteattach(struct device *pdp, struct device *dp, void *auxp)
 		ip->grf = gp;
 		splx(s);
 
-		alloc_sicallback();
 		iteinit(gp->g_itedev);
 		printf(": rows %d cols %d", ip->rows, ip->cols);
 		printf(" repeat at (%d/100)s next at (%d/100)s",
@@ -275,7 +235,7 @@ struct ite_softc *
 getitesp(dev_t dev)
 {
 	if (amiga_realconfig && con_itesoftc.grf == NULL)
-		return(ite_cd.cd_devs[ITEUNIT(dev)]);
+		return(device_lookup_private(&ite_cd, ITEUNIT(dev)));
 
 	if (con_itesoftc.grf == NULL)
 		panic("no ite_softc for console");
@@ -320,7 +280,7 @@ init_bell(void)
 	if (bsamplep == NULL)
 		panic("no chipmem for ite_bell");
 
-	bcopy(sample, bsamplep, 20);
+	memcpy(bsamplep, sample, 20);
 }
 
 void
@@ -429,7 +389,7 @@ iteinit(dev_t dev)
 	if (ip->flags & ITE_INITED)
 		return;
 	if (kbdmap_loaded == 0) {
-		bcopy(&ascii_kbdmap, &kbdmap, sizeof(struct kbdmap));
+		memcpy(&kbdmap, &ascii_kbdmap, sizeof(struct kbdmap));
 		kbdmap_loaded = 1;
 	}
 
@@ -437,6 +397,8 @@ iteinit(dev_t dev)
 
 	ip->cursorx = 0;
 	ip->cursory = 0;
+	if (ip->grf->g_iteinit == NULL)
+		return;  /* grf has no console */
 	SUBR_INIT(ip);
 	SUBR_CURSOR(ip, DRAW_CURSOR);
 	if (ip->tabs == NULL)
@@ -464,7 +426,7 @@ iteopen(dev_t dev, int mode, int devtype, struct lwp *l)
 		return ENXIO;
 
 	if (ip->tp == NULL) {
-		tp = ip->tp = ttymalloc();
+		tp = ip->tp = tty_alloc();
 		tty_attach(tp);
 	} else
 		tp = ip->tp;
@@ -601,12 +563,12 @@ iteioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 	case ITEIOCSKMAP:
 		if (addr == 0)
 			return(EFAULT);
-		bcopy(addr, &kbdmap, sizeof(struct kbdmap));
+		memcpy(&kbdmap, addr, sizeof(struct kbdmap));
 		return(0);
 	case ITEIOCGKMAP:
 		if (addr == NULL)
 			return(EFAULT);
-		bcopy(&kbdmap, addr, sizeof(struct kbdmap));
+		memcpy(addr, &kbdmap, sizeof(struct kbdmap));
 		return(0);
 	case ITEIOCGREPT:
 		irp = (struct iterepeat *)addr;
@@ -757,7 +719,7 @@ ite_reset(struct ite_softc *ip)
 	ip->keypad_appmode = 0;
 	ip->imode = 0;
 	ip->key_repeat = 1;
-	bzero(ip->tabs, ip->cols);
+	memset(ip->tabs, 0, ip->cols);
 	for (i = 0; i < ip->cols; i++)
 		ip->tabs[i] = ((i & 7) == 0);
 }
@@ -880,14 +842,6 @@ ite_filter(u_char c, enum caller caller)
 	/* have to make sure we're at spltty in here */
 	s = spltty();
 
-	/*
-	 * keyboard interrupts come at priority 2, while softint
-	 * generated keyboard-repeat interrupts come at level 1.  So,
-	 * to not allow a key-up event to get thru before a repeat for
-	 * the key-down, we remove any outstanding callout requests..
-	rem_sicallback(ite_sifilter);
-	 */
-
 	up = c & 0x80 ? 1 : 0;
 	c &= 0x7f;
 	code = 0;
@@ -919,7 +873,7 @@ ite_filter(u_char c, enum caller caller)
 	}
 	/* Safety button, switch back to ascii keymap. */
 	if (key_mod == (KBD_MOD_LALT | KBD_MOD_LMETA) && c == 0x50) {
-		bcopy(&ascii_kbdmap, &kbdmap, sizeof(struct kbdmap));
+		memcpy(&kbdmap, &ascii_kbdmap, sizeof(struct kbdmap));
 
 		splx(s);
 		return;
@@ -1028,7 +982,7 @@ ite_filter(u_char c, enum caller caller)
 		 * to the above table. This is *nasty* !
 		 */
 		if (c >= 0x4c && c <= 0x4f && kbd_ite->cursor_appmode
-		    && !bcmp(str, "\x03\x1b[", 3) &&
+		    && !memcmp(str, "\x03\x1b[", 3) &&
 		    strchr("ABCD", str[3]))
 			str = app_cursor + 4 * (str[3] - 'A');
 

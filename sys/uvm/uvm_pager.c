@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_pager.c,v 1.90 2008/01/02 11:49:19 ad Exp $	*/
+/*	$NetBSD: uvm_pager.c,v 1.100 2011/04/23 18:14:12 rmind Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pager.c,v 1.90 2008/01/02 11:49:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pager.c,v 1.100 2011/04/23 18:14:12 rmind Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_readahead.h"
@@ -47,10 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_pager.c,v 1.90 2008/01/02 11:49:19 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/proc.h>
-#include <sys/malloc.h>
-#include <sys/pool.h>
 #include <sys/vnode.h>
+#include <sys/buf.h>
 
 #include <uvm/uvm.h>
 
@@ -69,8 +60,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_pager.c,v 1.90 2008/01/02 11:49:19 ad Exp $");
 #endif
 
 size_t pager_map_size = PAGER_MAP_SIZE;
-
-struct pool *uvm_aiobuf_pool;
 
 /*
  * list of uvm pagers in the system
@@ -203,7 +192,7 @@ enter:
 		pp = *pps++;
 		KASSERT(pp);
 		KASSERT(pp->flags & PG_BUSY);
-		pmap_kenter_pa(cva, VM_PAGE_TO_PHYS(pp), prot);
+		pmap_kenter_pa(cva, VM_PAGE_TO_PHYS(pp), prot, 0);
 	}
 	pmap_update(vm_map_pmap(pager_map));
 
@@ -232,6 +221,8 @@ uvm_pagermapout(vaddr_t kva, int npages)
 	 */
 
 	pmap_kremove(kva, npages << PAGE_SHIFT);
+	pmap_update(pmap_kernel());
+
 	if (kva == emergva) {
 		mutex_enter(&pager_map_wanted_lock);
 		emerginuse = false;
@@ -251,30 +242,7 @@ uvm_pagermapout(vaddr_t kva, int npages)
 	vm_map_unlock(pager_map);
 	if (entries)
 		uvm_unmap_detach(entries, 0);
-	pmap_update(pmap_kernel());
 	UVMHIST_LOG(maphist,"<- done",0,0,0,0);
-}
-
-/*
- * interrupt-context iodone handler for nested i/o bufs.
- *
- * => the buffer is private so need not be locked here
- */
-
-void
-uvm_aio_biodone1(struct buf *bp)
-{
-	struct buf *mbp = bp->b_private;
-
-	KASSERT(mbp != bp);
-	if (bp->b_error != 0) {
-		mbp->b_error = bp->b_error;
-	}
-	mbp->b_resid -= bp->b_bcount;
-	putiobuf(bp);
-	if (mbp->b_resid == 0) {
-		biodone(mbp);
-	}
 }
 
 /*
@@ -291,39 +259,22 @@ uvm_aio_biodone(struct buf *bp)
 	workqueue_enqueue(uvm.aiodone_queue, &bp->b_work, NULL);
 }
 
-/*
- * uvm_aio_aiodone: do iodone processing for async i/os.
- * this should be called in thread context, not interrupt context.
- */
-
 void
-uvm_aio_aiodone(struct buf *bp)
+uvm_aio_aiodone_pages(struct vm_page **pgs, int npages, bool write, int error)
 {
-	int npages = bp->b_bufsize >> PAGE_SHIFT;
-	struct vm_page *pg, *pgs[npages];
 	struct uvm_object *uobj;
+	struct vm_page *pg;
 	kmutex_t *slock;
-	int i, error, swslot;
-	int pageout_done = 0;
-	bool write, swap;
-	UVMHIST_FUNC("uvm_aio_aiodone"); UVMHIST_CALLED(ubchist);
-	UVMHIST_LOG(ubchist, "bp %p", bp, 0,0,0);
-
-	error = bp->b_error;
-	write = (bp->b_flags & B_READ) == 0;
-	/* XXXUBC BC_NOCACHE is for swap pager, should be done differently */
-	if (write && !(bp->b_cflags & BC_NOCACHE) && bioopsp != NULL)
-		(*bioopsp->io_pageiodone)(bp);
-
-	uobj = NULL;
-	for (i = 0; i < npages; i++) {
-		pgs[i] = uvm_pageratop((vaddr_t)bp->b_data + (i << PAGE_SHIFT));
-		UVMHIST_LOG(ubchist, "pgs[%d] = %p", i, pgs[i],0,0);
-	}
-	uvm_pagermapout((vaddr_t)bp->b_data, npages);
+	int pageout_done;
+	int swslot;
+	int i;
+	bool swap;
+	UVMHIST_FUNC("uvm_aio_aiodone_pages"); UVMHIST_CALLED(ubchist);
 
 	swslot = 0;
+	pageout_done = 0;
 	slock = NULL;
+	uobj = NULL;
 	pg = pgs[0];
 	swap = (pg->uanon != NULL && pg->uobject == NULL) ||
 		(pg->pqflags & PQ_AOBJ) != 0;
@@ -484,6 +435,34 @@ uvm_aio_aiodone(struct buf *bp)
 		uvmexp.pdpending--;
 #endif /* defined(VMSWAP) */
 	}
+}
+
+/*
+ * uvm_aio_aiodone: do iodone processing for async i/os.
+ * this should be called in thread context, not interrupt context.
+ */
+
+void
+uvm_aio_aiodone(struct buf *bp)
+{
+	int npages = bp->b_bufsize >> PAGE_SHIFT;
+	struct vm_page *pgs[npages];
+	int i, error;
+	bool write;
+	UVMHIST_FUNC("uvm_aio_aiodone"); UVMHIST_CALLED(ubchist);
+	UVMHIST_LOG(ubchist, "bp %p", bp, 0,0,0);
+
+	error = bp->b_error;
+	write = (bp->b_flags & B_READ) == 0;
+
+	for (i = 0; i < npages; i++) {
+		pgs[i] = uvm_pageratop((vaddr_t)bp->b_data + (i << PAGE_SHIFT));
+		UVMHIST_LOG(ubchist, "pgs[%d] = %p", i, pgs[i],0,0);
+	}
+	uvm_pagermapout((vaddr_t)bp->b_data, npages);
+
+	uvm_aio_aiodone_pages(pgs, npages, write, error);
+
 	if (write && (bp->b_cflags & BC_AGE) != 0) {
 		mutex_enter(bp->b_objlock);
 		vwakeup(bp);

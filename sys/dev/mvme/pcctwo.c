@@ -1,4 +1,4 @@
-/*	$NetBSD: pcctwo.c,v 1.7 2007/10/19 12:00:37 ad Exp $	*/
+/*	$NetBSD: pcctwo.c,v 1.9 2009/03/14 15:36:19 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	      This product includes software developed by the NetBSD
- *	      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcctwo.c,v 1.7 2007/10/19 12:00:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcctwo.c,v 1.9 2009/03/14 15:36:19 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -64,10 +57,7 @@ int pcctwoprint(void *, const char *);
 
 /* ARGSUSED */
 void
-pcctwo_init(sc, pd, devoff)
-	struct pcctwo_softc *sc;
-	const struct pcctwo_device *pd;
-	int devoff;
+pcctwo_init(struct pcctwo_softc *sc, const struct pcctwo_device *pd, int devoff)
 {
 	struct pcctwo_attach_args npa;
 	u_int8_t cid;
@@ -118,9 +108,7 @@ pcctwo_init(sc, pd, devoff)
 }
 
 int
-pcctwoprint(aux, cp)
-	void *aux;
-	const char *cp;
+pcctwoprint(void *aux, const char *cp)
 {
 	struct pcctwo_attach_args *pa;
 
@@ -176,8 +164,7 @@ pcctwointr_establish(vec, hand, lvl, arg, evcnt)
 }
 
 void
-pcctwointr_disestablish(vec)
-	int vec;
+pcctwointr_disestablish(int vec)
 {
 
 #ifdef DEBUG
@@ -199,8 +186,7 @@ pcctwointr_disestablish(vec)
 }
 
 struct evcnt *
-pcctwointr_evcnt(lev)
-	int lev;
+pcctwointr_evcnt(int lev)
 {
 
 	return ((*sys_pcctwo->sc_isrevcnt)(sys_pcctwo->sc_isrcookie, lev));

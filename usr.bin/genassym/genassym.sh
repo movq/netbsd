@@ -1,5 +1,5 @@
 #!/bin/sh -
-#	$NetBSD: genassym.sh,v 1.2 2006/10/21 04:48:29 itohy Exp $
+#	$NetBSD: genassym.sh,v 1.6 2009/11/28 20:30:01 dsl Exp $
 #
 # Copyright (c) 1997 Matthias Pfaller.
 # All rights reserved.
@@ -12,11 +12,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by Matthias Pfaller.
-# 4. The name of the author may not be used to endorse or promote products
-#    derived from this software without specific prior written permission
 #
 # THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
 # IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
 #
 
 progname=${0}
-awk=${AWK:-awk}
+: ${AWK:=awk}
 
 ccode=0		# generate temporary C file, compile it, execute result
 fcode=0		# generate Forth code
@@ -42,25 +37,22 @@ usage()
 	echo "usage: ${progname} [-c | -f] -- compiler command" >&2
 }
 
-args=`getopt cf $*`
-if [ $? != 0 ]; then
-	usage;
-	exit 1;
-fi
-set -- $args
-
-for i; do
+while getopts cf i
+do
 	case "$i" in
-	-c)
+	c)
 		ccode=1
-		shift;;
-	-f)
+		;;
+	f)
 		fcode=1
-		shift;;
-	--)
-		shift; break;;
+		;;
 	esac
 done
+shift $(($OPTIND - 1))
+if [ $# -eq 0 ]; then
+	usage
+	exit 1
+fi
 
 # Deal with any leading environment settings..
 
@@ -85,7 +77,7 @@ if ! mkdir $genassym_temp; then
 fi
 trap "rm -rf $genassym_temp" 0 1 2 3 15
 
-$awk '
+$AWK '
 BEGIN {
 	printf("#define	offsetof(type, member) ((size_t)(&((type *)0)->member))\n");
 	defining = 0;
@@ -153,7 +145,7 @@ $0 ~ /^endif/ {
 	if (defining == 0) {
 		defining = 1;
 		printf("void f" FNR "(void);\n");
-		printf("void f" FNR "() {\n");
+		printf("void f" FNR "(void) {\n");
 		if (ccode)
 			call[FNR] = "f" FNR;
 		defining = 1;

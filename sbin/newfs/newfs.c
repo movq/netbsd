@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs.c,v 1.100 2007/12/15 19:44:47 perry Exp $	*/
+/*	$NetBSD: newfs.c,v 1.109 2011/03/06 17:08:17 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1993, 1994
@@ -70,15 +70,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)newfs.c	8.13 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: newfs.c,v 1.100 2007/12/15 19:44:47 perry Exp $");
+__RCSID("$NetBSD: newfs.c,v 1.109 2011/03/06 17:08:17 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -97,6 +97,7 @@ __RCSID("$NetBSD: newfs.c,v 1.100 2007/12/15 19:44:47 perry Exp $");
 #include <ufs/ufs/dir.h>
 #include <ufs/ufs/dinode.h>
 #include <ufs/ufs/ufsmount.h>
+#include <ufs/ufs/quota2.h>
 #include <ufs/ffs/fs.h>
 
 #include <ctype.h>
@@ -116,6 +117,10 @@ __RCSID("$NetBSD: newfs.c,v 1.100 2007/12/15 19:44:47 perry Exp $");
 #include <unistd.h>
 #include <util.h>
 #include <mntopts.h>
+
+#ifdef MFS
+#include <mountprog.h>
+#endif
 
 #include "dkcksum.h"
 #include "extern.h"
@@ -196,6 +201,7 @@ const char lmsg[] = "%s: can't read disk label";
 
 
 int	mfs;			/* run as the memory based filesystem */
+int	Gflag;			/* allow garbage parameters (for testing) */
 int	Nflag;			/* run without writing file system */
 int	Oflag = 1;		/* format as an 4.3BSD file system */
 int	verbosity;		/* amount of printf() output */
@@ -221,6 +227,7 @@ char	*disktype = NULL;
 int	unlabeled;
 char *appleufs_volname = 0; /* Apple UFS volume name */
 int isappleufs = 0;
+int quotas = 0;
 
 char	device[MAXPATHLEN];
 
@@ -238,6 +245,7 @@ main(int argc, char *argv[])
 #ifdef MFS
 	struct mfs_args args;
 	char mountfromname[100];
+	char mounttoname[MAXPATHLEN];
 	pid_t pid, res;
 	struct statvfs sf;
 	int status;
@@ -263,8 +271,8 @@ main(int argc, char *argv[])
 	}
 
 	opstring = mfs ?
-	    "NT:V:a:b:d:e:f:g:h:i:m:n:o:p:s:u:" :
-	    "B:FINO:S:T:V:Za:b:d:e:f:g:h:i:l:m:n:o:r:s:v:";
+	    "NT:V:a:b:d:e:f:g:h:i:m:n:o:p:q:s:u:" :
+	    "B:FGINO:S:T:V:Za:b:d:e:f:g:h:i:l:m:n:o:q:r:s:v:";
 	while ((ch = getopt(argc, argv, opstring)) != -1)
 		switch (ch) {
 		case 'B':
@@ -281,6 +289,11 @@ main(int argc, char *argv[])
 			break;
 		case 'F':
 			Fflag = 1;
+			break;
+		case 'G':
+			fprintf(stderr, "WARNING: -G may create file systems "
+			    "which cause kernel panics\n");
+			Gflag = 1;
 			break;
 		case 'I':
 			Iflag = 1;
@@ -374,6 +387,14 @@ main(int argc, char *argv[])
 					"use `space' or `time'.");
 			}
 			break;
+		case 'q':
+			if      (strcmp(optarg, "user") == 0)
+				quotas |= FS_Q2_DO_TYPE(USRQUOTA);
+			else if (strcmp(optarg, "group") == 0)
+				quotas |= FS_Q2_DO_TYPE(GRPQUOTA);
+			else
+				errx(1, "invalid quota type %s", optarg);
+			break;
 		case 'p':
 			/* mfs only */
 			if ((mfsmode = strtol(optarg, NULL, 8)) <= 0)
@@ -401,6 +422,9 @@ main(int argc, char *argv[])
 		}
 	argc -= optind;
 	argv += optind;
+
+	if (Oflag < 1 && quotas != 0)
+		errx(1, "in-filesystem quota is incompatible with -O0");
 
 	if (verbosity == -1)
 		/* Default to not showing CG info if mfs */
@@ -468,6 +492,10 @@ main(int argc, char *argv[])
 		special = device;
 		if (fsi < 0 || fstat(fsi, &sb) == -1)
 			err(1, "%s: open for read", special);
+		if (S_ISBLK(sb.st_mode)) {
+			errx(1, "%s is a block device. use raw device",
+			    special);
+		}
 
 		if (!Nflag) {
 			fso = open(special, O_WRONLY, 0);
@@ -547,7 +575,7 @@ main(int argc, char *argv[])
 			errx(1, "Unable to determine file system size");
 	}
 
-	if (dkw.dkw_parent[0] && fssize > dkw.dkw_size)
+	if (dkw.dkw_parent[0] && (uint64_t)fssize > dkw.dkw_size)
 		errx(1, "size %" PRIu64 " exceeds maximum file system size on "
 		    "`%s' of %" PRIu64 " sectors",
 		    fssize, special, dkw.dkw_size);
@@ -649,6 +677,7 @@ main(int argc, char *argv[])
 #ifdef MFS
 	if (mfs) {
 
+		pathadj(argv[1], mounttoname);
 		switch (pid = fork()) {
 		case -1:
 			perror("mfs");
@@ -672,10 +701,10 @@ main(int argc, char *argv[])
 				 * can mount a filesystem which hides our
 				 * ramdisk before we see the success.
 				 */
-				if (statvfs(argv[1], &sf) < 0)
-					err(88, "statvfs %s", argv[1]);
+				if (statvfs(mounttoname, &sf) < 0)
+					err(88, "statvfs %s", mounttoname);
 				if (!strcmp(sf.f_mntfromname, mountfromname) &&
-				    !strncmp(sf.f_mntonname, argv[1],
+				    !strncmp(sf.f_mntonname, mounttoname,
 					     MNAMELEN) &&
 				    !strcmp(sf.f_fstypename, "mfs"))
 					exit(0);
@@ -688,7 +717,7 @@ main(int argc, char *argv[])
 				if (WIFEXITED(status)) {
 					if (WEXITSTATUS(status) == 0)
 						exit(0);
-					errx(1, "%s: mount: %s", argv[1],
+					errx(1, "%s: mount: %s", mounttoname,
 					     strerror(WEXITSTATUS(status)));
 				} else
 					errx(11, "abnormal termination");
@@ -704,7 +733,7 @@ main(int argc, char *argv[])
 
 		args.base = membase;
 		args.size = fssize * sectorsize;
-		if (mount(MOUNT_MFS, argv[1], mntflags | MNT_ASYNC,
+		if (mount(MOUNT_MFS, mounttoname, mntflags | MNT_ASYNC,
 		    &args, sizeof args) == -1)
 			exit(errno); /* parent prints message */
 	}
@@ -719,7 +748,7 @@ mfs_group(const char *gname)
 
 	if (!(gp = getgrnam(gname)) && !isdigit((unsigned char)*gname))
 		errx(1, "unknown gname %s", gname);
-	return gp ? gp->gr_gid : atoi(gname);
+	return gp ? gp->gr_gid : (gid_t)atoi(gname);
 }
 
 static uid_t
@@ -729,7 +758,7 @@ mfs_user(const char *uname)
 
 	if (!(pp = getpwnam(uname)) && !isdigit((unsigned char)*uname))
 		errx(1, "unknown user %s", uname);
-	return pp ? pp->pw_uid : atoi(uname);
+	return pp ? pp->pw_uid : (uid_t)atoi(uname);
 }
 
 static int64_t
@@ -749,6 +778,9 @@ strsuftoi64(const char *desc, const char *arg, int64_t min, int64_t max, int *nu
 		if (num_suffix != NULL)
 			*num_suffix = 0;
 		break;
+	case 't': case 'T':
+		shift += 10;
+		/* FALLTHROUGH */
 	case 'g': case 'G':
 		shift += 10;
 		/* FALLTHROUGH */
@@ -768,12 +800,24 @@ strsuftoi64(const char *desc, const char *arg, int64_t min, int64_t max, int *nu
 	result = r1 << shift;
 	if (errno == ERANGE || result >> shift != r1)
 		errx(1, "%s `%s' is too large to convert.", desc, arg);
-	if (result < min)
-		errx(1, "%s `%s' (%" PRId64 ") is less than the minimum (%" PRId64 ").",
-		    desc, arg, result, min);
-	if (result > max)
-		errx(1, "%s `%s' (%" PRId64 ") is greater than the maximum (%" PRId64 ").",
-		    desc, arg, result, max);
+	if (result < min) {
+		if (Gflag) {
+			warnx("%s `%s' (%" PRId64 ") is less than the "
+			    "minimum (%" PRId64 ").", desc, arg, result, min);
+		} else {
+			errx(1, "%s `%s' (%" PRId64 ") is less than the "
+			    "minimum (%" PRId64 ").", desc, arg, result, min);
+		}
+	}
+	if (result > max) {
+		if (Gflag) {
+			warnx("%s `%s' (%" PRId64 ") is greater than the "
+			    "maximum (%" PRId64 ").", desc, arg, result, max);
+		} else {
+			errx(1, "%s `%s' (%" PRId64 ") is greater than the "
+			    "maximum (%" PRId64 ").", desc, arg, result, max);
+		}
+	}
 	return result;
 }
 
@@ -787,10 +831,11 @@ struct help_strings {
 } const help_strings[] = {
 	{ NEWFS,	"-B byteorder\tbyte order (`be' or `le')" },
 	{ NEWFS,	"-F \t\tcreate file system image in regular file" },
+	{ NEWFS,	"-G \t\tmake sanity calculations non-fatal (testing only!)" },
 	{ NEWFS,	"-I \t\tdo not check that the file system type is '4.2BSD'" },
 	{ BOTH,		"-N \t\tdo not create file system, just print out "
 			    "parameters" },
-	{ NEWFS,	"-O N\t\tfilesystem format: 0 ==> 4.3BSD, 1 ==> FFS, 2 ==> UFS2" },
+	{ NEWFS,	"-O N\t\tfilesystem format: 0 => 4.3BSD, 1 => FFSv1, 2 => FFSv2" },
 	{ NEWFS,	"-S secsize\tsector size" },
 #ifdef COMPAT
 	{ NEWFS,	"-T disktype\tdisk type" },
@@ -811,6 +856,7 @@ struct help_strings {
 	{ BOTH,		"-n inodes\tnumber of inodes (overrides -i density)" },
 	{ BOTH,		"-o optim\toptimization preference (`space' or `time')"
 			    },
+	{ BOTH,		"-q (user|group) enable specified quota" },
 	{ MFS_MOUNT,	"-p perm\t\tpermissions (in octal)" },
 	{ BOTH,		"-s fssize\tfile system size (sectors)" },
 	{ MFS_MOUNT,	"-u username\tuser name of mount point" },

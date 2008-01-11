@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.299 2008/01/09 16:16:27 ad Exp $	*/
+/*	$NetBSD: param.h,v 1.389 2011/05/24 18:07:11 spz Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -63,7 +63,7 @@
  *	2.99.9		(299000900)
  */
 
-#define	__NetBSD_Version__	499004900	/* NetBSD 4.99.49 */
+#define	__NetBSD_Version__	599005200	/* NetBSD 5.99.52 */
 
 #define __NetBSD_Prereq__(M,m,p) (((((M) * 100000000) + \
     (m) * 1000000) + (p) * 100) <= __NetBSD_Version__)
@@ -82,18 +82,30 @@
 
 #define	NetBSD	199905		/* NetBSD version (year & month). */
 
+/*
+ * There macros determine if we are running in protected mode or not.
+ *   _HARDKERNEL: code uses kernel namespace and runs in hw priviledged mode
+ *   _SOFTKERNEL: code uses kernel namespace but runs without hw priviledges
+ */
+#if defined(_KERNEL) && !defined(_RUMPKERNEL)
+#define _HARDKERNEL
+#endif
+#if defined(_KERNEL) && defined(_RUMPKERNEL)
+#define _SOFTKERNEL
+#endif
+
 #include <sys/null.h>
 
-#ifndef _LOCORE
+#ifndef __ASSEMBLER__
 #include <sys/inttypes.h>
 #include <sys/types.h>
-#endif
 
 /*
  * Machine-independent constants (some used in following include files).
  * Redefined constants are from POSIX 1003.1 limits file.
  *
  * MAXCOMLEN should be >= sizeof(ac_comm) (see <acct.h>)
+ * MAXHOSTNAMELEN should be >= (_POSIX_HOST_NAME_MAX + 1) (see <limits.h>)
  * MAXLOGNAME should be >= UT_NAMESIZE (see <utmp.h>)
  */
 #include <sys/syslimits.h>
@@ -126,6 +138,7 @@
 #include <sys/resource.h>
 #include <sys/ucred.h>
 #include <sys/uio.h>
+#include <uvm/uvm_param.h>
 #ifndef NPROC
 #define	NPROC	(20 + 16 * MAXUSERS)
 #endif
@@ -136,6 +149,13 @@
 #define	NVNODE	(NPROC + NTEXT + 100)
 #define	NVNODE_IMPLICIT
 #endif
+#ifndef VNODE_VA_MAXPCT
+#define	VNODE_VA_MAXPCT	20
+#endif
+#ifndef BUFCACHE_VA_MAXPCT
+#define	BUFCACHE_VA_MAXPCT	20
+#endif
+#define	VNODE_COST	2048			/* assumed space in bytes */
 #endif /* _KERNEL */
 
 /* Signals. */
@@ -157,6 +177,9 @@
 #define	dbtob(x)	((x) << DEV_BSHIFT)
 #define	btodb(x)	((x) >> DEV_BSHIFT)
 
+#ifndef COHERENCY_UNIT
+#define	COHERENCY_UNIT		64
+#endif
 #ifndef CACHE_LINE_SIZE
 #define	CACHE_LINE_SIZE		64
 #endif
@@ -244,6 +267,10 @@
 #define	NPRI_USER		64
 #define	MAXPRI_USER		(PRI_USER + NPRI_USER - 1)
 
+/* Priority range used by POSIX real-time features */
+#define	SCHED_PRI_MIN		0
+#define	SCHED_PRI_MAX		63
+
 /*
  * Kernel thread priorities.
  */
@@ -296,6 +323,8 @@
  * maximum number of symbolic links that may be expanded in a path name.
  * It should be set high enough to allow all legitimate uses, but halt
  * infinite loops reasonably quickly.
+ *
+ * MAXSYMLINKS should be >= _POSIX_SYMLOOP_MAX (see <limits.h>)
  */
 #define	MAXPATHLEN	PATH_MAX
 #define	MAXSYMLINKS	32
@@ -312,12 +341,12 @@
 #endif
 #define	roundup(x, y)	((((x)+((y)-1))/(y))*(y))
 #define	rounddown(x,y)	(((x)/(y))*(y))
-#define	roundup2(x, m)	(((x) + m - 1) & ~(m - 1))
+#define	roundup2(x, m)	(((x) + (m) - 1) & ~((m) - 1))
 #define	powerof2(x)	((((x)-1)&(x))==0)
 
 /* Macros for min/max. */
-#define	MIN(a,b)	(((a)<(b))?(a):(b))
-#define	MAX(a,b)	(((a)>(b))?(a):(b))
+#define	MIN(a,b)	((/*CONSTCOND*/(a)<(b))?(a):(b))
+#define	MAX(a,b)	((/*CONSTCOND*/(a)>(b))?(a):(b))
 
 /*
  * Constants for setting the parameters of the kernel memory allocator.
@@ -397,6 +426,10 @@
 	    ((t +0u) / hz) * 1000u : \
 	    ((t +0u) * 1000u) / hz)
 #endif
+
+extern const int schedppq;
+extern size_t coherency_unit;
+
 #endif /* _KERNEL */
 
 /*
@@ -407,5 +440,6 @@
 #ifndef MIN_LWP_ALIGNMENT
 #define	MIN_LWP_ALIGNMENT	32
 #endif
+#endif /* !__ASSEMBLER__ */
 
 #endif /* !_SYS_PARAM_H_ */

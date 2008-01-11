@@ -1,4 +1,4 @@
-/*	$NetBSD: vmstat.c,v 1.69 2006/10/22 16:43:24 christos Exp $	*/
+/*	$NetBSD: vmstat.c,v 1.77 2010/04/30 16:21:05 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1989, 1992, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)vmstat.c	8.2 (Berkeley) 1/12/94";
 #endif
-__RCSID("$NetBSD: vmstat.c,v 1.69 2006/10/22 16:43:24 christos Exp $");
+__RCSID("$NetBSD: vmstat.c,v 1.77 2010/04/30 16:21:05 njoly Exp $");
 #endif /* not lint */
 
 /*
@@ -45,7 +45,7 @@ __RCSID("$NetBSD: vmstat.c,v 1.69 2006/10/22 16:43:24 christos Exp $");
 #include <sys/uio.h>
 #include <sys/namei.h>
 #include <sys/sysctl.h>
-#include <sys/device.h>
+#include <sys/evcnt.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -325,11 +325,11 @@ labelvmstat_top(void)
 
 	mvprintw(STATROW, STATCOL + 4, "users    Load");
 
-	mvprintw(GENSTATROW, GENSTATCOL, "   Csw    Trp    Sys   Int   Sof    Flt");
+	mvprintw(GENSTATROW, GENSTATCOL, "   Csw    Trp    Sys   Int    Sof    Flt");
 
 	mvprintw(GRAPHROW, GRAPHCOL,
 		"    . %% Sy    . %% Us    . %% Ni    . %% In    . %% Id");
-	mvprintw(PROCSROW, PROCSCOL, "Proc:r  d  s  w");
+	mvprintw(PROCSROW, PROCSCOL, "Proc:r  d  s");
 	mvprintw(GRAPHROW + 1, GRAPHCOL,
 		"|    |    |    |    |    |    |    |    |    |    |");
 
@@ -350,8 +350,8 @@ labelvmstat(void)
 
 	/* Left hand column */
 
-	mvprintw(MEMROW, MEMCOL,     "           memory totals (in kB)");
-	mvprintw(MEMROW + 1, MEMCOL, "          real  virtual     free");
+	mvprintw(MEMROW, MEMCOL,     "              memory totals (in kB)");
+	mvprintw(MEMROW + 1, MEMCOL, "           real   virtual      free");
 	mvprintw(MEMROW + 2, MEMCOL, "Active");
 	mvprintw(MEMROW + 3, MEMCOL, "All");
 
@@ -446,14 +446,13 @@ show_vmstat_top(vmtotal_t *Total, uvmexp_sysctl_t *uvm, uvmexp_sysctl_t *uvm1)
 	putint(Total->t_rq - 1, PROCSROW + 1, PROCSCOL + 3, 3);
 	putint(Total->t_dw, PROCSROW + 1, PROCSCOL + 6, 3);
 	putint(Total->t_sl, PROCSROW + 1, PROCSCOL + 9, 3);
-	putint(Total->t_sw, PROCSROW + 1, PROCSCOL + 12, 3);
 
 	PUTRATE(us, us1, uvmexp->swtch, GENSTATROW + 1, GENSTATCOL - 1, 7);
 	PUTRATE(us, us1, uvmexp->traps, GENSTATROW + 1, GENSTATCOL + 7, 6);
 	PUTRATE(us, us1, uvmexp->syscalls, GENSTATROW + 1, GENSTATCOL + 14, 6);
 	PUTRATE(us, us1, uvmexp->intrs, GENSTATROW + 1, GENSTATCOL + 21, 5);
-	PUTRATE(us, us1, uvmexp->softs, GENSTATROW + 1, GENSTATCOL + 27, 5);
-	PUTRATE(us, us1, uvmexp->faults, GENSTATROW + 1, GENSTATCOL + 33, 6);
+	PUTRATE(us, us1, uvmexp->softs, GENSTATROW + 1, GENSTATCOL + 27, 6);
+	PUTRATE(us, us1, uvmexp->faults, GENSTATROW + 1, GENSTATCOL + 34, 6);
 
 	/* Last CPU state not calculated yet. */
 	for (f2 = 0.0, psiz = 0, c = 0; c < CPUSTATES; c++) {
@@ -471,8 +470,6 @@ show_vmstat_top(vmtotal_t *Total, uvmexp_sysctl_t *uvm, uvmexp_sysctl_t *uvm1)
 
 	PUTRATE(us, us1, uvmexp->pageins, PAGEROW + 2, PAGECOL + 5, 5);
 	PUTRATE(us, us1, uvmexp->pdpageouts, PAGEROW + 2, PAGECOL + 10, 5);
-	PUTRATE(us, us1, uvmexp->swapins, PAGEROW + 2, PAGECOL + 15, 5);
-	PUTRATE(us, us1, uvmexp->swapouts, PAGEROW + 2, PAGECOL + 20, 5);
 	PUTRATE(us, us1, uvmexp->pgswapin, PAGEROW + 3, PAGECOL + 5, 5);
 	PUTRATE(us, us1, uvmexp->pgswapout, PAGEROW + 3, PAGECOL + 10, 5);
 }
@@ -498,7 +495,7 @@ showvmstat(void)
 		etime = cur.cp_etime;
 		/* < 5 ticks - ignore this trash */
 		if ((etime * hertz) < 1.0) {
-			if (failcnt++ > MAXFAIL)
+			if (failcnt++ <= MAXFAIL)
 				return;
 			clear();
 			mvprintw(2, 10, "The alternate system clock has died!");
@@ -517,22 +514,24 @@ showvmstat(void)
 
 	/* Memory totals */
 #define pgtokb(pg)	((pg) * (s.uvmexp.pagesize / 1024))
-	putint(pgtokb(s.uvmexp.active), MEMROW + 2, MEMCOL + 6, 8);
+	putint(pgtokb(s.uvmexp.active), MEMROW + 2, MEMCOL + 6, 9);
 	putint(pgtokb(s.uvmexp.active + s.uvmexp.swpginuse),	/* XXX */
-	    MEMROW + 2, MEMCOL + 15, 8);
-	putint(pgtokb(s.uvmexp.npages - s.uvmexp.free), MEMROW + 3, MEMCOL + 6, 8);
+	    MEMROW + 2, MEMCOL + 16, 9);
+	putint(pgtokb(s.uvmexp.npages - s.uvmexp.free),
+	    MEMROW + 3, MEMCOL + 6, 9);
 	putint(pgtokb(s.uvmexp.npages - s.uvmexp.free + s.uvmexp.swpginuse),
-	    MEMROW + 3, MEMCOL + 15, 8);
-	putint(pgtokb(s.uvmexp.free), MEMROW + 2, MEMCOL + 24, 8);
+	    MEMROW + 3, MEMCOL + 16, 9);
+	putint(pgtokb(s.uvmexp.free), MEMROW + 2, MEMCOL + 26, 9);
 	putint(pgtokb(s.uvmexp.free + s.uvmexp.swpages - s.uvmexp.swpginuse),
-	    MEMROW + 3, MEMCOL + 24, 8);
+	    MEMROW + 3, MEMCOL + 26, 9);
 #undef pgtokb
 
 	/* Namei cache */
 	Z(s, s1, ncs_goodhits); Z(s, s1, ncs_badhits); Z(s, s1, ncs_miss);
 	Z(s, s1, ncs_long); Z(s, s1, ncs_pass2); Z(s, s1, ncs_2passes);
 	s.nchcount = s.nchstats.ncs_goodhits + s.nchstats.ncs_badhits +
-	    s.nchstats.ncs_miss + s.nchstats.ncs_long;
+	    s.nchstats.ncs_miss + s.nchstats.ncs_long +
+	    s.nchstats.ncs_pass2 + s.nchstats.ncs_2passes;
 	if (display_mode == TIME)
 		s1.nchcount = s.nchcount;
 
@@ -548,7 +547,7 @@ showvmstat(void)
 
 	/* Disks */
 	for (l = 0, i = 0, r = DISKROW, c = DISKCOL;
-	     i < ndrive; i++) {
+	     i < (int)ndrive; i++) {
 		if (!drv_select[i])
 			continue;
 
@@ -680,15 +679,10 @@ static int
 ucount(void)
 {
 	static int onusers = -1;
-	static struct utmpentry *oehead = NULL;
 	int nusers = 0;
 	struct utmpentry *ehead;
 
 	nusers = getutentries(NULL, &ehead);
-	if (oehead != ehead) {
-		freeutentries(oehead);
-		oehead = ehead;
-	}
 
 	if (nusers != onusers) {
 		if (nusers == 1)
@@ -744,7 +738,7 @@ putint(int n, int l, int c, int w)
 		return;
 	}
 	(void)snprintf(b, sizeof b, "%*d", w, n);
-	if (strlen(b) > w) {
+	if ((int)strlen(b) > w) {
 		if (display_mode == TIME)
 			hline('*', w);
 		else
@@ -766,7 +760,7 @@ putfloat(double f, int l, int c, int w, int d, int nz)
 		return;
 	}
 	(void)snprintf(b, sizeof b, "%*.*f", w, d, f);
-	if (strlen(b) > w) {
+	if ((int)strlen(b) > w) {
 		hline('*', w);
 		return;
 	}

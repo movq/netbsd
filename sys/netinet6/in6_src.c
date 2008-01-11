@@ -1,3 +1,4 @@
+/*	$NetBSD: in6_src.c,v 1.51 2011/05/17 04:39:57 dholland Exp $	*/
 /*	$KAME: in6_src.c,v 1.159 2005/10/19 01:40:32 t-momose Exp $	*/
 
 /*
@@ -65,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.40 2007/11/26 08:12:33 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.51 2011/05/17 04:39:57 dholland Exp $");
 
 #include "opt_inet.h"
 
@@ -76,14 +77,7 @@ __KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.40 2007/11/26 08:12:33 yamt Exp $");
 #include <sys/protosw.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
-#ifndef __FreeBSD__
 #include <sys/ioctl.h>
-#else
-#include <sys/sockio.h>
-#endif
-#ifdef __FreeBSD__
-#include <sys/sysctl.h>
-#endif
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
@@ -101,10 +95,9 @@ __KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.40 2007/11/26 08:12:33 yamt Exp $");
 #include <netinet/in_pcb.h>
 #include <netinet6/in6_var.h>
 #include <netinet/ip6.h>
-#ifndef __OpenBSD__
 #include <netinet6/in6_pcb.h>
-#endif
 #include <netinet6/ip6_var.h>
+#include <netinet6/ip6_private.h>
 #include <netinet6/nd6.h>
 #include <netinet6/scope6_var.h>
 
@@ -119,12 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.40 2007/11/26 08:12:33 yamt Exp $");
 #endif /* NMIP > 0 */
 #endif /* MIP6 */
 
-#ifndef __OpenBSD__
-#include "loop.h"
-#endif
-#ifdef __NetBSD__
-extern struct ifnet loif[NLOOP];
-#endif
+#include <netinet/tcp_vtw.h>
 
 #define ADDR_LABEL_NOTAPP (-1)
 struct in6_addrpolicy defaultaddrpolicy;
@@ -236,7 +224,7 @@ in6_selectsrc(struct sockaddr_in6 *dstsock, struct ip6_pktopts *opts,
 		 * the interface must be specified; otherwise, ifa_ifwithaddr()
 		 * will fail matching the address.
 		 */
-		bzero(&srcsock, sizeof(srcsock));
+		memset(&srcsock, 0, sizeof(srcsock));
 		srcsock.sin6_family = AF_INET6;
 		srcsock.sin6_len = sizeof(srcsock);
 		srcsock.sin6_addr = pi->ipi6_addr;
@@ -602,11 +590,7 @@ selectroute(struct sockaddr_in6 *dstsock, struct ip6_pktopts *opts,
 	/* If the caller specify the outgoing interface explicitly, use it. */
 	if (opts && (pi = opts->ip6po_pktinfo) != NULL && pi->ipi6_ifindex) {
 		/* XXX boundary check is assumed to be already done. */
-#ifdef __FreeBSD__
-		ifp = ifnet_byindex(pi->ipi6_ifindex);
-#else
 		ifp = ifindex2ifnet[pi->ipi6_ifindex];
-#endif
 		if (ifp != NULL &&
 		    (norouteok || retrt == NULL ||
 		    IN6_IS_ADDR_MULTICAST(dst))) {
@@ -722,7 +706,7 @@ selectroute(struct sockaddr_in6 *dstsock, struct ip6_pktopts *opts,
 		error = EHOSTUNREACH;
 	}
 	if (error == EHOSTUNREACH)
-		ip6stat.ip6s_noroute++;
+		IP6_STATINC(IP6_STAT_NOROUTE);
 
 	if (retifp != NULL)
 		*retifp = ifp;
@@ -813,7 +797,7 @@ in6_selecthlim(struct in6pcb *in6p, struct ifnet *ifp)
  * Find an empty port and set it to the specified PCB.
  */
 int
-in6_pcbsetport(struct in6_addr *laddr, struct in6pcb *in6p, struct lwp *l)
+in6_pcbsetport(struct sockaddr_in6 *sin6, struct in6pcb *in6p, struct lwp *l)
 {
 	struct socket *so = in6p->in6p_socket;
 	struct inpcbtable *table = in6p->in6p_table;
@@ -822,6 +806,8 @@ in6_pcbsetport(struct in6_addr *laddr, struct in6pcb *in6p, struct lwp *l)
 	u_int16_t lport, *lastport;
 	int wild = 0;
 	void *t;
+	int error;
+	enum kauth_network_req req;
 
 	/* XXX: this is redundant when called from in6_pcbbind */
 	if ((so->so_options & (SO_REUSEADDR|SO_REUSEPORT)) == 0 &&
@@ -831,18 +817,27 @@ in6_pcbsetport(struct in6_addr *laddr, struct in6pcb *in6p, struct lwp *l)
 
 	if (in6p->in6p_flags & IN6P_LOWPORT) {
 #ifndef IPNOPRIVPORTS
-		if (l == 0 || (kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL) != 0))
-			return (EACCES);
+		req = KAUTH_REQ_NETWORK_BIND_PRIVPORT;
+#else
+		req = KAUTH_REQ_NETWORK_BIND_PORT;
 #endif
+
 		minport = ip6_lowportmin;
 		maxport = ip6_lowportmax;
 		lastport = &table->inpt_lastlow;
 	} else {
+		req = KAUTH_REQ_NETWORK_BIND_PORT;
+
 		minport = ip6_anonportmin;
 		maxport = ip6_anonportmax;
 		lastport = &table->inpt_lastport;
 	}
+
+	/* XXX-kauth: KAUTH_REQ_NETWORK_BIND_AUTOASSIGN_{,PRIV}PORT */
+	error = kauth_authorize_network(l->l_cred, KAUTH_NETWORK_BIND, req, so,
+	    sin6, NULL);
+	if (error)
+		return (EACCES);
 
 	if (minport > maxport) {	/* sanity check */
 		u_int16_t swp;
@@ -854,21 +849,37 @@ in6_pcbsetport(struct in6_addr *laddr, struct in6pcb *in6p, struct lwp *l)
 
 	lport = *lastport - 1;
 	for (cnt = maxport - minport + 1; cnt; cnt--, lport--) {
+		vestigial_inpcb_t vestige;
+
 		if (lport < minport || lport > maxport)
 			lport = maxport;
 #ifdef INET
-		if (IN6_IS_ADDR_V4MAPPED(laddr)) {
+		if (IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr)) {
 			t = in_pcblookup_port(table,
-			    *(struct in_addr *)&laddr->s6_addr32[3],
-			    htons(lport), wild);
+			    *(struct in_addr *)&sin6->sin6_addr.s6_addr32[3],
+			    htons(lport), wild, &vestige);
+			if (!t && vestige.valid)
+				continue;
 		} else
 #endif
 		{
-			t = in6_pcblookup_port(table, laddr, htons(lport),
-			    wild);
+			t = in6_pcblookup_port(table, &sin6->sin6_addr,
+			    htons(lport), wild, &vestige);
+			if (!t && vestige.valid)
+				continue;
 		}
-		if (t == 0)
+		if (t == 0) {
+			/* We have a free port. Check with the secmodel. */
+			sin6->sin6_port = lport;
+			error = kauth_authorize_network(l->l_cred,
+			    KAUTH_NETWORK_BIND, req, so, sin6, NULL);
+			if (error) {
+				/* Secmodel says no. Keep looking. */
+				continue;
+			}
+	
 			goto found;
+		}
 	}
 
 	return (EAGAIN);
@@ -887,7 +898,7 @@ addrsel_policy_init(void)
 	init_policy_queue();
 
 	/* initialize the "last resort" policy */
-	bzero(&defaultaddrpolicy, sizeof(defaultaddrpolicy));
+	memset(&defaultaddrpolicy, 0, sizeof(defaultaddrpolicy));
 	defaultaddrpolicy.label = ADDR_LABEL_NOTAPP;
 }
 
@@ -909,7 +920,7 @@ lookup_addrsel_policy(struct sockaddr_in6 *key)
 /*
  * Subroutines to manage the address selection policy table via sysctl.
  */
-struct walkarg {
+struct sel_walkarg {
 	size_t	w_total;
 	size_t	w_given;
 	void *	w_where;
@@ -933,7 +944,7 @@ in6_src_sysctl(void *oldp, size_t *oldlenp, void *newp, size_t newlen)
 		goto end;
 	}
 	if (oldp || oldlenp) {
-		struct walkarg w;
+		struct sel_walkarg w;
 		size_t oldlen = *oldlenp;
 
 		memset(&w, 0, sizeof(w));
@@ -1004,7 +1015,7 @@ TAILQ_HEAD(addrsel_policyhead, addrsel_policyent);
 struct addrsel_policyhead addrsel_policytab;
 
 static void
-init_policy_queue()
+init_policy_queue(void)
 {
 	TAILQ_INIT(&addrsel_policytab);
 }
@@ -1025,9 +1036,7 @@ add_addrsel_policyent(struct in6_addrpolicy *newpolicy)
 		}
 	}
 
-	MALLOC(new, struct addrsel_policyent *, sizeof(*new), M_IFADDR,
-	       M_WAITOK);
-	bzero(new, sizeof(*new));
+	new = malloc(sizeof(*new), M_IFADDR, M_WAITOK|M_ZERO);
 
 	/* XXX: should validate entry */
 	new->ape_policy = *newpolicy;
@@ -1079,7 +1088,7 @@ static int
 dump_addrsel_policyent(struct in6_addrpolicy *pol, void *arg)
 {
 	int error = 0;
-	struct walkarg *w = arg;
+	struct sel_walkarg *w = arg;
 
 	if (w->w_where && (char *)w->w_where + sizeof(*pol) <= (char *)w->w_limit) {
 		if ((error = copyout(pol, w->w_where, sizeof(*pol))) != 0)

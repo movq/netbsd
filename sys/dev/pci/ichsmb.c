@@ -1,4 +1,4 @@
-/*	$NetBSD: ichsmb.c,v 1.11 2007/12/09 20:28:08 jmcneill Exp $	*/
+/*	$NetBSD: ichsmb.c,v 1.25 2011/05/15 01:00:52 msaitoh Exp $	*/
 /*	$OpenBSD: ichiic.c,v 1.18 2007/05/03 09:36:26 dlg Exp $	*/
 
 /*
@@ -22,7 +22,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ichsmb.c,v 1.11 2007/12/09 20:28:08 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ichsmb.c,v 1.25 2011/05/15 01:00:52 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -51,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: ichsmb.c,v 1.11 2007/12/09 20:28:08 jmcneill Exp $")
 #define ICHIIC_TIMEOUT	1
 
 struct ichsmb_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
@@ -69,8 +69,8 @@ struct ichsmb_softc {
 	}			sc_i2c_xfer;
 };
 
-static int	ichsmb_match(struct device *, struct cfdata *, void *);
-static void	ichsmb_attach(struct device *, struct device *, void *);
+static int	ichsmb_match(device_t, cfdata_t, void *);
+static void	ichsmb_attach(device_t, device_t, void *);
 
 static int	ichsmb_i2c_acquire_bus(void *, int);
 static void	ichsmb_i2c_release_bus(void *, int);
@@ -80,12 +80,12 @@ static int	ichsmb_i2c_exec(void *, i2c_op_t, i2c_addr_t, const void *,
 static int	ichsmb_intr(void *);
 
 
-CFATTACH_DECL(ichsmb, sizeof(struct ichsmb_softc),
+CFATTACH_DECL_NEW(ichsmb, sizeof(struct ichsmb_softc),
     ichsmb_match, ichsmb_attach, NULL, NULL);
 
 
 static int
-ichsmb_match(struct device *parent, struct cfdata *match, void *aux)
+ichsmb_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -104,6 +104,10 @@ ichsmb_match(struct device *parent, struct cfdata *match, void *aux)
 		case PCI_PRODUCT_INTEL_82801G_SMB:
 		case PCI_PRODUCT_INTEL_82801H_SMB:
 		case PCI_PRODUCT_INTEL_82801I_SMB:
+		case PCI_PRODUCT_INTEL_82801JD_SMB:
+		case PCI_PRODUCT_INTEL_82801JI_SMB:
+		case PCI_PRODUCT_INTEL_3400_SMB:
+		case PCI_PRODUCT_INTEL_6SERIES_SMB:
 			return 1;
 		}
 	}
@@ -111,9 +115,9 @@ ichsmb_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-ichsmb_attach(struct device *parent, struct device *self, void *aux)
+ichsmb_attach(device_t parent, device_t self, void *aux)
 {
-	struct ichsmb_softc *sc = (struct ichsmb_softc *)self;
+	struct ichsmb_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct i2cbus_attach_args iba;
 	pcireg_t conf;
@@ -122,6 +126,8 @@ ichsmb_attach(struct device *parent, struct device *self, void *aux)
 	const char *intrstr = NULL;
 	char devinfo[256];
 
+	sc->sc_dev = self;
+
 	aprint_naive("\n");
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
@@ -129,24 +135,24 @@ ichsmb_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Read configuration */
 	conf = pci_conf_read(pa->pa_pc, pa->pa_tag, LPCIB_SMB_HOSTC);
-	DPRINTF(("%s: conf 0x%08x", sc->sc_dev.dv_xname, conf));
+	DPRINTF(("%s: conf 0x%08x\n", device_xname(sc->sc_dev), conf));
 
 	if ((conf & LPCIB_SMB_HOSTC_HSTEN) == 0) {
-		aprint_error("%s: SMBus disabled\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "SMBus disabled\n");
 		return;
 	}
 
 	/* Map I/O space */
 	if (pci_mapreg_map(pa, LPCIB_SMB_BASE, PCI_MAPREG_TYPE_IO, 0,
 	    &sc->sc_iot, &sc->sc_ioh, NULL, &iosize)) {
-		aprint_error("%s: can't map I/O space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map I/O space\n");
 		return;
 	}
 
 	sc->sc_poll = 1;
 	if (conf & LPCIB_SMB_HOSTC_SMIEN) {
 		/* No PCI IRQ */
-		aprint_normal("%s: SMI\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(self, "interrupting at SMI\n");
 	} else {
 		/* Install interrupt handler */
 		if (pci_intr_map(pa, &ih) == 0) {
@@ -154,13 +160,13 @@ ichsmb_attach(struct device *parent, struct device *self, void *aux)
 			sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO,
 			    ichsmb_intr, sc);
 			if (sc->sc_ih != NULL) {
-				aprint_normal("%s: interrupting at %s\n",
-				    sc->sc_dev.dv_xname, intrstr);
+				aprint_normal_dev(self, "interrupting at %s\n",
+				    intrstr);
 				sc->sc_poll = 0;
 			}
 		}
 		if (sc->sc_poll)
-			aprint_normal("%s: polling\n", sc->sc_dev.dv_xname);
+			aprint_normal_dev(self, "polling\n");
 	}
 
 	/* Attach I2C bus */
@@ -170,7 +176,7 @@ ichsmb_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_i2c_tag.ic_release_bus = ichsmb_i2c_release_bus;
 	sc->sc_i2c_tag.ic_exec = ichsmb_i2c_exec;
 
-	bzero(&iba, sizeof(iba));
+	memset(&iba, 0, sizeof(iba));
 	iba.iba_type = I2C_TYPE_SMBUS;
 	iba.iba_tag = &sc->sc_i2c_tag;
 	config_found(self, &iba, iicbus_print);
@@ -212,8 +218,8 @@ ichsmb_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	int retries;
 	char fbuf[64];
 
-	DPRINTF(("%s: exec: op %d, addr 0x%02x, cmdlen %zu, len %d, "
-	    "flags 0x%02x\n", sc->sc_dev.dv_xname, op, addr, cmdlen,
+	DPRINTF(("%s: exec: op %d, addr 0x%02x, cmdlen %zu, len %zu, "
+	    "flags 0x%02x\n", device_xname(sc->sc_dev), op, addr, cmdlen,
 	    len, flags));
 
 	/* Wait for bus to be idle */
@@ -224,8 +230,8 @@ ichsmb_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 		DELAY(ICHIIC_DELAY);
 	}
 #ifdef ICHIIC_DEBUG
-	bitmask_snprintf(st, LPCIB_SMB_HS_BITS, fbuf, sizeof(fbuf));
-	printf("%s: exec: st 0x%s\n", sc->sc_dev.dv_xname, fbuf);
+	snprintb(fbuf, sizeof(fbuf), LPCIB_SMB_HS_BITS, st);
+	printf("%s: exec: st 0x%s\n", device_xname(sc->sc_dev), fbuf);
 #endif
 	if (st & LPCIB_SMB_HS_BUSY)
 		return (1);
@@ -233,7 +239,8 @@ ichsmb_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	if (cold || sc->sc_poll)
 		flags |= I2C_F_POLL;
 
-	if (!I2C_OP_STOP_P(op) || cmdlen > 1 || len > 2)
+	if (!I2C_OP_STOP_P(op) || cmdlen > 1 || len > 2 ||
+	    (cmdlen == 0 && len > 1))
 		return (1);
 
 	/* Setup transfer */
@@ -256,7 +263,10 @@ ichsmb_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	if (I2C_OP_WRITE_P(op)) {
 		/* Write data */
 		b = buf;
-		if (len > 0)
+		if (cmdlen == 0 && len == 1)
+			bus_space_write_1(sc->sc_iot, sc->sc_ioh,
+			    LPCIB_SMB_HCMD, b[0]);
+		else if (len > 0)
 			bus_space_write_1(sc->sc_iot, sc->sc_ioh,
 			    LPCIB_SMB_HD0, b[0]);
 		if (len > 1)
@@ -265,9 +275,12 @@ ichsmb_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr,
 	}
 
 	/* Set SMBus command */
-	if (len == 0)
-		ctl = LPCIB_SMB_HC_CMD_BYTE;
-	else if (len == 1)
+	if (cmdlen == 0) {
+		if (len == 0)
+			ctl = LPCIB_SMB_HC_CMD_QUICK;
+		else
+			ctl = LPCIB_SMB_HC_CMD_BYTE;
+	} else if (len == 1)
 		ctl = LPCIB_SMB_HC_CMD_BDATA;
 	else if (len == 2)
 		ctl = LPCIB_SMB_HC_CMD_WDATA;
@@ -307,18 +320,19 @@ timeout:
 	/*
 	 * Transfer timeout. Kill the transaction and clear status bits.
 	 */
-	bitmask_snprintf(st, LPCIB_SMB_HS_BITS, fbuf, sizeof(fbuf));
-	printf("%s: exec: op %d, addr 0x%02x, cmdlen %zd, len %zd, "
+	snprintb(fbuf, sizeof(fbuf), LPCIB_SMB_HS_BITS, st);
+	aprint_error_dev(sc->sc_dev,
+	    "exec: op %d, addr 0x%02x, cmdlen %zd, len %zd, "
 	    "flags 0x%02x: timeout, status 0x%s\n",
-	    sc->sc_dev.dv_xname, op, addr, cmdlen, len, flags, fbuf);
+	    op, addr, cmdlen, len, flags, fbuf);
 	bus_space_write_1(sc->sc_iot, sc->sc_ioh, LPCIB_SMB_HC,
 	    LPCIB_SMB_HC_KILL);
 	DELAY(ICHIIC_DELAY);
 	st = bus_space_read_1(sc->sc_iot, sc->sc_ioh, LPCIB_SMB_HS);
 	if ((st & LPCIB_SMB_HS_FAILED) == 0) {
-		bitmask_snprintf(st, LPCIB_SMB_HS_BITS, fbuf, sizeof(fbuf));
-		printf("%s: abort failed, status 0x%s\n",
-		    sc->sc_dev.dv_xname, fbuf);
+		snprintb(fbuf, sizeof(fbuf), LPCIB_SMB_HS_BITS, st);
+		aprint_error_dev(sc->sc_dev, "abort failed, status 0x%s\n",
+		    fbuf);
 	}
 	bus_space_write_1(sc->sc_iot, sc->sc_ioh, LPCIB_SMB_HS, st);
 	return (1);
@@ -344,8 +358,8 @@ ichsmb_intr(void *arg)
 		return (0);
 
 #ifdef ICHIIC_DEBUG
-	bitmask_snprintf(st, LPCIB_SMB_HS_BITS, fbuf, sizeof(fbuf));
-	printf("%s: intr st 0x%s\n", sc->sc_dev.dv_xname, fbuf);
+	snprintb(fbuf, sizeof(fbuf), LPCIB_SMB_HS_BITS, st);
+	printf("%s: intr st 0x%s\n", device_xname(sc->sc_dev), fbuf);
 #endif
 
 	/* Clear status bits */

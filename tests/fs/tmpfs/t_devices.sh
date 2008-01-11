@@ -1,6 +1,6 @@
-# $NetBSD: t_devices.sh,v 1.1 2007/11/12 15:18:22 jmmv Exp $
+# $NetBSD: t_devices.sh,v 1.5 2010/11/07 17:51:18 jmmv Exp $
 #
-# Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
+# Copyright (c) 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -11,13 +11,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,12 +35,12 @@ basic_body() {
 
 	umask 022
 
-	atf_check '/dev/MAKEDEV std' 0 ignore ignore
-	atf_check 'test -e zero' 0 null null
-	atf_check 'test -e null' 0 null null
+	atf_check -s eq:0 -o ignore -e ignore /dev/MAKEDEV std
+	atf_check -s eq:0 -o empty -e empty test -e zero
+	atf_check -s eq:0 -o empty -e empty test -e null
 
 	echo "Reading from the 'zero' character device"
-	atf_check 'dd if=zero of=a bs=10k count=1' 0 ignore ignore
+	atf_check -s eq:0 -o ignore -e ignore dd if=zero of=a bs=10k count=1
 	[ $(md5 a | cut -d ' ' -f 4) = 1276481102f218c981e0324180bafd9f ] || \
 	    atf_fail "Data read is invalid"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: cbiiisc.c,v 1.15 2006/03/08 23:46:22 lukem Exp $ */
+/*	$NetBSD: cbiiisc.c,v 1.19 2010/12/20 00:25:25 matt Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -58,14 +58,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cbiiisc.c,v 1.15 2006/03/08 23:46:22 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cbiiisc.c,v 1.19 2010/12/20 00:25:25 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
+#include <sys/cpu.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -131,8 +130,6 @@ cbiiiscattach(struct device *pdp, struct device *dp, void *auxp)
 	sc->sc_ctest7 = 0x00;
 	sc->sc_dcntl = 0x20;		/* XXX ?? */
 
-	alloc_sicallback();
-
         /*
          * Fill in the scsipi_adapter.
          */
@@ -181,6 +178,7 @@ cbiiisc_dmaintr(void *arg)
 	if (sc->sc_flags & SIOP_INTSOFF)
 		return (0);	/* interrupts are not active */
 	rp = sc->sc_siopp;
+	amiga_membarrier();
 	istat = rp->siop_istat;
 	if ((istat & (SIOP_ISTAT_SIP | SIOP_ISTAT_DIP)) == 0)
 		return(0);
@@ -191,6 +189,7 @@ cbiiisc_dmaintr(void *arg)
 	sc->sc_sist = rp->siop_sist;
 	sc->sc_istat = istat;
 	sc->sc_dstat = rp->siop_dstat;
+	amiga_membarrier();
 	siopngintr(sc);
 	return(1);
 }
@@ -200,10 +199,13 @@ void
 cbiiisc_dump(void)
 {
 	extern struct cfdriver cbiiisc_cd;
+	struct siop_softc *sc;
 	int i;
 
-	for (i = 0; i < cbiiisc_cd.cd_ndevs; ++i)
-		if (cbiiisc_cd.cd_devs[i])
-			siopng_dump(cbiiisc_cd.cd_devs[i]);
+	for (i = 0; i < cbiiisc_cd.cd_ndevs; ++i) {
+		sc = device_lookup_private(&cbiiisc_cd, i);
+		if (sc != NULL)
+			siopng_dump(sc);
+	}
 }
 #endif

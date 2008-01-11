@@ -3,16 +3,22 @@
 sbin_PROGRAMS = racoon racoonctl plainrsa-gen
 noinst_PROGRAMS = eaytest
 include_racoon_HEADERS = racoonctl.h var.h vmbuf.h misc.h gcmalloc.h admin.h \
-	schedule.h sockmisc.h vmbuf.h isakmp_var.h isakmp.h isakmp_xauth.h \
+	schedule.h sockmisc.h isakmp_var.h isakmp.h isakmp_xauth.h \
 	isakmp_cfg.h isakmp_unity.h ipsec_doi.h evt.h
 lib_LTLIBRARIES = libracoon.la
 
 adminsockdir=${localstatedir}/racoon
 
+BUILT_SOURCES = cfparse.h prsa_par.h
 INCLUDES = -I${srcdir}/../libipsec 
 AM_CFLAGS = -D_GNU_SOURCE @GLIBC_BUGS@ -DSYSCONFDIR=\"${sysconfdir}\" \
 	-DADMINPORTDIR=\"${adminsockdir}\"
 AM_LDFLAGS = @EXTRA_CRYPTO@ -lcrypto
+AM_YFLAGS = -d ${$*_YFLAGS}
+AM_LFLAGS = ${$*_LFLAGS}
+
+prsa_par_YFLAGS = -p prsa
+prsa_tok_LFLAGS = -Pprsa -olex.yy.c
 
 MISSING_ALGOS = \
 	missing/crypto/sha2/sha2.c \
@@ -32,18 +38,17 @@ racoon_SOURCES = \
 	cftoken.l cfparse.y prsa_tok.l prsa_par.y 
 EXTRA_racoon_SOURCES = isakmp_xauth.c isakmp_cfg.c isakmp_unity.c throttle.c \
 	isakmp_frag.c nattraversal.c security.c $(MISSING_ALGOS)
-racoon_LDFLAGS = ../libipsec/libipsec.la
 racoon_LDADD = $(CRYPTOBJS) $(HYBRID_OBJS) $(NATT_OBJS) $(FRAG_OBJS) $(LEXLIB) \
-	 $(SECCTX_OBJS) vmbuf.o sockmisc.o misc.o
-racoon_DEPENDENCIES = ../libipsec/libipsec.la \
+	 $(SECCTX_OBJS) vmbuf.o sockmisc.o misc.o ../libipsec/libipsec.la
+racoon_DEPENDENCIES = \
 	$(CRYPTOBJS) $(HYBRID_OBJS) $(NATT_OBJS) $(FRAG_OBJS) $(SECCTX_OBJS) \
 	vmbuf.o sockmisc.o misc.o
 
 racoonctl_SOURCES = racoonctl.c str2val.c 
-racoonctl_LDFLAGS = libracoon.la ../libipsec/libipsec.la 
-racoonctl_DEPENDENCIES = ../libipsec/libipsec.la libracoon.la
+racoonctl_LDADD = libracoon.la ../libipsec/libipsec.la 
 
 libracoon_la_SOURCES = kmpstat.c vmbuf.c sockmisc.c misc.c
+libracoon_la_CFLAGS = -DNOUSE_PRIVSEP $(AM_CFLAGS)
 
 plainrsa_gen_SOURCES = plainrsa-gen.c plog.c \
 	crypto_openssl.c logger.c 
@@ -84,6 +89,7 @@ EXTRA_DIST = \
    ${man5_MANS} ${man8_MANS} \
    missing/crypto/rijndael/boxes-fst.dat \
    doc/FAQ doc/README.certificate doc/README.gssapi doc/README.plainrsa \
+   doc/README.privsep \
    contrib/sp.pl stats.pl \
    samples/psk.txt.sample  samples/racoon.conf.sample \
    samples/psk.txt.in samples/racoon.conf.in \
@@ -96,46 +102,10 @@ EXTRA_DIST = \
    samples/roadwarrior/server/racoon.conf \
    samples/roadwarrior/server/racoon.conf-radius
 
-DISTCLEANFILES = cfparse.c cftoken.c prsa_tok.c prsa_par.c cfparse.h prsa_par.h
-
 TESTS = eaytest
 
 install-exec-local:
 	${mkinstalldirs} $(DESTDIR)${adminsockdir}
-
-# Config file parser
-cftoken.o: cftoken.c cfparse.h
-	$(COMPILE) -c -o $@ $<
-
-cfparse.o: cfparse.c
-	$(COMPILE) -c -o $@ $<
-
-cftoken.c: cftoken.l
-	$(LEX) -ocftoken.c $(srcdir)/cftoken.l
-
-cfparse.h: cfparse.c
-
-cfparse.c: $(srcdir)/cfparse.y
-	$(YACC) -bcfparse -d $(srcdir)/cfparse.y && \
-	mv cfparse.tab.c cfparse.c && \
-	mv cfparse.tab.h cfparse.h
-
-# Plain-RSA parser
-prsa_tok.o: prsa_tok.c prsa_par.h
-	$(COMPILE) -c -o $@ $<
-
-prsa_par.o: prsa_par.c
-	$(COMPILE) -c -o $@ $<
-
-prsa_tok.c: $(srcdir)/prsa_tok.l
-	$(LEX) -Pprsa -oprsa_tok.c $(srcdir)/prsa_tok.l
-
-prsa_par.h: prsa_par.c
-
-prsa_par.c: $(srcdir)/prsa_par.y
-	$(YACC) -bprsa_par -pprsa -d $(srcdir)/prsa_par.y && \
-	mv prsa_par.tab.c prsa_par.c && \
-	mv prsa_par.tab.h prsa_par.h
 
 # special object rules
 crypto_openssl_test.o: crypto_openssl.c

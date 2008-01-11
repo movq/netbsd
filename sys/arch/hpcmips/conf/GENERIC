@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.198 2007/12/31 15:31:55 ad Exp $
+# $NetBSD: GENERIC,v 1.213 2011/03/06 17:08:25 bouyer Exp $
 #
 # GENERIC machine description file
 # 
@@ -24,11 +24,11 @@ include		"arch/hpcmips/conf/std.hpcmips.tx39"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.198 $"
+#ident 		"GENERIC-$Revision: 1.213 $"
 
 maxusers	16
 
-makeoptions	CPUFLAGS="-mips2"	# CPU codegen options
+makeoptions	CPUFLAGS="-mips2 -mdivide-breaks"	# CPU codegen options
 options 	VR4102			# NEC VR4102
 options 	VR4111			# NEC VR4111
 options 	VR4121			# NEC VR4121
@@ -83,18 +83,18 @@ file-system 	MSDOSFS		# MS-DOS file system
 file-system 	KERNFS		# /kern (kernel informational filesystem)
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# Efficient memory file-system
+file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 options 	NFSSERVER	# Sun NFS-compatible filesystem (server)
-options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
-#options 	QUOTA		# UFS quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
@@ -110,6 +110,11 @@ options 	INET6		# IPV6
 #options 	ISO		# OSI networking
 #options 	TPIP		# TPIP
 #options 	EON		# OSI tunneling over IP
+options 	PFIL_HOOKS	# pfil(9) packet filter hooks
+options 	IPFILTER_LOG	# ipmon(8) log support
+options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
+#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 
 #options 	ALTQ		# Manipulate network interfaces' output queues
 #options 	ALTQ_BLUE	# Stochastic Fair Blue
@@ -129,9 +134,10 @@ options 	COMPAT_43
 options 	COMPAT_16
 options 	COMPAT_20
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
-options 	LKM		# loadable kernel modules
 
 #options 	NFS_BOOT_DHCP
 options 	NFS_BOOT_BOOTP
@@ -452,7 +458,12 @@ ucbio*		at ucb?
 # interrupt-mode don't work. use polling mode.
 tc5165buf*	at txcsbus1 iocs 1 iocsbase 0 iocssize 0x100 iocswidth 16
 hpckbd*		at tc5165buf?
-#wsmouse*	at ucbtp? mux 0
+wsmouse*	at ucbtp? mux 0
+
+#
+# Fujitsu PenCentra 200
+#
+txcsbus3	at tx39biu? platform FUJITSU_PENCENTRA_200
 
 # TC6358TB(Plum2)
 #  register space: CS3,
@@ -574,6 +585,9 @@ ulpt*	at uhub? port ? configuration ? interface ?
 umodem*	at uhub? port ? configuration ?
 ucom*	at umodem?
 
+# Option N.V. Wireless WAN modems
+uhso*	at uhub? port ? configuration ?
+
 # USB Mass Storage
 umass*	at uhub? port ? configuration ? interface ?
 scsibus* at umass? channel ?
@@ -641,6 +655,11 @@ audio*	at uaudio?
 
 # Pseudo-Devices
 
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
 pseudo-device	loop		1	# network loopback
 pseudo-device	ppp			# serial-line IP ports
 pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
@@ -652,14 +671,14 @@ pseudo-device	ipfilter		# IP filter, NAT
 pseudo-device	vnd			# virtual disk ick
 #options 	VND_COMPRESSION		# compressed vnd(4)
 #pseudo-device	ccd		4	# concatenated disks
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 #pseudo-device	cgd		4	# cryptographic disks
 pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 
 pseudo-device	biconsdev	1	# build-in console device
 pseudo-device	wsmux			# mouse & keyboard multiplexor
-#pseudo-device	md		1	# memory disk device (ramdisk)
+#pseudo-device	md			# memory disk device (ramdisk)
 
 #pseudo-device	raid		8	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components

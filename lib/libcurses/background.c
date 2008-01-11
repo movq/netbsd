@@ -1,4 +1,4 @@
-/*	$NetBSD: background.c,v 1.13 2007/09/19 22:13:14 jdc Exp $	*/
+/*	$NetBSD: background.c,v 1.15 2009/07/22 16:57:14 roy Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: background.c,v 1.13 2007/09/19 22:13:14 jdc Exp $");
+__RCSID("$NetBSD: background.c,v 1.15 2009/07/22 16:57:14 roy Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -110,17 +103,17 @@ wbkgd(WINDOW *win, chtype ch)
 	for (y = 0; y < win->maxy; y++)
 		for (x = 0; x < win->maxx; x++) {
 			/* Copy character if space */
-			if (ch & A_CHARTEXT && win->lines[y]->line[x].ch == ' ')
-				win->lines[y]->line[x].ch = ch & __CHARTEXT;
+			if (ch & A_CHARTEXT && win->alines[y]->line[x].ch == ' ')
+				win->alines[y]->line[x].ch = ch & __CHARTEXT;
 			/* Merge attributes */
-			if (win->lines[y]->line[x].attr & __ALTCHARSET)
-				win->lines[y]->line[x].attr =
+			if (win->alines[y]->line[x].attr & __ALTCHARSET)
+				win->alines[y]->line[x].attr =
 				    (ch & __ATTRIBUTES) | __ALTCHARSET;
 			else
-				win->lines[y]->line[x].attr =
+				win->alines[y]->line[x].attr =
 				    ch & __ATTRIBUTES;
 #ifdef HAVE_WCHAR
-			SET_WCOL(win->lines[y]->line[x], 1);
+			SET_WCOL(win->alines[y]->line[x], 1);
 #endif
 		}
 	__touchwin(win);

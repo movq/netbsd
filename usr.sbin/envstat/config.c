@@ -1,4 +1,4 @@
-/* 	$NetBSD: config.c,v 1.6 2007/11/16 08:01:37 xtraeme Exp $	*/
+/* 	$NetBSD: config.c,v 1.10 2010/10/05 05:03:49 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: config.c,v 1.6 2007/11/16 08:01:37 xtraeme Exp $");
+__RCSID("$NetBSD: config.c,v 1.10 2010/10/05 05:03:49 pgoyette Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -97,13 +97,14 @@ config_errmsg(int lvl, const char *key, const char *key2)
 void
 config_dict_add_prop(const char *key, char *value)
 {
+
 	if (!key || !value)
 		return;
 
 	if (!sensordict) {
 		sensordict = prop_dictionary_create();
 		if (!sensordict)
-			err(EXIT_FAILURE, "cfdict");
+			err(EXIT_FAILURE, "sensordict");
 	}
 
 	if (!prop_dictionary_set_cstring(sensordict, key, value))
@@ -198,11 +199,9 @@ config_dict_adddev_prop(const char *key, const char *value, int line)
 
 	free(strval);
 
-	if (!refreshdict) {
-		refreshdict = prop_dictionary_create();
-		if (!refreshdict)
-			err(EXIT_FAILURE, "prop_dict_create refresh");
-	}
+	refreshdict = prop_dictionary_create();
+	if (!refreshdict)
+		err(EXIT_FAILURE, "prop_dict_create refresh");
 
 	d = prop_dictionary_create();
 	if (!d)
@@ -374,6 +373,11 @@ config_devblock_add(const char *key, prop_dictionary_t kdict)
 	if (!prop_dictionary_set(cfdict, key, db->array))
 		err(EXIT_FAILURE, "prop_dictionary_set db->array");
 
+	/*
+	 * refreshdict must be NULLed to avoid false positives in
+	 * next matches.
+	 */
+	refreshdict = NULL;
 }
 
 /*
@@ -471,6 +475,90 @@ config_devblock_check_sensorprops(prop_dictionary_t ksdict,
 	}
 
 	/*
+	 * warning-capacity property set?
+	 */
+	obj = prop_dictionary_get(csdict, "warning-capacity");
+	if (obj) {
+		obj2 = prop_dictionary_get(ksdict, "want-percentage");
+		obj3 = prop_dictionary_get(ksdict, "monitoring-supported");
+		if (prop_bool_true(obj2) && prop_bool_true(obj3)) {
+			strval = prop_string_cstring(obj);
+			val = strtod(strval, &endptr);
+			if ((*endptr != '\0') || (val < 0 || val > 100))
+				config_errmsg(VALUE_ERR,
+					      "warning-capacity",
+					      sensor);
+			/*
+			 * Convert the value to a valid percentage.
+			 */
+			obj = prop_dictionary_get(ksdict, "max-value");
+			val = (val / 100) * prop_number_integer_value(obj);
+
+			if (!prop_dictionary_set_uint32(csdict,
+						       "warning-capacity",
+						       val))
+				err(EXIT_FAILURE, "dict_set warncap");
+		} else
+			config_errmsg(PROP_ERR, "warning-capacity", sensor);
+	}
+
+	/*
+	 * high-capacity property set?
+	 */
+	obj = prop_dictionary_get(csdict, "high-capacity");
+	if (obj) {
+		obj2 = prop_dictionary_get(ksdict, "want-percentage");
+		obj3 = prop_dictionary_get(ksdict, "monitoring-supported");
+		if (prop_bool_true(obj2) && prop_bool_true(obj3)) {
+			strval = prop_string_cstring(obj);
+			val = strtod(strval, &endptr);
+			if ((*endptr != '\0') || (val < 0 || val > 100))
+				config_errmsg(VALUE_ERR,
+					      "high-capacity",
+					      sensor);
+			/*
+			 * Convert the value to a valid percentage.
+			 */
+			obj = prop_dictionary_get(ksdict, "max-value");
+			val = (val / 100) * prop_number_integer_value(obj);
+
+			if (!prop_dictionary_set_uint32(csdict,
+						       "high-capacity",
+						       val))
+				err(EXIT_FAILURE, "dict_set highcap");
+		} else
+			config_errmsg(PROP_ERR, "high-capacity", sensor);
+	}
+
+	/*
+	 * maximum-capacity property set?
+	 */
+	obj = prop_dictionary_get(csdict, "maximum-capacity");
+	if (obj) {
+		obj2 = prop_dictionary_get(ksdict, "want-percentage");
+		obj3 = prop_dictionary_get(ksdict, "monitoring-supported");
+		if (prop_bool_true(obj2) && prop_bool_true(obj3)) {
+			strval = prop_string_cstring(obj);
+			val = strtod(strval, &endptr);
+			if ((*endptr != '\0') || (val < 0 || val > 100))
+				config_errmsg(VALUE_ERR,
+					      "maximum-capacity",
+					      sensor);
+			/*
+			 * Convert the value to a valid percentage.
+			 */
+			obj = prop_dictionary_get(ksdict, "max-value");
+			val = (val / 100) * prop_number_integer_value(obj);
+
+			if (!prop_dictionary_set_uint32(csdict,
+						       "maximum-capacity",
+						       val))
+				err(EXIT_FAILURE, "dict_set maxcap");
+		} else
+			config_errmsg(PROP_ERR, "maximum-capacity", sensor);
+	}
+
+	/*
 	 * critical-max property set?
 	 */
 	obj = prop_dictionary_get(csdict, "critical-max");
@@ -500,6 +588,37 @@ config_devblock_check_sensorprops(prop_dictionary_t ksdict,
 					     sensor, strval);
 		if (!prop_dictionary_set(csdict, "critical-min", obj))
 			err(EXIT_FAILURE, "prop_dict_set cmin");
+	}
+
+	/*
+	 * warning-max property set?
+	 */
+	obj = prop_dictionary_get(csdict, "warning-max");
+	if (obj) {
+		obj2 = prop_dictionary_get(ksdict, "monitoring-supported");
+		if (!prop_bool_true(obj2))
+			config_errmsg(PROP_ERR, "warning-max", sensor);
+
+		strval = prop_string_cstring(obj);
+		obj = convert_val_to_pnumber(ksdict, "warning-max",
+					     sensor, strval);
+		if (!prop_dictionary_set(csdict, "warning-max", obj))
+			err(EXIT_FAILURE, "prop_dict_set wmax");
+	}
+	/*
+	 * warning-min property set?
+	 */
+	obj = prop_dictionary_get(csdict, "warning-min");
+	if (obj) {
+		obj2 = prop_dictionary_get(ksdict, "monitoring-supported");
+		if (!prop_bool_true(obj2))
+			config_errmsg(PROP_ERR, "warning-min", sensor);
+
+		strval = prop_string_cstring(obj);
+		obj = convert_val_to_pnumber(ksdict, "warning-min",
+					     sensor, strval);
+		if (!prop_dictionary_set(csdict, "warning-min", obj))
+			err(EXIT_FAILURE, "prop_dict_set wmin");
 	}
 }
 
@@ -564,7 +683,8 @@ convert_val_to_pnumber(prop_dictionary_t kdict, const char *prop,
 		num = prop_number_create_unsigned_integer(val);
 		free(strval);
 
-	} else if (prop_string_equals_cstring(obj, "Fan")) {
+	} else if (prop_string_equals_cstring(obj, "Fan") ||
+		   prop_string_equals_cstring(obj, "Integer")) {
 		/* no conversion */
 		val = strtod(value, &endptr);
 		if (*endptr != '\0')

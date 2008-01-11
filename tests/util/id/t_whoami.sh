@@ -1,6 +1,6 @@
-# $NetBSD: t_whoami.sh,v 1.2 2007/11/19 14:17:45 jmmv Exp $
+# $NetBSD: t_whoami.sh,v 1.6 2010/11/07 17:51:23 jmmv Exp $
 #
-# Copyright (c) 2007 The NetBSD Foundation, Inc.
+# Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -11,13 +11,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -32,9 +25,13 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 
-run_whoami() {
-	[ -f ./whoami ] || ln -s $(atf_get_srcdir)/h_id ./whoami
-	./whoami "${@}"
+create_run_whoami() {
+	cat >run_whoami.sh <<EOF
+#! /bin/sh
+[ -f ./whoami ] || ln -s $(atf_get_srcdir)/h_id ./whoami
+./whoami "\${@}"
+EOF
+	chmod +x run_whoami.sh
 }
 
 atf_test_case correct
@@ -42,14 +39,16 @@ correct_head() {
 	atf_set "descr" "Checks that correct queries work"
 }
 correct_body() {
+	create_run_whoami
+
 	echo "Checking with EUID=100"
 	echo "test" >expout
-	atf_check "run_whoami" 0 expout null
+	atf_check -s eq:0 -o file:expout -e empty ./run_whoami.sh
 
 	echo "Checking with EUID=0"
 	export LIBFAKE_EUID_ROOT=1
 	echo "root" >expout
-	atf_check "run_whoami" 0 expout null
+	atf_check -s eq:0 -o file:expout -e empty ./run_whoami.sh
 }
 
 atf_test_case syntax
@@ -57,14 +56,16 @@ syntax_head() {
 	atf_set "descr" "Checks the command's syntax"
 }
 syntax_body() {
+	create_run_whoami
+
 	# Give a user to the command.
 	echo 'usage: whoami' >experr
-	atf_check "run_whoami root" 1 null experr
+	atf_check -s eq:1 -o empty -e file:experr ./run_whoami.sh root
 
 	# Give an invalid flag but which is allowed by id (with which
 	# whoami shares code) when using the -un options.
 	echo 'usage: whoami' >experr
-	atf_check "run_whoami -r" 1 null experr
+	atf_check -s eq:1 -o empty -e file:experr ./run_whoami.sh -r
 }
 
 atf_init_test_cases()

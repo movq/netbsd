@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp_quick.c,v 1.17 2007/12/12 05:08:28 mgrooms Exp $	*/
+/*	$NetBSD: isakmp_quick.c,v 1.29 2011/03/14 17:18:13 tteras Exp $	*/
 
 /* Id: isakmp_quick.c,v 1.29 2006/08/22 18:17:17 manubsd Exp */
 
@@ -98,6 +98,33 @@
 static vchar_t *quick_ir1mx __P((struct ph2handle *, vchar_t *, vchar_t *));
 static int get_sainfo_r __P((struct ph2handle *));
 static int get_proposal_r __P((struct ph2handle *));
+static int ph2_recv_n __P((struct ph2handle *, struct isakmp_gen *));
+static void quick_timeover_stub __P((struct sched *));
+static void quick_timeover __P((struct ph2handle *));
+
+/* called from scheduler */
+static void
+quick_timeover_stub(p)
+	struct sched *p;
+{
+	quick_timeover(container_of(p, struct ph2handle, sce));
+}
+
+static void
+quick_timeover(iph2)
+	struct ph2handle *iph2;
+{
+	plog(LLV_ERROR, LOCATION, NULL,
+		"%s give up to get IPsec-SA due to time up to wait.\n",
+		saddrwop2str(iph2->dst));
+
+	/* If initiator side, send error to kernel by SADB_ACQUIRE. */
+	if (iph2->side == INITIATOR)
+		pk_sendeacquire(iph2);
+
+	remph2(iph2);
+	delph2(iph2);
+}
 
 /* %%%
  * Quick Mode
@@ -138,8 +165,8 @@ quick_i1prep(iph2, msg)
 
 	plog(LLV_DEBUG, LOCATION, NULL, "pfkey getspi sent.\n");
 
-	iph2->sce = sched_new(lcconf->wait_ph2complete,
-		pfkey_timeover_stub, iph2);
+	sched_schedule(&iph2->sce, lcconf->wait_ph2complete,
+		       quick_timeover_stub);
 
 	error = 0;
 
@@ -229,13 +256,16 @@ quick_i1send(iph2, msg)
 	 * - no MIP6 or proxy
 	 * - id payload suggests to encrypt all the traffic (no specific
 	 *   protocol type)
+	 * - SA endpoints and IKE addresses for the nego are the same
+	 *   (iph2->src/dst)
 	 */
 	id = (struct ipsecdoi_id_b *)iph2->id->v;
 	id_p = (struct ipsecdoi_id_b *)iph2->id_p->v;
-	if (id->proto_id == 0
-	 && id_p->proto_id == 0
-	 && iph2->ph1->rmconf->support_proxy == 0
-	 && ipsecdoi_transportmode(iph2->proposal)) {
+	if (id->proto_id == 0 &&
+	    id_p->proto_id == 0 &&
+	    iph2->ph1->rmconf->support_proxy == 0 &&
+	    iph2->sa_src == NULL && iph2->sa_dst == NULL &&
+	    ipsecdoi_transportmode(iph2->proposal)) {
 		idci = idcr = 0;
 	} else
 		idci = idcr = 1;
@@ -337,8 +367,7 @@ quick_i1send(iph2, msg)
 		goto end;
 
 	/* send the packet, add to the schedule to resend */
-	iph2->retry_counter = iph2->ph1->rmconf->retry_counter;
-	if (isakmp_ph2resend(iph2) == -1)
+	if (isakmp_ph2send(iph2) == -1)
 		goto end;
 
 	/* change status of isakmp status entry */
@@ -466,18 +495,27 @@ quick_i2recv(iph2, msg0)
 					"isn't supported.\n");
 				break;
 			}
-			if (isakmp_p2ph(&iph2->sa_ret, pa->ptr) < 0)
+			if (isakmp_p2ph(&iph2->sa_ret, pa->ptr) < 0) {
+				plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+					"duplicate ISAKMP_NPTYPE_SA.\n");
 				goto end;
+			}
 			break;
 
 		case ISAKMP_NPTYPE_NONCE:
-			if (isakmp_p2ph(&iph2->nonce_p, pa->ptr) < 0)
+			if (isakmp_p2ph(&iph2->nonce_p, pa->ptr) < 0) {
+				plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+					"duplicate ISAKMP_NPTYPE_NONCE.\n");
 				goto end;
+			}
 			break;
 
 		case ISAKMP_NPTYPE_KE:
-			if (isakmp_p2ph(&iph2->dhpub_p, pa->ptr) < 0)
+			if (isakmp_p2ph(&iph2->dhpub_p, pa->ptr) < 0) {
+				plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+					"duplicate ISAKMP_NPTYPE_KE.\n");
 				goto end;
+			}
 			break;
 
 		case ISAKMP_NPTYPE_ID:
@@ -488,12 +526,14 @@ quick_i2recv(iph2, msg0)
 				if (isakmp_p2ph(&idcr, pa->ptr) < 0)
 					goto end;
 			} else {
+				plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+					"too many ISAKMP_NPTYPE_ID payloads.\n");
 				goto end;
 			}
 			break;
 
 		case ISAKMP_NPTYPE_N:
-			isakmp_check_notify(pa->ptr, iph2->ph1);
+			ph2_recv_n(iph2, pa->ptr);
 			break;
 
 #ifdef ENABLE_NATT
@@ -528,6 +568,8 @@ quick_i2recv(iph2, msg0)
 				iph2->natoa_dst = daddr;
 			else {
 				racoon_free(daddr);
+				plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+					"too many ISAKMP_NPTYPE_NATOA payloads.\n");
 				goto end;
 			}
 		    }
@@ -581,17 +623,19 @@ quick_i2recv(iph2, msg0)
 			error = ISAKMP_NTYPE_ATTRIBUTES_NOT_SUPPORTED;
 			goto end;
 		}
+#ifdef ENABLE_NATT
+		set_port(iph2->natoa_src,
+			 extract_port((struct sockaddr *) &proposed_addr));
+#endif
 
-		if (cmpsaddrstrict((struct sockaddr *) &proposed_addr,
-				   (struct sockaddr *) &got_addr) == 0) {
+		if (cmpsaddr((struct sockaddr *) &proposed_addr,
+			     (struct sockaddr *) &got_addr) == CMPSADDR_MATCH) {
 			plog(LLV_DEBUG, LOCATION, NULL,
 				"IDci matches proposal.\n");
 #ifdef ENABLE_NATT
 		} else if (iph2->natoa_src != NULL
-			&& cmpsaddrwop(iph2->natoa_src,
-				       (struct sockaddr *) &got_addr) == 0
-			&& extract_port((struct sockaddr *) &proposed_addr) ==
-			   extract_port((struct sockaddr *) &got_addr)) {
+			&& cmpsaddr(iph2->natoa_src,
+				    (struct sockaddr *) &got_addr) == 0) {
 			plog(LLV_DEBUG, LOCATION, NULL,
 				"IDci matches NAT-OAi.\n");
 #endif
@@ -627,16 +671,19 @@ quick_i2recv(iph2, msg0)
 			goto end;
 		}
 
-		if (cmpsaddrstrict((struct sockaddr *) &proposed_addr,
-				   (struct sockaddr *) &got_addr) == 0) {
+#ifdef ENABLE_NATT
+		set_port(iph2->natoa_dst,
+			 extract_port((struct sockaddr *) &proposed_addr));
+#endif
+
+		if (cmpsaddr((struct sockaddr *) &proposed_addr,
+			     (struct sockaddr *) &got_addr) == CMPSADDR_MATCH) {
 			plog(LLV_DEBUG, LOCATION, NULL,
 				"IDcr matches proposal.\n");
 #ifdef ENABLE_NATT
 		} else if (iph2->natoa_dst != NULL
-			&& cmpsaddrwop(iph2->natoa_dst,
-				       (struct sockaddr *) &got_addr) == 0
-			&& extract_port((struct sockaddr *) &proposed_addr) ==
-			   extract_port((struct sockaddr *) &got_addr)) {
+			&& cmpsaddr(iph2->natoa_dst,
+				    (struct sockaddr *) &got_addr) == CMPSADDR_MATCH) {
 			plog(LLV_DEBUG, LOCATION, NULL,
 				"IDcr matches NAT-OAr.\n");
 #endif
@@ -684,6 +731,8 @@ quick_i2recv(iph2, msg0)
 
 	/* validity check SA payload sent from responder */
 	if (ipsecdoi_checkph2proposal(iph2) < 0) {
+		plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+			"proposal check failed.\n");
 		error = ISAKMP_NTYPE_NO_PROPOSAL_CHOSEN;
 		goto end;
 	}
@@ -801,8 +850,7 @@ quick_i2send(iph2, msg0)
 	/* if there is commit bit, need resending */
 	if (ISSET(iph2->flags, ISAKMP_FLAG_C)) {
 		/* send the packet, add to the schedule to resend */
-		iph2->retry_counter = iph2->ph1->rmconf->retry_counter;
-		if (isakmp_ph2resend(iph2) == -1)
+		if (isakmp_ph2send(iph2) == -1)
 			goto end;
 	} else {
 		/* send the packet */
@@ -917,7 +965,7 @@ quick_i3recv(iph2, msg0)
 				    "Ignoring multiples notifications\n");
 				break;
 			}
-			isakmp_check_notify(pa->ptr, iph2->ph1);
+			ph2_recv_n(iph2, pa->ptr);
 			notify = vmalloc(pa->len);
 			if (notify == NULL) {
 				plog(LLV_ERROR, LOCATION, NULL,
@@ -1044,8 +1092,11 @@ quick_r1recv(iph2, msg0)
 	}
 	/* decrypt packet */
 	msg = oakley_do_decrypt(iph2->ph1, msg0, iph2->ivm->iv, iph2->ivm->ive);
-	if (msg == NULL)
+	if (msg == NULL) {
+		plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+			"Packet decryption failed.\n");
 		goto end;
+	}
 
 	/* create buffer for using to validate HASH(1) */
 	/*
@@ -1129,18 +1180,27 @@ quick_r1recv(iph2, msg0)
 					"Multi SAs isn't supported.\n");
 				goto end;
 			}
-			if (isakmp_p2ph(&iph2->sa, pa->ptr) < 0)
+			if (isakmp_p2ph(&iph2->sa, pa->ptr) < 0) {
+				plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+					"duplicate ISAKMP_NPTYPE_SA.\n");
 				goto end;
+			}
 			break;
 
 		case ISAKMP_NPTYPE_NONCE:
-			if (isakmp_p2ph(&iph2->nonce_p, pa->ptr) < 0)
+			if (isakmp_p2ph(&iph2->nonce_p, pa->ptr) < 0) {
+				plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+					"duplicate ISAKMP_NPTYPE_NONCE.\n");
 				goto end;
+			}
 			break;
 
 		case ISAKMP_NPTYPE_KE:
-			if (isakmp_p2ph(&iph2->dhpub_p, pa->ptr) < 0)
+			if (isakmp_p2ph(&iph2->dhpub_p, pa->ptr) < 0) {
+				plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+					"duplicate ISAKMP_NPTYPE_KE.\n");
 				goto end;
+			}
 			break;
 
 		case ISAKMP_NPTYPE_ID:
@@ -1173,7 +1233,7 @@ quick_r1recv(iph2, msg0)
 			break;
 
 		case ISAKMP_NPTYPE_N:
-			isakmp_check_notify(pa->ptr, iph2->ph1);
+			ph2_recv_n(iph2, pa->ptr);
 			break;
 
 #ifdef ENABLE_NATT
@@ -1208,6 +1268,9 @@ quick_r1recv(iph2, msg0)
 				iph2->natoa_src = daddr;
 			else {
 				racoon_free(daddr);
+				plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+					"received too many NAT-OA payloads.\n");
+				error = ISAKMP_NTYPE_PAYLOAD_MALFORMED;
 				goto end;
 			}
 		    }
@@ -1300,6 +1363,8 @@ quick_r1recv(iph2, msg0)
 	case 0:
 		/* select single proposal or reject it. */
 		if (ipsecdoi_selectph2proposal(iph2) < 0) {
+			plog(LLV_ERROR, LOCATION, iph2->ph1->remote,
+				"no proposal chosen.\n");
 			error = ISAKMP_NTYPE_NO_PROPOSAL_CHOSEN;
 			goto end;
 		}
@@ -1389,8 +1454,8 @@ quick_r1prep(iph2, msg)
 
 	plog(LLV_DEBUG, LOCATION, NULL, "pfkey getspi sent.\n");
 
-	iph2->sce = sched_new(lcconf->wait_ph2complete,
-		pfkey_timeover_stub, iph2);
+	sched_schedule(&iph2->sce, lcconf->wait_ph2complete,
+		       quick_timeover_stub);
 
 	error = 0;
 
@@ -1618,8 +1683,7 @@ quick_r2send(iph2, msg)
 		goto end;
 
 	/* send the packet, add to the schedule to resend */
-	iph2->retry_counter = iph2->ph1->rmconf->retry_counter;
-	if (isakmp_ph2resend(iph2) == -1)
+	if (isakmp_ph2send(iph2) == -1)
 		goto end;
 
 	/* the sending message is added to the received-list. */
@@ -1696,7 +1760,7 @@ quick_r3recv(iph2, msg0)
 			hash = (struct isakmp_pl_hash *)pa->ptr;
 			break;
 		case ISAKMP_NPTYPE_N:
-			isakmp_check_notify(pa->ptr, iph2->ph1);
+			ph2_recv_n(iph2, pa->ptr);
 			break;
 		default:
 			/* don't send information, see ident_r1recv() */
@@ -2079,7 +2143,6 @@ get_sainfo_r(iph2)
 {
 	vchar_t *idsrc = NULL, *iddst = NULL, *client = NULL;
 	int error = ISAKMP_INTERNAL_ERROR;
-	int remoteid = 0;
 
 	if (iph2->id == NULL) {
 		idsrc = ipsecdoi_sockaddr2id(iph2->src, IPSECDOI_PREFIX_HOST,
@@ -2103,18 +2166,6 @@ get_sainfo_r(iph2)
 		plog(LLV_ERROR, LOCATION, NULL,
 			"failed to set ID for destination.\n");
 		goto end;
-	}
-
-	{
-		struct remoteconf *conf;
-		conf = getrmconf(iph2->dst);
-		if (conf != NULL)
-			remoteid=conf->ph1id;
-		else{
-			plog(LLV_DEBUG, LOCATION, NULL, "Warning: no valid rmconf !\n");
-			remoteid=0;
-		}
-		
 	}
 
 #ifdef ENABLE_HYBRID
@@ -2144,7 +2195,7 @@ get_sainfo_r(iph2)
 #endif
 
 	/* obtain a matching sainfo section */
-	iph2->sainfo = getsainfo(idsrc, iddst, iph2->ph1->id_p, client, remoteid);
+	iph2->sainfo = getsainfo(idsrc, iddst, iph2->ph1->id_p, client, iph2->ph1->rmconf->ph1id);
 	if (iph2->sainfo == NULL) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"failed to get sainfo.\n");
@@ -2200,8 +2251,8 @@ get_proposal_r(iph2)
 		return ISAKMP_NTYPE_INVALID_ID_INFORMATION;
 	}
 
-	/* make sure if id[src,dst] is null. */
-	if (iph2->src_id || iph2->dst_id) {
+	/* make sure if sa_[src, dst] are null. */
+	if (iph2->sa_src || iph2->sa_dst) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"Why do ID[src,dst] exist already.\n");
 		return ISAKMP_INTERNAL_ERROR;
@@ -2305,34 +2356,45 @@ get_proposal_r(iph2)
 		}
 #endif
 
-		/* make id[src,dst] if both ID types are IP address and same */
-		if (_XIDT(iph2->id_p) == idi2type
-		 && spidx.dst.ss_family == spidx.src.ss_family) {
-			iph2->src_id = dupsaddr((struct sockaddr *)&spidx.dst);
-			if (iph2->src_id  == NULL) {
+		/* Before setting iph2->[sa_src, sa_dst] with the addresses
+		 * provided in ID payloads, we check:
+		 * - they are both addresses of same family
+		 * - sainfo has not been selected only based on ID payload
+		 *   information but also based on specific Phase 1
+		 *   credentials (iph2->sainfo->id_i is defined), i.e.
+		 *   local configuration _explicitly_ expect that user
+		 *   (e.g. from asn1dn "C=FR, ...") with those IDs) */
+		if (_XIDT(iph2->id_p) == idi2type &&
+		    spidx.dst.ss_family == spidx.src.ss_family &&
+		    iph2->sainfo && iph2->sainfo->id_i) {
+
+			iph2->sa_src = dupsaddr((struct sockaddr *)&spidx.dst);
+			if (iph2->sa_src  == NULL) {
 				plog(LLV_ERROR, LOCATION, NULL,
 				    "buffer allocation failed.\n");
 				return ISAKMP_INTERNAL_ERROR;
 			}
-			iph2->dst_id = dupsaddr((struct sockaddr *)&spidx.src);
-			if (iph2->dst_id  == NULL) {
+
+			iph2->sa_dst = dupsaddr((struct sockaddr *)&spidx.src);
+			if (iph2->sa_dst  == NULL) {
 				plog(LLV_ERROR, LOCATION, NULL,
 				    "buffer allocation failed.\n");
 				return ISAKMP_INTERNAL_ERROR;
 			}
 		} else {
 			plog(LLV_DEBUG, LOCATION, NULL,
-			     "Family (%d - %d) or types (%d - %d) of ID"
-			     "from initiator differ.\n",
+			     "Either family (%d - %d), types (%d - %d) of ID "
+			     "from initiator differ or matching sainfo "
+			     "has no id_i defined for the peer. Not filling "
+			     "iph2->sa_src and iph2->sa_dst.\n",
 			     spidx.src.ss_family, spidx.dst.ss_family,
 			     _XIDT(iph2->id_p),idi2type);
 		}
 	} else {
 		plog(LLV_DEBUG, LOCATION, NULL,
-			"get a source address of SP index "
-			"from phase1 address "
-			"due to no ID payloads found "
-			"OR because ID type is not address.\n");
+		     "get a source address of SP index from Phase 1"
+		     "addresses due to no ID payloads found"
+		     "OR because ID type is not address.\n");
 
 		/* see above comment. */
 		memcpy(&spidx.src, iph2->dst, sysdep_sa_len(iph2->dst));
@@ -2354,7 +2416,7 @@ get_proposal_r(iph2)
 #undef _XIDT
 
 	plog(LLV_DEBUG, LOCATION, NULL,
-		"get a src address from ID payload "
+		"get src address from ID payload "
 		"%s prefixlen=%u ul_proto=%u\n",
 		saddr2str((struct sockaddr *)&spidx.src),
 		spidx.prefs, spidx.ul_proto);
@@ -2468,6 +2530,76 @@ get_proposal_r(iph2)
 	}
 #endif /* HAVE_SECCTX */
 
+	iph2->spid = sp_in->id;
+
+	return 0;
+}
+
+/*
+ * handle a notification payload inside phase2 exchange.
+ * phase2 is always encrypted, so it does not need to be checked
+ * for explicitely.
+ */
+static int
+ph2_recv_n(iph2, gen)
+	struct ph2handle *iph2;
+	struct isakmp_gen *gen;
+{
+	struct ph1handle *iph1 = iph2->ph1;
+	struct isakmp_pl_n *notify = (struct isakmp_pl_n *) gen;
+	u_int type;
+	int check_level;
+
+	type = ntohs(notify->type);
+	switch (type) {
+	case ISAKMP_NTYPE_CONNECTED:
+		break;
+	case ISAKMP_NTYPE_INITIAL_CONTACT:
+		return isakmp_info_recv_initialcontact(iph1, iph2);
+	case ISAKMP_NTYPE_RESPONDER_LIFETIME:
+		ipsecdoi_parse_responder_lifetime(notify,
+			&iph2->lifetime_secs, &iph2->lifetime_kb);
+
+		if (iph1 != NULL && iph1->rmconf != NULL) {
+			check_level = iph1->rmconf->pcheck_level;
+		} else {
+			if (iph1 != NULL)
+				plog(LLV_DEBUG, LOCATION, NULL,
+					"No phase1 rmconf found !\n");
+			else
+				plog(LLV_DEBUG, LOCATION, NULL,
+					"No phase1 found !\n");
+			check_level = PROP_CHECK_EXACT;
+		}
+
+		switch (check_level) {
+		case PROP_CHECK_OBEY:
+			break;
+		case PROP_CHECK_STRICT:
+		case PROP_CHECK_CLAIM:
+			if (iph2->sainfo == NULL
+			 || iph2->sainfo->lifetime <= iph2->lifetime_secs) {
+				plog(LLV_WARNING, LOCATION, NULL,
+					"RESPONDER-LIFETIME: lifetime mismatch\n");
+				iph2->lifetime_secs = 0;
+			}
+			break;
+		case PROP_CHECK_EXACT:
+			if (iph2->sainfo == NULL
+			 || iph2->sainfo->lifetime != iph2->lifetime_secs) {
+				plog(LLV_WARNING, LOCATION, NULL,
+					"RESPONDER-LIFETIME: lifetime mismatch\n");
+				iph2->lifetime_secs = 0;
+			}
+			break;
+		}
+		break;
+	default:
+		isakmp_log_notify(iph2->ph1, notify, "phase2 exchange");
+		isakmp_info_send_n2(iph2, ISAKMP_NTYPE_INVALID_PAYLOAD_TYPE,
+			NULL);
+		break;
+	}
 	return 0;
 }
 

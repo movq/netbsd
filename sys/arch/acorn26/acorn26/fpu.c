@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu.c,v 1.8 2005/12/24 22:45:33 perry Exp $	*/
+/*	$NetBSD: fpu.c,v 1.12 2011/01/14 02:06:22 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 Ben Harris
@@ -32,12 +32,11 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.8 2005/12/24 22:45:33 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.12 2011/01/14 02:06:22 rmind Exp $");
 
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 #include <arm/undefined.h>
 #include <machine/fpureg.h>
 #include <machine/pcb.h>
@@ -103,7 +102,7 @@ fpu_attach(struct device *parent, struct device *self, void *aux)
 	printf("\n");
 	if (!supported)
 		printf("%s: WARNING: FPU type not supported by kernel\n",
-		       self->dv_xname);
+		       device_xname(self));
 }
 
 static label_t undef_jmp;
@@ -116,7 +115,7 @@ fpu_undef_handler(u_int addr, u_int insn, struct trapframe *tf, int fault_code)
 }
 
 static register_t
-fpu_identify()
+fpu_identify(void)
 {
 	volatile register_t fpsr;
 	void *uh;
@@ -128,18 +127,4 @@ fpu_identify()
 	}
 	remove_coproc_handler(uh);
 	return fpsr & FPSR_SYSID_MASK;
-}
-
-void
-fpu_swapout(struct proc *p)
-{
-	struct pcb *pcb;
-
-	pcb = &p->p_addr->u_pcb;
-	if (pcb->pcb_flags & PCB_OWNFPU) {
-		the_fpu->sc_ctxsave(&pcb->pcb_ff);
-		the_fpu->sc_disable();
-		the_fpu->sc_owner = NULL;
-		pcb->pcb_flags &= ~PCB_OWNFPU;
-	}
 }

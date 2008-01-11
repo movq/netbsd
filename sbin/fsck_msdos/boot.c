@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.13 2007/03/19 18:30:40 gdt Exp $	*/
+/*	$NetBSD: boot.c,v 1.15 2009/04/11 07:14:50 lukem Exp $	*/
 
 /*
  * Copyright (C) 1995, 1997 Wolfgang Solfrank
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Martin Husemann
- *	and Wolfgang Solfrank.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: boot.c,v 1.13 2007/03/19 18:30:40 gdt Exp $");
+__RCSID("$NetBSD: boot.c,v 1.15 2009/04/11 07:14:50 lukem Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -55,7 +48,7 @@ readboot(int dosfs, struct bootblock *boot)
 	int ret = FSOK;
 	int i;
 	
-	if (read(dosfs, block, sizeof block) < sizeof block) {
+	if ((size_t)read(dosfs, block, sizeof block) != sizeof block) {
 		perr("could not read boot block");
 		return FSFATAL;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: mount.c,v 1.84 2007/07/17 23:56:01 christos Exp $	*/
+/*	$NetBSD: mount.c,v 1.92 2011/01/13 11:57:02 pooka Exp $	*/
 
 /*
  * Copyright (c) 1980, 1989, 1993, 1994
@@ -31,21 +31,23 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount.c	8.25 (Berkeley) 5/8/95";
 #else
-__RCSID("$NetBSD: mount.c,v 1.84 2007/07/17 23:56:01 christos Exp $");
+__RCSID("$NetBSD: mount.c,v 1.92 2011/01/13 11:57:02 pooka Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/wait.h>
+
+#include <fs/puffs/puffs_msgif.h>
 
 #include <err.h>
 #include <errno.h>
@@ -64,7 +66,7 @@ __RCSID("$NetBSD: mount.c,v 1.84 2007/07/17 23:56:01 christos Exp $");
 #include <sys/ioctl.h>
 
 #include "pathnames.h"
-#include "vfslist.h"
+#include "mountprog.h"
 
 static int	debug, verbose;
 
@@ -99,7 +101,9 @@ main(int argc, char *argv[])
 	const char *mntfromname, *mntonname, **vfslist, *vfstype;
 	struct fstab *fs;
 	struct statvfs *mntbuf;
+#if 0
 	FILE *mountdfp;
+#endif
 	int all, ch, forceall, i, init_flags, mntsize, rval;
 	char *options;
 	const char *mountopts, *fstypename;
@@ -280,9 +284,14 @@ main(int argc, char *argv[])
 		 * specified ala Sun.
 		 */
 		if (vfslist == NULL) {
-			if (strpbrk(argv[0], ":@") != NULL)
+			if (strpbrk(argv[0], ":@") != NULL) {
+				fprintf(stderr, "WARNING: autoselecting nfs "
+				    "based on : or @ in the device name is "
+				    "deprecated!\n"
+				    "WARNING: This behaviour will be removed "
+				    "in a future release\n");
 				vfstype = "nfs";
-			else {
+			} else {
 				vfstype = getfslab(argv[0]);
 				if (vfstype == NULL)
 					vfstype = ffs_fstype;
@@ -296,6 +305,7 @@ main(int argc, char *argv[])
 		/* NOTREACHED */
 	}
 
+#if 0	/* disabled because it interferes the service. */
 	/*
 	 * If the mount was successfully, and done by root, tell mountd the
 	 * good news.  Pid checks are probably unnecessary, but don't hurt.
@@ -309,6 +319,7 @@ main(int argc, char *argv[])
 			err(1, "signal mountd");
 		(void)fclose(mountdfp);
 	}
+#endif
 
 	exit(rval);
 	/* NOTREACHED */
@@ -381,7 +392,7 @@ mountfs(const char *vfstype, const char *spec, const char *name,
 	if (!mntopts && !options)
 		catopt(&optbuf, "rw");
 
-	if (getargs == 0 && strcmp(name, "/") == 0)
+	if (getargs == 0 && strcmp(name, "/") == 0 && !hasopt(optbuf, "union"))
 		flags |= MNT_UPDATE;
 	else if (skipmounted) {
 		if ((numfs = getmntinfo(&sfp, MNT_WAIT)) == 0) {
@@ -389,13 +400,23 @@ mountfs(const char *vfstype, const char *spec, const char *name,
 			return (1);
 		}
 		for(i = 0; i < numfs; i++) {
+			const char *mountedtype = sfp[i].f_fstypename;
+			size_t cmplen = sizeof(sfp[i].f_fstypename);
+
+			/* remove "puffs|" from comparisons, if present */
+#define TYPESIZE (sizeof(PUFFS_TYPEPREFIX)-1)
+			if (strncmp(mountedtype,
+			    PUFFS_TYPEPREFIX, TYPESIZE) == 0) {
+				mountedtype += TYPESIZE;
+				cmplen -= TYPESIZE;
+			}
+
 			/*
 			 * XXX can't check f_mntfromname,
 			 * thanks to mfs, union, etc.
 			 */
 			if (strncmp(name, sfp[i].f_mntonname, MNAMELEN) == 0 &&
-			    strncmp(vfstype, sfp[i].f_fstypename,
-				sizeof(sfp[i].f_fstypename)) == 0) {
+			    strncmp(vfstype, mountedtype, cmplen) == 0) {
 				if (verbose)
 					(void)printf("%s on %s type %.*s: "
 					    "%s\n",
@@ -425,7 +446,13 @@ mountfs(const char *vfstype, const char *spec, const char *name,
 	if (argv == NULL)
 		err(1, "malloc");
 
-	(void) snprintf(execbase, sizeof(execbase), "mount_%s", vfstype);
+	if (getargs &&
+	    strncmp(vfstype, PUFFS_TYPEPREFIX, sizeof(PUFFS_TYPEPREFIX)-1) == 0)
+		(void)snprintf(execbase, sizeof(execbase), "mount_puffs");
+	else if (hasopt(optbuf, "rump"))
+		(void)snprintf(execbase, sizeof(execbase), "rump_%s", vfstype);
+	else
+		(void)snprintf(execbase, sizeof(execbase), "mount_%s", vfstype);
 	argc = 0;
 	argv[argc++] = execbase;
 	if (optbuf)

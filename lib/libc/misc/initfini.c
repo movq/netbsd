@@ -1,4 +1,4 @@
-/* 	$NetBSD: initfini.c,v 1.2 2007/11/13 15:33:55 ad Exp $	 */
+/* 	$NetBSD: initfini.c,v 1.9 2011/03/09 23:10:06 joerg Exp $	 */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,25 +30,70 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: initfini.c,v 1.2 2007/11/13 15:33:55 ad Exp $");
+__RCSID("$NetBSD: initfini.c,v 1.9 2011/03/09 23:10:06 joerg Exp $");
 
 #ifdef _LIBC
 #include "namespace.h"
 #endif
 
-static void	__libc_init(void) __attribute__((__constructor__, __used__));
+#include <sys/param.h>
+#include <sys/exec.h>
+#include <sys/tls.h>
+#include <stdbool.h>
+
+void	_libc_init(void) __attribute__((__constructor__, __used__));
 
 void	__guard_setup(void);
 void	__libc_thr_init(void);
+void	__libc_atomic_init(void);
+void	__libc_atexit_init(void);
+void	__libc_env_init(void);
 
-/* LINTED used */
-static void
-__libc_init(void)
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+__dso_hidden void	__libc_static_tls_setup(void);
+#endif
+
+static bool libc_initialised;
+
+void _libc_init(void);
+
+__dso_hidden void	*__auxinfo;
+struct ps_strings *__ps_strings;
+
+/*
+ * _libc_init is called twice.  The first time explicitly by crt0.o
+ * (for newer versions) and the second time as indirectly via _init().
+ */
+void
+_libc_init(void)
 {
+
+	if (libc_initialised)
+		return;
+
+	libc_initialised = 1;
+
+	if (__ps_strings != NULL)
+		__auxinfo = __ps_strings->ps_argvstr +
+		    __ps_strings->ps_nargvstr + __ps_strings->ps_nenvstr + 2;
 
 	/* For -fstack-protector */
 	__guard_setup();
 
+	/* Atomic operations */
+	__libc_atomic_init();
+
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	/* Initialize TLS for statically linked programs. */
+	__libc_static_tls_setup();
+#endif
+
 	/* Threads */
 	__libc_thr_init();
+
+	/* Initialize the atexit mutexes */
+	__libc_atexit_init();
+
+	/* Initialize environment memory RB tree. */
+	__libc_env_init();
 }

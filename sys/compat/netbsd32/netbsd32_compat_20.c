@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_20.c,v 1.19 2007/12/20 23:03:01 dsl Exp $	*/
+/*	$NetBSD: netbsd32_compat_20.c,v 1.28 2010/04/23 15:19:20 rmind Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,11 +27,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_20.c,v 1.19 2007/12/20 23:03:01 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_20.c,v 1.28 2010/04/23 15:19:20 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -106,8 +103,7 @@ compat_20_netbsd32_getfsstat(struct lwp *l, const struct compat_20_netbsd32_getf
 	mutex_enter(&mountlist_lock);
 	count = 0;
 	for (mp = mountlist.cqh_first; mp != (void *)&mountlist; mp = nmp) {
-		if (vfs_busy(mp, LK_NOWAIT, &mountlist_lock)) {
-			nmp = mp->mnt_list.cqe_next;
+		if (vfs_busy(mp, &nmp)) {
 			continue;
 		}
 		if (sfsp && count < maxcount) {
@@ -123,23 +119,21 @@ compat_20_netbsd32_getfsstat(struct lwp *l, const struct compat_20_netbsd32_getf
 			     SCARG(uap, flags) == 0) &&
 			    (error = VFS_STATVFS(mp, sp)) != 0) {
 				mutex_enter(&mountlist_lock);
-				nmp = mp->mnt_list.cqe_next;
-				vfs_unbusy(mp);
+				vfs_unbusy(mp, false, &nmp);
 				continue;
 			}
 			sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
 			compat_20_netbsd32_from_statvfs(sp, &sb32);
 			error = copyout(&sb32, sfsp, sizeof(sb32));
 			if (error) {
-				vfs_unbusy(mp);
+				vfs_unbusy(mp, false, NULL);
 				return (error);
 			}
 			sfsp = (char *)sfsp + sizeof(sb32);
 		}
 		count++;
 		mutex_enter(&mountlist_lock);
-		nmp = mp->mnt_list.cqe_next;
-		vfs_unbusy(mp);
+		vfs_unbusy(mp, false, &nmp);
 	}
 	mutex_exit(&mountlist_lock);
 	if (sfsp && count > maxcount)
@@ -160,15 +154,15 @@ compat_20_netbsd32_statfs(struct lwp *l, const struct compat_20_netbsd32_statfs_
 	struct statvfs *sp;
 	struct netbsd32_statfs s32;
 	int error;
-	struct nameidata nd;
+	struct vnode *vp;
 
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG_P32(uap, path));
-	if ((error = namei(&nd)) != 0)
+	error = namei_simple_user(SCARG_P32(uap, path),
+				NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
 		return (error);
-	mp = nd.ni_vp->v_mount;
+	mp = vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(nd.ni_vp);
+	vrele(vp);
 	if ((error = VFS_STATVFS(mp, sp)) != 0)
 		return (error);
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
@@ -183,15 +177,14 @@ compat_20_netbsd32_fstatfs(struct lwp *l, const struct compat_20_netbsd32_fstatf
 		syscallarg(int) fd;
 		syscallarg(netbsd32_statfsp_t) buf;
 	} */
-	struct file *fp;
+	file_t *fp;
 	struct mount *mp;
 	struct statvfs *sp;
 	struct netbsd32_statfs s32;
 	int error;
-	struct proc *p = l->l_proc;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return (error);
 	mp = ((struct vnode *)fp->f_data)->v_mount;
 	sp = &mp->mnt_stat;
@@ -201,7 +194,7 @@ compat_20_netbsd32_fstatfs(struct lwp *l, const struct compat_20_netbsd32_fstatf
 	compat_20_netbsd32_from_statvfs(sp, &s32);
 	error = copyout(&s32, SCARG_P32(uap, buf), sizeof(s32));
  out:
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 

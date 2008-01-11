@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.101 2007/10/26 16:38:12 hira Exp $	*/
+/*	$NetBSD: options.c,v 1.109 2010/08/31 03:16:06 enami Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)options.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: options.c,v 1.101 2007/10/26 16:38:12 hira Exp $");
+__RCSID("$NetBSD: options.c,v 1.109 2010/08/31 03:16:06 enami Exp $");
 #endif
 #endif /* not lint */
 
@@ -85,7 +85,7 @@ static int no_op(void);
 static void printflg(unsigned int);
 static int c_frmt(const void *, const void *);
 static off_t str_offt(char *);
-static char *getline(FILE *fp);
+static char *get_line(FILE *fp);
 static void pax_options(int, char **);
 static void pax_usage(void);
 static void tar_options(int, char **);
@@ -95,10 +95,10 @@ static void cpio_options(int, char **);
 static void cpio_usage(void);
 #endif
 
-/* errors from getline */
+/* errors from get_line */
 #define GETLINE_FILE_CORRUPT 1
 #define GETLINE_OUT_OF_MEM 2
-static int getline_error;
+static int get_line_error;
 
 #define BZIP2_CMD	"bzip2"		/* command to run as bzip2 */
 #define GZIP_CMD	"gzip"		/* command to run as gzip */
@@ -240,6 +240,8 @@ struct option pax_longopts[] = {
 						OPT_INSECURE },
 	{ "force-local",	no_argument,		0,
 						OPT_FORCE_LOCAL },
+	{ "use-compress-program", required_argument,	0,
+						OPT_USE_COMPRESS_PROGRAM },
 	{ 0,			0,			0,
 						0 },
 };
@@ -254,7 +256,7 @@ static void
 pax_options(int argc, char **argv)
 {
 	int c;
-	int i;
+	size_t i;
 	u_int64_t flg = 0;
 	u_int64_t bflg = 0;
 	char *pt;
@@ -474,6 +476,7 @@ pax_options(int argc, char **argv)
 			/*
 			 * use gzip.  Non standard option.
 			 */
+			zflag = 1;
 			gzip_program = GZIP_CMD;
 			break;
 		case 'A':
@@ -640,7 +643,11 @@ pax_options(int argc, char **argv)
 			secure = 0;
 			break;
 		case OPT_FORCE_LOCAL:
-			forcelocal = 0;
+			forcelocal = 1;
+			break;
+		case OPT_USE_COMPRESS_PROGRAM:
+			zflag = 1;
+			gzip_program = optarg;
 			break;
 		case '?':
 		default:
@@ -692,7 +699,7 @@ pax_options(int argc, char **argv)
 	case LIST:
 	case EXTRACT:
 		for (; optind < argc; optind++)
-			if (pat_add(argv[optind], NULL) < 0)
+			if (pat_add(argv[optind], NULL, 0) < 0)
 				pax_usage();
 		break;
 	case COPY:
@@ -1173,6 +1180,7 @@ tar_options(int argc, char **argv)
 			int sawpat = 0;
 			int dirisnext = 0;
 			char *file, *dir = NULL;
+			int mustfreedir = 0;
 
 			while (nincfiles || *argv != NULL) {
 				/*
@@ -1185,6 +1193,7 @@ tar_options(int argc, char **argv)
 				if (nincfiles) {
 					file = incfiles->file;
 					dir = incfiles->dir;
+					mustfreedir = 0;
 					incfiles++;
 					nincfiles--;
 				} else if (strcmp(*argv, "-I") == 0) {
@@ -1192,9 +1201,11 @@ tar_options(int argc, char **argv)
 						break;
 					file = *argv++;
 					dir = chdname;
+					mustfreedir = 0;
 				} else {
 					file = NULL;
 					dir = NULL;
+					mustfreedir = 0;
 				}
 				if (file != NULL) {
 					FILE *fp;
@@ -1206,11 +1217,12 @@ tar_options(int argc, char **argv)
 						tty_warn(1, "Unable to open file '%s' for read", file);
 						tar_usage();
 					}
-					while ((str = getline(fp)) != NULL) {
+					while ((str = get_line(fp)) != NULL) {
 						if (dirisnext) {
-							if (dir)
+							if (dir && mustfreedir)
 								free(dir);
 							dir = str;
+							mustfreedir = 1;
 							dirisnext = 0;
 							continue;
 						}
@@ -1222,24 +1234,25 @@ tar_options(int argc, char **argv)
 						}
 						if (strncmp(str, "-C ", 3) == 0) {
 							havechd++;
-							if (dir)
+							if (dir && mustfreedir)
 								free(dir);
 							dir = strdup(str + 3);
+							mustfreedir = 1;
 							free(str);
 							continue;
 						}
-						if (pat_add(str, dir) < 0)
+						if (pat_add(str, dir, NOGLOB_MTCH) < 0)
 							tar_usage();
 						sawpat = 1;
 					}
 					/* Bomb if given -C w/out a dir. */
 					if (dirisnext)
 						tar_usage();
-					if (dir)
+					if (dir && mustfreedir)
 						free(dir);
 					if (strcmp(file, "-") != 0)
 						fclose(fp);
-					if (getline_error) {
+					if (get_line_error) {
 						tty_warn(1, "Problem with file '%s'", file);
 						tar_usage();
 					}
@@ -1248,7 +1261,7 @@ tar_options(int argc, char **argv)
  						break;
 					chdname = *argv++;
 					havechd++;
-				} else if (pat_add(*argv++, chdname) < 0)
+				} else if (pat_add(*argv++, chdname, 0) < 0)
 					tar_usage();
 				else
 					sawpat = 1;
@@ -1309,7 +1322,7 @@ tar_options(int argc, char **argv)
 					tty_warn(1, "Unable to open file '%s' for read", file);
 					tar_usage();
 				}
-				while ((str = getline(fp)) != NULL) {
+				while ((str = get_line(fp)) != NULL) {
 					if (dirisnext) {
 						if (ftree_add(str, 1) < 0)
 							tar_usage();
@@ -1333,7 +1346,7 @@ tar_options(int argc, char **argv)
 					tar_usage();
 				if (strcmp(file, "-") != 0)
 					fclose(fp);
-				if (getline_error) {
+				if (get_line_error) {
 					tty_warn(1, "Problem with file '%s'",
 					    file);
 					tar_usage();
@@ -1449,6 +1462,8 @@ cpio_set_action(int op)
 {
 	if ((act == APPND && op == ARCHIVE) || (act == ARCHIVE && op == APPND))
 		act = APPND;
+	else if (act == EXTRACT && op == LIST)
+		act = op;
 	else if (act != ERROR && act != op)
 		cpio_usage();
 	else
@@ -1467,7 +1482,8 @@ cpio_options(int argc, char **argv)
 	FSUB tmp;
 	u_int64_t flg = 0;
 	u_int64_t bflg = 0;
-	int c, i;
+	int c;
+	size_t i;
 	FILE *fp;
 	char *str;
 
@@ -1634,11 +1650,11 @@ cpio_options(int argc, char **argv)
 				    optarg);
 				cpio_usage();
 			}
-			while ((str = getline(fp)) != NULL) {
-				pat_add(str, NULL);
+			while ((str = get_line(fp)) != NULL) {
+				pat_add(str, NULL, 0);
 			}
 			fclose(fp);
-			if (getline_error) {
+			if (get_line_error) {
 				tty_warn(1, "Problem with file '%s'", optarg);
 				cpio_usage();
 			}
@@ -1661,6 +1677,7 @@ cpio_options(int argc, char **argv)
 			(void)fputs("\n\n", stderr);
 			cpio_usage();
 			break;
+		case 'F':
 		case 'I':
 		case 'O':
 			/*
@@ -1718,13 +1735,13 @@ cpio_options(int argc, char **argv)
 			 * process Version 6 cpio format
 			 */
 			frmt = &(fsub[F_BCPIO]);
+			break;
 		case OPT_FORCE_LOCAL:
 			forcelocal = 1;
 			break;
 		case OPT_INSECURE:
 			secure = 0;
 			break;
-
 		case OPT_SPARSE:
 			/* do nothing; we already generate sparse files */
 			break;
@@ -1774,7 +1791,7 @@ cpio_options(int argc, char **argv)
 	case LIST:
 	case EXTRACT:
 		for (; optind < argc; optind++)
-			if (pat_add(argv[optind], 0) < 0)
+			if (pat_add(argv[optind], NULL, 0) < 0)
 				cpio_usage();
 		break;
 	case COPY:
@@ -1797,10 +1814,10 @@ cpio_options(int argc, char **argv)
 		 * no read errors allowed on updates/append operation!
 		 */
 		maxflt = 0;
-		while ((str = getline(stdin)) != NULL) {
+		while ((str = get_line(stdin)) != NULL) {
 			ftree_add(str, 0);
 		}
-		if (getline_error) {
+		if (get_line_error) {
 			tty_warn(1, "Problem while reading stdin");
 			cpio_usage();
 		}
@@ -2028,21 +2045,21 @@ str_offt(char *val)
 }
 
 char *
-getline(FILE *f)
+get_line(FILE *f)
 {
 	char *name, *temp;
 	size_t len;
 
 	name = fgetln(f, &len);
 	if (!name) {
-		getline_error = ferror(f) ? GETLINE_FILE_CORRUPT : 0;
+		get_line_error = ferror(f) ? GETLINE_FILE_CORRUPT : 0;
 		return 0;
 	}
 	if (name[len-1] != '\n')
 		len++;
 	temp = malloc(len);
 	if (!temp) {
-		getline_error = GETLINE_OUT_OF_MEM;
+		get_line_error = GETLINE_OUT_OF_MEM;
 		return 0;
 	}
 	memcpy(temp, name, len-1);

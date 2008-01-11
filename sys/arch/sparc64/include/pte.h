@@ -1,4 +1,4 @@
-/*	$NetBSD: pte.h,v 1.18 2006/09/08 23:08:05 mrg Exp $ */
+/*	$NetBSD: pte.h,v 1.22 2010/01/15 15:02:48 nakayama Exp $ */
 
 /*
  * Copyright (c) 1996-1999 Eduardo Horvath
@@ -41,15 +41,17 @@
  *
  *	struct sun4u_tte {
  *		uint64	tag_g:1,	(global flag)
- *			tag_ctxt:15,	(context for mapping)
+ *			tag_reserved:2,	(reserved for future use)
+ *			tag_ctxt:13,	(context for mapping)
  *			tag_unassigned:6,
  *			tag_va:42;	(virtual address bits<64:22>)
  *		uint64	data_v:1,	(valid bit)
  *			data_size:2,	(page size [8K*8**<SIZE>])
  *			data_nfo:1,	(no-fault only)
  *			data_ie:1,	(invert endianness [inefficient])
- *			data_soft2:2,	(reserved for S/W)
- *			data_pa:36,	(physical address)
+ *			data_soft2:9,	(reserved for S/W)
+ *			data_reserved:7,(reserved for future use)
+ *			data_pa:30,	(physical address)
  *			data_soft:6,	(reserved for S/W)
  *			data_lock:1,	(lock into TLB)
  *			data_cacheable:2,	(cacheability control)
@@ -91,23 +93,25 @@
 #if 0
 /* We don't use bitfeilds anyway. */
 struct sun4u_tag_fields {
-	uint64_t	tag_g:1,	/* global flag */
-		tag_ctxt:15,	/* context for mapping */
+	uint64_t tag_g:1,	/* global flag */
+		tag_reserved:2,	/* reserved for future use */
+		tag_ctxt:13,	/* context for mapping */
 		tag_unassigned:6,
 		tag_va:42;	/* virtual address bits<64:22> */
 };
 union sun4u_tag { struct sun4u_tag_fields f; int64_t tag; };
 struct sun4u_data_fields {
-	uint64_t	data_v:1,	/* valid bit */
+	uint64_t data_v:1,	/* valid bit */
 		data_size:2,	/* page size [8K*8**<SIZE>] */
 		data_nfo:1,	/* no-fault only */
 		data_ie:1,	/* invert endianness [inefficient] */
-		data_soft2:2,	/* reserved for S/W */
-		data_pa:36,	/* physical address */
-		data_accessed:1,/* S/W accessed bit */
+		data_soft2:9,	/* reserved for S/W */
+		data_reserved:7,/* reserved for future use */
+		data_pa:30,	/* physical address */
+		data_tsblock:1,	/* S/W TSB locked entry */
 		data_modified:1,/* S/W modified bit */
 		data_realw:1,	/* S/W real writable bit (to manage modified) */
-		data_tsblock:1,	/* S/W TSB locked entry */
+		data_accessed:1,/* S/W accessed bit */
 		data_exec:1,	/* S/W Executable */
 		data_onlyexec:1,/* S/W Executable only */
 		data_lock:1,	/* lock into TLB */
@@ -129,30 +133,6 @@ struct sun4u_tte {
 };
 #endif
 typedef struct sun4u_tte pte_t;
-
-/* TLB shootdown handler arguments. */
-struct ipi_tlb_args {
-	vaddr_t ita_vaddr;
-	int ita_ctx;
-};
-
-/* Assembly routines to flush TLB mappings */
-void sp_tlb_flush_pte(vaddr_t, int);
-void sp_tlb_flush_ctx(int);
-void sp_tlb_flush_all(void);
-
-#if defined(MULTIPROCESSOR)
-void smp_tlb_flush_pte(vaddr_t, int);
-void smp_tlb_flush_ctx(int);
-void smp_tlb_flush_all(void);
-#define	tlb_flush_pte(va,ctx)	smp_tlb_flush_pte(va, ctx)
-#define	tlb_flush_ctx(ctx)	smp_tlb_flush_ctx(ctx)
-#define	tlb_flush_all()		smp_tlb_flush_all()
-#else
-#define	tlb_flush_pte(va,ctx)	sp_tlb_flush_pte(va, ctx)
-#define	tlb_flush_ctx(ctx)	sp_tlb_flush_ctx(ctx)
-#define	tlb_flush_all()		sp_tlb_flush_all()
-#endif
 
 #endif /* _LOCORE */
 
@@ -184,9 +164,9 @@ void smp_tlb_flush_all(void);
 #define TLB_SZ_MASK		0x6000000000000000LL
 #define TLB_NFO			0x1000000000000000LL
 #define TLB_IE			0x0800000000000000LL
-#define TLB_SOFT2_MASK		0x07fe000000000000LL
-#define TLB_DIAG_MASK		0x0001fe0000000000LL
-#define TLB_PA_MASK		0x000001ffffffe000LL
+#define TLB_SOFT2_MASK		0x07fc000000000000LL
+#define TLB_RESERVED_MASK	0x0003f80000000000LL
+#define TLB_PA_MASK		0x000007ffffffe000LL
 #define TLB_SOFT_MASK		0x0000000000001f80LL
 /* S/W bits */
 /* Access & TSB locked bits are swapped so I can set access w/one insn */

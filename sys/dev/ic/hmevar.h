@@ -1,4 +1,4 @@
-/*	$NetBSD: hmevar.h,v 1.15 2007/03/04 06:01:55 christos Exp $	*/
+/*	$NetBSD: hmevar.h,v 1.21 2009/09/18 12:40:15 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,10 +57,9 @@ struct hme_ring {
 };
 
 struct hme_softc {
-	struct device	sc_dev;		/* boilerplate device view */
+	device_t	sc_dev;		/* boilerplate device view */
 	struct ethercom	sc_ethercom;	/* Ethernet common part */
 	struct mii_data	sc_mii;		/* MII media control */
-#define sc_media	sc_mii.mii_media/* shorthand */
 	struct callout	sc_tick_ch;	/* tick callout */
 
 	/* The following bus handles are to be provided by the bus front-end */
@@ -94,10 +86,9 @@ struct hme_softc {
 #endif
 
 	int			sc_debug;
-	void			*sc_sh;		/* shutdownhook cookie */
 	int			sc_ec_capenable;
 	short			sc_if_flags;
-	u_int8_t		sc_enaddr[ETHER_ADDR_LEN]; /* MAC address */
+	uint8_t			sc_enaddr[ETHER_ADDR_LEN]; /* MAC address */
 
 	/* Special hardware hooks */
 	void	(*sc_hwreset)(struct hme_softc *);
@@ -110,5 +101,4 @@ struct hme_softc {
 
 
 void	hme_config(struct hme_softc *);
-void	hme_reset(struct hme_softc *);
 int	hme_intr(void *);

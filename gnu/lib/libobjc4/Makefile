@@ -1,7 +1,9 @@
-#	$NetBSD: Makefile,v 1.9 2006/11/09 20:07:15 christos Exp $
+#	$NetBSD: Makefile,v 1.13 2011/05/20 13:38:52 joerg Exp $
 
 REQUIRETOOLS=	yes
 NOLINT=		# defined
+
+UNSUPPORTED_COMPILER.clang=	# defined
 
 .include <bsd.own.mk>
 
@@ -9,8 +11,8 @@ LIB=		objc
 
 .if ${MKGCC} != "no"
 
-SHLIB_MAJOR=	2
-SHLIB_MINOR=	1
+SHLIB_MAJOR=	3
+SHLIB_MINOR=	0
 
 # XXX just while all platforms defs.mk are updated..
 .if exists(${.CURDIR}/arch/${MACHINE_ARCH}/defs.mk)
@@ -34,7 +36,8 @@ GCCLIBXX=	${NETBSDSRCDIR}/gnu/lib/libstdc++-v3_4/arch/${MACHINE_ARCH}
 SRCS=		${G_OBJS:N[A-Z]*:Nlinking.lo:.lo=.c} ${G_OBJS:M[A-Z]*:.lo=.m} linking.m
 
 GCPPFLAGS=	${G_ALL_CFLAGS} ${G_INCLUDES}
-CPPFLAGS+=	-I. -I${GCCARCH} ${GCPPFLAGS:M-D*} ${GCPPFLAGS:M-I*:N-I.*}
+CPPFLAGS+=	-I. -I${.CURDIR}/arch/${MACHINE_ARCH}
+CPPFLAGS+=	-I${GCCARCH} ${GCPPFLAGS:M-D*} ${GCPPFLAGS:M-I*:N-I.*}
 CPPFLAGS+=	-I${GCCLIBXX}
 
 BUILDSYMLINKS=	${.CURDIR}/../libstdc++-v3_4/arch/${MACHINE_ARCH} bits
@@ -96,10 +99,12 @@ CLEANFILES+= cs-tconfig.h tconfig.h unwind.h
 # XXX just while all platforms defs.mk are updated..
 .if exists(${.CURDIR}/arch/${MACHINE_ARCH}/defs.mk)
 optionlist: ${G_ALL_OPT_FILES} ${LIBOBJCARCH}/defs.mk Makefile ${DIST}/gcc/opt-gather.awk
-	${AWK} -f ${DIST}/gcc/opt-gather.awk ${G_ALL_OPT_FILES} > ${.TARGET}
+	${TOOL_AWK} -f ${DIST}/gcc/opt-gather.awk ${G_ALL_OPT_FILES} \
+		> ${.TARGET}
 
 options.h: optionlist ${DIST}/gcc/opt-functions.awk ${DIST}/gcc/opth-gen.awk
-	${AWK} -f ${DIST}/gcc/opt-functions.awk -f ${DIST}/gcc/opth-gen.awk \
+	${TOOL_AWK} -f ${DIST}/gcc/opt-functions.awk \
+		-f ${DIST}/gcc/opth-gen.awk \
 		< optionlist > ${.TARGET}
 
 CLEANFILES+=	options.h optionlist

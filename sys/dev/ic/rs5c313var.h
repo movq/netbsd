@@ -1,4 +1,4 @@
-/*	$NetBSD: rs5c313var.h,v 1.1 2006/09/07 01:12:00 uwe Exp $	*/
+/*	$NetBSD: rs5c313var.h,v 1.3 2010/04/06 15:29:19 nonaka Exp $	*/
 
 /*
  * Copyright (c) 2006 Valeriy E. Ushakov
@@ -37,12 +37,20 @@
 struct rs5c313_ops;
 
 struct rs5c313_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	struct todr_chip_handle sc_todr;
 	struct rs5c313_ops *sc_ops;
 
 	int sc_valid;		/* oscillation halt sensing on init */
+
+	enum {
+		MODEL_5C313 = 0,
+		MODEL_5C316,
+		MODEL_NUM
+	} sc_model;
+
+	int sc_ctrl[2];		/* ctrl registers */
 };
 
 struct rs5c313_ops {

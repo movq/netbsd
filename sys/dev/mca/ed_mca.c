@@ -1,7 +1,8 @@
-/*	$NetBSD: ed_mca.c,v 1.39 2007/10/19 12:00:34 ad Exp $	*/
+/*	$NetBSD: ed_mca.c,v 1.47 2009/05/12 14:31:00 cegger Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
+ * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Jaromir Dolecek.
@@ -14,23 +15,18 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 /*
@@ -38,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ed_mca.c,v 1.39 2007/10/19 12:00:34 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ed_mca.c,v 1.47 2009/05/12 14:31:00 cegger Exp $");
 
 #include "rnd.h"
 
@@ -82,8 +78,8 @@ __KERNEL_RCSID(0, "$NetBSD: ed_mca.c,v 1.39 2007/10/19 12:00:34 ad Exp $");
 
 #define	EDLABELDEV(dev) (MAKEDISKDEV(major(dev), DISKUNIT(dev), RAW_PART))
 
-static int     ed_mca_probe  (struct device *, struct cfdata *, void *);
-static void    ed_mca_attach (struct device *, struct device *, void *);
+static int     ed_mca_probe  (device_t, cfdata_t, void *);
+static void    ed_mca_attach (device_t, device_t, void *);
 
 CFATTACH_DECL(ed_mca, sizeof(struct ed_softc),
     ed_mca_probe, ed_mca_attach, NULL, NULL);
@@ -119,7 +115,7 @@ static struct dkdriver eddkdriver = { edmcastrategy, minphys };
  * Just check if it's possible to identify the disk.
  */
 static int
-ed_mca_probe(struct device *parent, struct cfdata *cf,
+ed_mca_probe(device_t parent, cfdata_t cf,
     void *aux)
 {
 	u_int16_t cmd_args[2];
@@ -139,9 +135,7 @@ ed_mca_probe(struct device *parent, struct cfdata *cf,
 }
 
 static void
-ed_mca_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ed_mca_attach(device_t parent, device_t self, void *aux)
 {
 	struct ed_softc *ed = device_private(self);
 	struct edc_mca_softc *sc = device_private(parent);
@@ -169,7 +163,7 @@ ed_mca_attach(parent, self, aux)
 		ed->sc_capacity);
 
 	printf("%s: %u spares/cyl, %s, %s, %s, %s, %s\n",
-		ed->sc_dev.dv_xname, ed->spares,
+		device_xname(&ed->sc_dev), ed->spares,
 		(drv_flags & (1 << 0)) ? "NoRetries" : "Retries",
 		(drv_flags & (1 << 1)) ? "Removable" : "Fixed",
 		(drv_flags & (1 << 2)) ? "SkewedFormat" : "NoSkew",
@@ -180,10 +174,10 @@ ed_mca_attach(parent, self, aux)
 	/*
 	 * Initialize and attach the disk structure.
 	 */
-	disk_init(&ed->sc_dk, ed->sc_dev.dv_xname, &eddkdriver);
+	disk_init(&ed->sc_dk, device_xname(&ed->sc_dev), &eddkdriver);
 	disk_attach(&ed->sc_dk);
 #if NRND > 0
-	rnd_attach_source(&ed->rnd_source, ed->sc_dev.dv_xname,
+	rnd_attach_source(&ed->rnd_source, device_xname(&ed->sc_dev),
 			  RND_TYPE_DISK, 0);
 #endif
 
@@ -201,14 +195,16 @@ ed_mca_attach(parent, self, aux)
  * transfer.  Does not wait for the transfer to complete.
  */
 void
-edmcastrategy(bp)
-	struct buf *bp;
+edmcastrategy(struct buf *bp)
 {
-	struct ed_softc *ed = device_lookup(&ed_cd, DISKUNIT(bp->b_dev));
-	struct disklabel *lp = ed->sc_dk.dk_label;
+	struct ed_softc *ed;
+	struct disklabel *lp;
 	daddr_t blkno;
 
-	ATADEBUG_PRINT(("edmcastrategy (%s)\n", ed->sc_dev.dv_xname),
+	ed = device_lookup_private(&ed_cd, DISKUNIT(bp->b_dev));
+	lp = ed->sc_dk.dk_label;
+
+	ATADEBUG_PRINT(("edmcastrategy (%s)\n", device_xname(&ed->sc_dev)),
 	    DEBUG_XFERS);
 
 	/* Valid request?  */
@@ -254,7 +250,7 @@ edmcastrategy(bp)
 
 	/* Queue transfer on drive, activate drive and controller if idle. */
 	simple_lock(&ed->sc_q_lock);
-	BUFQ_PUT(ed->sc_q, bp);
+	bufq_put(ed->sc_q, bp);
 	simple_unlock(&ed->sc_q_lock);
 
 	/* Ring the worker thread */
@@ -288,7 +284,7 @@ edmcaopen(dev_t dev, int flag, int fmt, struct lwp *l)
 	int part, error;
 
 	ATADEBUG_PRINT(("edopen\n"), DEBUG_FUNCS);
-	wd = device_lookup(&ed_cd, DISKUNIT(dev));
+	wd = device_lookup_private(&ed_cd, DISKUNIT(dev));
 	if (wd == NULL || (wd->sc_flags & EDF_INIT) == 0)
 		return (ENXIO);
 
@@ -359,7 +355,7 @@ edmcaopen(dev_t dev, int flag, int fmt, struct lwp *l)
 int
 edmcaclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
-	struct ed_softc *wd = device_lookup(&ed_cd, DISKUNIT(dev));
+	struct ed_softc *wd = device_lookup_private(&ed_cd, DISKUNIT(dev));
 	int part = DISKPART(dev);
 
 	ATADEBUG_PRINT(("edmcaclose\n"), DEBUG_FUNCS);
@@ -393,9 +389,7 @@ edmcaclose(dev_t dev, int flag, int fmt, struct lwp *l)
 }
 
 static void
-edgetdefaultlabel(ed, lp)
-	struct ed_softc *ed;
-	struct disklabel *lp;
+edgetdefaultlabel(struct ed_softc *ed, struct disklabel *lp)
 {
 	ATADEBUG_PRINT(("edgetdefaultlabel\n"), DEBUG_FUNCS);
 	memset(lp, 0, sizeof(struct disklabel));
@@ -430,9 +424,7 @@ edgetdefaultlabel(ed, lp)
  * Fabricate a default disk label, and try to read the correct one.
  */
 static void
-edgetdisklabel(dev, ed)
-	dev_t dev;
-	struct ed_softc *ed;
+edgetdisklabel(dev_t dev, struct ed_softc *ed)
 {
 	struct disklabel *lp = ed->sc_dk.dk_label;
 	const char *errstring;
@@ -460,20 +452,15 @@ edgetdisklabel(dev, ed)
 			edmcastrategy, lp, ed->sc_dk.dk_cpulabel);
 	}
 	if (errstring) {
-		printf("%s: %s\n", ed->sc_dev.dv_xname, errstring);
+		printf("%s: %s\n", device_xname(&ed->sc_dev), errstring);
 		return;
 	}
 }
 
 int
-edmcaioctl(dev, xfer, addr, flag, l)
-	dev_t dev;
-	u_long xfer;
-	void *addr;
-	int flag;
-	struct lwp *l;
+edmcaioctl(dev_t dev, u_long xfer, void *addr, int flag, struct lwp *l)
 {
-	struct ed_softc *ed = device_lookup(&ed_cd, DISKUNIT(dev));
+	struct ed_softc *ed = device_lookup_private(&ed_cd, DISKUNIT(dev));
 	int error;
 
 	ATADEBUG_PRINT(("edioctl\n"), DEBUG_FUNCS);
@@ -580,7 +567,8 @@ edmcaioctl(dev, xfer, addr, flag, l)
 			return (EBADF);
 
 		/* If the ioctl happens here, the parent is us. */
-		strcpy(dkw->dkw_parent, ed->sc_dev.dv_xname);
+		strlcpy(dkw->dkw_parent, device_xname(&ed->sc_dev),
+			sizeof(dkw->dkw_parent));
 		return (dkwedge_add(dkw));
 	    }
 
@@ -592,7 +580,8 @@ edmcaioctl(dev, xfer, addr, flag, l)
 			return (EBADF);
 
 		/* If the ioctl happens here, the parent is us. */
-		strcpy(dkw->dkw_parent, ed->sc_dev.dv_xname);
+		strlcpy(dkw->dkw_parent, device_xname(&ed->sc_dev),
+			sizeof(dkw->dkw_parent));
 		return (dkwedge_del(dkw));
 	    }
 
@@ -613,8 +602,7 @@ edmcaioctl(dev, xfer, addr, flag, l)
 }
 
 int
-edmcasize(dev)
-	dev_t dev;
+edmcasize(dev_t dev)
 {
 	struct ed_softc *wd;
 	int part, omask;
@@ -622,7 +610,7 @@ edmcasize(dev)
 
 	ATADEBUG_PRINT(("edsize\n"), DEBUG_FUNCS);
 
-	wd = device_lookup(&ed_cd, DISKUNIT(dev));
+	wd = device_lookup_private(&ed_cd, DISKUNIT(dev));
 	if (wd == NULL)
 		return (-1);
 
@@ -650,11 +638,7 @@ static int eddumpmulti = 1;
  * Dump core after a system crash.
  */
 int
-edmcadump(dev, blkno, va, size)
-	dev_t dev;
-	daddr_t blkno;
-	void *va;
-	size_t size;
+edmcadump(dev_t dev, daddr_t blkno, void *va, size_t size)
 {
 	struct ed_softc *ed;	/* disk unit to do the I/O */
 	struct disklabel *lp;   /* disk's disklabel */
@@ -667,7 +651,7 @@ edmcadump(dev, blkno, va, size)
 		return EFAULT;
 	eddoingadump = 1;
 
-	ed = device_lookup(&ed_cd, DISKUNIT(dev));
+	ed = device_lookup_private(&ed_cd, DISKUNIT(dev));
 	if (ed == NULL)
 		return (ENXIO);
 
@@ -717,9 +701,7 @@ edmcadump(dev, blkno, va, size)
 }
 
 static int
-ed_get_params(ed, drv_flags)
-	struct ed_softc *ed;
-	int *drv_flags;
+ed_get_params(struct ed_softc *ed, int *drv_flags)
 {
 	u_int16_t cmd_args[2];
 

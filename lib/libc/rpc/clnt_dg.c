@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_dg.c,v 1.21 2007/02/19 18:37:14 chs Exp $	*/
+/*	$NetBSD: clnt_dg.c,v 1.24 2010/12/08 02:06:38 joerg Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_dg.c 1.19 89/03/16 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_dg.c,v 1.21 2007/02/19 18:37:14 chs Exp $");
+__RCSID("$NetBSD: clnt_dg.c,v 1.24 2010/12/08 02:06:38 joerg Exp $");
 #endif
 #endif
 
@@ -99,7 +99,6 @@ static void clnt_dg_destroy __P((CLIENT *));
  */
 static int	*dg_fd_locks;
 #ifdef _REENTRANT
-extern int __isthreaded;
 #define __rpc_lock_value __isthreaded;
 extern mutex_t clnt_fd_lock;
 static cond_t	*dg_cv;
@@ -107,7 +106,7 @@ static cond_t	*dg_cv;
 	mutex_lock(&clnt_fd_lock);	\
 	dg_fd_locks[fd] = 0;		\
 	mutex_unlock(&clnt_fd_lock);	\
-	thr_sigsetmask(SIG_SETMASK, &(mask), (sigset_t *) NULL);	\
+	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);	\
 	cond_signal(&dg_cv[fd]);	\
 }
 #else
@@ -175,7 +174,7 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
-	if (dg_fd_locks == (int *) NULL) {
+	if (dg_fd_locks == NULL) {
 #ifdef _REENTRANT
 		size_t cv_allocsz;
 #endif
@@ -183,8 +182,8 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 		int dtbsize = __rpc_dtbsize();
 
 		fd_allocsz = dtbsize * sizeof (int);
-		dg_fd_locks = (int *) mem_alloc(fd_allocsz);
-		if (dg_fd_locks == (int *) NULL) {
+		dg_fd_locks = mem_alloc(fd_allocsz);
+		if (dg_fd_locks == NULL) {
 			mutex_unlock(&clnt_fd_lock);
 			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 			goto err1;
@@ -193,10 +192,10 @@ clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
 
 #ifdef _REENTRANT
 		cv_allocsz = dtbsize * sizeof (cond_t);
-		dg_cv = (cond_t *) mem_alloc(cv_allocsz);
-		if (dg_cv == (cond_t *) NULL) {
+		dg_cv = mem_alloc(cv_allocsz);
+		if (dg_cv == NULL) {
 			mem_free(dg_fd_locks, fd_allocsz);
-			dg_fd_locks = (int *) NULL;
+			dg_fd_locks = NULL;
 			mutex_unlock(&clnt_fd_lock);
 			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 			goto err1;
@@ -368,7 +367,7 @@ call_again:
 	outlen = (size_t)XDR_GETPOS(xdrs);
 
 send_again:
-	if (sendto(cu->cu_fd, cu->cu_outbuf, outlen, 0,
+	if ((size_t)sendto(cu->cu_fd, cu->cu_outbuf, outlen, 0,
 	    (struct sockaddr *)(void *)&cu->cu_raddr, (socklen_t)cu->cu_rlen)
 	    != outlen) {
 		cu->cu_error.re_errno = errno;
@@ -416,7 +415,7 @@ send_again:
 				cu->cu_error.re_status = RPC_CANTRECV;
 				goto out;
 			}
-			if (recvlen >= sizeof(uint32_t) &&
+			if (recvlen >= (ssize_t)sizeof(uint32_t) &&
 			    (*((uint32_t *)(void *)(cu->cu_inbuf)) == 
 				*((uint32_t *)(void *)(cu->cu_outbuf)))) {
 				/* We now assume we have the proper reply. */

@@ -5,7 +5,7 @@
 # provided that this notice is preserved and due credit is given
 # to the original author and the contributors.
 #
-# Id: Makefile,v 2.76.2.21 2007/05/11 21:57:25 darrenr Exp
+# Id: Makefile,v 2.76.2.31 2010/01/31 16:22:53 darrenr Exp
 #
 SHELL=/bin/sh
 BINDEST=/usr/local/bin
@@ -34,6 +34,10 @@ IPFLOG=-DIPFILTER_LOG
 # To enable loading filter rules compiled to C code...
 #
 #COMPIPF=-DIPFILTER_COMPILED
+#
+# To enable IPFilter compatibility with older CLI utilities
+#
+COMPATIPF=-DIPFILTER_COMPAT
 #
 # To enable synchronisation between IPFilter hosts
 #
@@ -64,8 +68,13 @@ LOGFAC=-DLOGFAC=LOG_LOCAL0
 # By default IPFilter looks for /usr/src/linux, but you may have to change
 # it to /usr/src/linux-2.4 or similar.
 #
-LINUXKERNEL=/usr/src/linux
+LINUXKERNEL=/usr/src/kernels/2.6.29.5-191.fc11.i586
 LINUX=`uname -r | awk -F. ' { printf"%d",$$1;for(i=1;i<NF&&i<3;i++){printf("%02d",$$(i+1));}}'`
+#
+#
+#
+#BUILDROOT=/usr/src/redhat/BUILD/ipfilter
+BUILDROOT=${HOME}/rpmbuild/BUILDROOT/ipfilter-4.1.32-1.i386
 
 #
 # All of the compile-time options are here, used for compiling the userland
@@ -79,7 +88,7 @@ ALLOPTS=-DIPFILTER_LOG -DIPFILTER_LOOKUP \
 # (requires that you have installed ncurses).
 #STATETOP_CFLAGS=-DSTATETOP
 #
-# Where to find the ncurses include files (if not in default path), 
+# Where to find the ncurses include files (if not in default path),
 #
 #STATETOP_INC=
 #STATETOP_INC=-I/usr/local/include
@@ -109,6 +118,7 @@ MFLAGS1='CFLAGS=$(CFLAGS) $(ARCHINC) $(SOLARIS2) $(SGIREV) $(INET6)' \
         'STATETOP_CFLAGS=$(STATETOP_CFLAGS)' "BPFILTER=$(BPFILTER)" \
         'STATETOP_INC=$(STATETOP_INC)' 'STATETOP_LIB=$(STATETOP_LIB)' \
 	"BITS=$(BITS)" "OBJ=$(OBJ)" "LOOKUP=$(LOOKUP)" "COMPIPF=$(COMPIPF)" \
+	"COMPATIPF=$(COMPATIPF)" \
 	'SYNC=$(SYNC)' 'ALLOPTS=$(ALLOPTS)' 'LIBBPF=$(LIBBPF)'
 MFLAGS=$(MFLAGS1) "IPFLKM=$(IPFLKM)"
 MACHASSERT=`/bin/ls -1 /usr/sys/*/mach_assert.h | head -1`
@@ -131,10 +141,7 @@ all:
 	@echo "openbsd	- compile for OpenBSD"
 	@echo "freebsd20	- compile for FreeBSD 2.0, 2.1 or earlier"
 	@echo "freebsd22	- compile for FreeBSD-2.2 or greater"
-	@echo "freebsd3	- compile for FreeBSD-3.x"
-	@echo "freebsd4	- compile for FreeBSD-4.x"
-	@echo "freebsd5 - compile for FreeBSD-5.x"
-	@echo "freebsd6 - compile for FreeBSD-6.x"
+	@echo "freebsd	- compile for all other versions of FreeBSD"
 	@echo "bsd	- compile for generic 4.4BSD systems"
 	@echo "bsdi	- compile for BSD/OS"
 	@echo "irix	- compile for SGI IRIX"
@@ -151,6 +158,7 @@ retest:
 	else echo test directory not present, sorry; fi
 
 include:
+	-mkdir -p net netinet
 	if [ ! -f netinet/done ] ; then \
 		(cd netinet; ln -s ../*.h .; ln -s ../ip_*_pxy.c .;); \
 		(cd netinet; ln -s ../ipsend/tcpip.h tcpip.h); \
@@ -165,6 +173,9 @@ include:
 sunos solaris: include
 	MAKE="$(MAKE)" MAKEFLAGS="$(MAKEFLAGS)" BPFILTER=$(BPFILTER) \
 		CC="$(CC)" DEBUG="$(DEBUG)" ./buildsunos
+
+freebsd:
+	make freebsd`uname -r|cut -c1`
 
 freebsd22: include
 	make setup "TARGOS=BSD" "CPUDIR=$(CPUDIR)"
@@ -187,7 +198,7 @@ freebsd22: include
 	fi
 	make freebsd20
 
-freebsd5 freebsd6 freebsd7: include
+freebsd5 freebsd6 freebsd7 freebsd8: include
 	if [ x$(INET6) = x ] ; then \
 		echo "#undef INET6" > opt_inet6.h; \
 	else \
@@ -210,7 +221,7 @@ freebsd5 freebsd6 freebsd7: include
 
 	make setup "TARGOS=BSD" "CPUDIR=$(CPUDIR)"
 	(cd BSD/$(CPUDIR); make build TOP=../.. $(MFLAGS) "ML=mlfk_ipl.c" "MLD=mlfk_ipl.c" "LKM=ipf.ko.5" "LKMR=ipfrule.ko.5" "DLKM=-DKLD_MODULE" "MLR=mlfk_rule.o"; cd ..)
-	(cd BSD/$(CPUDIR); make -f Makefile.ipsend build TOP=../.. $(MFLAGS1); cd ..)
+#	(cd BSD/$(CPUDIR); make -f Makefile.ipsend build TOP=../.. $(MFLAGS1); cd ..)
 
 freebsd4 : include
 	if [ x$(INET6) = x ] ; then \
@@ -239,7 +250,7 @@ netbsd: include
 		exit 1; \
 	fi
 	(cd BSD/$(CPUDIR); make build TOP=../.. $(MFLAGS) 'DLKM=-D_LKM' "ML=mln_ipl.c" LKMR= "MLR=mln_rule.o"; cd ..)
-	(cd BSD/$(CPUDIR); make -f Makefile.ipsend build TOP=../.. $(MFLAGS); cd ..)
+#	(cd BSD/$(CPUDIR); make -f Makefile.ipsend build TOP=../.. $(MFLAGS); cd ..)
 
 openbsd: include
 	make setup "TARGOS=BSD" "CPUDIR=$(CPUDIR)"
@@ -350,12 +361,8 @@ sunos4 solaris1:
 	(cd SunOS4; make -f Makefile.ipsend build "CC=$(CC)" TOP=.. $(DEST) $(MFLAGS); cd ..)
 
 sunos5 solaris2: null
-	(cd SunOS5/$(CPUDIR); $(MAKE) build TOP=../.. "CC=$(CC)" $(DEST) $(MFLAGS) "SOLARIS2=$(SOLARIS2)" "CPU=-Dsparc -D__sparc__"; cd ..)
+	(cd SunOS5/$(CPUDIR); $(MAKE) build TOP=../.. "CC=$(CC)" $(DEST) $(MFLAGS) "SOLARIS2=$(SOLARIS2)"; cd ..)
 	(cd SunOS5/$(CPUDIR); $(MAKE) -f Makefile.ipsend build TOP=../.. "CC=$(CC)" $(DEST) $(MFLAGS); cd ..)
-
-sunos5x86 solaris2x86: null
-	(cd SunOS5/$(CPUDIR); make build TOP=../.. "CC=$(CC)" $(DEST) $(MFLAGS) "SOLARIS2=$(SOLARIS2)" "CPU=-Di86pc -Di386 -D__i386__"; cd ..)
-	(cd SunOS5/$(CPUDIR); make -f Makefile.ipsend build TOP=../.. "CC=$(CC)" $(DEST) $(MFLAGS); cd ..)
 
 linux: include
 	(cd Linux; make build LINUX=$(LINUX) TOP=.. "DEBUG=-g" "CC=$(CC)" $(MFLAGS) OBJ=$(CPUDIR) LINUXKERNEL=$(LINUXKERNEL); cd ..)
@@ -363,7 +370,7 @@ linux: include
 #	(cd Linux; make -f Makefile.ipsend build LINUX=$(LINUX) TOP=.. "CC=$(CC)" $(MFLAGS); cd ..)
 
 install-linux: linux
-	(cd Linux/; make LINUX=$(LINUX) TOP=.. "DEBUG=-g" "CC=$(CC)" $(MFLAGS) OBJ=$(CPUDIR) install ; cd ..)
+	(cd Linux/; make LINUX=$(LINUX) TOP=.. "DEBUG=-g" "CC=$(CC)" $(MFLAGS) OBJ=$(CPUDIR) ROOTDIR=$(BUILDROOT) install ; cd ..)
 
 install-bsd:
 	(cd BSD/$(CPUDIR); make install "TOP=../.." $(MFLAGS); cd ..)
@@ -373,7 +380,7 @@ install-sunos4: solaris
 	(cd SunOS4; $(MAKE) CPU=$(CPU) TOP=.. install)
 
 install-sunos5: solaris null
-	(cd SunOS5; $(MAKE) CPU=$(CPU) TOP=.. install)
+	(cd SunOS5; $(MAKE) TOP=.. install)
 
 install-aix:
 	(cd AIX/`AIX/cpurev`; make install "TOP=../.." $(MFLAGS); cd ..)
@@ -409,4 +416,3 @@ mdb:
 	       -DIPFILTER_SCAN -DIPFILTER_LKM -DSOLARIS2=10 -n ipf_mdb -k \
 	       -I/home/dr146992/pfil -I/home/dr146992/ipf -f \
 	       /usr/include/netinet/in_systm.h,/usr/include/sys/ethernet.h,/usr/include/netinet/in.h,/usr/include/netinet/ip.h,/usr/include/netinet/ip_var.h,/usr/include/netinet/tcp.h,/usr/include/netinet/tcpip.h,/usr/include/netinet/ip_icmp.h,/usr/include/netinet/udp.h,ip_compat.h,ip_fil.h,ip_nat.h,ip_state.h,ip_proxy.h,ip_scan.h
-

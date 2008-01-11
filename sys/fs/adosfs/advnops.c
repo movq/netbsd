@@ -1,4 +1,4 @@
-/*	$NetBSD: advnops.c,v 1.27 2008/01/02 11:48:40 ad Exp $	*/
+/*	$NetBSD: advnops.c,v 1.38 2011/05/19 03:11:55 rmind Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,11 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: advnops.c,v 1.27 2008/01/02 11:48:40 ad Exp $");
-
-#if defined(_KERNEL_OPT)
-#include "opt_quota.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: advnops.c,v 1.38 2011/05/19 03:11:55 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,28 +58,27 @@ __KERNEL_RCSID(0, "$NetBSD: advnops.c,v 1.27 2008/01/02 11:48:40 ad Exp $");
 extern struct vnodeops adosfs_vnodeops;
 
 #define	adosfs_open	genfs_nullop
-int	adosfs_getattr	__P((void *));
-int	adosfs_read	__P((void *));
-int	adosfs_write	__P((void *));
+int	adosfs_getattr(void *);
+int	adosfs_read(void *);
+int	adosfs_write(void *);
 #define	adosfs_fcntl	genfs_fcntl
 #define	adosfs_ioctl	genfs_enoioctl
 #define	adosfs_poll	genfs_poll
-int	adosfs_strategy	__P((void *));
-int	adosfs_link	__P((void *));
-int	adosfs_symlink	__P((void *));
+int	adosfs_strategy(void *);
+int	adosfs_link(void *);
+int	adosfs_symlink(void *);
 #define	adosfs_abortop	genfs_abortop
-int	adosfs_bmap	__P((void *));
-int	adosfs_print	__P((void *));
-int	adosfs_readdir	__P((void *));
-int	adosfs_access	__P((void *));
-int	adosfs_readlink	__P((void *));
-int	adosfs_inactive	__P((void *));
-int	adosfs_reclaim	__P((void *));
-int	adosfs_pathconf	__P((void *));
+int	adosfs_bmap(void *);
+int	adosfs_print(void *);
+int	adosfs_readdir(void *);
+int	adosfs_access(void *);
+int	adosfs_readlink(void *);
+int	adosfs_inactive(void *);
+int	adosfs_reclaim(void *);
+int	adosfs_pathconf(void *);
 
 #define adosfs_close 	genfs_nullop
 #define adosfs_fsync 	genfs_nullop
-#define	adosfs_lease_check	genfs_lease_check
 #define adosfs_seek 	genfs_seek
 
 #define adosfs_advlock 	genfs_einval
@@ -110,7 +105,6 @@ const struct vnodeopv_entry_desc adosfs_vnodeop_entries[] = {
 	{ &vop_setattr_desc, adosfs_setattr },		/* setattr */
 	{ &vop_read_desc, adosfs_read },		/* read */
 	{ &vop_write_desc, adosfs_write },		/* write */
-	{ &vop_lease_desc, adosfs_lease_check },	/* lease */
 	{ &vop_fcntl_desc, adosfs_fcntl },		/* fcntl */
 	{ &vop_ioctl_desc, adosfs_ioctl },		/* ioctl */
 	{ &vop_poll_desc, adosfs_poll },		/* poll */
@@ -148,8 +142,7 @@ const struct vnodeopv_desc adosfs_vnodeop_opv_desc =
 	{ &adosfs_vnodeop_p, adosfs_vnodeop_entries };
 
 int
-adosfs_getattr(v)
-	void *v;
+adosfs_getattr(void *v)
 {
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
@@ -214,8 +207,7 @@ adosfs_getattr(v)
  * deleted or changed (data block pointer blocks moving about.)
  */
 int
-adosfs_read(v)
-	void *v;
+adosfs_read(void *v)
 {
 	struct vop_read_args /* {
 		struct vnode *a_vp;
@@ -269,19 +261,14 @@ adosfs_read(v)
 		error = 0;
 
 		while (uio->uio_resid > 0) {
-			void *win;
-			int flags;
 			vsize_t bytelen = MIN(ap->fsize - uio->uio_offset,
 					      uio->uio_resid);
 
 			if (bytelen == 0) {
 				break;
 			}
-			win = ubc_alloc(&vp->v_uobj, uio->uio_offset,
-					&bytelen, advice, UBC_READ);
-			error = uiomove(win, bytelen, uio);
-			flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
-			ubc_release(win, flags);
+			error = ubc_uiomove(&vp->v_uobj, uio, bytelen, advice,
+			    UBC_READ | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp));
 			if (error) {
 				break;
 			}
@@ -307,7 +294,7 @@ adosfs_read(v)
 		 * but not much as ados makes little attempt to
 		 * make things contigous
 		 */
-		error = bread(sp->a_vp, lbn, amp->bsize, NOCRED, &bp);
+		error = bread(sp->a_vp, lbn, amp->bsize, NOCRED, 0, &bp);
 		if (error) {
 			brelse(bp, 0);
 			goto reterr;
@@ -352,10 +339,10 @@ reterr:
 }
 
 int
-adosfs_write(v)
-	void *v;
+adosfs_write(void *v)
 {
 #ifdef ADOSFS_DIAGNOSTIC
+#if 0
 	struct vop_write_args /* {
 		struct vnode *a_vp;
 		struct uio *a_uio;
@@ -363,6 +350,7 @@ adosfs_write(v)
 		kauth_cred_t a_cred;
 	} */ *sp = v;
 	advopprint(sp);
+#endif
 	printf(" EOPNOTSUPP)");
 #endif
 	return(EOPNOTSUPP);
@@ -372,8 +360,7 @@ adosfs_write(v)
  * Just call the device strategy routine
  */
 int
-adosfs_strategy(v)
-	void *v;
+adosfs_strategy(void *v)
 {
 	struct vop_strategy_args /* {
 		struct vnode *a_vp;
@@ -419,8 +406,7 @@ reterr:
 }
 
 int
-adosfs_link(v)
-	void *v;
+adosfs_link(void *v)
 {
 	struct vop_link_args /* {
 		struct vnode *a_dvp;
@@ -434,8 +420,7 @@ adosfs_link(v)
 }
 
 int
-adosfs_symlink(v)
-	void *v;
+adosfs_symlink(void *v)
 {
 	struct vop_symlink_args /* {
 		struct vnode *a_dvp;
@@ -454,8 +439,7 @@ adosfs_symlink(v)
  * Wait until the vnode has finished changing state.
  */
 int
-adosfs_bmap(v)
-	void *v;
+adosfs_bmap(void *v)
 {
 	struct vop_bmap_args /* {
 		struct vnode *a_vp;
@@ -532,7 +516,7 @@ adosfs_bmap(v)
 			goto reterr;
 		}
 		error = bread(ap->amp->devvp, nb * ap->amp->bsize / DEV_BSIZE,
-			      ap->amp->bsize, NOCRED, &flbp);
+			      ap->amp->bsize, NOCRED, 0, &flbp);
 		if (error) {
 			brelse(flbp, 0);
 			goto reterr;
@@ -585,8 +569,7 @@ reterr:
  */
 /* ARGSUSED */
 int
-adosfs_print(v)
-	void *v;
+adosfs_print(void *v)
 {
 #if 0
 	struct vop_print_args /* {
@@ -597,8 +580,7 @@ adosfs_print(v)
 }
 
 int
-adosfs_readdir(v)
-	void *v;
+adosfs_readdir(void *v)
 {
 	struct vop_readdir_args /* {
 		struct vnode *a_vp;
@@ -767,10 +749,41 @@ reterr:
 	return(error);
 }
 
+static int
+adosfs_check_possible(struct vnode *vp, struct anode *ap, mode_t mode)
+{
+
+	/*
+	 * Disallow write attempts unless the file is a socket,
+	 * fifo, or a block or character device resident on the
+	 * file system.
+	 */
+	if (mode & VWRITE) {
+		switch (vp->v_type) {
+		case VDIR:
+		case VLNK:
+		case VREG:
+			return (EROFS);
+		default:
+			break;
+		}
+	}
+
+	return 0;
+}
+
+static int
+adosfs_check_permitted(struct vnode *vp, struct anode *ap, mode_t mode,
+    kauth_cred_t cred)
+{
+
+	return genfs_can_access(vp->v_type,
+	    adunixprot(ap->adprot) & ap->amp->mask, ap->uid, ap->gid, mode,
+	    cred);
+}
 
 int
-adosfs_access(v)
-	void *v;
+adosfs_access(void *v)
 {
 	struct vop_access_args /* {
 		struct vnode *a_vp;
@@ -792,25 +805,13 @@ adosfs_access(v)
 		panic("adosfs_access: not locked");
 	}
 #endif
-	/*
-	 * Disallow write attempts unless the file is a socket,
-	 * fifo, or a block or character device resident on the
-	 * file system.
-	 */
-	if (sp->a_mode & VWRITE) {
-		switch (vp->v_type) {
-		case VDIR:
-		case VLNK:
-		case VREG:
-			return (EROFS);
-		default:
-			break;
-		}
-	}
-#ifdef QUOTA
-#endif
-	error = vaccess(sp->a_vp->v_type, adunixprot(ap->adprot) & ap->amp->mask,
-	    ap->uid, ap->gid, sp->a_mode, sp->a_cred);
+
+	error = adosfs_check_possible(vp, ap, sp->a_mode);
+	if (error)
+		return error;
+
+	error = adosfs_check_permitted(vp, ap, sp->a_mode, sp->a_cred);
+
 #ifdef ADOSFS_DIAGNOSTIC
 	printf(" %d)", error);
 #endif
@@ -818,8 +819,7 @@ adosfs_access(v)
 }
 
 int
-adosfs_readlink(v)
-	void *v;
+adosfs_readlink(void *v)
 {
 	struct vop_readlink_args /* {
 		struct vnode *a_vp;
@@ -842,8 +842,7 @@ adosfs_readlink(v)
 
 /*ARGSUSED*/
 int
-adosfs_inactive(v)
-	void *v;
+adosfs_inactive(void *v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
@@ -853,7 +852,7 @@ adosfs_inactive(v)
 #ifdef ADOSFS_DIAGNOSTIC
 	advopprint(sp);
 #endif
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	/* XXX this needs to check if file was deleted */
 	*sp->a_recycle = true;
 
@@ -868,8 +867,7 @@ adosfs_inactive(v)
  * no lock needed we are being called from vclean()
  */
 int
-adosfs_reclaim(v)
-	void *v;
+adosfs_reclaim(void *v)
 {
 	struct vop_reclaim_args /* {
 		struct vnode *a_vp;
@@ -883,7 +881,6 @@ adosfs_reclaim(v)
 	vp = sp->a_vp;
 	ap = VTOA(vp);
 	LIST_REMOVE(ap, link);
-	cache_purge(vp);
 	if (vp->v_type == VDIR && ap->tab)
 		free(ap->tab, M_ANODE);
 	else if (vp->v_type == VLNK && ap->slinkto)
@@ -900,8 +897,7 @@ adosfs_reclaim(v)
  * not valid currently
  */
 int
-adosfs_pathconf(v)
-	void *v;
+adosfs_pathconf(void *v)
 {
 	struct vop_pathconf_args /* {
 		struct vnode *a_vp;

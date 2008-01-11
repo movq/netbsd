@@ -1,7 +1,7 @@
-/*	$NetBSD: wav.c,v 1.7 2004/01/21 11:55:07 mrg Exp $	*/
+/*	$NetBSD: wav.c,v 1.9 2009/06/18 02:37:27 mrg Exp $	*/
 
 /*
- * Copyright (c) 2002 Matthew R. Green
+ * Copyright (c) 2002, 2009 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -35,7 +33,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: wav.c,v 1.7 2004/01/21 11:55:07 mrg Exp $");
+__RCSID("$NetBSD: wav.c,v 1.9 2009/06/18 02:37:27 mrg Exp $");
 #endif
 
 
@@ -49,6 +47,7 @@ __RCSID("$NetBSD: wav.c,v 1.7 2004/01/21 11:55:07 mrg Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include "libaudio.h"
 
@@ -78,6 +77,8 @@ wav_enc_from_val(int encoding)
 	return (wavencs[i].wname);
 }
 
+extern int verbose;
+
 /*
  * sample header is:
  *
@@ -103,8 +104,10 @@ audio_wav_parse_hdr(hdr, sz, enc, prec, sample, channels, datasize)
 	char	*where = hdr, *owhere;
 	wav_audioheaderpart part;
 	wav_audioheaderfmt fmt;
+	wav_audiohdrextensible ext;
 	char	*end = (((char *)hdr) + sz);
 	u_int	newenc, newprec;
+	u_int16_t fmttag;
 	static const char
 	    strfmt[4] = "fmt ",
 	    strRIFF[4] = "RIFF",
@@ -133,12 +136,23 @@ audio_wav_parse_hdr(hdr, sz, enc, prec, sample, channels, datasize)
 
 	memcpy(&fmt, (owhere + 8), sizeof fmt);
 
-	switch (getle16(fmt.tag)) {
+	fmttag = getle16(fmt.tag);
+	if (verbose)
+		printf("WAVE format tag: %x\n", fmttag);
+
+	if (fmttag == WAVE_FORMAT_EXTENSIBLE) {
+		if ((uintptr_t)(where - owhere) < sizeof(fmt) + sizeof(ext))
+			return (AUDIO_ESHORTHDR);
+		memcpy(&ext, owhere + sizeof fmt, sizeof ext);
+		if (getle16(ext.len) < sizeof(ext) - sizeof(ext.len))
+			return (AUDIO_ESHORTHDR);
+		fmttag = ext.sub_tag;
+		if (verbose)
+			printf("WAVE extensible sub tag: %x\n", fmttag);
+	}
+
+	switch (fmttag) {
 	case WAVE_FORMAT_UNKNOWN:
-	case WAVE_FORMAT_ADPCM:
-	case WAVE_FORMAT_OKI_ADPCM:
-	case WAVE_FORMAT_DIGISTD:
-	case WAVE_FORMAT_DIGIFIX:
 	case IBM_FORMAT_MULAW:
 	case IBM_FORMAT_ALAW:
 	case IBM_FORMAT_ADPCM:
@@ -146,6 +160,11 @@ audio_wav_parse_hdr(hdr, sz, enc, prec, sample, channels, datasize)
 		return (AUDIO_EWAVUNSUPP);
 
 	case WAVE_FORMAT_PCM:
+	case WAVE_FORMAT_ADPCM:
+	case WAVE_FORMAT_OKI_ADPCM:
+	case WAVE_FORMAT_IMA_ADPCM:
+	case WAVE_FORMAT_DIGIFIX:
+	case WAVE_FORMAT_DIGISTD:
 		switch (getle16(fmt.bits_per_sample)) {
 		case 8:
 			newprec = 8;

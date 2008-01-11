@@ -1,4 +1,4 @@
-/*	$NetBSD: drbbc.c,v 1.16 2006/09/07 20:59:47 mhitch Exp $ */
+/*	$NetBSD: drbbc.c,v 1.19 2010/12/20 00:25:25 matt Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drbbc.c,v 1.16 2006/09/07 20:59:47 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drbbc.c,v 1.19 2010/12/20 00:25:25 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/systm.h>
-
-#include <uvm/uvm_extern.h>
 
 #if 0
 #include <machine/psl.h>
@@ -66,8 +57,8 @@ void draco_ds_reset(void *);
 void drbbc_attach(struct device *, struct device *, void *);
 int drbbc_match(struct device *, struct cfdata *, void *);
 
-int dracougettod(todr_chip_handle_t, volatile struct timeval *);
-int dracousettod(todr_chip_handle_t, volatile struct timeval *);
+int dracougettod(todr_chip_handle_t, struct timeval *);
+int dracousettod(todr_chip_handle_t, struct timeval *);
 
 static struct todr_chip_handle dracotodr;
 struct drbbc_softc {
@@ -170,7 +161,7 @@ draco_ds_reset(void *p)
 }
 
 int
-dracougettod(todr_chip_handle_t h, volatile struct timeval *tvp)
+dracougettod(todr_chip_handle_t h, struct timeval *tvp)
 {
 	u_int32_t clkbuf;
 	u_int32_t usecs;
@@ -201,7 +192,7 @@ dracougettod(todr_chip_handle_t h, volatile struct timeval *tvp)
 }
 
 int
-dracousettod(todr_chip_handle_t h, volatile struct timeval *tvp)
+dracousettod(todr_chip_handle_t h, struct timeval *tvp)
 {
 	return (ENXIO);
 }

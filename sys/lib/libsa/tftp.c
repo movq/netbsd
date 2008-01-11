@@ -1,4 +1,4 @@
-/*	$NetBSD: tftp.c,v 1.24 2007/12/02 04:59:26 tsutsui Exp $	 */
+/*	$NetBSD: tftp.c,v 1.31 2011/05/11 16:23:40 zoltan Exp $	 */
 
 /*
  * Copyright (c) 1996
@@ -73,7 +73,7 @@ struct tftp_handle {
 	int             off;
 	const char     *path;	/* saved for re-requests */
 	struct {
-		u_char header[HEADER_SIZE];
+		u_char header[UDP_TOTAL_HEADER_SIZE];
 		struct tftphdr t;
 		u_char space[RSPACE];
 	} lastdata;
@@ -90,15 +90,16 @@ static const int tftperrors[8] = {
 	EINVAL,			/* ??? */
 };
 
-static ssize_t recvtftp __P((struct iodesc *, void *, size_t, time_t));
-static int tftp_makereq __P((struct tftp_handle *));
-static int tftp_getnextblock __P((struct tftp_handle *));
+static ssize_t recvtftp(struct iodesc *, void *, size_t, saseconds_t);
+static int tftp_makereq(struct tftp_handle *);
+static int tftp_getnextblock(struct tftp_handle *);
 #ifndef TFTP_NOTERMINATE
-static void tftp_terminate __P((struct tftp_handle *));
+static void tftp_terminate(struct tftp_handle *);
 #endif
+static ssize_t tftp_size_of_file(struct tftp_handle *tftpfile);
 
 static ssize_t
-recvtftp(struct iodesc *d, void *pkt, size_t len, time_t tleft)
+recvtftp(struct iodesc *d, void *pkt, size_t len, saseconds_t tleft)
 {
 	ssize_t n;
 	struct tftphdr *t;
@@ -152,7 +153,7 @@ static int
 tftp_makereq(struct tftp_handle *h)
 {
 	struct {
-		u_char header[HEADER_SIZE];
+		u_char header[UDP_TOTAL_HEADER_SIZE];
 		struct tftphdr t;
 		u_char space[FNAME_SIZE + 6];
 	} wbuf;
@@ -164,9 +165,9 @@ tftp_makereq(struct tftp_handle *h)
 	wbuf.t.th_opcode = htons((u_short)RRQ);
 	wtail = wbuf.t.th_stuff;
 	l = strlen(h->path);
-	bcopy(h->path, wtail, l + 1);
+	(void)memcpy(wtail, h->path, l + 1);
 	wtail += l + 1;
-	bcopy("octet", wtail, 6);
+	(void)memcpy(wtail, "octet", 6);
 	wtail += 6;
 
 	t = &h->lastdata.t;
@@ -195,7 +196,7 @@ static int
 tftp_getnextblock(struct tftp_handle *h)
 {
 	struct {
-		u_char header[HEADER_SIZE];
+		u_char header[UDP_TOTAL_HEADER_SIZE];
 		struct tftphdr t;
 	} wbuf;
 	char           *wtail;
@@ -228,19 +229,20 @@ static void
 tftp_terminate(struct tftp_handle *h)
 {
 	struct {
-		u_char header[HEADER_SIZE];
+		u_char header[UDP_TOTAL_HEADER_SIZE];
 		struct tftphdr t;
 	} wbuf;
 	char           *wtail;
 
+	wtail = (char *)&wbuf.t.th_data;
 	if (h->islastblock) {
 		wbuf.t.th_opcode = htons((u_short)ACK);
 		wbuf.t.th_block = htons((u_short)h->currblock);
 	} else {
 		wbuf.t.th_opcode = htons((u_short)ERROR);
 		wbuf.t.th_code = htons((u_short)ENOSPACE); /* ??? */
+		*wtail++ = '\0'; /* empty error string */
 	}
-	wtail = (char *)&wbuf.t.th_data;
 
 	(void)sendudp(h->iodesc, &wbuf.t, wtail - (char *)&wbuf.t);
 }
@@ -269,6 +271,7 @@ tftp_open(const char *path, struct open_file *f)
 		return res;
 	}
 	f->f_fsdata = (void *)tftpfile;
+	fsmod = "nfs";
 	return 0;
 }
 
@@ -320,17 +323,18 @@ tftp_read(struct open_file *f, void *addr, size_t size, size_t *resid)
 
 			offinblock = tftpfile->off % SEGSIZE;
 
-			inbuffer = tftpfile->validsize - offinblock;
-			if (inbuffer < 0) {
+			if (offinblock > tftpfile->validsize) {
 #ifdef DEBUG
 				printf("tftp: invalid offset %d\n",
 				    tftpfile->off);
 #endif
 				return EINVAL;
 			}
+			inbuffer = tftpfile->validsize - offinblock;
 			count = (size < inbuffer ? size : inbuffer);
-			bcopy(tftpfile->lastdata.t.th_data + offinblock,
-			    addr, count);
+			(void)memcpy(addr,
+			    tftpfile->lastdata.t.th_data + offinblock,
+			    count);
 
 			addr = (char *)addr + count;
 			tftpfile->off += count;
@@ -375,6 +379,42 @@ tftp_write(struct open_file *f, void *start, size_t size, size_t *resid)
 	return EROFS;
 }
 
+static ssize_t 
+tftp_size_of_file(struct tftp_handle *tftpfile)
+{
+	ssize_t filesize;
+
+	if (tftpfile->currblock > 1) {	/* move to start of file */
+#ifndef TFTP_NOTERMINATE
+		tftp_terminate(tftpfile);
+#endif
+		tftp_makereq(tftpfile);	/* no error check, it worked
+		      			 * for open */
+	}
+
+	/* start with the size of block 1 */
+	filesize = tftpfile->validsize;
+
+	/* and keep adding the sizes till we hit the last block */
+	while (!tftpfile->islastblock) {
+		int res;
+
+		res = tftp_getnextblock(tftpfile);
+		if (res) {	/* no answer */
+#ifdef DEBUG
+			printf("tftp: read error (block %d)\n",
+					tftpfile->currblock);
+#endif
+			return -1;
+		}
+		filesize += tftpfile->validsize;
+	}
+#ifdef DEBUG
+	printf("tftp_size_of_file: file is %d bytes\n", filesize);
+#endif
+	return filesize;
+}
+
 int
 tftp_stat(struct open_file *f, struct stat *sb)
 {
@@ -385,7 +425,7 @@ tftp_stat(struct open_file *f, struct stat *sb)
 	sb->st_nlink = 1;
 	sb->st_uid = 0;
 	sb->st_gid = 0;
-	sb->st_size = -1;
+	sb->st_size = tftp_size_of_file(tftpfile);
 	return 0;
 }
 

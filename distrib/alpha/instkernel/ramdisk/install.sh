@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: install.sh,v 1.4 2004/04/23 02:48:12 simonb Exp $
+# $NetBSD: install.sh,v 1.6 2009/09/20 22:44:06 abs Exp $
 #
 # Copyright (c) 1997 Perry E. Metzger
 # Copyright (c) 1994 Christopher G. Demetriou
@@ -176,7 +176,7 @@ echo -n "View the boot messages again? [n] "
 getresp "n"
 case "$resp" in
 	y*|Y*)
-		more /kern/msgbuf
+		dmesg | more
 		;;
 	*)
 		echo	""
@@ -303,7 +303,7 @@ echo	""
 fragsize=1024
 blocksize=8192
 
-cat /etc/disktab.preinstall > $DT
+echo "# $DT" > $DT
 echo	"" >> $DT
 echo	"$labelname|NetBSD installation generated:\\" >> $DT
 echo	"	:dt=${type}:ty=winchester:\\" >> $DT

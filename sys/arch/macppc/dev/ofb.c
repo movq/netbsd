@@ -1,4 +1,4 @@
-/*	$NetBSD: ofb.c,v 1.63 2007/11/26 19:58:29 garbled Exp $	*/
+/*	$NetBSD: ofb.c,v 1.65 2010/12/20 00:25:37 matt Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.63 2007/11/26 19:58:29 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.65 2010/12/20 00:25:37 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -40,8 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofb.c,v 1.63 2007/11/26 19:58:29 garbled Exp $");
 #include <sys/systm.h>
 #include <sys/kauth.h>
 #include <sys/lwp.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
@@ -319,7 +317,6 @@ ofb_mmap(void *v, void *vs, off_t offset, int prot)
 	struct ofb_softc *sc = vd->cookie;
 	struct rasops_info *ri;
 	u_int32_t *ap = sc->sc_addrs;
-	struct lwp *me;
 	int i;
 
 	if (vd->active == NULL) {
@@ -338,13 +335,10 @@ ofb_mmap(void *v, void *vs, off_t offset, int prot)
 	 * restrict all other mappings to processes with superuser privileges
 	 * or the kernel itself
 	 */
-	me = curlwp;
-	if (me != NULL) {
-		if (kauth_authorize_generic(me->l_cred, KAUTH_GENERIC_ISSUSER,
-		    NULL) != 0) {
-			printf("%s: mmap() rejected.\n", sc->sc_dev.dv_xname);
-			return -1;
-		}
+	if (kauth_authorize_generic(kauth_cred_get(), KAUTH_GENERIC_ISSUSER,
+	    NULL) != 0) {
+		printf("%s: mmap() rejected.\n", sc->sc_dev.dv_xname);
+		return -1;
 	}
 
 	/* let them mmap() 0xa0000 - 0xbffff if it's not covered above */

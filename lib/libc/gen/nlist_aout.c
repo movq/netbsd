@@ -1,4 +1,4 @@
-/* $NetBSD: nlist_aout.c,v 1.16 2006/11/08 23:27:32 christos Exp $ */
+/* $NetBSD: nlist_aout.c,v 1.22 2009/08/20 11:08:59 martin Exp $ */
 
 /*
  * Copyright (c) 1989, 1993
@@ -66,7 +66,7 @@
 #if 0
 static char sccsid[] = "@(#)nlist.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: nlist_aout.c,v 1.16 2006/11/08 23:27:32 christos Exp $");
+__RCSID("$NetBSD: nlist_aout.c,v 1.22 2009/08/20 11:08:59 martin Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -82,11 +82,14 @@ __RCSID("$NetBSD: nlist_aout.c,v 1.16 2006/11/08 23:27:32 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <a.out.h>			/* for 'struct nlist' declaration */
 
+struct nlist;
 #include "nlist_private.h"
 
 #ifdef NLIST_AOUT
+#include <a.out.h>
+#include <sys/exec_aout.h>
+
 int
 __fdnlist_aout(fd, list)
 	int fd;
@@ -114,7 +117,7 @@ __fdnlist_aout(fd, list)
 	stroff = symoff + symsize;
 
 	/* Check for files too large to mmap. */
-	if (st.st_size - stroff > SIZE_T_MAX) {
+	if ((uintmax_t)(st.st_size - stroff) > (uintmax_t)SIZE_T_MAX) {
 		errno = EFBIG;
 		return (-1);
 	}

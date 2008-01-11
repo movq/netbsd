@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_init.c,v 1.31 2008/01/02 11:49:17 ad Exp $	*/
+/*	$NetBSD: uvm_init.c,v 1.41 2011/04/24 03:56:50 rmind Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.31 2008/01/02 11:49:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.41 2011/04/24 03:56:50 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,9 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.31 2008/01/02 11:49:17 ad Exp $");
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/resourcevar.h>
+#include <sys/kmem.h>
 #include <sys/mman.h>
-#include <sys/proc.h>
-#include <sys/malloc.h>
 #include <sys/vnode.h>
 
 #include <uvm/uvm.h>
@@ -65,11 +57,16 @@ struct uvm uvm;		/* decl */
 struct uvmexp uvmexp;	/* decl */
 struct uvm_object *uvm_kernel_object;
 
+#if defined(__uvmexp_pagesize)
+int *uvmexp_pagesize = &uvmexp.pagesize;
+int *uvmexp_pagemask = &uvmexp.pagemask;
+int *uvmexp_pageshift = &uvmexp.pageshift;
+#endif
+
 kmutex_t uvm_pageqlock;
 kmutex_t uvm_fpageqlock;
 kmutex_t uvm_kentry_lock;
 kmutex_t uvm_swap_data_lock;
-kmutex_t uvm_scheduler_mutex;
 
 /*
  * uvm_init: init the VM system.   called from kern/init_main.c.
@@ -147,24 +144,6 @@ uvm_init(void)
 	uvm_pager_init();
 
 	/*
-	 * step 8: init the uvm_loan() facility.
-	 */
-
-	uvm_loan_init();
-
-	/*
-	 * the VM system is now up!  now that malloc is up we can resize the
-	 * <obj,off> => <page> hash table for general use and enable paging
-	 * of kernel objects.
-	 */
-
-	uvm_page_rehash();
-	uao_create(VM_MAX_KERNEL_ADDRESS - VM_MIN_KERNEL_ADDRESS,
-	    UAO_FLAG_KERNSWAP);
-
-	uvmpdpol_reinit();
-
-	/*
 	 * Initialize pools.  This must be done before anyone manipulates
 	 * any vm_maps because we use a pool for some map entry structures.
 	 */
@@ -172,10 +151,41 @@ uvm_init(void)
 	pool_subsystem_init();
 
 	/*
+	 * init slab memory allocator kmem(9).
+	 */
+
+	kmem_init();
+
+	/*
+	 * Initialize the uvm_loan() facility.
+	 */
+
+	uvm_loan_init();
+
+	/*
+	 * init emap subsystem.
+	 */
+
+	uvm_emap_sysinit();
+
+	/*
+	 * the VM system is now up!  now that kmem is up we can resize the
+	 * <obj,off> => <page> hash table for general use and enable paging
+	 * of kernel objects.
+	 */
+
+	uao_create(VM_MAX_KERNEL_ADDRESS - VM_MIN_KERNEL_ADDRESS,
+	    UAO_FLAG_KERNSWAP);
+
+	uvmpdpol_reinit();
+
+	/*
 	 * init anonymous memory systems
 	 */
 
 	uvm_anon_init();
+
+	uvm_uarea_init();
 
 	/*
 	 * init readahead module

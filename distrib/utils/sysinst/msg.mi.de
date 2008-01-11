@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.de,v 1.41 2007/11/12 15:07:33 jmmv Exp $	*/
+/*	$NetBSD: msg.mi.de,v 1.57 2011/04/17 12:33:42 martin Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -42,8 +38,15 @@ message usage
 {Aufruf: sysinst [-r Release] [-f Definitionsdatei]
 }
 
+/*
+ * We can not use non ascii characters in this message - it is displayed
+ * before the locale is set up!
+ */
 message sysinst_message_language
 {Installation auf Deutsch}
+
+message sysinst_message_locale
+{de_DE.ISO8859-15}
 
 message Yes {Ja}
 message No {Nein}
@@ -73,12 +76,12 @@ oder aber eine bereits bestehende Installation von NetBSD zu aktualisieren.
 In den folgenden Menüs können Sie mit den Buchstaben (a, b, c, ...)
 die verschiedenen Menüeinträge wählen oder durch Drücken von Strg-N/Strg-P
 die Markierung auf- oder abbewegen. Die Cursor- und Bildlauftasten
-(Seite vor/zurück) sollten ebenfalls funktionieren. 
+(Seite vor/zurück) sollten ebenfalls funktionieren.
 Durch Betätigen der Eingabetaste aktivieren Sie die gegenwärtige Auswahl.
 }
 
 message thanks
-{Danke, daß Sie NetBSD benutzen!
+{Danke, dass Sie NetBSD benutzen!
 }
 
 message installusure
@@ -100,7 +103,7 @@ Wollen Sie fortfahren?
 
 message upgradeusure
 {Sie möchten das auf der Festplatte befindliche NetBSD-System aktualisieren.
-Zu diesem Zeitpunkt sollten Sie bereits eine vollständige 
+Zu diesem Zeitpunkt sollten Sie bereits eine vollständige
 Datensicherung durchgeführt haben! Wollen Sie NetBSD wirklich aktualisieren?
 (Dies ist die letzte Warnung, bevor Ihre Festplatte(n) modifiziert werden.)
 }
@@ -128,8 +131,8 @@ Zurück zum Hauptmenü...
 }
 
 message onedisk
-{Ich habe nur eine Festplatte, %s, gefunden. Ich gehe somit davon aus, daß
-Sie NetBSD darauf %s möchten. 
+{Ich habe nur eine Festplatte, %s, gefunden. Ich gehe somit davon aus, dass
+Sie NetBSD darauf %s möchten.
 }
 
 message ask_disk
@@ -188,7 +191,7 @@ Wählen Sie Ihre Einheit.}
 
 message ptnsizes
 {Sie können jetzt die Größen der Systempartitionen verändern. Standardmäßig
-wird der gesamte Speicherplatz der Rootpartition zugeordnet. Wenn Sie 
+wird der gesamte Speicherplatz der Rootpartition zugeordnet. Wenn Sie
 wollen, können Sie separate Partitionen definieren, z.B. /usr (zusätzliche
 Systemdateien), /var (Log- bzw. Protokolldateien und anderes) oder /home
 (Verzeichnis für die persönlichen Dateien der Anwender).
@@ -227,20 +230,26 @@ message fssizesok
 {Akzeptieren. Freier Speicherplatz: %d %s, %d freie Partitionen.}
 
 message fssizesbad
-{Reduzieren der Partitionsgrößen um %d %s (%d Sektoren).}
+{Reduzieren der Partitionsgrößen um %d %s (%u Sektoren).}
 
 message startoutsidedisk
 {Der Startwert, den Sie angegeben haben, liegt jenseits des Endes der
-Festplatte. 
+Festplatte.
 }
 
 message endoutsidedisk
 {Mit diesem Wert liegt das Ende der Partition jenseits des Endes der
-Festplatte. 
+Festplatte.
 Die Größe Ihrer Partition wurde auf %d %s verringert.
 
 Drücken Sie die Eingabetaste um fortzufahren.
 }
+
+message toobigdisklabel
+{
+Diese Platte ist zu groß für eine
+disklabel-Partitionstabelle und kann deswegen weder für
+boot- noch für root-Partitionen benutzt werden}
 
 message fspart
 {Nachfolgend sehen Sie Ihre BSD-Disklabel-Partitionen:
@@ -254,7 +263,7 @@ message fspart_header
 }
 
 message fspart_row
-{%9d %9d %10d %-10s %-5s %-5s %s}
+{%9lu %9lu %10lu %-10s %-5s %-5s %s}
 
 message show_all_unused_partitions
 {Alle unbenutzten Partitionen anzeigen}
@@ -264,7 +273,7 @@ message partition_sizes_ok
 
 message edfspart
 {Die gegenwärtigen Werte für die Partition '%c' werden unten angezeigt.
-Wählen Sie das Feld, das Sie ändern möchten: 
+Wählen Sie das Feld, das Sie ändern möchten:
 
                           MB  Zylinder  Sektoren
 	             ------- --------- ---------
@@ -355,14 +364,14 @@ Möchten Sie fortfahren?
 }
 
 message disksetupdone
-{Der erste Teil der Installation ist nun abgeschlossen. 
+{Der erste Teil der Installation ist nun abgeschlossen.
 Sysinst hat das von Ihnen gewählte Ziellaufwerk partitioniert und
 auf allen von Ihnen gewählten Partitionen ein Dateisystem initialisiert
 und geprüft.
 }
 
 message disksetupdoneupdate
-{Der erste Teil der Prozedur ist nun abgeschlossen. 
+{Der erste Teil der Prozedur ist nun abgeschlossen.
 Sysinst hat das von Ihnen gewählte Ziellaufwerk partitioniert und
 und alle gewählten Dateisysteme auf Fehler überprüft.
 }
@@ -414,15 +423,15 @@ beendet.
 Sie sollten nun die Anweisungen im INSTALL Dokument beachten, um
 Ihr System Ihrer Konfiguration entsprechend einzurichten. Die afterboot(8)
 Manpage kann ebenfalls nützlich sein.
-  
+
 Zumindest müssen Sie die Datei rc.conf editieren, so daß die gewünschten
 Dienste gestartet werden. Vergessen Sie nicht, rc_configured=NO auf
-rc_configured=YES umzustellen. 
+rc_configured=YES umzustellen.
 }
 
 message distmedium
 {Ihre Festplatte ist nun bereit für die Installation der Kernel- und
-Distributionspakete. Wie im INSTALL-Dokument beschrieben, haben Sie nun 
+Distributionspakete. Wie im INSTALL-Dokument beschrieben, haben Sie nun
 mehrere Optionen.
 Für FTP oder NFS müssen Sie mit einem Netzwerk verbunden sein und
 Zugriff auf die entsprechenden Server haben.
@@ -473,6 +482,16 @@ die Distribution zu finden ist.
 
 }
 
+message Available_cds
+{Verfügbare CDs}
+
+message ask_cd
+{Es wurden mehrere CDs gefunden. Bitte wählen Sie die Installations CD aus.}
+
+message cd_path_not_found
+{Die Installationsdateien wurden auf der ausgewählten CD nicht gefunden. Bitte
+prüfen Sie den Gerätenamen und Pfad der Installationsdateien.}
+
 message localfssource
 {Geben Sie das noch nicht gemountete lokale Gerät und dessen entsprechendes
 Verzeichnis an, in dem die Distribution zu finden ist.
@@ -496,7 +515,7 @@ Zurück zum vorigen Menü.
 }
 
 message netup
-{Die folgenden Netzwerkadapter sind verfügbar: %s 
+{Die folgenden Netzwerkadapter sind verfügbar: %s
 Hat einer davon Zugriff auf die benötigten Server?}
 
 message asknetdev
@@ -505,7 +524,7 @@ message asknetdev
 
 message badnet
 {Sie haben keinen der angezeigten Netzwerkadapter ausgewählt. Bitte versuchen
-Sie es erneut. 
+Sie es erneut.
 NetBSD hat folgende Netzwerkadapter gefunden: %s
 \nWelchen möchten Sie benutzen?}
 
@@ -603,12 +622,6 @@ message realdir
 message delete_xfer_file
 {Nach der Installation löschen}
 
-message verboseextract
-{
-Im nächsten Schritt werden nun die Distributionssets (Basissystem + Kernel)
-geladen und auf die Festplatte kopiert.
-}
-
 message notarfile
 {Das Release-Paket %s existiert nicht.}
 
@@ -670,7 +683,7 @@ Bitte korrigieren Sie dies, bevor Sie fortfahren.
 
 Eine Möglichkeit ist es, im Extras-Menü eine Shell zu starten,
 wodurch Sie /usr/X11R6/bin/X.old überprüfen können. Gehört diese Datei zu
-einer früheren Aktualisierung, so können Sie diese mit rm -f 
+einer früheren Aktualisierung, so können Sie diese mit rm -f
 /usr/X11R6/bin/x.old löschen und danach die Aktualisierung neu starten.
 Gehört die Datei /usr/X11R6/bin/X.old aber zu einer aktuellen,
 abgebrochenen Aktualisierung, so können Sie die Datei /usr/X11R6/bin/X mit
@@ -709,7 +722,7 @@ message rootmissing
 
 message badroot
 {Das neu installierte root Dateisystem scheint unvollständig zu sein.
-Sind Sie sicher, daß Sie alle benötigten Sets installiert haben? 
+Sind Sie sicher, dass Sie alle benötigten Sets installiert haben?
 }
 
 message fd_type
@@ -737,7 +750,7 @@ message fdmount
 {Bitte legen Sie die Diskette ein, auf der sich die Datei "%s.%s" befindet. }
 
 message fdnotfound
-{Ich konnte die Datei "%s.%s" nicht finden. Bitte legen Sie die entsprechende 
+{Ich konnte die Datei "%s.%s" nicht finden. Bitte legen Sie die entsprechende
 Diskette ein.
 Wenn dies die letzte Diskette des Paketes war, wählen Sie "Paket fertig",
 um zum nächsten Paket überzugehen - falls ein weiteres Paket folgt.}
@@ -745,7 +758,7 @@ um zum nächsten Paket überzugehen - falls ein weiteres Paket folgt.}
 message fdremount
 {Die Diskette konnte nicht gemountet werden.
 
-Sie sollten: 
+Sie sollten:
 
 Erneut probieren, die Diskette mit der Datei "%s.%s" einzulegen.
 
@@ -789,8 +802,11 @@ message set_man_pages
 message set_misc
 {Verschiedenes}
 
+message set_modules
+{Kernel Modules}
+
 message set_tests
-{Test programs}
+{Testprogramme}
 
 message set_text_tools
 {Textbearbeitung}
@@ -826,7 +842,7 @@ message install_selected_sets
 {Installieren der ausgewählten Pakete}
 
 message tarerror
-{Beim Extrahieren der Datei %s ist ein Fehler aufgetreten. Das bedeutet, daß
+{Beim Extrahieren der Datei %s ist ein Fehler aufgetreten. Das bedeutet, dass
 nicht alle Dateien korrekt extrahiert wurden und Ihr System somit nicht
 vollständig sein wird.
 
@@ -837,6 +853,13 @@ message must_be_one_root
 
 message partitions_overlap
 {Die Partitionen %c und %c überlappen sich.}
+
+message No_Bootcode
+{Kein Bootcode für die Rootpartition vorhanden}
+
+message cannot_ufs2_root
+{Leider existiert für diese Maschine kein Bootloader für FFSv2 Dateisysteme,
+daher kann das Root-Dateisystem nicht im FFSv2 Format angelegt werden.}
 
 message edit_partitions_again
 {
@@ -855,29 +878,13 @@ message choose_timezone
 Drücken Sie die Eingabetaste, um einen Eintrag anzuwählen. Betätigen Sie danach
 die Taste 'x' gefolgt von der Eingabetaste, um das Menü zu verlassen.
 
- Vorgabe:	%s 
- Ausgewählt:	%s 
+ Vorgabe:	%s
+ Ausgewählt:	%s
  Lokale Zeit:	%s %s
 }
 
 message tz_back
 { Zurück zum Zeitzonenmenü.}
-
-message choose_crypt
-{Bitte wählen Sie den gewünschten Ver-/Entschlüsselungsalgorithmus (Cipher)
-für Benutzerpassworte. NetBSD kann DES, MD5 oder Blowfish benutzen.
-
-Das traditionelle DES-System ist mit den meisten anderen UNIX-ähnlichen
-Betriebssystemen kompatibel, allerdings werden nur die ersten 8 Zeichen eines
-jeden Passworts berücksichtigt. Das MD5 und Blowfish System erlaubt längere
-Passwörter, was unter Umständen als sicherer interpretiert werden kann.
-
-Wenn Sie ein Netzwerk haben und planen, NIS zu nutzen, berücksichtigen
-Sie hier bitte auch die Möglichkeiten der anderen Maschinen im Netzwerk.
-
-Wenn Sie NetBSD aktualisieren und die bestehende Konfiguration nicht
-verändern möchten, so wählen Sie "Beibehalten".
-}
 
 message swapactive
 {Das Laufwerk, das Sie ausgewählt haben, verfügt über eine Swappartition, die
@@ -927,6 +934,7 @@ message Upgrade_NetBSD_on_a_hard_disk {Aktualisierung einer bestehenden NetBSD-I
 message Re_install_sets_or_install_additional_sets {Erneute Installation oder zusätzliche Pakete installieren}
 message Reboot_the_computer {Computer neu starten}
 message Utility_menu {Extras}
+message exit_utility_menu {Zurück zum Hauptmenü}
 message NetBSD_VERSION_Utilities {NetBSD-@@VERSION@@ Extras}
 message Run_bin_sh {Ausführen von /bin/sh}
 message Set_timezone {Setzen der Zeitzone}
@@ -952,6 +960,7 @@ message local_fs {Ungemountetes Dateisysytem}
 message local_dir {Lokales Verzeichnis}
 message Select_your_distribution {Wählen Sie Ihre Pakete}
 message Full_installation {Volle Installation}
+message Full_installation_nox {Grundinstallation ohne X11}
 message Minimal_installation {Minimale Installation}
 message Custom_installation {Benutzerdefinierte Installation}
 message hidden {** versteckt **}
@@ -971,11 +980,6 @@ message Skip_set {Paket überspringen}
 message Skip_group {Paketgruppe überspringen}
 message Abandon {Installation abbrechen}
 message Abort_fetch {Holen abbrechen}
-message Password_cipher {Passwort Verschlüsselungsverfahren}
-message DES {DES}
-message MD5 {MD5}
-message Blowfish_2_7_round {Blowfish mit 2^7 Wiederholungen}
-message do_not_change {Beibehalten}
 message Device {Gerät}
 message File_system {Dateisystem}
 message Select_IPv6_DNS_server {  Auswählen eines IPv6 DNS Servers}
@@ -983,16 +987,12 @@ message other {andere }
 message Perform_IPv6_autoconfiguration {IPv6 automatisch konfigurieren?}
 message Perform_DHCP_autoconfiguration {Konfiguration per DHCP ermitteln?}
 message Root_shell {Root-Shell}
-message Select_set_extraction_verbosity {Bitte wählen Sie die Fortschrittsanzeige während des Extrahierens}
-message Progress_bar {Fortschrittsbalken (empfohlen)}
-message Silent {Keine (schnell)}
-message Verbose {Alle installierten Dateien anzeigen (langsam))}
 
 .if AOUT2ELF
 message aoutfail
 {Das Verzeichnis, in das die alten a.out-Bibliotheken gesichert
 werden sollten, konnte nicht erstellt werden. Bitte starten Sie
-die Aktualisierung erneut und stellen Sie sicher, daß alle Dateisysteme
+die Aktualisierung erneut und stellen Sie sicher, dass alle Dateisysteme
 gemountet sind.}
 
 message emulbackup
@@ -1008,8 +1008,15 @@ message oldsendmail
 {Sendmail ist nicht länger integrierter Bestandteil von NetBSD.
 Der Standard MTA ist nun Postfix. Ihr System benutzt derzeit
 eine Konfiguration in /etc/mailer.conf, die auf das nicht mehr
-vorhandene Sendmail-Programm verweist. 
+vorhandene Sendmail-Programm verweist.
 Möchten Sie /etc/mailer.conf automatisch auf eine Version für
 Postfix umstellen? Falls Sie "Nein" wählen, müssen Sie anschließend
 manuell /etc/mailer.conf korrigieren, um funktionierende Mailauslieferung
 zu gewährleisten.}
+
+message license
+{Um den Netzwerkadapter %s zu benutzen müssen Sie der Lizenz in
+der Datei %s zustimmen.
+Um den Lizenztext zu lesen, geben Sie ^Z ein, schauen den Inhalt
+der Datei an und kehren mit dem Befehl "fg" zu sysinst zurück.}
+

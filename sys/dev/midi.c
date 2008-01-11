@@ -1,4 +1,4 @@
-/*	$NetBSD: midi.c,v 1.59 2007/12/16 19:01:35 christos Exp $	*/
+/*	$NetBSD: midi.c,v 1.72 2010/07/27 14:34:33 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: midi.c,v 1.59 2007/12/16 19:01:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: midi.c,v 1.72 2010/07/27 14:34:33 jakllsch Exp $");
 
 #include "midi.h"
 #include "sequencer.h"
@@ -59,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: midi.c,v 1.59 2007/12/16 19:01:35 christos Exp $");
 #include <sys/conf.h>
 #include <sys/audioio.h>
 #include <sys/midiio.h>
+#include <sys/device.h>
 #include <sys/intr.h>
 
 #include <dev/audio_if.h>
@@ -106,10 +100,10 @@ void	midi_rcv_asense(void *);
 void	midi_softintr_rd(void *);
 void	midi_softintr_wr(void *);
 
-int	midiprobe(struct device *, struct cfdata *, void *);
-void	midiattach(struct device *, struct device *, void *);
-int	mididetach(struct device *, int);
-int	midiactivate(struct device *, enum devact);
+int	midiprobe(device_t, cfdata_t, void *);
+void	midiattach(device_t, device_t, void *);
+int	mididetach(device_t, int);
+int	midiactivate(device_t, enum devact);
 
 dev_type_open(midiopen);
 dev_type_close(midiclose);
@@ -124,7 +118,7 @@ const struct cdevsw midi_cdevsw = {
 	nostop, notty, midipoll, nommap, midikqfilter, D_OTHER,
 };
 
-CFATTACH_DECL(midi, sizeof(struct midi_softc),
+CFATTACH_DECL_NEW(midi, sizeof(struct midi_softc),
     midiprobe, midiattach, mididetach, midiactivate);
 
 #define MIDI_XMT_ASENSE_PERIOD mstohz(275)
@@ -133,8 +127,7 @@ CFATTACH_DECL(midi, sizeof(struct midi_softc),
 extern struct cfdriver midi_cd;
 
 int
-midiprobe(struct device *parent, struct cfdata *match,
-    void *aux)
+midiprobe(device_t parent, cfdata_t match, void *aux)
 {
 	struct audio_attach_args *sa = aux;
 
@@ -144,9 +137,9 @@ midiprobe(struct device *parent, struct cfdata *match,
 }
 
 void
-midiattach(struct device *parent, struct device *self, void *aux)
+midiattach(device_t parent, device_t self, void *aux)
 {
-	struct midi_softc *sc = (void *)self;
+	struct midi_softc *sc = device_private(self);
 	struct audio_attach_args *sa = aux;
 	const struct midi_hw_if *hwp = sa->hwif;
 	void *hdlp = sa->hdl;
@@ -166,6 +159,7 @@ midiattach(struct device *parent, struct device *self, void *aux)
 	}
 #endif
 
+	sc->dev = self;
 	sc->hw_if = hwp;
 	sc->hw_hdl = hdlp;
 	midi_attach(sc, parent);
@@ -176,28 +170,26 @@ midiattach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-midiactivate(struct device *self, enum devact act)
+midiactivate(device_t self, enum devact act)
 {
-	struct midi_softc *sc = (struct midi_softc *)self;
+	struct midi_softc *sc = device_private(self);
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
 	case DVACT_DEACTIVATE:
 		sc->dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (0);
 }
 
 int
-mididetach(struct device *self, int flags)
+mididetach(device_t self, int flags)
 {
-	struct midi_softc *sc = (struct midi_softc *)self;
+	struct midi_softc *sc = device_private(self);
 	int maj, mn;
 
-	DPRINTFN(2,("midi_detach: sc=%p flags=%d\n", sc, flags));
+	DPRINTFN(2,("%s: sc=%p flags=%d\n", __func__, sc, flags));
 
 	pmf_device_deregister(self);
 
@@ -235,7 +227,7 @@ mididetach(struct device *self, int flags)
 }
 
 void
-midi_attach(struct midi_softc *sc, struct device *parent)
+midi_attach(struct midi_softc *sc, device_t parent)
 {
 	struct midi_info mi;
 	int s;
@@ -267,23 +259,21 @@ midi_attach(struct midi_softc *sc, struct device *parent)
 	if ( !(sc->props & MIDI_PROP_NO_OUTPUT) ) {
 		evcnt_attach_dynamic(&sc->xmt.bytesDiscarded,
 			EVCNT_TYPE_MISC, NULL,
-			sc->dev.dv_xname, "xmt bytes discarded");
+			device_xname(sc->dev), "xmt bytes discarded");
 		evcnt_attach_dynamic(&sc->xmt.incompleteMessages,
 			EVCNT_TYPE_MISC, NULL,
-			sc->dev.dv_xname, "xmt incomplete msgs");
+			device_xname(sc->dev), "xmt incomplete msgs");
 	}
 	if ( sc->props & MIDI_PROP_CAN_INPUT ) {
 		evcnt_attach_dynamic(&sc->rcv.bytesDiscarded,
 			EVCNT_TYPE_MISC, NULL,
-			sc->dev.dv_xname, "rcv bytes discarded");
+			device_xname(sc->dev), "rcv bytes discarded");
 		evcnt_attach_dynamic(&sc->rcv.incompleteMessages,
 			EVCNT_TYPE_MISC, NULL,
-			sc->dev.dv_xname, "rcv incomplete msgs");
+			device_xname(sc->dev), "rcv incomplete msgs");
 	}
 	
-	aprint_normal(": %s%s\n", mi.name,
-	    (sc->props & (MIDI_PROP_OUT_INTR|MIDI_PROP_NO_OUTPUT)) ?
-	    "" : " (CPU-intensive output)");
+	aprint_normal(": %s\n", mi.name);
 }
 
 void midi_register_hw_if_ext(struct midi_hw_if_ext *exthw) {
@@ -296,7 +286,7 @@ midi_unit_count(void)
 {
 	int i;
 	for ( i = 0; i < midi_cd.cd_ndevs; ++i )
-	        if ( NULL == midi_cd.cd_devs[i] )
+	        if ( NULL == device_lookup(&midi_cd, i) )
 		        break;
         return i;
 }
@@ -677,13 +667,13 @@ midi_softintr_rd(void *cookie)
 	struct proc *p;
 
 	if (sc->async != NULL) {
-		mutex_enter(&proclist_mutex);
+		mutex_enter(proc_lock);
 		if ((p = sc->async) != NULL)
 			psignal(p, SIGIO);
-		mutex_exit(&proclist_mutex);
+		mutex_exit(proc_lock);
 	}
 	midi_wakeup(&sc->rchan);
-	selnotify(&sc->rsel, 0); /* filter will spin if locked */
+	selnotify(&sc->rsel, 0, 0); /* filter will spin if locked */
 }
 
 void
@@ -693,13 +683,13 @@ midi_softintr_wr(void *cookie)
 	struct proc *p;
 
 	if (sc->async != NULL) {
-		mutex_enter(&proclist_mutex);
+		mutex_enter(proc_lock);
 		if ((p = sc->async) != NULL)
 			psignal(p, SIGIO);
-		mutex_exit(&proclist_mutex);
+		mutex_exit(proc_lock);
 	}
 	midi_wakeup(&sc->wchan);
-	selnotify(&sc->wsel, 0); /* filter will spin if locked */
+	selnotify(&sc->wsel, 0, 0); /* filter will spin if locked */
 }
 
 void
@@ -820,7 +810,7 @@ midiopen(dev_t dev, int flags, int ifmt, struct lwp *l)
 	const struct midi_hw_if *hw;
 	int error;
 
-	sc = device_lookup(&midi_cd, MIDIUNIT(dev));
+	sc = device_lookup_private(&midi_cd, MIDIUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	if (sc->dying)
@@ -882,8 +872,8 @@ int
 midiclose(dev_t dev, int flags, int ifmt,
     struct lwp *l)
 {
-	int unit = MIDIUNIT(dev);
-	struct midi_softc *sc = midi_cd.cd_devs[unit];
+	struct midi_softc *sc =
+	    device_lookup_private(&midi_cd, MIDIUNIT(dev));
 	const struct midi_hw_if *hw = sc->hw_if;
 	int s, error;
 
@@ -912,8 +902,8 @@ midiclose(dev_t dev, int flags, int ifmt,
 int
 midiread(dev_t dev, struct uio *uio, int ioflag)
 {
-	int unit = MIDIUNIT(dev);
-	struct midi_softc *sc = midi_cd.cd_devs[unit];
+	struct midi_softc *sc =
+	    device_lookup_private(&midi_cd, MIDIUNIT(dev));
 	struct midi_buffer *mb = &sc->inbuf;
 	int error;
 	int s;
@@ -1240,8 +1230,7 @@ midi_poll_out(struct midi_softc *sc)
 
 ioerror:
 #if defined(AUDIO_DEBUG) || defined(DIAGNOSTIC)
-	printf("%s: midi_poll_output error %d\n",
-	      sc->dev.dv_xname, error);
+	aprint_error_dev(sc->dev, "midi_poll_output error %d\n", error);
 #endif
 	MIDI_OUT_LOCK(sc,s);
 	MIDI_BUF_CONSUMER_WBACK(mb,idx);
@@ -1317,8 +1306,8 @@ midi_intr_out(struct midi_softc *sc)
 
 #if defined(AUDIO_DEBUG) || defined(DIAGNOSTIC)
 	if ( error )
-		printf("%s: midi_intr_output error %d\n",
-	               sc->dev.dv_xname, error);
+		aprint_error_dev(sc->dev, "midi_intr_output error %d\n",
+		    error);
 #endif
 	return error;
 }
@@ -1440,8 +1429,8 @@ real_writebytes(struct midi_softc *sc, u_char *ibuf, int cc)
 int
 midiwrite(dev_t dev, struct uio *uio, int ioflag)
 {
-	int unit = MIDIUNIT(dev);
-	struct midi_softc *sc = midi_cd.cd_devs[unit];
+	struct midi_softc *sc =
+	    device_lookup_private(&midi_cd, MIDIUNIT(dev));
 	struct midi_buffer *mb = &sc->outbuf;
 	int error;
 	u_char inp[256];
@@ -1453,7 +1442,7 @@ midiwrite(dev_t dev, struct uio *uio, int ioflag)
 	size_t xfrcount;
 	int pollout = 0;
 
-	DPRINTFN(6, ("midiwrite: %p, unit=%d, count=%lu\n", sc, unit,
+	DPRINTFN(6, ("midiwrite: %p, unit=%d, count=%lu\n", sc, (int)minor(dev),
 		     (unsigned long)uio->uio_resid));
 
 	if (sc->dying)
@@ -1523,7 +1512,7 @@ midiwrite(dev_t dev, struct uio *uio, int ioflag)
 #ifdef MIDI_DEBUG
 		if (error)
 		        printf("midi_write:(1) uiomove failed %d; "
-			       "xfrcount=%d inp=%p\n",
+			       "xfrcount=%zu inp=%p\n",
 			       error, xfrcount, inp);
 #endif
 		if ( error )
@@ -1562,7 +1551,8 @@ locked_exit:
 int
 midi_writebytes(int unit, u_char *bf, int cc)
 {
-	struct midi_softc *sc = midi_cd.cd_devs[unit];
+	struct midi_softc *sc =
+	    device_lookup_private(&midi_cd, unit);
 
 	DPRINTFN(7, ("midi_writebytes: %p, unit=%d, cc=%d %#02x %#02x %#02x\n",
                     sc, unit, cc, bf[0], bf[1], bf[2]));
@@ -1572,8 +1562,8 @@ midi_writebytes(int unit, u_char *bf, int cc)
 int
 midiioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
-	int unit = MIDIUNIT(dev);
-	struct midi_softc *sc = midi_cd.cd_devs[unit];
+	struct midi_softc *sc =
+	    device_lookup_private(&midi_cd, MIDIUNIT(dev));
 	const struct midi_hw_if *hw = sc->hw_if;
 	int error;
 	int s;
@@ -1647,8 +1637,8 @@ midiioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 int
 midipoll(dev_t dev, int events, struct lwp *l)
 {
-	int unit = MIDIUNIT(dev);
-	struct midi_softc *sc = midi_cd.cd_devs[unit];
+	struct midi_softc *sc =
+	    device_lookup_private(&midi_cd, MIDIUNIT(dev));
 	int revents = 0;
 	int s;
 	MIDI_BUF_DECLARE(idx);
@@ -1753,8 +1743,8 @@ static const struct filterops midiwrite_filtops =
 int
 midikqfilter(dev_t dev, struct knote *kn)
 {
-	int unit = MIDIUNIT(dev);
-	struct midi_softc *sc = midi_cd.cd_devs[unit];
+	struct midi_softc *sc =
+	    device_lookup_private(&midi_cd, MIDIUNIT(dev));
 	struct klist *klist;
 	int s;
 
@@ -1787,7 +1777,7 @@ midi_getinfo(dev_t dev, struct midi_info *mi)
 {
 	struct midi_softc *sc;
 
-	sc = device_lookup(&midi_cd, MIDIUNIT(dev));
+	sc = device_lookup_private(&midi_cd, MIDIUNIT(dev));
 	if (sc == NULL)
 		return;
 	if (sc->dying)
@@ -1807,8 +1797,8 @@ void midi_register_hw_if_ext(struct midi_hw_if_ext *exthw) { /* stub */
 
 int	audioprint(void *, const char *);
 
-struct device *
-midi_attach_mi(const struct midi_hw_if *mhwp, void *hdlp, struct device *dev)
+device_t
+midi_attach_mi(const struct midi_hw_if *mhwp, void *hdlp, device_t dev)
 {
 	struct audio_attach_args arg;
 

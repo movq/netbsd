@@ -1,4 +1,4 @@
-/*	$NetBSD: mkmakefile.c,v 1.6 2007/01/13 23:47:36 christos Exp $	*/
+/*	$NetBSD: mkmakefile.c,v 1.13 2009/04/11 12:41:10 lukem Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -74,6 +74,8 @@ static void emitrules(FILE *);
 static void emitload(FILE *);
 static void emitincludes(FILE *);
 static void emitappmkoptions(FILE *);
+static void emitsubs(FILE *, const char *, const char *, int);
+static int  selectopt(const char *, void *);
 
 int
 mkmakefile(void)
@@ -113,7 +115,7 @@ mkmakefile(void)
 	lineno = 0;
 	while (fgets(line, sizeof(line), ifp) != NULL) {
 		lineno++;
-		if (line[0] != '%') {
+		if ((version < 20090214 && line[0] != '%') || line[0] == '#') {
 			fputs(line, ofp);
 			continue;
 		}
@@ -131,9 +133,20 @@ mkmakefile(void)
 			fn = emitincludes;
 		else if (strcmp(line, "%MAKEOPTIONSAPPEND\n") == 0)
 			fn = emitappmkoptions;
-		else {
-			cfgxerror(ifname, lineno,
-			    "unknown %% construct ignored: %s", line);
+		else if (strncmp(line, "%VERSION ", sizeof("%VERSION ")-1) == 0) {
+			int newvers;
+			if (sscanf(line, "%%VERSION %d\n", &newvers) != 1) {
+				cfgxerror(ifname, lineno, "syntax error for "
+				    "%%VERSION");
+			} else
+				setversion(newvers);
+			continue;
+		} else {
+			if (version < 20090214)
+				cfgxerror(ifname, lineno,
+				    "unknown %% construct ignored: %s", line);
+			else
+				emitsubs(ofp, line, ifname, lineno);
 			continue;
 		}
 		(*fn)(ofp);
@@ -172,6 +185,51 @@ mkmakefile(void)
  bad2:
 	free(ifname);
 	return (1);
+}
+
+static void
+emitsubs(FILE *fp, const char *line, const char *file, int lineno)
+{
+	char *nextpct;
+	const char *optname;
+	struct nvlist *option;
+
+	while (*line != '\0') {
+		if (*line != '%') {
+			fputc(*line++, fp);
+			continue;
+		}
+
+		line++;
+		nextpct = strchr(line, '%');
+		if (nextpct == NULL) {
+			cfgxerror(file, lineno, "unbalanced %% or "
+			    "unknown construct");
+			return;
+		}
+		*nextpct = '\0';
+
+		if (*line == '\0')
+			fputc('%', fp);
+		else {
+			optname = intern(line);
+			if (!DEFINED_OPTION(optname)) {
+				cfgxerror(file, lineno, "unknown option %s",
+				    optname);
+				return;
+			}
+
+			if ((option = ht_lookup(opttab, optname)) == NULL)
+				option = ht_lookup(fsopttab, optname);
+			if (option != NULL)
+				fputs(option->nv_str ? option->nv_str : "1",
+				    fp);
+			/* Otherwise it's not a selected option and we don't
+			 * output anything. */
+		}
+
+		line = nextpct+1;
+	}
 }
 
 /*
@@ -222,7 +280,7 @@ static void
 emitdefs(FILE *fp)
 {
 	struct nvlist *nv;
-	char *sp;
+	const char *sp;
 
 	fprintf(fp, "KERNEL_BUILD=%s\n", conffile);
 	fputs("IDENT=", fp);
@@ -407,7 +465,6 @@ emitrules(FILE *fp)
 	struct files *fi;
 	const char *cp, *fpath;
 	int ch;
-	char buf[200];
 
 	TAILQ_FOREACH(fi, &allfiles, fi_next) {
 		if ((fi->fi_flags & FI_SEL) == 0)
@@ -425,17 +482,19 @@ emitrules(FILE *fp)
 				            fi->fi_base,
 				            filetype_prologue(&fi->fi_fit),
 				            fpath);
+ 			}
+		}
+		if (fi->fi_mkrule != NULL) {
+			fprintf(fp, "\t%s\n\n", fi->fi_mkrule);
+		} else {
+			fputs("\t${NORMAL_", fp);
+			cp = strrchr(fpath, '.');
+			cp = cp == NULL ? fpath : cp + 1;
+			while ((ch = *cp++) != '\0') {
+				fputc(toupper(ch), fp);
 			}
+			fputs("}\n\n", fp);
 		}
-		if ((cp = fi->fi_mkrule) == NULL) {
-			cp = "NORMAL";
-			ch = fpath[strlen(fpath) - 1];
-			if (islower(ch))
-				ch = toupper(ch);
-			(void)snprintf(buf, sizeof(buf), "${%s_%c}", cp, ch);
-			cp = buf;
-		}
-		fprintf(fp, "\t%s\n\n", cp);
 	}
 }
 
@@ -485,21 +544,6 @@ emitincludes(FILE *fp)
 	}
 }
 
-static int
-print_condmkopts(const char *name, void *value, void *arg)
-{
-	struct nvlist *nv;
-	FILE *fp = arg;
-
-	if (ht_lookup(selecttab, name) == 0)
-		return (0);
-
-	for (nv = value; nv != NULL; nv = nv->nv_next)
-		fprintf(fp, "%s+=%s\n", nv->nv_name, nv->nv_str);
-
-	return (0);
-}
-
 /*
  * Emit appending makeoptions.
  */
@@ -511,5 +555,18 @@ emitappmkoptions(FILE *fp)
 	for (nv = appmkoptions; nv != NULL; nv = nv->nv_next)
 		fprintf(fp, "%s+=%s\n", nv->nv_name, nv->nv_str);
 
-	ht_enumerate(condmkopttab, print_condmkopts, fp);
+	for (nv = condmkoptions; nv != NULL; nv = nv->nv_next)
+	{
+		if (expr_eval(nv->nv_ptr, selectopt, NULL))
+			fprintf(fp, "%s+=%s\n", nv->nv_name, nv->nv_str);
+		expr_free(nv->nv_ptr);
+	}
+}
+
+static int
+/*ARGSUSED*/
+selectopt(const char *name, void *context)
+{
+
+	return (ht_lookup(selecttab, strtolower(name)) != NULL);
 }

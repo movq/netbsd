@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.22 2007/12/12 00:03:33 lukem Exp $	*/
+/*	$NetBSD: defs.h,v 1.35 2010/04/30 20:47:18 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -71,14 +71,20 @@
 
 #ifdef	MAKE_BOOTSTRAP
 #undef	dev_t
+#undef	devmajor_t
+#undef	devminor_t
 #undef	NODEV
+#undef	NODEVMAJOR
 #undef	major
 #undef	minor
 #undef	makedev
-#define	dev_t		int		/* XXX: assumes int is 32 bits */
+#define	dev_t		unsigned int	/* XXX: assumes int is 32 bits */
 #define	NODEV		((dev_t)-1)
-#define major(x)        ((int)((((x) & 0x000fff00) >>  8)))
-#define minor(x)        ((int)((((x) & 0xfff00000) >> 12) | \
+#define devmajor_t	int
+#define devminor_t	int
+#define NODEVMAJOR	(-1)
+#define major(x)        ((devmajor_t)((((x) & 0x000fff00) >>  8)))
+#define minor(x)        ((devminor_t)((((x) & 0xfff00000) >> 12) | \
 			       (((x) & 0x000000ff) >>  0)))
 #define makedev(x,y)    ((dev_t)((((x) <<  8) & 0x000fff00) | \
                                  (((y) << 12) & 0xfff00000) | \
@@ -98,7 +104,7 @@ extern const char *progname;
  * The next two lines define the current version of the config(1) binary,
  * and the minimum version of the configuration files it supports.
  */
-#define CONFIG_VERSION		20071109
+#define CONFIG_VERSION		20100430
 #define CONFIG_MINVERSION	0
 
 /*
@@ -110,7 +116,7 @@ struct nvlist {
 	const char	*nv_name;
 	const char	*nv_str;
 	void		*nv_ptr;
-	int		nv_int;
+	long long	nv_num;
 	int		nv_ifunit;		/* XXX XXX XXX */
 	int		nv_flags;
 #define	NV_DEPENDED	1
@@ -200,7 +206,7 @@ struct devbase {
 	TAILQ_ENTRY(devbase) d_next;
 	int	d_isdef;		/* set once properly defined */
 	int	d_ispseudo;		/* is a pseudo-device */
-	int	d_major;		/* used for "root on sd0", e.g. */
+	devmajor_t d_major;		/* used for "root on sd0", e.g. */
 	struct	nvlist *d_attrs;	/* attributes, if any */
 	int	d_umax;			/* highest unit number + 1 */
 	struct	devi *d_ihead;		/* first instance, if any */
@@ -254,6 +260,7 @@ struct devi {
 #define	DEVI_ACTIVE	1	/* instance has an active parent */
 #define	DEVI_IGNORED	2	/* instance's parent has been removed */
 #define DEVI_BROKEN	3	/* instance is broken (syntax error) */
+	int	i_pseudoroot;	/* instance is pseudoroot */
 
 	/* created during packing or ioconf.c generation */
 	short	i_collapsed;	/* set => this alias no longer needed */
@@ -287,12 +294,12 @@ struct filetype
  * depending on whether it has names on which to *be* optional.  The
  * options field (fi_optx) is actually an expression tree, with nodes
  * for OR, AND, and NOT, as well as atoms (words) representing some   
- * particular option.  The node type is stored in the nv_int field.
+ * particular option.  The node type is stored in the nv_num field.
  * Subexpressions appear in the `next' field; for the binary operators
  * AND and OR, the left subexpression is first stored in the nv_ptr field.
  * 
  * For any file marked as needs-count or needs-flag, fixfiles() will
- * build fi_optf, a `flat list' of the options with nv_int fields that
+ * build fi_optf, a `flat list' of the options with nv_num fields that
  * contain counts or `need' flags; this is used in mkheaders().
  */
 struct files {
@@ -361,9 +368,10 @@ struct devm {
 	const char	*dm_srcfile;	/* the name of the "majors" file */
 	u_short		dm_srcline;	/* the line number */
 	const char	*dm_name;	/* [bc]devsw name */
-	int		dm_cmajor;	/* character major */
-	int		dm_bmajor;	/* block major */
+	devmajor_t	dm_cmajor;	/* character major */
+	devmajor_t	dm_bmajor;	/* block major */
 	struct nvlist	*dm_opts;	/* options */
+	struct nvlist	*dm_devnodes;	/* information on /dev nodes */
 };
 
 /*
@@ -381,6 +389,7 @@ const char *machine;		/* machine type, e.g., "sparc" or "sun3" */
 const char *machinearch;	/* machine arch, e.g., "sparc" or "m68k" */
 struct	nvlist *machinesubarches;
 				/* machine subarches, e.g., "sun68k" or "hpc" */
+const char *ioconfname;		/* ioconf name, mutually exclusive to machine */
 const char *srcdir;		/* path to source directory (rel. to build) */
 const char *builddir;		/* path to build directory */
 const char *defbuilddir;	/* default build directory */
@@ -396,7 +405,7 @@ struct	nvlist *options;	/* options */
 struct	nvlist *fsoptions;	/* filesystems */
 struct	nvlist *mkoptions;	/* makeoptions */
 struct	nvlist *appmkoptions;	/* appending mkoptions */
-struct	hashtab *condmkopttab;	/* conditional makeoption table */
+struct	nvlist *condmkoptions;	/* conditional makeoption table */
 struct	hashtab *devbasetab;	/* devbase lookup */
 struct	hashtab *devroottab;	/* attach at root lookup */
 struct	hashtab *devatab;	/* devbase attachment lookup */
@@ -425,8 +434,8 @@ TAILQ_HEAD(, devm)	alldevms;	/* list of all device-majors */
 TAILQ_HEAD(, pspec)	allpspecs;	/* list of all parent specs */
 int	ndevi;				/* number of devi's (before packing) */
 int	npspecs;			/* number of parent specs */
-int	maxbdevm;			/* max number of block major */
-int	maxcdevm;			/* max number of character major */
+devmajor_t maxbdevm;			/* max number of block major */
+devmajor_t maxcdevm;			/* max number of character major */
 int	do_devsw;			/* 0 if pre-devsw config */
 int	oktopackage;			/* 0 before setmachine() */
 int	devilevel;			/* used for devi->i_level */
@@ -460,6 +469,8 @@ int	fixobjects(void);
 int	fixdevsw(void);
 void	addfile(const char *, struct nvlist *, int, const char *);
 void	addobject(const char *, struct nvlist *, int);
+int	expr_eval(struct nvlist *, int (*)(const char *, void *), void *);
+void	expr_free(struct nvlist *);
 
 /* hash.c */
 struct	hashtab *ht_new(void);
@@ -484,8 +495,8 @@ void	addoption(const char *, const char *);
 void	addfsoption(const char *);
 void	addmkoption(const char *, const char *);
 void	appendmkoption(const char *, const char *);
-void	appendcondmkoption(const char *, const char *, const char *);
-void	deffilesystem(const char *, struct nvlist *, struct nvlist *);
+void	appendcondmkoption(struct nvlist *, const char *, const char *);
+void	deffilesystem(struct nvlist *, struct nvlist *);
 void	defoption(const char *, struct nvlist *, struct nvlist *);
 void	defflag(const char *, struct nvlist *, struct nvlist *, int);
 void	defparam(const char *, struct nvlist *, struct nvlist *, int);
@@ -496,6 +507,7 @@ int	devbase_has_instances(struct devbase *, int);
 struct nvlist * find_declared_option(const char *);
 int	deva_has_instances(struct deva *, int);
 void	setupdirs(void);
+const char *strtolower(const char *);
 
 /* tests on option types */
 #define OPT_FSOPT(n)	(ht_lookup(deffstab, (n)) != NULL)
@@ -514,6 +526,8 @@ int	mkdevsw(void);
 /* mkheaders.c */
 int	mkheaders(void);
 int	moveifchanged(const char *, const char *);
+int	emitlocs(void);
+int	emitioconfh(void);
 
 /* mkioconf.c */
 int	mkioconf(void);
@@ -551,7 +565,7 @@ void	cfgxerror(const char *, int, const char *, ...)	/* delayed errs */
      __attribute__((__format__(__printf__, 3, 4)));
 __dead void panic(const char *, ...)
      __attribute__((__format__(__printf__, 1, 2)));
-struct nvlist *newnv(const char *, const char *, void *, int, struct nvlist *);
+struct nvlist *newnv(const char *, const char *, void *, long long, struct nvlist *);
 void	nvfree(struct nvlist *);
 void	nvfreel(struct nvlist *);
 struct nvlist *nvcat(struct nvlist *, struct nvlist *);

@@ -1,7 +1,6 @@
-/*	$NetBSD: pmap.h,v 1.97 2007/11/28 16:44:46 ad Exp $	*/
+/*	$NetBSD: pmap.h,v 1.109 2011/02/01 20:09:08 chuck Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgment:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -72,25 +65,31 @@
 
 #if defined(_KERNEL_OPT)
 #include "opt_user_ldt.h"
+#include "opt_xen.h"
 #endif
 
 #include <sys/atomic.h>
 
-#include <machine/pte.h>
+#include <i386/pte.h>
 #include <machine/segments.h>
 #if defined(_KERNEL)
 #include <machine/cpufunc.h>
 #endif
 
 #include <uvm/uvm_object.h>
+#ifdef XEN
+#include <xen/xenfunc.h>
+#include <xen/xenpmap.h>
+#endif /* XEN */
 
 /*
  * see pte.h for a description of i386 MMU terminology and hardware
  * interface.
  *
- * a pmap describes a processes' 4GB virtual address space.  this
- * virtual address space can be broken up into 1024 4MB regions which
- * are described by PDEs in the PDP.  the PDEs are defined as follows:
+ * a pmap describes a processes' 4GB virtual address space.  when PAE
+ * is not in use, this virtual address space can be broken up into 1024 4MB
+ * regions which are described by PDEs in the PDP.  the PDEs are defined as
+ * follows:
  *
  * (ranges are inclusive -> exclusive, just like vm_map_entry start/end)
  * (the following assumes that KERNBASE is 0xc0000000)
@@ -174,6 +173,46 @@
  *
  * note that in the APTE_BASE space, the APDP appears at VA
  * "APDP_BASE" (0xfffff000).
+ *
+ * - PAE support -
+ * ---------------
+ *
+ * PAE adds another layer of indirection during address translation, breaking
+ * up the translation process in 3 different levels:
+ * - L3 page directory, containing 4 * 64-bits addresses (index determined by
+ * bits [31:30] from the virtual address). This breaks up the address space
+ * in 4 1GB regions.
+ * - the PD (L2), containing 512 64-bits addresses, breaking each L3 region
+ * in 512 * 2MB regions.
+ * - the PT (L1), also containing 512 64-bits addresses (at L1, the size of
+ * the pages is still 4K).
+ *
+ * The kernel virtual space is mapped by the last entry in the L3 page,
+ * the first 3 entries mapping the user VA space.
+ *
+ * Because the L3 has only 4 entries of 1GB each, we can't use recursive
+ * mappings at this level for PDP_PDE and APDP_PDE (this would eat up 2 of
+ * the 4GB virtual space). There are also restrictions imposed by Xen on the
+ * last entry of the L3 PD (reference count to this page cannot be bigger
+ * than 1), which makes it hard to use one L3 page per pmap to switch
+ * between pmaps using %cr3.
+ *
+ * As such, each CPU gets its own L3 page that is always loaded into its %cr3
+ * (ci_pae_l3_pd in the associated cpu_info struct). We claim that the VM has
+ * only a 2-level PTP (similar to the non-PAE case). L2 PD is now 4 contiguous
+ * pages long (corresponding to the 4 entries of the L3), and the different
+ * index/slots (like PDP_PDE) are adapted accordingly.
+ * 
+ * Kernel space remains in L3[3], L3[0-2] maps the user VA space. Switching
+ * between pmaps consists in modifying the first 3 entries of the CPU's L3 page.
+ *
+ * PTE_BASE and APTE_BASE will need 4 entries in the L2 PD pages to map the
+ * L2 pages recursively.
+ *
+ * In addition, for Xen, we can't recursively map L3[3] (Xen wants the ref
+ * count on this page to be exactly one), so we use a shadow PD page for
+ * the last L2 PD. The shadow page could be static too, but to make pm_pdir[]
+ * contiguous we'll allocate/copy one page per pmap.
  */
 /* XXX MP should we allocate one APDP_PDE per processor?? */
 
@@ -190,11 +229,25 @@
 /*
  * the following defines identify the slots used as described above.
  */
-
-#define L2_SLOT_PTE	(KERNBASE/NBPD_L2-1)	/* 767: for recursive PDP map */
-#define L2_SLOT_KERN	(KERNBASE/NBPD_L2)	/* 768: start of kernel space */
-#define	L2_SLOT_KERNBASE L2_SLOT_KERN
+#ifdef PAE
+#define L2_SLOT_PTE	(KERNBASE/NBPD_L2-4) /* 1532: for recursive PDP map */
+#define L2_SLOT_KERN	(KERNBASE/NBPD_L2)   /* 1536: start of kernel space */
+#ifndef XEN
+#define L2_SLOT_APTE	2044		/* 2044: alternative recursive slot */
+#else
+#define L2_SLOT_APTE	1960		/* 1964-2047 reserved by Xen */
+#endif
+#else /* PAE */
+#define L2_SLOT_PTE	(KERNBASE/NBPD_L2-1) /* 767: for recursive PDP map */
+#define L2_SLOT_KERN	(KERNBASE/NBPD_L2)   /* 768: start of kernel space */
+#ifndef XEN
 #define L2_SLOT_APTE	1023		/* 1023: alternative recursive slot */
+#else
+#define L2_SLOT_APTE	1007		/* 1008-1023 reserved by Xen */
+#endif
+#endif /* PAE */
+
+#define	L2_SLOT_KERNBASE L2_SLOT_KERN
 
 #define PDIR_SLOT_KERN	L2_SLOT_KERN
 #define PDIR_SLOT_PTE	L2_SLOT_PTE
@@ -208,18 +261,27 @@
  * PDP_PDE and APDP_PDE: the VA of the PDE that points back to the PDP/APDP
  */
 
-#define PTE_BASE  ((pt_entry_t *) (L2_SLOT_PTE * NBPD_L2))
-#define APTE_BASE ((pt_entry_t *) (VA_SIGN_NEG((L2_SLOT_APTE * NBPD_L2))))
+#define PTE_BASE  ((pt_entry_t *) (PDIR_SLOT_PTE * NBPD_L2))
+#define APTE_BASE ((pt_entry_t *) (VA_SIGN_NEG((PDIR_SLOT_APTE * NBPD_L2))))
 
 #define L1_BASE		PTE_BASE
 #define AL1_BASE	APTE_BASE
 
 #define L2_BASE ((pd_entry_t *)((char *)L1_BASE + L2_SLOT_PTE * NBPD_L1))
-
 #define AL2_BASE ((pd_entry_t *)((char *)AL1_BASE + L2_SLOT_PTE * NBPD_L1))
 
 #define PDP_PDE		(L2_BASE + PDIR_SLOT_PTE)
+#if defined(PAE) && defined(XEN)
+/*
+ * when PAE is in use under Xen, we can't write APDP_PDE through the recursive
+ * mapping, because it points to the shadow PD. Use the kernel PD instead,
+ * which is static
+ */
+#define APDP_PDE	(&pmap_kl2pd[l2tol2(PDIR_SLOT_APTE)])
+#define APDP_PDE_SHADOW	(L2_BASE + PDIR_SLOT_APTE)
+#else /* PAE && XEN */
 #define APDP_PDE	(L2_BASE + PDIR_SLOT_APTE)
+#endif /* PAE && XEN */
 
 #define PDP_BASE	L2_BASE
 #define APDP_BASE	AL2_BASE
@@ -233,7 +295,7 @@
 #define NKL2_START_ENTRIES	0	/* XXX computed on runtime */
 #define NKL1_START_ENTRIES	0	/* XXX unused */
 
-#define NTOPLEVEL_PDES		(PAGE_SIZE / (sizeof (pd_entry_t)))
+#define NTOPLEVEL_PDES		(PAGE_SIZE * PDP_SIZE / (sizeof (pd_entry_t)))
 
 #define NPDPG			(PAGE_SIZE / sizeof (pd_entry_t))
 
@@ -259,24 +321,134 @@
  * Number of PTE's per cache line.  4 byte pte, 32-byte cache line
  * Used to avoid false sharing of cache lines.
  */
+#ifdef PAE
+#define NPTECL		4
+#else
 #define NPTECL		8
+#endif
 
+#include <x86/pmap.h>
+
+#ifndef XEN
 #define pmap_pa2pte(a)			(a)
 #define pmap_pte2pa(a)			((a) & PG_FRAME)
 #define pmap_pte_set(p, n)		do { *(p) = (n); } while (0)
+#define pmap_pte_flush()		/* nothing */
+
+#ifdef PAE
+#define pmap_pte_cas(p, o, n)		atomic_cas_64((p), (o), (n))
+#define pmap_pte_testset(p, n)		\
+    atomic_swap_64((volatile uint64_t *)p, n)
+#define pmap_pte_setbits(p, b)		\
+    atomic_or_64((volatile uint64_t *)p, b)
+#define pmap_pte_clearbits(p, b)	\
+    atomic_and_64((volatile uint64_t *)p, ~(b))
+#else /* PAE */
+#define pmap_pte_cas(p, o, n)		atomic_cas_32((p), (o), (n))
 #define pmap_pte_testset(p, n)		\
     atomic_swap_ulong((volatile unsigned long *)p, n)
 #define pmap_pte_setbits(p, b)		\
     atomic_or_ulong((volatile unsigned long *)p, b)
 #define pmap_pte_clearbits(p, b)	\
     atomic_and_ulong((volatile unsigned long *)p, ~(b))
-#define pmap_pte_flush()		/* nothing */
+#endif /* PAE */
 
-#include <x86/pmap.h>
+#else /* XEN */
+static __inline pt_entry_t
+pmap_pa2pte(paddr_t pa)
+{
+	return (pt_entry_t)xpmap_ptom_masked(pa);
+}
+
+static __inline paddr_t
+pmap_pte2pa(pt_entry_t pte)
+{
+	return xpmap_mtop_masked(pte & PG_FRAME);
+}
+static __inline void
+pmap_pte_set(pt_entry_t *pte, pt_entry_t npte)
+{
+	int s = splvm();
+	xpq_queue_pte_update(xpmap_ptetomach(pte), npte);
+	splx(s);
+}
+
+static __inline pt_entry_t
+pmap_pte_cas(volatile pt_entry_t *ptep, pt_entry_t o, pt_entry_t n)
+{
+	int s = splvm();
+	pt_entry_t opte = *ptep;
+
+	if (opte == o) {
+		xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(ptep)), n);
+		xpq_flush_queue();
+	}
+	splx(s);
+	return opte;
+}
+
+static __inline pt_entry_t
+pmap_pte_testset(volatile pt_entry_t *pte, pt_entry_t npte)
+{
+	int s = splvm();
+	pt_entry_t opte = *pte;
+	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)),
+	    npte);
+	xpq_flush_queue();
+	splx(s);
+	return opte;
+}
+
+static __inline void
+pmap_pte_setbits(volatile pt_entry_t *pte, pt_entry_t bits)
+{
+	int s = splvm();
+	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)), (*pte) | bits);
+	xpq_flush_queue();
+	splx(s);
+}
+
+static __inline void
+pmap_pte_clearbits(volatile pt_entry_t *pte, pt_entry_t bits)
+{	
+	int s = splvm();
+	xpq_queue_pte_update(xpmap_ptetomach(__UNVOLATILE(pte)),
+	    (*pte) & ~bits);
+	xpq_flush_queue();
+	splx(s);
+}
+
+static __inline void
+pmap_pte_flush(void)
+{
+	int s = splvm();
+	xpq_flush_queue();
+	splx(s);
+}
+
+#endif
+
+#ifdef PAE
+/* Address of the static kernel's L2 page */
+pd_entry_t *pmap_kl2pd;
+paddr_t pmap_kl2paddr;
+#endif
+
 
 struct trapframe;
 
 int	pmap_exec_fixup(struct vm_map *, struct trapframe *, struct pcb *);
 void	pmap_ldt_cleanup(struct lwp *);
+
+#include <x86/pmap_pv.h>
+
+#define	__HAVE_VM_PAGE_MD
+#define	VM_MDPAGE_INIT(pg) \
+	memset(&(pg)->mdpage, 0, sizeof((pg)->mdpage)); \
+	PMAP_PAGE_INIT(&(pg)->mdpage.mp_pp)
+
+struct vm_page_md {
+	struct pmap_page mp_pp;
+};
 
 #endif	/* _I386_PMAP_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_utils.c,v 1.11 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_utils.c,v 1.13 2008/09/10 17:52:35 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,13 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_utils.c	8.8 (Berkeley) 7/20/94";
-#else
-__RCSID("$NetBSD: bt_utils.c,v 1.11 2007/02/03 23:46:09 christos Exp $");
-#endif
-#endif /* LIBC_SCCS and not lint */
+__RCSID("$NetBSD: bt_utils.c,v 1.13 2008/09/10 17:52:35 joerg Exp $");
 
 #include <sys/param.h>
 
@@ -217,7 +211,7 @@ int
 __bt_defcmp(const DBT *a, const DBT *b)
 {
 	size_t len;
-	u_char *p1, *p2;
+	uint8_t *p1, *p2;
 
 	/*
 	 * XXX
@@ -245,7 +239,7 @@ __bt_defcmp(const DBT *a, const DBT *b)
 size_t
 __bt_defpfx(const DBT *a, const DBT *b)
 {
-	u_char *p1, *p2;
+	uint8_t *p1, *p2;
 	size_t cnt, len;
 
 	cnt = 1;

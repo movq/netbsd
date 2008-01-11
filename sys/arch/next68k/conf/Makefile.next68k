@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.next68k,v 1.28 2005/12/11 12:18:25 christos Exp $
+# $NetBSD: Makefile.next68k,v 1.30 2011/01/21 15:59:08 joerg Exp $
 
 # Makefile for NetBSD
 #
@@ -33,7 +33,7 @@ GENASSYM_CONF=	${NEXT68K}/next68k/genassym.cf
 ##
 CPPFLAGS+=	-Dnext68k
 CFLAGS+=	-msoft-float
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
+AFLAGS+=	-x assembler-with-cpp
 
 ##
 ## (3) libkern and compat
@@ -52,6 +52,8 @@ MD_SFILES=	${NEXT68K}/next68k/locore.s
 
 locore.o: ${NEXT68K}/next68k/locore.s assym.h
 	${NORMAL_S}
+
+copy.o copypage.o lock_stubs.o: assym.h
 
 ##
 ## (5) link settings

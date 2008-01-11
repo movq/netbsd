@@ -1,7 +1,6 @@
-/*      $NetBSD: if_atm.h,v 1.17 2007/12/25 18:33:44 perry Exp $       */
+/*      $NetBSD: if_atm.h,v 1.19 2011/02/01 19:46:28 chuck Exp $       */
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *	Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -64,7 +57,7 @@
  */
 
 struct atm_pseudohdr {
-  u_int8_t atm_ph[4];	/* flags+VPI+VCI1(msb)+VCI2(lsb) */
+  uint8_t atm_ph[4];	/* flags+VPI+VCI1(msb)+VCI2(lsb) */
 };
 
 #define ATM_PH_FLAGS(X)	((X)->atm_ph[0])
@@ -125,8 +118,8 @@ struct pvctxreq {
 
 #define ATMLLC_HDR "\252\252\3\0\0\0"
 struct atmllc {
-  u_int8_t llchdr[6];	/* aa.aa.03.00.00.00 */
-  u_int8_t type[2];	/* "ethernet" type */
+  uint8_t llchdr[6];	/* aa.aa.03.00.00.00 */
+  uint8_t type[2];	/* "ethernet" type */
 } __packed;
 
 /* ATM_LLC macros: note type code in host byte order */

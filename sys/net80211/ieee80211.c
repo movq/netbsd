@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211.c,v 1.48 2007/12/01 14:35:51 jmcneill Exp $	*/
+/*	$NetBSD: ieee80211.c,v 1.53 2010/04/05 07:22:24 joerg Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -36,7 +36,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211.c,v 1.22 2005/08/10 16:22:29 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211.c,v 1.48 2007/12/01 14:35:51 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211.c,v 1.53 2010/04/05 07:22:24 joerg Exp $");
 #endif
 
 /*
@@ -44,7 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211.c,v 1.48 2007/12/01 14:35:51 jmcneill Exp 
  */
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h> 
@@ -157,10 +156,8 @@ ieee80211_ifattach(struct ieee80211com *ic)
 #endif /* __NetBSD__ */
 
 	ether_ifattach(ifp, ic->ic_myaddr);
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11,
+	bpf_attach2(ifp, DLT_IEEE802_11,
 	    sizeof(struct ieee80211_frame_addr4), &ic->ic_rawbpf);
-#endif
 
 	ieee80211_crypto_attach(ic);
 
@@ -261,9 +258,7 @@ ieee80211_ifdetach(struct ieee80211com *ic)
 
 	IEEE80211_BEACON_LOCK_DESTROY(ic);
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	ether_ifdetach(ifp);
 }
 
@@ -354,7 +349,7 @@ ieee80211_media_init(struct ieee80211com *ic,
 	struct ifnet *ifp = ic->ic_ifp;
 	struct ifmediareq imr;
 	int i, j, mode, rate, maxrate, mword, mopt, r;
-	struct ieee80211_rateset *rs;
+	const struct ieee80211_rateset *rs;
 	struct ieee80211_rateset allrates;
 
 	/*
@@ -800,6 +795,15 @@ ieee80211_watchdog(struct ieee80211com *ic)
 	if (ic->ic_mgt_timer != 0 || need_inact_timer)
 		ic->ic_ifp->if_timer = 1;
 }
+
+const struct ieee80211_rateset ieee80211_std_rateset_11a =
+	{ 8, { 12, 18, 24, 36, 48, 72, 96, 108 } };
+
+const struct ieee80211_rateset ieee80211_std_rateset_11b =
+	{ 4, { 2, 4, 11, 22 } };
+
+const struct ieee80211_rateset ieee80211_std_rateset_11g =
+	{ 12, { 2, 4, 11, 22, 12, 18, 24, 36, 48, 72, 96, 108 } };
 
 /*
  * Set the current phy mode and recalculate the active channel

@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.49 2007/12/14 16:36:19 christos Exp $	*/
+/*	$NetBSD: util.h,v 1.55 2010/02/25 18:37:12 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1995
@@ -63,8 +63,6 @@ struct utmp;
 struct winsize;
 struct sockaddr;
 
-typedef struct pw_policy *pw_policy_t; 
-
 char	       *flags_to_string(unsigned long, const char *);
 pid_t		forkpty(int *, char *, struct termios *, struct winsize *);
 const char     *getbootfile(void);
@@ -72,39 +70,49 @@ off_t		getlabeloffset(void);
 int		getlabelsector(void);
 int		getmaxpartitions(void);
 int		getrawpartition(void);
-void		login(const struct utmp *);
-void		loginx(const struct utmpx *);
+#ifndef __LIBC12_SOURCE__
+void		login(const struct utmp *) __RENAME(__login50);
+void		loginx(const struct utmpx *) __RENAME(__loginx50);
+#endif
 int		login_tty(int);
 int		logout(const char *);
 int		logoutx(const char *, int, int);
 void		logwtmp(const char *, const char *, const char *);
 void		logwtmpx(const char *, const char *, const char *, int, int);
 int		opendisk(const char *, int, char *, size_t, int);
+int		opendisk1(const char *, int, char *, size_t, int,
+			  int (*)(const char *, int, ...));
 int		openpty(int *, int *, char *, struct termios *,
-		    struct winsize *);
-time_t		parsedate(const char *, const time_t *, const int *);
+    struct winsize *);
+#ifndef __LIBC12_SOURCE__
+time_t		parsedate(const char *, const time_t *, const int *)
+    __RENAME(__parsedate50);
+#endif
 int		pidfile(const char *);
 int		pidlock(const char *, int, pid_t *, const char *);
 int		pw_abort(void);
-void		pw_copy(int, int, struct passwd *, struct passwd *);
+#ifndef __LIBC12_SOURCE__
+void		pw_copy(int, int, struct passwd *, struct passwd *)
+    __RENAME(__pw_copy50);
 int		pw_copyx(int, int, struct passwd *, struct passwd *,
-			 char *, size_t);
+    char *, size_t) __RENAME(__pw_copyx50);
+#endif
 void		pw_edit(int, const char *);
 void		pw_error(const char *, int, int);
 void		pw_getconf(char *, size_t, const char *, const char *);
+#ifndef __LIBC12_SOURCE__
 void		pw_getpwconf(char *, size_t, const struct passwd *,
-			     const char *);
+    const char *) __RENAME(__pw_getpwconf50);
+#endif
 const char     *pw_getprefix(void);
 void		pw_init(void);
 int		pw_lock(int);
 int		pw_mkdb(const char *, int);
-pw_policy_t	pw_policy_load(void *, int);
-int		pw_policy_test(pw_policy_t, char *);
-void		pw_policy_free(pw_policy_t);
 void		pw_prompt(void);
 int		pw_setprefix(const char *);
 int		raise_default_signal(int);
 int		secure_path(const char *);
+int		snprintb_m(char *, size_t, const char *, uint64_t, size_t);
 int		snprintb(char *, size_t, const char *, uint64_t);
 int		sockaddr_snprintf(char *, size_t, const char *,
     const struct sockaddr *);
@@ -129,10 +137,10 @@ void 		*emalloc(size_t);
 void 		*erealloc(void *, size_t);
 struct __sFILE	*efopen(const char *, const char *);
 int	 	easprintf(char ** __restrict, const char * __restrict, ...)
-    __attribute__((__format__(__printf__, 2, 3)));
+			__printflike(2, 3);
 int		evasprintf(char ** __restrict, const char * __restrict,
     _BSD_VA_LIST_)
-    __attribute__((__format__(__printf__, 2, 0)));
+			__printflike(2, 0);
 __END_DECLS
 
 #endif /* !_UTIL_H_ */

@@ -1,3 +1,5 @@
+/* $NetBSD: vga_post.c,v 1.18 2011/02/12 19:13:30 jmcneill Exp $ */
+
 /*-
  * Copyright (c) 2007 Joerg Sonnenberger <joerg@NetBSD.org>.
  * All rights reserved.
@@ -27,10 +29,13 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vga_post.c,v 1.18 2011/02/12 19:13:30 jmcneill Exp $");
+
 #include <sys/param.h>
 #include <sys/device.h>
 #include <sys/kmem.h>
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 #include <uvm/uvm_page.h>
 
 #include <machine/pio.h>
@@ -41,12 +46,23 @@
 #include <x86emu/x86emu_i8254.h>
 #include <x86emu/x86emu_regs.h>
 
+#include "opt_ddb.h"
+
+#define	BASE_MEMORY	65536	/* How much memory to allocate in Real Mode */
+
 struct vga_post {
 	struct X86EMU emu;
 	vaddr_t sys_image;
 	uint32_t initial_eax;
 	struct x86emu_i8254 i8254;
+	uint8_t bios_data[PAGE_SIZE];
+	struct pglist ram_backing;
 };
+
+#ifdef DDB
+static struct vga_post *ddb_vgapostp;
+void ddb_vgapost(void);
+#endif
 
 static uint8_t
 vm86_emu_inb(struct X86EMU *emu, uint16_t port)
@@ -122,20 +138,59 @@ struct vga_post *
 vga_post_init(int bus, int device, int function)
 {
 	struct vga_post *sc;
-	vaddr_t rom;
-	vaddr_t sys_image;
+	vaddr_t iter;
+	struct vm_page *pg;
+	vaddr_t sys_image, sys_bios_data;
+	int err;
 
 	sys_image = uvm_km_alloc(kernel_map, 1024 * 1024, 0, UVM_KMF_VAONLY);
-	if (sys_image == 0)
+	if (sys_image == 0) {
 		return NULL;
+	}
 	sc = kmem_alloc(sizeof(*sc), KM_SLEEP);
-
 	sc->sys_image = sys_image;
 	sc->emu.sys_private = sc;
 
-	pmap_kenter_pa(sc->sys_image, 0, VM_PROT_READ | VM_PROT_WRITE);
-	for (rom = 640 * 1024; rom < 1024 * 1024; rom += 4096)
-		pmap_kenter_pa(sc->sys_image + rom, rom, VM_PROT_READ | VM_PROT_WRITE);
+	err = uvm_pglistalloc(BASE_MEMORY, 0, (paddr_t)-1, 0, 0,
+	    &sc->ram_backing, BASE_MEMORY/PAGE_SIZE, 1);
+	if (err) {
+		uvm_km_free(kernel_map, sc->sys_image,
+		    1024 * 1024, UVM_KMF_VAONLY);
+		kmem_free(sc, sizeof(*sc));
+		return NULL;
+	}
+
+	/*
+	 * Map and copy BIOS data.
+	 */
+	sys_bios_data = uvm_km_alloc(kernel_map, PAGE_SIZE, 0, UVM_KMF_VAONLY);
+	if (sys_bios_data == 0) {
+		return NULL;
+	}
+	pmap_kenter_pa(sys_bios_data, 0, VM_PROT_READ, 0);
+	pmap_update(pmap_kernel());
+
+	memcpy((void *)sc->bios_data, (void *)sys_bios_data, PAGE_SIZE);
+
+	pmap_kremove(sys_bios_data, PAGE_SIZE);
+	pmap_update(pmap_kernel());
+	uvm_km_free(kernel_map, sys_bios_data, PAGE_SIZE, UVM_KMF_VAONLY);
+
+	/*
+	 * Map 0 .. 64KB and 640KB .. 1MB ranges.
+	 */
+	iter = 0;
+	TAILQ_FOREACH(pg, &sc->ram_backing, pageq.queue) {
+		pmap_kenter_pa(sc->sys_image + iter, VM_PAGE_TO_PHYS(pg),
+		    VM_PROT_READ | VM_PROT_WRITE, 0);
+		iter += PAGE_SIZE;
+	}
+	KASSERT(iter == BASE_MEMORY);
+
+	for (iter = 640 * 1024; iter < 1024 * 1024; iter += PAGE_SIZE) {
+		pmap_kenter_pa(sc->sys_image + iter, iter,
+		    VM_PROT_READ | VM_PROT_WRITE, 0);
+	}
 	pmap_update(pmap_kernel());
 
 	memset(&sc->emu, 0, sizeof(sc->emu));
@@ -151,7 +206,9 @@ vga_post_init(int bus, int device, int function)
 	sc->emu.mem_size = 1024 * 1024;
 
 	sc->initial_eax = bus * 256 + device * 8 + function;
-
+#ifdef DDB
+	ddb_vgapostp = sc;
+#endif
 	return sc;
 }
 
@@ -163,9 +220,11 @@ vga_post_call(struct vga_post *sc)
 	sc->emu.x86.R_DS = 0x0040;
 	sc->emu.x86.register_flags = 0x3200;
 
-	/* stack is at the end of the first 4KB */
+	memcpy((void *)sc->sys_image, sc->bios_data, PAGE_SIZE);
+
+	/* stack is at the end of the first 64KB */
 	sc->emu.x86.R_SS = 0;
-	sc->emu.x86.R_ESP = 4096;
+	sc->emu.x86.R_ESP = 0;
 
 	x86emu_i8254_init(&sc->i8254, nanotime);
 
@@ -174,9 +233,45 @@ vga_post_call(struct vga_post *sc)
 }
 
 void
+vga_post_set_vbe(struct vga_post *sc, uint16_t vbemode)
+{
+	sc->emu.x86.R_EAX = sc->initial_eax;
+	sc->emu.x86.R_EDX = 0x00000080;
+	sc->emu.x86.R_DS = 0x0040;
+	sc->emu.x86.register_flags = 0x3200;
+
+	memcpy((void *)sc->sys_image, sc->bios_data, PAGE_SIZE);
+
+	/* stack is at the end of the first 64KB */
+	sc->emu.x86.R_SS = 0;
+	sc->emu.x86.R_ESP = 0;
+
+	x86emu_i8254_init(&sc->i8254, nanotime);
+
+	sc->emu.x86.R_EBX = vbemode | 0x4000;
+	sc->emu.x86.R_EAX = 0x4f02;
+	X86EMU_exec_intr(&sc->emu, 0x10);
+}
+
+void
 vga_post_free(struct vga_post *sc)
 {
+
+	uvm_pglistfree(&sc->ram_backing);
 	pmap_kremove(sc->sys_image, 1024 * 1024);
 	pmap_update(pmap_kernel());
+	uvm_km_free(kernel_map, sc->sys_image, 1024 * 1024, UVM_KMF_VAONLY);
 	kmem_free(sc, sizeof(*sc));
 }
+
+#ifdef DDB
+void
+ddb_vgapost(void)
+{
+
+	if (ddb_vgapostp)
+		vga_post_call(ddb_vgapostp);
+	else
+		printf("ddb_vgapost: vga_post not initialized\n");
+}
+#endif

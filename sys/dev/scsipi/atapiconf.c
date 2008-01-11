@@ -1,4 +1,4 @@
-/*	$NetBSD: atapiconf.c,v 1.74 2007/12/09 20:28:22 jmcneill Exp $	*/
+/*	$NetBSD: atapiconf.c,v 1.83 2010/06/07 01:41:39 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1996, 2001 Manuel Bouyer.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.74 2007/12/09 20:28:22 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.83 2010/06/07 01:41:39 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,20 +51,20 @@ const struct scsipi_periphsw atapi_probe_periphsw = {
 	NULL,
 };
 
-static int	atapibusmatch(struct device *, struct cfdata *, void *);
-static void	atapibusattach(struct device *, struct device *, void *);
-static int	atapibusactivate(struct device *, enum devact);
-static int	atapibusdetach(struct device *, int flags);
+static int	atapibusmatch(device_t, cfdata_t, void *);
+static void	atapibusattach(device_t, device_t, void *);
+static int	atapibusdetach(device_t, int flags);
+static void	atapibuschilddet(device_t, device_t);
 
-static int	atapibussubmatch(struct device *, struct cfdata *,
-				 const int *, void *);
+static int	atapibussubmatch(device_t, cfdata_t, const int *, void *);
 
 static int	atapi_probe_bus(struct atapibus_softc *, int);
 
 static int	atapibusprint(void *, const char *);
 
-CFATTACH_DECL(atapibus, sizeof(struct atapibus_softc),
-    atapibusmatch, atapibusattach, atapibusdetach, atapibusactivate);
+CFATTACH_DECL3_NEW(atapibus, sizeof(struct atapibus_softc),
+    atapibusmatch, atapibusattach, atapibusdetach, NULL, NULL,
+    atapibuschilddet, DVF_DETACH_SHUTDOWN);
 
 extern struct cfdriver atapibus_cd;
 
@@ -115,8 +110,7 @@ atapiprint(void *aux, const char *pnp)
 }
 
 static int
-atapibusmatch(struct device *parent, struct cfdata *cf,
-    void *aux)
+atapibusmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct scsipi_channel *chan = aux;
 
@@ -130,8 +124,7 @@ atapibusmatch(struct device *parent, struct cfdata *cf,
 }
 
 static int
-atapibussubmatch(struct device *parent, struct cfdata *cf,
-    const int *ldesc, void *aux)
+atapibussubmatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_periph *periph = sa->sa_periph;
@@ -143,14 +136,15 @@ atapibussubmatch(struct device *parent, struct cfdata *cf,
 }
 
 static void
-atapibusattach(struct device *parent, struct device *self, void *aux)
+atapibusattach(device_t parent, device_t self, void *aux)
 {
 	struct atapibus_softc *sc = device_private(self);
 	struct scsipi_channel *chan = aux;
 
 	sc->sc_channel = chan;
+	sc->sc_dev = self;
 
-	chan->chan_name = sc->sc_dev.dv_xname;
+	chan->chan_name = device_xname(sc->sc_dev);
 
 	/* ATAPI has no LUNs. */
 	chan->chan_nluns = 1;
@@ -169,38 +163,26 @@ atapibusattach(struct device *parent, struct device *self, void *aux)
 	atapi_probe_bus(sc, -1);
 }
 
-static int
-atapibusactivate(struct device *self, enum devact act)
+static void
+atapibuschilddet(device_t self, device_t child)
 {
 	struct atapibus_softc *sc = device_private(self);
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
-	int target, error = 0, s;
+	int target;
 
-	s = splbio();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		for (target = 0; target < chan->chan_ntargets; target++) {
-			periph = scsipi_lookup_periph(chan, target, 0);
-			if (periph == NULL)
-				continue;
-			error = config_deactivate(periph->periph_dev);
-			if (error)
-				goto out;
-		}
+	for (target = 0; target < chan->chan_ntargets; target++) {
+		periph = scsipi_lookup_periph(chan, target, 0);
+		if (periph == NULL || periph->periph_dev != child)
+			continue;
+		scsipi_remove_periph(chan, periph);
+		free(periph, M_DEVBUF);
 		break;
 	}
- out:
-	splx(s);
-	return (error);
 }
 
 static int
-atapibusdetach(struct device *self, int flags)
+atapibusdetach(device_t self, int flags)
 {
 	struct atapibus_softc *sc = device_private(self);
 	struct scsipi_channel *chan = sc->sc_channel;
@@ -222,9 +204,7 @@ atapibusdetach(struct device *self, int flags)
 		error = config_detach(periph->periph_dev, flags);
 		if (error)
 			return (error);
-
-		scsipi_remove_periph(chan, periph);
-		free(periph, M_DEVBUF);
+		KASSERT(scsipi_lookup_periph(chan, target, 0) == NULL);
 	}
 	return (0);
 }
@@ -261,7 +241,7 @@ atapi_probe_device(struct atapibus_softc *sc, int target,
 {
 	struct scsipi_channel *chan = sc->sc_channel;
 	const struct scsi_quirk_inquiry_pattern *finger;
-	struct cfdata *cf;
+	cfdata_t cf;
 	int priority, quirks;
 
 	finger = scsipi_inqmatch(
@@ -280,7 +260,7 @@ atapi_probe_device(struct atapibus_softc *sc, int target,
 	 */
 	periph->periph_quirks |= quirks;
 
-	if ((cf = config_search_ia(atapibussubmatch, &sc->sc_dev,
+	if ((cf = config_search_ia(atapibussubmatch, sc->sc_dev,
 	    "atapibus", sa)) != 0) {
 		scsipi_insert_periph(chan, periph);
 		/*
@@ -288,10 +268,10 @@ atapi_probe_device(struct atapibus_softc *sc, int target,
 		 * XXX need it before config_attach() returns.  Must
 		 * XXX assign it in periph driver.
 		 */
-		return config_attach(&sc->sc_dev, cf, sa,
+		return config_attach(sc->sc_dev, cf, sa,
 		    atapibusprint);
 	} else {
-		atapibusprint(sa, sc->sc_dev.dv_xname);
+		atapibusprint(sa, device_xname(sc->sc_dev));
 		printf(" not configured\n");
 		free(periph, M_DEVBUF);
 		return NULL;

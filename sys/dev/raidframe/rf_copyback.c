@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_copyback.c,v 1.40 2007/11/26 19:01:37 pooka Exp $	*/
+/*	$NetBSD: rf_copyback.c,v 1.47 2011/05/11 18:13:12 mrg Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -38,7 +38,7 @@
  ****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_copyback.c,v 1.40 2007/11/26 19:01:37 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_copyback.c,v 1.47 2011/05/11 18:13:12 mrg Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -81,21 +81,22 @@ rf_ConfigureCopyback(RF_ShutdownList_t **listp)
 #include <sys/ioctl.h>
 #include <sys/fcntl.h>
 #include <sys/vnode.h>
+#include <sys/namei.h> /* for pathbuf */
 
 /* do a complete copyback */
 void
 rf_CopybackReconstructedData(RF_Raid_t *raidPtr)
 {
-	RF_ComponentLabel_t c_label;
+	RF_ComponentLabel_t *c_label;
 	int     found, retcode;
 	RF_CopybackDesc_t *desc;
 	RF_RowCol_t fcol;
 	RF_RaidDisk_t *badDisk;
 	char   *databuf;
 
+	struct pathbuf *dev_pb;
 	struct vnode *vp;
 	struct vattr va;
-	struct lwp *l;
 
 	int ac;
 
@@ -116,8 +117,6 @@ rf_CopybackReconstructedData(RF_Raid_t *raidPtr)
 
 	badDisk = &raidPtr->Disks[fcol];
 
-	l = raidPtr->engine_thread;
-
 	/* This device may have been opened successfully the first time. Close
 	 * it before trying to open it again.. */
 
@@ -136,8 +135,16 @@ rf_CopybackReconstructedData(RF_Raid_t *raidPtr)
 	printf("About to (re-)open the device: %s\n",
 	    raidPtr->Disks[fcol].devname);
 
-	retcode = dk_lookup(raidPtr->Disks[fcol].devname, l, &vp,
-	    UIO_SYSSPACE);
+	dev_pb = pathbuf_create(raidPtr->Disks[fcol].devname);
+	if (dev_pb == NULL) {
+		/* shouldn't happen unless maybe the system is OOMing */
+		printf("raid%d: copyback: pathbuf_create on device: %s failed: %d!\n",
+		       raidPtr->raidid, raidPtr->Disks[fcol].devname,
+		       ENOMEM);
+		return;
+	}
+	retcode = dk_lookup(dev_pb, curlwp, &vp);
+	pathbuf_destroy(dev_pb);
 
 	if (retcode) {
 		printf("raid%d: copyback: dk_lookup on device: %s failed: %d!\n",
@@ -153,9 +160,9 @@ rf_CopybackReconstructedData(RF_Raid_t *raidPtr)
 		/* Ok, so we can at least do a lookup... How about actually
 		 * getting a vp for it? */
 
-		if ((retcode = VOP_GETATTR(vp, &va, l->l_cred)) != 0)
+		if ((retcode = VOP_GETATTR(vp, &va, curlwp->l_cred)) != 0)
 			return;
-		retcode = rf_getdisksize(vp, l, &raidPtr->Disks[fcol]);
+		retcode = rf_getdisksize(vp, curlwp, &raidPtr->Disks[fcol]);
 		if (retcode) {
 			return;
 		}
@@ -198,30 +205,29 @@ rf_CopybackReconstructedData(RF_Raid_t *raidPtr)
 	rf_SuspendNewRequestsAndWait(raidPtr);
 
 	/* adjust state of the array and of the disks */
-	RF_LOCK_MUTEX(raidPtr->mutex);
+	rf_lock_mutex2(raidPtr->mutex);
 	raidPtr->Disks[desc->fcol].status = rf_ds_optimal;
 	raidPtr->status = rf_rs_optimal;
 	rf_copyback_in_progress = 1;	/* debug only */
-	RF_UNLOCK_MUTEX(raidPtr->mutex);
+	rf_unlock_mutex2(raidPtr->mutex);
 
 	RF_GETTIME(desc->starttime);
 	rf_ContinueCopyback(desc);
 
 	/* Data has been restored.  Fix up the component label. */
 	/* Don't actually need the read here.. */
-	raidread_component_label( raidPtr->raid_cinfo[fcol].ci_dev,
-				  raidPtr->raid_cinfo[fcol].ci_vp,
-				  &c_label);
+	
+	c_label = raidget_component_label(raidPtr, fcol);
+	raid_init_component_label(raidPtr, c_label);
 
-	raid_init_component_label( raidPtr, &c_label );
+	c_label->row = 0;
+	c_label->column = fcol;
+	rf_component_label_set_partitionsize(c_label,
+	    raidPtr->Disks[fcol].partitionSize);
 
-	c_label.row = 0;
-	c_label.column = fcol;
-	c_label.partitionSize = raidPtr->Disks[fcol].partitionSize;
+	raidflush_component_label(raidPtr, fcol);
 
-	raidwrite_component_label( raidPtr->raid_cinfo[fcol].ci_dev,
-				   raidPtr->raid_cinfo[fcol].ci_vp,
-				   &c_label);
+	/* XXXjld why is this here? */
 	rf_update_component_labels(raidPtr, RF_NORMAL_COMPONENT_UPDATE);
 }
 
@@ -344,17 +350,17 @@ rf_CopybackOne(RF_CopybackDesc_t *desc, int typ, RF_RaidAddr_t addr,
 	 * pair to complete. in the simulator, just return, since everything
 	 * will happen as callbacks */
 
-	RF_LOCK_MUTEX(desc->mcpair->mutex);
+	RF_LOCK_MCPAIR(desc->mcpair);
 	desc->mcpair->flag = 0;
-	RF_UNLOCK_MUTEX(desc->mcpair->mutex);
+	RF_UNLOCK_MCPAIR(desc->mcpair);
 
 	rf_DiskIOEnqueue(&raidPtr->Queues[spCol], desc->readreq, RF_IO_NORMAL_PRIORITY);
 
-	RF_LOCK_MUTEX(desc->mcpair->mutex);
+	RF_LOCK_MCPAIR(desc->mcpair);
 	while (!desc->mcpair->flag) {
 		RF_WAIT_MCPAIR(desc->mcpair);
 	}
-	RF_UNLOCK_MUTEX(desc->mcpair->mutex);
+	RF_UNLOCK_MCPAIR(desc->mcpair);
 	rf_FreeDiskQueueData(desc->readreq);
 	rf_FreeDiskQueueData(desc->writereq);
 
@@ -398,14 +404,14 @@ rf_CopybackComplete(RF_CopybackDesc_t *desc, int status)
 	struct timeval t, diff;
 
 	if (!status) {
-		RF_LOCK_MUTEX(raidPtr->mutex);
+		rf_lock_mutex2(raidPtr->mutex);
 		if (raidPtr->Layout.map->flags & RF_DISTRIBUTE_SPARE) {
 			RF_ASSERT(raidPtr->Layout.map->parityConfig == 'D');
 			rf_FreeSpareTable(raidPtr);
 		} else {
 			raidPtr->Disks[desc->spCol].status = rf_ds_spare;
 		}
-		RF_UNLOCK_MUTEX(raidPtr->mutex);
+		rf_unlock_mutex2(raidPtr->mutex);
 
 		RF_GETTIME(t);
 		RF_TIMEVAL_DIFF(&desc->starttime, &t, &diff);

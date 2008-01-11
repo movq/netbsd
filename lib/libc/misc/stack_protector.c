@@ -1,4 +1,4 @@
-/*	$NetBSD: stack_protector.c,v 1.1 2007/11/13 15:21:20 ad Exp $	*/
+/*	$NetBSD: stack_protector.c,v 1.5 2010/12/07 20:10:53 joerg Exp $	*/
 /*	$OpenBSD: stack_protector.c,v 1.10 2006/03/31 05:34:44 deraadt Exp $	*/
 
 /*
@@ -28,7 +28,7 @@
  *
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: stack_protector.c,v 1.1 2007/11/13 15:21:20 ad Exp $");
+__RCSID("$NetBSD: stack_protector.c,v 1.5 2010/12/07 20:10:53 joerg Exp $");
 
 #ifdef _LIBC
 #include "namespace.h"
@@ -44,14 +44,12 @@ __RCSID("$NetBSD: stack_protector.c,v 1.1 2007/11/13 15:21:20 ad Exp $");
 #include "extern.h"
 #else
 #define __sysctl sysctl
-extern int xprintf(const char *fmt, ...);
+void xprintf(const char *fmt, ...);
 #include <stdlib.h>
 #endif
 
 long __stack_chk_guard[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-static void __fail(const char *);
-void __stack_chk_fail(void);
-void __chk_fail(void);
+static void __fail(const char *) __attribute__((__noreturn__));
 void __stack_chk_fail_local(void);
 void __guard_setup(void);
 
@@ -95,7 +93,7 @@ __fail(const char *msg)
 
 #ifdef _LIBC
 	/* This may fail on a chroot jail... */
-	syslog_ss(LOG_CRIT, &sdata, msg);
+	syslog_ss(LOG_CRIT, &sdata, "%s", msg);
 #else
 	xprintf("%s: %s\n", getprogname(), msg);
 #endif
@@ -105,7 +103,7 @@ __fail(const char *msg)
 	sa.sa_flags = 0;
 	sa.sa_handler = SIG_DFL;
 	(void)sigaction(SIGABRT, &sa, NULL);
-	(void)kill(getpid(), SIGABRT);
+	(void)raise(SIGABRT);
 	_exit(127);
 }
 

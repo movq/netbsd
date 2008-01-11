@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.c,v 1.30 2007/01/24 13:08:13 hubertf Exp $	*/
+/*	$NetBSD: isa_machdep.c,v 1.37 2010/04/13 11:31:11 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997 Leo Weppelman.  All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.30 2007/01/24 13:08:13 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.37 2010/04/13 11:31:11 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -67,9 +67,9 @@ struct atari_bus_dma_tag isa_bus_dma_tag = {
 };
 #endif /* NISADMA == 0 */
 
-static int	atariisabusprint __P((void *auxp, const char *));
-static int	isabusmatch __P((struct device *, struct cfdata *, void *));
-static void	isabusattach __P((struct device *, struct device *, void *));
+static int	atariisabusprint(void *auxp, const char *);
+static int	isabusmatch(struct device *, struct cfdata *, void *);
+static void	isabusattach(struct device *, struct device *, void *);
 
 struct isabus_softc {
 	struct device sc_dev;
@@ -86,35 +86,30 @@ CFATTACH_DECL(isab, sizeof(struct isabus_softc),
 static struct atari_bus_space	bs_storage[2];	/* 1 iot, 1 memt */
 
 int
-isabusmatch(pdp, cfp, auxp)
-struct device	*pdp;
-struct cfdata	*cfp;
-void		*auxp;
+isabusmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	static int	nmatched = 0;
 
 	if (strcmp((char *)auxp, "isab"))
-		return (0); /* Wrong number... */
+		return 0; /* Wrong number... */
 
-	if(atari_realconfig == 0)
-		return (1);
+	if (atari_realconfig == 0)
+		return 1;
 
 	if (machineid & (ATARI_HADES|ATARI_MILAN)) {
 		/*
 		 * The Hades and Milan have only one pci bus
 		 */
 		if (nmatched)
-			return (0);
+			return 0;
 		nmatched++;
-		return (1);
+		return 1;
 	}
-	return(0);
+	return 0;
 }
 
 void
-isabusattach(pdp, dp, auxp)
-struct device	*pdp, *dp;
-void		*auxp;
+isabusattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct isabus_softc *sc = (struct isabus_softc *)dp;
 	struct isabus_attach_args	iba;
@@ -147,19 +142,21 @@ void		*auxp;
 }
 
 int
-atariisabusprint(auxp, name)
-void		*auxp;
-const char	*name;
+atariisabusprint(void *auxp, const char *name)
 {
-	if(name == NULL)
-		return(UNCONF);
-	return(QUIET);
+
+	if (name == NULL)
+		return UNCONF;
+	return QUIET;
 }
 
 void
-isa_attach_hook(parent, self, iba)
-	struct device		  *parent, *self;
-	struct isabus_attach_args *iba;
+isa_attach_hook(struct device *parent, struct device *self, struct isabus_attach_args *iba)
+{
+}
+
+void
+isa_detach_hook(isa_chipset_tag_t ic, device_t self)
 {
 }
 

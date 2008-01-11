@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf.h,v 1.4 2005/12/11 12:17:00 christos Exp $	*/
+/*	$NetBSD: exec_elf.h,v 1.6 2010/08/28 21:30:02 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -102,10 +95,8 @@ typedef	__int64_t	Elf64_Sxword;
 #define	ELF64_FSZ_XWORD	8
 typedef	__uint64_t	Elf64_Xword;
 #define	ELF64_FSZ_XWORD	8
-typedef	__uint32_t	Elf64_Half;
-#define	ELF64_FSZ_HALF	4
-typedef	__uint16_t	Elf64_Quarter;
-#define	ELF64_FSZ_QUARTER 2
+typedef	__uint16_t	Elf64_Half;
+#define	ELF64_FSZ_HALF 2
 
 /*
  * ELF Header

@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_vfsops.c,v 1.53 2008/01/02 11:48:40 ad Exp $	*/
+/*	$NetBSD: cd9660_vfsops.c,v 1.71 2010/06/24 13:03:09 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.53 2008/01/02 11:48:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.71 2010/06/24 13:03:09 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -50,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.53 2008/01/02 11:48:40 ad Exp $"
 #include <sys/proc.h>
 #include <sys/kernel.h>
 #include <sys/vnode.h>
+#include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h>
 #include <sys/mount.h>
 #include <sys/buf.h>
@@ -65,6 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.53 2008/01/02 11:48:40 ad Exp $"
 #include <sys/conf.h>
 #include <sys/dirent.h>
 #include <sys/kauth.h>
+#include <sys/module.h>
 
 #include <fs/cd9660/iso.h>
 #include <fs/cd9660/cd9660_extern.h>
@@ -72,7 +74,11 @@ __KERNEL_RCSID(0, "$NetBSD: cd9660_vfsops.c,v 1.53 2008/01/02 11:48:40 ad Exp $"
 #include <fs/cd9660/cd9660_node.h>
 #include <fs/cd9660/cd9660_mount.h>
 
+MODULE(MODULE_CLASS_VFS, cd9660, NULL);
+
 MALLOC_JUSTDEFINE(M_ISOFSMNT, "ISOFS mount", "ISOFS mount structure");
+
+static struct sysctllog *cd9660_sysctl_log;
 
 extern const struct vnodeopv_desc cd9660_vnodeop_opv_desc;
 extern const struct vnodeopv_desc cd9660_specop_opv_desc;
@@ -105,11 +111,13 @@ struct vfsops cd9660_vfsops = {
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
 	(void *)eopnotsupp,		/* vfs_suspendctl */
+	genfs_renamelock_enter,
+	genfs_renamelock_exit,
+	(void *)eopnotsupp,
 	cd9660_vnodeopv_descs,
 	0,	/* refcount */
 	{ NULL, NULL } /* list */
 };
-VFS_ATTACH(cd9660_vfsops);
 
 static const struct genfs_ops cd9660_genfsops = {
 	.gop_size = genfs_size,
@@ -126,8 +134,53 @@ static int iso_makemp(struct iso_mnt *isomp, struct buf *bp, int *ea_len);
 static int iso_mountfs(struct vnode *devvp, struct mount *mp,
 		struct lwp *l, struct iso_args *argp);
 
+static int
+cd9660_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&cd9660_vfsops);
+		if (error != 0)
+			break;
+		sysctl_createv(&cd9660_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT, CTLTYPE_NODE, "vfs", NULL,
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, CTL_EOL);
+		sysctl_createv(&cd9660_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT, CTLTYPE_NODE, "cd9660",
+			       SYSCTL_DESCR("ISO-9660 file system"),
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, 14, CTL_EOL);
+		sysctl_createv(&cd9660_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+			       CTLTYPE_INT, "utf8_joliet",
+			       SYSCTL_DESCR("Encode Joliet filenames to UTF-8"),
+			       NULL, 0, &cd9660_utf8_joliet, 0,
+			       CTL_VFS, 14, CD9660_UTF8_JOLIET, CTL_EOL);
+		/*
+		 * XXX the "14" above could be dynamic, thereby eliminating
+		 * one more instance of the "number to vfs" mapping problem,
+		 * but "14" is the order as taken from sys/mount.h
+		 */
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&cd9660_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&cd9660_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}
+
 int
-cd9660_mountroot()
+cd9660_mountroot(void)
 {
 	struct mount *mp;
 	struct lwp *l = curlwp;
@@ -145,8 +198,7 @@ cd9660_mountroot()
 
 	args.flags = ISOFSMNT_ROOT;
 	if ((error = iso_mountfs(rootvp, mp, l, &args)) != 0) {
-		mp->mnt_op->vfs_refcount--;
-		vfs_unbusy(mp);
+		vfs_unbusy(mp, false, NULL);
 		vfs_destroy(mp);
 		return (error);
 	}
@@ -154,7 +206,7 @@ cd9660_mountroot()
 	CIRCLEQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 	mutex_exit(&mountlist_lock);
 	(void)cd9660_statvfs(mp, &mp->mnt_stat);
-	vfs_unbusy(mp);
+	vfs_unbusy(mp, false, NULL);
 	return (0);
 }
 
@@ -164,14 +216,9 @@ cd9660_mountroot()
  * mount system call
  */
 int
-cd9660_mount(mp, path, data, data_len)
-	struct mount *mp;
-	const char *path;
-	void *data;
-	size_t *data_len;
+cd9660_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
-	struct nameidata nd;
 	struct vnode *devvp;
 	struct iso_args *args = data;
 	int error;
@@ -199,10 +246,10 @@ cd9660_mount(mp, path, data, data_len)
 	 * Not an update, or updating the name: look up the name
 	 * and verify that it refers to a sensible block device.
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec);
-	if ((error = namei(&nd)) != 0)
+	error = namei_simple_user(args->fspec,
+				NSM_FOLLOW_NOEMULROOT, &devvp);
+	if (error != 0)
 		return (error);
-	devvp = nd.ni_vp;
 
 	if (devvp->v_type != VBLK) {
 		vrele(devvp);
@@ -216,29 +263,14 @@ cd9660_mount(mp, path, data, data_len)
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
 	 */
-	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER, NULL) != 0) {
-		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-		error = VOP_ACCESS(devvp, VREAD, l->l_cred);
-		VOP_UNLOCK(devvp, 0);
-		if (error) {
-			vrele(devvp);
-			return (error);
-		}
+	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
+	error = genfs_can_mount(devvp, VREAD, l->l_cred);
+	VOP_UNLOCK(devvp);
+	if (error) {
+		vrele(devvp);
+		return (error);
 	}
 	if ((mp->mnt_flag & MNT_UPDATE) == 0) {
-		/*
-		 * Disallow multiple mounts of the same device.
-		 * Disallow mounting of a device that is currently in use
-		 * (except for root, which might share swap device for
-		 * miniroot).
-		 */
-		error = vfs_mountedon(devvp);
-		if (error)
-			goto fail;
-		if (vcount(devvp) > 1 && devvp != rootvp) {
-			error = EBUSY;
-			goto fail;
-		}
 		error = VOP_OPEN(devvp, FREAD, FSCRED);
 		if (error)
 			goto fail;
@@ -246,12 +278,13 @@ cd9660_mount(mp, path, data, data_len)
 		if (error) {
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 			(void)VOP_CLOSE(devvp, FREAD, NOCRED);
-			VOP_UNLOCK(devvp, 0);
+			VOP_UNLOCK(devvp);
 			goto fail;
 		}
 	} else {
 		vrele(devvp);
-		if (devvp != imp->im_devvp)
+		if (devvp != imp->im_devvp &&
+		    devvp->v_rdev != imp->im_devvp->v_rdev)
 			return (EINVAL);	/* needs translation */
 	}
 	return set_statvfs_info(path, UIO_USERSPACE, args->fspec, UIO_USERSPACE,
@@ -266,10 +299,7 @@ fail:
  * Make a mount point from a volume descriptor
  */
 static int
-iso_makemp(isomp, bp, ea_len)
-	struct iso_mnt *isomp;
-	struct buf *bp;
-	int *ea_len;
+iso_makemp(struct iso_mnt *isomp, struct buf *bp, int *ea_len)
 {
 	struct iso_primary_descriptor *pri;
 	int logical_block_size;
@@ -307,11 +337,8 @@ iso_makemp(isomp, bp, ea_len)
  * Common code for mount and mountroot
  */
 static int
-iso_mountfs(devvp, mp, l, argp)
-	struct vnode *devvp;
-	struct mount *mp;
-	struct lwp *l;
-	struct iso_args *argp;
+iso_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l,
+	struct iso_args *argp)
 {
 	struct iso_mnt *isomp = (struct iso_mnt *)0;
 	struct buf *bp = NULL, *pribp = NULL, *supbp = NULL;
@@ -341,8 +368,7 @@ iso_mountfs(devvp, mp, l, argp)
 	iso_bsize = ISO_DEFAULT_BLOCK_SIZE;
 
 	error = VOP_IOCTL(devvp, DIOCGDINFO, &label, FREAD, FSCRED);
-	if (!error &&
-	    label.d_partitions[DISKPART(dev)].p_fstype == FS_ISO9660) {
+	if (!error) {
 		/* XXX more sanity checks? */
 		sess = label.d_partitions[DISKPART(dev)].p_cdsession;
 	} else {
@@ -352,12 +378,12 @@ iso_mountfs(devvp, mp, l, argp)
 			sess = 0;	/* never mind */
 	}
 #ifdef ISO_DEBUG
-	printf("isofs: session offset (part %d) %d\n", DISKPART(dev), sess);
+	printf("isofs: session offset (part %"PRId32") %d\n", DISKPART(dev), sess);
 #endif
 
 	for (iso_blknum = 16; iso_blknum < 100; iso_blknum++) {
 		if ((error = bread(devvp, (iso_blknum+sess) * btodb(iso_bsize),
-				   iso_bsize, NOCRED, &bp)) != 0)
+				   iso_bsize, NOCRED, 0, &bp)) != 0)
 			goto out;
 
 		vdp = (struct iso_volume_descriptor *)bp->b_data;
@@ -435,7 +461,7 @@ iso_mountfs(devvp, mp, l, argp)
 				   (isomp->root_extent + ext_attr_length) <<
 				   (isomp->im_bshift - DEV_BSHIFT),
 				   isomp->logical_block_size, NOCRED,
-				   &bp)) != 0)
+				   0, &bp)) != 0)
 		    goto out;
 
 		rootp = (struct iso_directory_record *)bp->b_data;
@@ -526,9 +552,7 @@ cd9660_start(struct mount *mp, int flags)
  * unmount system call
  */
 int
-cd9660_unmount(mp, mntflags)
-	struct mount *mp;
-	int mntflags;
+cd9660_unmount(struct mount *mp, int mntflags)
 {
 	struct iso_mnt *isomp;
 	int error, flags = 0;
@@ -556,9 +580,7 @@ cd9660_unmount(mp, mntflags)
  * Return root of a filesystem
  */
 int
-cd9660_root(mp, vpp)
-	struct mount *mp;
-	struct vnode **vpp;
+cd9660_root(struct mount *mp, struct vnode **vpp)
 {
 	struct iso_mnt *imp = VFSTOISOFS(mp);
 	struct iso_directory_record *dp =
@@ -577,9 +599,7 @@ cd9660_root(mp, vpp)
  * Get file system statistics.
  */
 int
-cd9660_statvfs(
-    struct mount *mp,
-    struct statvfs *sbp)
+cd9660_statvfs(struct mount *mp, struct statvfs *sbp)
 {
 	struct iso_mnt *isomp;
 
@@ -604,12 +624,9 @@ cd9660_statvfs(
 
 /* ARGSUSED */
 int
-cd9660_sync(
-    struct mount *mp,
-    int waitfor,
-    kauth_cred_t cred)
+cd9660_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 {
-	return (0);
+	return 0;
 }
 
 /*
@@ -631,10 +648,7 @@ struct ifid {
 
 /* ARGSUSED */
 int
-cd9660_fhtovp(mp, fhp, vpp)
-	struct mount *mp;
-	struct fid *fhp;
-	struct vnode **vpp;
+cd9660_fhtovp(struct mount *mp, struct fid *fhp, struct vnode **vpp)
 {
 	struct ifid ifh;
 	struct iso_node *ip;
@@ -665,10 +679,7 @@ cd9660_fhtovp(mp, fhp, vpp)
 }
 
 int
-cd9660_vget(mp, ino, vpp)
-	struct mount *mp;
-	ino_t ino;
-	struct vnode **vpp;
+cd9660_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 {
 
 	/*
@@ -687,17 +698,13 @@ cd9660_vget(mp, ino, vpp)
 }
 
 int
-cd9660_vget_internal(mp, ino, vpp, relocated, isodir)
-	struct mount *mp;
-	ino_t ino;
-	struct vnode **vpp;
-	int relocated;
-	struct iso_directory_record *isodir;
+cd9660_vget_internal(struct mount *mp, ino_t ino, struct vnode **vpp,
+	int relocated, struct iso_directory_record *isodir)
 {
 	struct iso_mnt *imp;
 	struct iso_node *ip;
 	struct buf *bp;
-	struct vnode *vp, *nvp;
+	struct vnode *vp;
 	dev_t dev;
 	int error;
 
@@ -765,7 +772,7 @@ cd9660_vget_internal(mp, ino, vpp, relocated, isodir)
 
 		error = bread(imp->im_devvp,
 			      lbn << (imp->im_bshift - DEV_BSHIFT),
-			      imp->logical_block_size, NOCRED, &bp);
+			      imp->logical_block_size, NOCRED, 0, &bp);
 		if (error) {
 			vput(vp);
 			brelse(bp, 0);
@@ -799,7 +806,7 @@ cd9660_vget_internal(mp, ino, vpp, relocated, isodir)
 	} else
 		bp = 0;
 
-	VREF(ip->i_devvp);
+	vref(ip->i_devvp);
 
 	if (relocated) {
 		/*
@@ -862,24 +869,7 @@ cd9660_vget_internal(mp, ino, vpp, relocated, isodir)
 		 * if device, look at device number table for translation
 		 */
 		vp->v_op = cd9660_specop_p;
-		if ((nvp = checkalias(vp, ip->inode.iso_rdev, mp)) != NULL) {
-			/*
-			 * Discard unneeded vnode, but save its iso_node.
-			 * Note that the lock is carried over in the iso_node
-			 * to the replacement vnode.
-			 */
-			nvp->v_data = vp->v_data;
-			vp->v_data = NULL;
-			VOP_UNLOCK(vp, 0);
-			vp->v_op = spec_vnodeop_p;
-			vgone(vp);
-			lockmgr(&nvp->v_lock, LK_EXCLUSIVE, &nvp->v_interlock);
-			/*
-			 * Reinitialize aliased inode.
-			 */
-			vp = nvp;
-			ip->i_vnode = vp;
-		}
+		spec_node_init(vp, ip->inode.iso_rdev);
 		break;
 	case VLNK:
 	case VNON:
@@ -911,10 +901,7 @@ cd9660_vget_internal(mp, ino, vpp, relocated, isodir)
  */
 /* ARGSUSED */
 int
-cd9660_vptofh(vp, fhp, fh_size)
-	struct vnode *vp;
-	struct fid *fhp;
-	size_t *fh_size;
+cd9660_vptofh(struct vnode *vp, struct fid *fhp, size_t *fh_size)
 {
 	struct iso_node *ip = VTOI(vp);
 	struct ifid ifh;
@@ -936,26 +923,4 @@ cd9660_vptofh(vp, fhp, fh_size)
 	    ifh.ifid_ino,ifh.ifid_start);
 #endif
 	return 0;
-}
-
-SYSCTL_SETUP(sysctl_vfs_cd9660_setup, "sysctl vfs.cd9660 subtree setup")
-{
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT, CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT, CTLTYPE_NODE, "cd9660",
-		       SYSCTL_DESCR("ISO-9660 file system"),
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, 14, CTL_EOL);
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "utf8_joliet",
-		       SYSCTL_DESCR("Encode Joliet file names to UTF-8"),
-		       NULL, 0, &cd9660_utf8_joliet, 0,
-		       CTL_VFS, 14, CD9660_UTF8_JOLIET, CTL_EOL);
-
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: ppbus_1284.h,v 1.6 2005/12/11 12:23:28 christos Exp $ */
+/* $NetBSD: ppbus_1284.h,v 1.8 2009/04/05 09:56:16 cegger Exp $ */
 
 /*-
  * Copyright (c) 1997 Nicolas Souchu
@@ -30,6 +30,8 @@
  */
 #ifndef __PPBUS_1284_H
 #define __PPBUS_1284_H
+
+#include <sys/device.h>	/* for device_t */
 
 /*
  * IEEE1284 signals
@@ -113,15 +115,15 @@
 /* Function prototypes */
 
 /* Host functions */
-int ppbus_1284_negotiate(struct device *, int, int);
-int ppbus_1284_terminate(struct device *);
-int ppbus_1284_read_id(struct device *, int, char **, size_t *, size_t *);
-int ppbus_1284_get_state(struct device *);
-int ppbus_1284_set_state(struct device *, int state);
+int ppbus_1284_negotiate(device_t, int, int);
+int ppbus_1284_terminate(device_t);
+int ppbus_1284_read_id(device_t, int, char **, size_t *, size_t *);
+int ppbus_1284_get_state(device_t);
+int ppbus_1284_set_state(device_t, int state);
 
 /* Peripheral functions */
-int ppbus_peripheral_terminate(struct device *, int);
-int ppbus_peripheral_negotiate(struct device *, int, int);
-int byte_peripheral_write(struct device *, char *, int, int *);
+int ppbus_peripheral_terminate(device_t, int);
+int ppbus_peripheral_negotiate(device_t, int, int);
+int byte_peripheral_write(device_t, char *, int, int *);
 
 #endif /* __PPBUS_1284_H */

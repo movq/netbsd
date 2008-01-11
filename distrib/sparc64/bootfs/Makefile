@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2006/06/08 08:40:39 he Exp $
+#	$NetBSD: Makefile,v 1.9 2010/04/02 21:29:30 martin Exp $
 #
 # boot.fs is the image for cdrom booting.
 #
@@ -15,7 +15,7 @@
 .include <bsd.kernobj.mk>
 
 IMAGE=		boot.fs
-IMAGESIZE=	5m
+IMAGESIZE=	1m
 IMAGEENDIAN=	be
 
 LISTS=		${.CURDIR}/list
@@ -26,9 +26,8 @@ RAMDISK=	${RAMDISKDIR}/install.fs
 PRIMARYBOOT=	${DESTDIR}/usr/mdec/bootblk
 
 PARSELISTENV=	RAMDISKDIR=${RAMDISKDIR:Q}
-IMAGEDEPENDS=	${RAMDISKDIR}/netbsd-INSTALL.gz ${DESTDIR}/usr/mdec/ofwboot \
-		${PRIMARYBOOT}
-IMAGEPOSTBUILD=	${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${IMAGE} ${PRIMARYBOOT} /boot
+IMAGEDEPENDS=	${DESTDIR}/usr/mdec/ofwboot ${PRIMARYBOOT}
+IMAGEPOSTBUILD=	${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${IMAGE} ${PRIMARYBOOT}
 
 IMAGE_RELEASEDIR=	installation/misc
 

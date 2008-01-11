@@ -1,4 +1,4 @@
-/*	$NetBSD: mpconfig.h,v 1.9 2006/07/04 00:30:22 christos Exp $	*/
+/*	$NetBSD: mpconfig.h,v 1.12 2010/01/09 20:56:17 cegger Exp $	*/
 
 /*
  * Definitions originally from the mpbios code, but now used for ACPI
@@ -40,10 +40,10 @@ struct mp_bus
 	const char *mb_name;		/* XXX bus name */
 	int mb_idx;		/* XXX bus index */
 	void (*mb_intr_print)(int);
-	void (*mb_intr_cfg)(const struct mpbios_int *, u_int32_t *);
+	void (*mb_intr_cfg)(const struct mpbios_int *, uint32_t *);
 	struct mp_intr_map *mb_intrs;
-	u_int32_t mb_data;	/* random bus-specific datum. */
-	int mb_configured;	/* has been autoconfigured */
+	uint32_t mb_data;	/* random bus-specific datum. */
+	device_t mb_dev;	/* has been autoconfigured if mb_dev != NULL */
 	pcitag_t *mb_pci_bridge_tag;
 	pci_chipset_tag_t mb_pci_chipset_tag;
 };
@@ -58,8 +58,8 @@ struct mp_intr_map
 	int ioapic_ih;		/* int handle, for apic_intr_est */
 	int type;		/* from mp spec intr record */
  	int flags;		/* from mp spec intr record */
-	u_int32_t redir;
-	int cpu_id;
+	uint32_t redir;
+	uint32_t cpu_id;
 	int global_int;		/* ACPI global interrupt number */
 	int sflags;		/* other, software flags (see below) */
 	void *linkdev;
@@ -75,6 +75,8 @@ extern struct mp_intr_map *mp_intrs;
 extern int mp_nintr;
 extern int mp_isa_bus, mp_eisa_bus;
 extern int mp_nbus;
+int mp_pci_scan(device_t, struct pcibus_attach_args *, cfprint_t);
+void mp_pci_childdetached(device_t, device_t);
 #endif
 #endif
 

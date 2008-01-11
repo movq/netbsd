@@ -32,21 +32,22 @@
  * SUCH DAMAGE. 
  */
 
+#undef ECHO
+
 #include "make_cmds.h"
 #include "parse.h"
 
-__RCSID("$Heimdal: lex.l,v 1.6 2001/09/16 23:10:10 assar Exp $"
-        "$NetBSD: lex.l,v 1.4 2002/09/12 13:19:22 joda Exp $");
+__RCSID("$Heimdal: lex.l 10703 2001-09-16 23:10:10Z assar $"
+        "$NetBSD: lex.l,v 1.6 2009/10/29 14:49:03 christos Exp $");
 
 static unsigned lineno = 1;
 static int getstring(void);
-
-#define YY_NO_UNPUT
 
 #undef ECHO
 
 %}
 
+%option nounput
 
 %%
 command_table		{ return TABLE; }

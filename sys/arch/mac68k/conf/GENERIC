@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.186 2007/12/31 15:31:58 ad Exp $
+# $NetBSD: GENERIC,v 1.200 2011/03/06 17:08:27 bouyer Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/mac68k/conf/std.mac68k"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.186 $"
+#ident 		"GENERIC-$Revision: 1.200 $"
 
 maxusers	16		# estimated number of users
 
@@ -49,7 +49,6 @@ options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
 options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
-options 	LKM		# loadable kernel modules
 
 options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -63,6 +62,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC	# cheap kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
+#options 	LOCKDEBUG	# kernel lock debugging
 options 	KMEMSTATS	# kernel memory statistics (vmstat -m)
 options 	DDB			# in-kernel debugger
 #options 	DDB_HISTORY_SIZE=100	# enable history editing in DDB
@@ -82,7 +82,9 @@ options 	COMPAT_14	# NetBSD 1.4,
 options 	COMPAT_15	# NetBSD 1.5,
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_30	# NetBSD 3.0,
+options 	COMPAT_40	# NetBSD 4.0,
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
@@ -108,7 +110,7 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system 	PORTAL		# portal filesystem (still experimental)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
@@ -119,9 +121,10 @@ file-system	TMPFS		# Efficient memory file-system
 #file-system	HFS		# experimental - Apple HFS+ (read-only)
 
 # File system options
-options 	QUOTA		# UFS quotas
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# FFS Endian Independant support
-options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -147,6 +150,7 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -227,6 +231,12 @@ wskbd*	at akbd? console ?
 wsmouse* at ams?
 
 
+# Centronics printer port
+
+# CSI Hurdler Centronics Parallel Interface
+cpi*	at nubus?
+
+
 # Serial Devices
 
 # On-board serial interface
@@ -303,8 +313,8 @@ pseudo-device	ccd		4	# concatenated/striped disk devices
 # options	RF_INCLUDE_INTERDECLUSTER=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss		4	# file system snapshot device
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vcoda		1	# Venus/Coda distributed file system
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
@@ -329,11 +339,17 @@ pseudo-device	bridge			# simple inter-network bridging
 #options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
 # miscellaneous pseudo-devices
 pseudo-device	grf		2	# grf emulation for wscons
 pseudo-device	ite		1	# ite emulation for wscons
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	clockctl		# user control of clock subsystem
+pseudo-device	putter			# for puffs and pud
 
 # random number generator pseudo-device
 pseudo-device	rnd			# /dev/random and in-kernel generator

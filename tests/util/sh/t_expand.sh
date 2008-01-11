@@ -1,6 +1,6 @@
-# $NetBSD: t_expand.sh,v 1.1 2007/11/12 15:14:03 jmmv Exp $
+# $NetBSD: t_expand.sh,v 1.9 2010/11/17 13:41:52 christos Exp $
 #
-# Copyright (c) 2007 The NetBSD Foundation, Inc.
+# Copyright (c) 2007, 2009 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -11,13 +11,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,19 @@
 #
 # This file tests the functions in expand.c.
 #
+
+delim_argv() {
+	str=
+	while [ $# -gt 0 ]; do
+		if [ -z "${str}" ]; then
+			str=">$1<"
+		else
+			str="${str} >$1<"
+		fi
+                shift
+	done
+	echo ${str}
+}
 
 atf_test_case dollar_at
 dollar_at_head() {
@@ -59,6 +65,23 @@ dollar_at_body() {
 	atf_check_equal '0' '$n_args'
 }
 
+atf_test_case dollar_at_with_text
+dollar_at_with_text_head() {
+	atf_set "descr" "Test \$@ expansion when it is surrounded by text" \
+	                "within the quotes.  PR bin/33956."
+}
+dollar_at_with_text_body() {
+	set --
+	atf_check_equal '' "$(delim_argv "$@")"
+	atf_check_equal '>foobar<' "$(delim_argv "foo$@bar")"
+	atf_check_equal '>foo  bar<' "$(delim_argv "foo $@ bar")"
+
+	set -- a b c
+	atf_check_equal '>a< >b< >c<' "$(delim_argv "$@")"
+	atf_check_equal '>fooa< >b< >cbar<' "$(delim_argv "foo$@bar")"
+	atf_check_equal '>foo a< >b< >c bar<' "$(delim_argv "foo $@ bar")"
+}
+
 atf_test_case strip
 strip_head() {
 	atf_set "descr" "Checks that the %% operator works and strips" \
@@ -68,7 +91,19 @@ strip_head() {
 strip_body() {
 	line='#define bindir "/usr/bin" /* comment */'
 	stripped='#define bindir "/usr/bin" '
+	atf_expect_fail "PR bin/43469"
 	atf_check_equal '$stripped' '${line%%/\**}'
+}
+
+atf_test_case varpattern_backslashes
+varpattern_backslashes_head() {
+	atf_set "descr" "Tests that protecting wildcards with backslashes" \
+	                "works in variable patterns."
+}
+varpattern_backslashes_body() {
+	line='/foo/bar/*/baz'
+	stripped='/foo/bar/'
+	atf_check_equal $stripped ${line%%\**}
 }
 
 atf_test_case arithmetic
@@ -86,6 +121,8 @@ arithmetic_body() {
 
 atf_init_test_cases() {
 	atf_add_test_case dollar_at
+	atf_add_test_case dollar_at_with_text
 	atf_add_test_case strip
+	atf_add_test_case varpattern_backslashes
 	atf_add_test_case arithmetic
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: autoconf.c,v 1.2 2008/01/04 22:17:04 ad Exp $ */
+/* $NetBSD: autoconf.c,v 1.4 2010/01/22 08:56:05 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -45,13 +45,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.2 2008/01/04 22:17:04 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.4 2010/01/22 08:56:05 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -120,10 +113,10 @@ device_register(struct device *dev, void *aux)
 		prop_object_release(po);
 	}
 	if (device_is_a(dev, "admsw") &&
-	    (po = prop_dictionary_get(properties, "mac-addr")) != NULL) {
+	    (po = prop_dictionary_get(properties, "mac-address")) != NULL) {
 
 		if (prop_dictionary_set(device_properties(dev),
-					"mac-addr", po) == FALSE) {
+					"mac-address", po) == FALSE) {
 			printf("WARNING: unable to set mac-addr "
 			    "property for %s\n", dev->dv_xname);
 		}

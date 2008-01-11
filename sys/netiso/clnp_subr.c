@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_subr.c,v 1.30 2007/12/20 19:53:34 dyoung Exp $	*/
+/*	$NetBSD: clnp_subr.c,v 1.33 2009/03/18 16:00:23 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clnp_subr.c,v 1.30 2007/12/20 19:53:34 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clnp_subr.c,v 1.33 2009/03/18 16:00:23 cegger Exp $");
 
 #include "opt_iso.h"
 
@@ -221,7 +221,7 @@ clnp_ours(
 		 * We are overloading siso_tlen in the if's address, as an nsel length.
 		 */
 		if (dst->isoa_len == ia->ia_addr.siso_nlen &&
-		    bcmp((void *) ia->ia_addr.siso_addr.isoa_genaddr,
+		    memcmp((void *) ia->ia_addr.siso_addr.isoa_genaddr,
 			 (void *) dst->isoa_genaddr,
 			 ia->ia_addr.siso_nlen - ia->ia_addr.siso_tlen) == 0)
 			return 1;
@@ -263,10 +263,11 @@ clnp_forward(
 	struct ifnet   *ifp;		/* ptr to outgoing interface */
 	struct iso_ifaddr *ia = 0;	/* ptr to iso name for ifp */
 	struct route route;		/* filled in by clnp_route */
+	struct rtentry *rt;
 	extern int      iso_systype;
 
 	clnp = mtod(m, struct clnp_fixed *);
-	bzero((void *) & route, sizeof(route));	/* MUST be done before
+	memset((void *) & route, 0, sizeof(route));	/* MUST be done before
 							 * "bad:" */
 
 	/*
@@ -346,7 +347,7 @@ clnp_forward(
 	 */
 	if ((iso_systype & SNPA_IS) && (inbound_shp) &&
 	    (ifp == inbound_shp->snh_ifp))
-		esis_rdoutput(inbound_shp, m, oidx, dst, rtcache_getrt(&route));
+		esis_rdoutput(inbound_shp, m, oidx, dst, rtcache_validate(&route));
 	/*
 	 *	If options are present, update them
 	 */
@@ -391,11 +392,13 @@ clnp_forward(
 	/*
 	 *	Dispatch the datagram if it is small enough, otherwise fragment
 	 */
-	if (len <= SN_MTU(ifp, rtcache_getrt(&route))) {
+	if ((rt = rtcache_validate(&route)) == NULL)
+		;
+	else if (len <= SN_MTU(ifp, rt)) {
 		iso_gen_csum(m, CLNP_CKSUM_OFF, (int) clnp->cnf_hdr_len);
-		(void) (*ifp->if_output) (ifp, m, next_hop, rtcache_getrt(&route));
+		(void) (*ifp->if_output) (ifp, m, next_hop, rt);
 	} else {
-		(void) clnp_fragment(ifp, m, next_hop, len, seg_off, /* flags */ 0, rtcache_getrt(&route));
+		(void) clnp_fragment(ifp, m, next_hop, len, seg_off, /* flags */ 0, rt);
 	}
 
 done:
@@ -606,7 +609,7 @@ clnp_echoreply(
 	int             ret;
 
 	/* fill in fake isopcb to pass to output function */
-	bzero(&isopcb, sizeof(isopcb));
+	memset(&isopcb, 0, sizeof(isopcb));
 	isopcb.isop_laddr = ec_dst;
 	isopcb.isop_faddr = ec_src;
 

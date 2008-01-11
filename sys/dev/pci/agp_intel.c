@@ -1,4 +1,4 @@
-/*	$NetBSD: agp_intel.c,v 1.27 2008/01/04 21:18:00 ad Exp $	*/
+/*	$NetBSD: agp_intel.c,v 1.37 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_intel.c,v 1.27 2008/01/04 21:18:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_intel.c,v 1.37 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,8 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: agp_intel.c,v 1.27 2008/01/04 21:18:00 ad Exp $");
 #include <sys/proc.h>
 #include <sys/agpio.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -71,7 +69,7 @@ static int agp_intel_bind_page(struct agp_softc *, off_t, bus_addr_t);
 static int agp_intel_unbind_page(struct agp_softc *, off_t);
 static void agp_intel_flush_tlb(struct agp_softc *);
 static int agp_intel_init(struct agp_softc *);
-static bool agp_intel_resume(device_t);
+static bool agp_intel_resume(device_t, const pmf_qual_t *);
 
 static struct agp_methods agp_intel_methods = {
 	agp_intel_get_aperture,
@@ -87,9 +85,10 @@ static struct agp_methods agp_intel_methods = {
 };
 
 static int
-agp_intel_vgamatch(struct pci_attach_args *pa)
+agp_intel_vgamatch(const struct pci_attach_args *pa)
 {
 	switch (PCI_PRODUCT(pa->pa_id)) {
+	case PCI_PRODUCT_INTEL_82855GM_AGP:
 	case PCI_PRODUCT_INTEL_82855PM_AGP:
 	case PCI_PRODUCT_INTEL_82443LX_AGP:
 	case PCI_PRODUCT_INTEL_82443BX_AGP:
@@ -106,10 +105,10 @@ agp_intel_vgamatch(struct pci_attach_args *pa)
 }
 
 int
-agp_intel_attach(struct device *parent, struct device *self, void *aux)
+agp_intel_attach(device_t parent, device_t self, void *aux)
 {
-	struct agp_softc *sc = (struct agp_softc *)self;
-	struct pci_attach_args *pa= aux;
+	struct agp_softc *sc = device_private(self);
+	struct pci_attach_args *pa = aux;
 	struct agp_intel_softc *isc;
 	struct agp_gatt *gatt;
 	u_int32_t value;
@@ -125,7 +124,7 @@ agp_intel_attach(struct device *parent, struct device *self, void *aux)
 
 	if (pci_find_device(&isc->vga_pa, agp_intel_vgamatch) == 0) {
 		aprint_normal(": using generic initialization for Intel AGP\n");
-		aprint_normal("%s", sc->as_dev.dv_xname);
+		aprint_normal_dev(sc->as_dev, "");
 		isc->chiptype = CHIP_INTEL;
 	}
 
@@ -148,6 +147,7 @@ agp_intel_attach(struct device *parent, struct device *self, void *aux)
 	case PCI_PRODUCT_INTEL_82840_AGP:
 		isc->chiptype = CHIP_I840;
 		break;
+	case PCI_PRODUCT_INTEL_82855GM_AGP:
 	case PCI_PRODUCT_INTEL_82855PM_AGP:
 	case PCI_PRODUCT_INTEL_82845_AGP:
 		isc->chiptype = CHIP_I845;
@@ -263,8 +263,11 @@ agp_intel_init(struct agp_softc *sc)
 		break;
 
 	default:
-		pci_conf_write(sc->as_pc, sc->as_tag,
-			AGP_INTEL_ERRSTS, 0x70);
+		{
+		reg = pci_conf_read(sc->as_pc, sc->as_tag, AGP_INTEL_ERRSTS);
+		/* clear error bits (write-one-to-clear) - just write back */
+		pci_conf_write(sc->as_pc, sc->as_tag, AGP_INTEL_ERRSTS, reg);
+		}
 	}
 
 	return (0);
@@ -394,7 +397,7 @@ agp_intel_flush_tlb(struct agp_softc *sc)
 }
 
 static bool
-agp_intel_resume(device_t dv)
+agp_intel_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct agp_softc *sc = device_private(dv);
 

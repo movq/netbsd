@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.133 2007/11/12 15:07:33 jmmv Exp $	*/
+/*	$NetBSD: defs.h,v 1.153 2011/04/04 08:30:12 mbalmer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,24 +14,20 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
@@ -54,6 +50,7 @@ deconst(const void *p)
 }
 
 #include "msg_defs.h"
+#include "menu_defs.h"
 
 #define min(a,b)	((a) < (b) ? (a) : (b))
 #define max(a,b)	((a) > (b) ? (a) : (b))
@@ -107,6 +104,7 @@ enum {
     SET_GAMES,		/* text games */
     SET_MAN_PAGES,	/* online manual pages */
     SET_MISC,		/* miscellaneuous */
+    SET_MODULES,	/* kernel modules */
     SET_TESTS,		/* tests */
     SET_TEXT_TOOLS,	/* text processing tools */
 
@@ -135,7 +133,7 @@ enum {
 #define SET_KERNEL SET_KERNEL_1, SET_KERNEL_2, SET_KERNEL_3, SET_KERNEL_4, \
 		    SET_KERNEL_5, SET_KERNEL_6, SET_KERNEL_7, SET_KERNEL_8
 /* Core system sets */
-#define SET_CORE SET_BASE, SET_ETC
+#define SET_CORE SET_MODULES, SET_BASE, SET_ETC
 /* All system sets */
 #define SET_SYSTEM SET_CORE, SET_COMPILER, SET_GAMES, \
 		    SET_MAN_PAGES, SET_MISC, SET_TESTS, SET_TEXT_TOOLS
@@ -146,17 +144,26 @@ enum {
 /* All machine dependant sets */
 #define SET_MD SET_MD_1, SET_MD_2, SET_MD_3, SET_MD_4
 
+/* Set list flags */
+#define SFLAG_MINIMAL	1
+#define	SFLAG_NOX	2
+
 /* Macros */
 #define nelem(x) (sizeof (x) / sizeof *(x))
 
 /* Round up to the next full cylinder size */
 #define NUMSEC(size, sizemult, cylsize) \
-	((size) == -1 ? -1 : (sizemult) == 1 ? (size) : \
+	((size) == ~0u ? ~0u : (sizemult) == 1 ? (size) : \
 	 roundup((size) * (sizemult), (cylsize)))
 
 /* What FS type? */
 #define PI_ISBSDFS(p) ((p)->pi_fstype == FS_BSDLFS || \
 		       (p)->pi_fstype == FS_BSDFFS)
+
+/* non-standard cd0 driver */
+#ifndef CD_NAME
+#define CD_NAME "cd0a"
+#endif
 
 /* Types */
 typedef struct distinfo {
@@ -186,11 +193,28 @@ typedef struct _partinfo {
 #define PIF_NODEVMTIME	0x0080		/* mount -o nodevmtime */
 #define PIF_NOEXEC	0x0100		/* mount -o noexec */
 #define PIF_NOSUID	0x0200		/* mount -o nosuid */
-#define PIF_SOFTDEP	0x0400		/* mount -o softdep */
+#define PIF__UNUSED	0x0400		/* unused */
+#define PIF_LOG		0x0800		/* mount -o log */
 #define PIF_MOUNT_OPTS	0x0ff0		/* all above mount flags */
 #define PIF_RESET	0x1000		/* internal - restore previous values */
 } partinfo;	/* Single partition from a disklabel */
 
+struct ptn_info {
+	int		menu_no;
+	struct ptn_size {
+		int	ptn_id;
+		char	mount[20];
+		daddr_t	dflt_size;
+		daddr_t	size;
+		int	limit;
+		int	changed;
+	}		ptn_sizes[MAXPARTITIONS + 1];	/* +1 for delete code */
+	menu_ent	ptn_menus[MAXPARTITIONS + 1];	/* +1 for unit chg */
+	int		free_parts;
+	daddr_t		free_space;
+	struct ptn_size	*pool_part;
+	char		exit_msg[70];
+};
 
 /* variables */
 
@@ -205,7 +229,7 @@ int ttysig_ignore;
 pid_t ttysig_forward;
 int layoutkind;
 int sizemult;
-const char *multname; 
+const char *multname;
 
 /* loging variables */
 
@@ -221,13 +245,14 @@ int rootpart;				/* partition we install into */
 const char *disktype;		/* ST506, SCSI, ... */
 
 /* Area of disk we can allocate, start and size in disk sectors. */
-int ptstart, ptsize;
+daddr_t ptstart, ptsize;
 /* If we have an MBR boot partition, start and size in sectors */
 int bootstart, bootsize;
 
 /* Actual values for current disk - set by find_disks() or md_get_info() */
 int sectorsize;
-int dlcyl, dlhead, dlsec, dlsize, dlcylsize;
+int dlcyl, dlhead, dlsec, dlcylsize;
+daddr_t dlsize;
 int current_cylsize;
 unsigned int root_limit;		/* BIOS (etc) read limit */
 
@@ -237,14 +262,14 @@ enum DLTR { PART_A, PART_B, PART_C, PART_D, PART_E, PART_F, PART_G, PART_H,
 #define partition_name(x)	('a' + (x))
 partinfo oldlabel[MAXPARTITIONS];	/* What we found on the disk */
 partinfo bsdlabel[MAXPARTITIONS];	/* What we want it to look like */
-int tmp_mfs_size;
+daddr_t tmp_ramdisk_size;
 
 #define DISKNAME_SIZE 16
 char bsddiskname[DISKNAME_SIZE];
 const char *doessf;
 
 /* Relative file name for storing a distribution. */
-char xfer_dir[STRSIZE];  
+char xfer_dir[STRSIZE];
 int  clean_xfer_dir;
 
 #if !defined(SYSINST_FTP_HOST)
@@ -292,19 +317,23 @@ char dist_postfix[SSTRSIZE];
 void set_menu_numopts(int, int);
 
 /* Machine dependent functions .... */
-int	md_check_partitions(void);
-void	md_cleanup_install(void);
-int	md_copy_filesystem(void);
+void	md_init(void);
+void	md_init_set_status(int); /* SFLAG_foo */
+
+ /* MD functions if user selects install - in order called */
 int	md_get_info(void);
 int	md_make_bsd_partitions(void);
+int	md_check_partitions(void);
+int	md_pre_disklabel(void);
 int	md_post_disklabel(void);
 int	md_post_newfs(void);
-int	md_pre_disklabel(void);
+int	md_post_extract(void);
+void	md_cleanup_install(void);
+
+ /* MD functions if user selects upgrade - in order called */
 int	md_pre_update(void);
 int	md_update(void);
-int	md_post_extract(void);
-void	md_init(void);
-void	md_set_no_x(void);
+/* Also calls md_post_extract() */
 
 /* from main.c */
 void	toplevel(void);
@@ -320,6 +349,7 @@ int	make_fstab(void);
 int	mount_disks(void);
 int	set_swap(const char *, partinfo *);
 int	check_swap(const char *, int);
+char	*bootxx_name(void);
 
 /* from disks_lfs.c */
 int	fs_is_lfs(void *);
@@ -329,8 +359,6 @@ const char *get_last_mounted(int, int, partinfo *);
 int	savenewlabel(partinfo *, int);
 int	incorelabel(const char *, partinfo *);
 int	edit_and_check_label(partinfo *, int, int, int);
-int	getpartoff(int);
-int	getpartsize(int, int);
 void	set_bsize(partinfo *, int);
 void	set_fsize(partinfo *, int);
 void	set_ptype(partinfo *, int, int);
@@ -374,6 +402,7 @@ int	file_mode_match(const char *, unsigned int);
 uint	get_ramsize(void);
 void	ask_sizemult(int);
 void	run_makedev(void);
+int	boot_media_still_needed(void);
 int	get_via_floppy(void);
 int	get_via_cdrom(void);
 int	get_via_localfs(void);
@@ -386,14 +415,13 @@ unsigned int    set_X11_selected(void);
 int 	get_and_unpack_sets(int, msg, msg, msg);
 int	sanity_check(void);
 int	set_timezone(void);
-int	set_crypt_type(void);
 int	set_root_password(void);
 int	set_root_shell(void);
 void	scripting_fprintf(FILE *, const char *, ...);
 void	scripting_vfprintf(FILE *, const char *, va_list);
 void	add_rc_conf(const char *, ...);
+void	add_sysctl_conf(const char *, ...);
 void	enable_rc_conf(void);
-int	check_partitions(void);
 void	set_sizemultname_cyl(void);
 void	set_sizemultname_meg(void);
 int	check_lfs_progs(void);
@@ -402,6 +430,9 @@ void	customise_sets(void);
 void	umount_mnt2(void);
 
 /* from target.c */
+#if defined(DEBUG)  ||	defined(DEBUG_ROOT)
+void	backtowin(void);
+#endif
 const	char *concat_paths(const char *, const char *);
 const	char *target_expand(const char *);
 void	make_target_dir(const char *);
@@ -429,6 +460,11 @@ void	unwind_mounts(void);
 
 /* from bsddisklabel.c */
 int	make_bsd_partitions(void);
+int	save_ptn(int, daddr_t, daddr_t, int, const char *);
+void	set_ptn_titles(menudesc *, int, void *);
+void	set_ptn_menu(struct ptn_info *);
+int	set_ptn_size(menudesc *, void *);
+void	get_ptn_sizes(daddr_t, daddr_t, int);
 
 /* from aout2elf.c */
 int move_aout_libs(void);

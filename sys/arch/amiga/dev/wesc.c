@@ -1,4 +1,4 @@
-/*	$NetBSD: wesc.c,v 1.37 2007/03/05 20:47:52 he Exp $ */
+/*	$NetBSD: wesc.c,v 1.39 2010/12/20 00:25:26 matt Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -58,14 +58,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wesc.c,v 1.37 2007/03/05 20:47:52 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wesc.c,v 1.39 2010/12/20 00:25:26 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -193,10 +191,13 @@ void
 wesc_dump(void)
 {
 	extern struct cfdriver wesc_cd;
+	struct siop_softc *sc;
 	int i;
 
-	for (i = 0; i < wesc_cd.cd_ndevs; ++i)
-		if (wesc_cd.cd_devs[i])
-			siop_dump(wesc_cd.cd_devs[i]);
+	for (i = 0; i < wesc_cd.cd_ndevs; ++i) {
+		sc = device_lookup_private(&wesc_cd, i);
+		if (sc != NULL)
+			siop_dump(sc);
+	}
 }
 #endif

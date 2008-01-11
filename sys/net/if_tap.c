@@ -1,7 +1,7 @@
-/*	$NetBSD: if_tap.c,v 1.37 2008/01/04 21:18:15 ad Exp $	*/
+/*	$NetBSD: if_tap.c,v 1.66 2010/11/22 21:31:51 christos Exp $	*/
 
 /*
- *  Copyright (c) 2003, 2004 The NetBSD Foundation.
+ *  Copyright (c) 2003, 2004, 2008, 2009 The NetBSD Foundation.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -12,9 +12,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,10 +33,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.37 2008/01/04 21:18:15 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.66 2010/11/22 21:31:51 christos Exp $");
 
 #if defined(_KERNEL_OPT)
-#include "bpfilter.h"
+
+#include "opt_modular.h"
+#include "opt_compat_netbsd.h"
 #endif
 
 #include <sys/param.h>
@@ -52,29 +51,33 @@ __KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.37 2008/01/04 21:18:15 ad Exp $");
 #include <sys/filedesc.h>
 #include <sys/ksyms.h>
 #include <sys/poll.h>
+#include <sys/proc.h>
 #include <sys/select.h>
 #include <sys/sockio.h>
+#if defined(COMPAT_40) || defined(MODULAR)
 #include <sys/sysctl.h>
+#endif
 #include <sys/kauth.h>
 #include <sys/mutex.h>
 #include <sys/simplelock.h>
+#include <sys/intr.h>
+#include <sys/stat.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_ether.h>
 #include <net/if_media.h>
 #include <net/if_tap.h>
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <compat/sys/sockio.h>
 
+#if defined(COMPAT_40) || defined(MODULAR)
 /*
  * sysctl node management
  *
  * It's not really possible to use a SYSCTL_SETUP block with
- * current LKM implementation, so it is easier to just define
+ * current module implementation, so it is easier to just define
  * our own function.
  *
  * The handler function is a "helper" in Andrew Brown's sysctl
@@ -87,6 +90,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.37 2008/01/04 21:18:15 ad Exp $");
 static int tap_node;
 static int	tap_sysctl_handler(SYSCTLFN_PROTO);
 SYSCTL_SETUP_PROTO(sysctl_tap_setup);
+#endif
 
 /*
  * Since we're an Ethernet device, we need the 3 following
@@ -97,7 +101,7 @@ SYSCTL_SETUP_PROTO(sysctl_tap_setup);
  */
 
 struct tap_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 	struct ifmedia	sc_im;
 	struct ethercom	sc_ec;
 	int		sc_flags;
@@ -109,17 +113,21 @@ struct tap_softc {
 	pid_t		sc_pgid; /* For async. IO */
 	kmutex_t	sc_rdlock;
 	struct simplelock	sc_kqlock;
+	void		*sc_sih;
+	struct timespec sc_atime;
+	struct timespec sc_mtime;
+	struct timespec sc_btime;
 };
 
 /* autoconf(9) glue */
 
 void	tapattach(int);
 
-static int	tap_match(struct device *, struct cfdata *, void *);
-static void	tap_attach(struct device *, struct device *, void *);
-static int	tap_detach(struct device*, int);
+static int	tap_match(device_t, cfdata_t, void *);
+static void	tap_attach(device_t, device_t, void *);
+static int	tap_detach(device_t, int);
 
-CFATTACH_DECL(tap, sizeof(struct tap_softc),
+CFATTACH_DECL_NEW(tap, sizeof(struct tap_softc),
     tap_match, tap_attach, tap_detach, NULL);
 extern struct cfdriver tap_cd;
 
@@ -132,25 +140,26 @@ static int	tap_dev_poll(int, int, struct lwp *);
 static int	tap_dev_kqfilter(int, struct knote *);
 
 /* Fileops access routines */
-static int	tap_fops_close(struct file *, struct lwp *);
-static int	tap_fops_read(struct file *, off_t *, struct uio *,
+static int	tap_fops_close(file_t *);
+static int	tap_fops_read(file_t *, off_t *, struct uio *,
     kauth_cred_t, int);
-static int	tap_fops_write(struct file *, off_t *, struct uio *,
+static int	tap_fops_write(file_t *, off_t *, struct uio *,
     kauth_cred_t, int);
-static int	tap_fops_ioctl(struct file *, u_long, void *,
-    struct lwp *);
-static int	tap_fops_poll(struct file *, int, struct lwp *);
-static int	tap_fops_kqfilter(struct file *, struct knote *);
+static int	tap_fops_ioctl(file_t *, u_long, void *);
+static int	tap_fops_poll(file_t *, int);
+static int	tap_fops_stat(file_t *, struct stat *);
+static int	tap_fops_kqfilter(file_t *, struct knote *);
 
 static const struct fileops tap_fileops = {
-	tap_fops_read,
-	tap_fops_write,
-	tap_fops_ioctl,
-	fnullop_fcntl,
-	tap_fops_poll,
-	fbadop_stat,
-	tap_fops_close,
-	tap_fops_kqfilter,
+	.fo_read = tap_fops_read,
+	.fo_write = tap_fops_write,
+	.fo_ioctl = tap_fops_ioctl,
+	.fo_fcntl = fnullop_fcntl,
+	.fo_poll = tap_fops_poll,
+	.fo_stat = tap_fops_stat,
+	.fo_close = tap_fops_close,
+	.fo_kqfilter = tap_fops_kqfilter,
+	.fo_restart = fnullop_restart,
 };
 
 /* Helper for cloning open() */
@@ -198,8 +207,11 @@ static void	tap_stop(struct ifnet *, int);
 static int	tap_init(struct ifnet *);
 static int	tap_ioctl(struct ifnet *, u_long, void *);
 
-/* This is an internal function to keep tap_ioctl readable */
+/* Internal functions */
+#if defined(COMPAT_40) || defined(MODULAR)
 static int	tap_lifaddr(struct ifnet *, u_long, struct ifaliasreq *);
+#endif
+static void	tap_softintr(void *);
 
 /*
  * tap is a clonable interface, although it is highly unrealistic for
@@ -216,7 +228,7 @@ struct if_clone tap_cloners = IF_CLONE_INITIALIZER("tap",
 
 /* Helper functionis shared by the two cloning code paths */
 static struct tap_softc *	tap_clone_creator(int);
-int	tap_clone_destroyer(struct device *);
+int	tap_clone_destroyer(device_t);
 
 void
 tapattach(int n)
@@ -236,25 +248,34 @@ tapattach(int n)
 
 /* Pretty much useless for a pseudo-device */
 static int
-tap_match(struct device *self, struct cfdata *cfdata,
-    void *arg)
+tap_match(device_t parent, cfdata_t cfdata, void *arg)
 {
+
 	return (1);
 }
 
 void
-tap_attach(struct device *parent, struct device *self,
-    void *aux)
+tap_attach(device_t parent, device_t self, void *aux)
 {
-	struct tap_softc *sc = (struct tap_softc *)self;
+	struct tap_softc *sc = device_private(self);
 	struct ifnet *ifp;
+#if defined(COMPAT_40) || defined(MODULAR)
 	const struct sysctlnode *node;
-	u_int8_t enaddr[ETHER_ADDR_LEN] =
+	int error;
+#endif
+	uint8_t enaddr[ETHER_ADDR_LEN] =
 	    { 0xf2, 0x0b, 0xa4, 0xff, 0xff, 0xff };
 	char enaddrstr[3 * ETHER_ADDR_LEN];
 	struct timeval tv;
 	uint32_t ui;
-	int error;
+
+	sc->sc_dev = self;
+	sc->sc_sih = softint_establish(SOFTINT_CLOCK, tap_softintr, sc);
+	getnanotime(&sc->sc_btime);
+	sc->sc_atime = sc->sc_mtime = sc->sc_btime;
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	/*
 	 * In order to obtain unique initial Ethernet address on a host,
@@ -263,9 +284,9 @@ tap_attach(struct device *parent, struct device *self,
 	 */
 	getmicrouptime(&tv);
 	ui = (tv.tv_sec ^ tv.tv_usec) & 0xffffff;
-	memcpy(enaddr+3, (u_int8_t *)&ui, 3);
+	memcpy(enaddr+3, (uint8_t *)&ui, 3);
 
-	aprint_verbose("%s: Ethernet address %s\n", device_xname(&sc->sc_dev),
+	aprint_verbose_dev(self, "Ethernet address %s\n",
 	    ether_snprintf(enaddrstr, sizeof(enaddrstr), enaddr));
 
 	/*
@@ -290,7 +311,7 @@ tap_attach(struct device *parent, struct device *self,
 	 * to support IPv6.
 	 */
 	ifp = &sc->sc_ec.ec_if;
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strcpy(ifp->if_xname, device_xname(self));
 	ifp->if_softc	= sc;
 	ifp->if_flags	= IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl	= tap_ioctl;
@@ -308,6 +329,7 @@ tap_attach(struct device *parent, struct device *self,
 
 	sc->sc_flags = 0;
 
+#if defined(COMPAT_40) || defined(MODULAR)
 	/*
 	 * Add a sysctl node for that interface.
 	 *
@@ -324,12 +346,13 @@ tap_attach(struct device *parent, struct device *self,
 	 */
 	if ((error = sysctl_createv(NULL, 0, NULL,
 	    &node, CTLFLAG_READWRITE,
-	    CTLTYPE_STRING, sc->sc_dev.dv_xname, NULL,
+	    CTLTYPE_STRING, device_xname(self), NULL,
 	    tap_sysctl_handler, 0, sc, 18,
-	    CTL_NET, AF_LINK, tap_node, device_unit(&sc->sc_dev),
+	    CTL_NET, AF_LINK, tap_node, device_unit(sc->sc_dev),
 	    CTL_EOL)) != 0)
-		aprint_error("%s: sysctl_createv returned %d, ignoring\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(self, "sysctl_createv returned %d, ignoring\n",
+		    error);
+#endif
 
 	/*
 	 * Initialize the two locks for the device.
@@ -348,6 +371,8 @@ tap_attach(struct device *parent, struct device *self,
 	 */
 	mutex_init(&sc->sc_rdlock, MUTEX_DEFAULT, IPL_NONE);
 	simple_lock_init(&sc->sc_kqlock);
+
+	selinit(&sc->sc_rsel);
 }
 
 /*
@@ -355,11 +380,14 @@ tap_attach(struct device *parent, struct device *self,
  * routine, in reversed order.
  */
 static int
-tap_detach(struct device* self, int flags)
+tap_detach(device_t self, int flags)
 {
-	struct tap_softc *sc = (struct tap_softc *)self;
+	struct tap_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
-	int error, s;
+#if defined(COMPAT_40) || defined(MODULAR)
+	int error;
+#endif
+	int s;
 
 	sc->sc_flags |= TAP_GOING;
 	s = splnet();
@@ -367,19 +395,26 @@ tap_detach(struct device* self, int flags)
 	if_down(ifp);
 	splx(s);
 
+	softint_disestablish(sc->sc_sih);
+
+#if defined(COMPAT_40) || defined(MODULAR)
 	/*
 	 * Destroying a single leaf is a very straightforward operation using
 	 * sysctl_destroyv.  One should be sure to always end the path with
 	 * CTL_EOL.
 	 */
 	if ((error = sysctl_destroyv(NULL, CTL_NET, AF_LINK, tap_node,
-	    device_unit(&sc->sc_dev), CTL_EOL)) != 0)
-		aprint_error("%s: sysctl_destroyv returned %d, ignoring\n",
-		    sc->sc_dev.dv_xname, error);
+	    device_unit(sc->sc_dev), CTL_EOL)) != 0)
+		aprint_error_dev(self,
+		    "sysctl_destroyv returned %d, ignoring\n", error);
+#endif
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 	ifmedia_delete_instance(&sc->sc_im, IFM_INST_ANY);
+	seldestroy(&sc->sc_rsel);
 	mutex_destroy(&sc->sc_rdlock);
+
+	pmf_device_deregister(self);
 
 	return (0);
 }
@@ -446,20 +481,38 @@ tap_start(struct ifnet *ifp)
 				return;
 
 			ifp->if_opackets++;
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m0);
-#endif
+			bpf_mtap(ifp, m0);
 
 			m_freem(m0);
 		}
 	} else if (!IFQ_IS_EMPTY(&ifp->if_snd)) {
 		ifp->if_flags |= IFF_OACTIVE;
 		wakeup(sc);
-		selnotify(&sc->sc_rsel, 1);
+		selnotify(&sc->sc_rsel, 0, 1);
 		if (sc->sc_flags & TAP_ASYNCIO)
-			fownsignal(sc->sc_pgid, SIGIO, POLL_IN,
-			    POLLIN|POLLRDNORM, NULL);
+			softint_schedule(sc->sc_sih);
+	}
+}
+
+static void
+tap_softintr(void *cookie)
+{
+	struct tap_softc *sc;
+	struct ifnet *ifp;
+	int a, b;
+
+	sc = cookie;
+
+	if (sc->sc_flags & TAP_ASYNCIO) {
+		ifp = &sc->sc_ec.ec_if;
+		if (ifp->if_flags & IFF_RUNNING) {
+			a = POLL_IN;
+			b = POLLIN|POLLRDNORM;
+		} else {
+			a = POLL_HUP;
+			b = 0;
+		}
+		fownsignal(sc->sc_pgid, SIGIO, a, b, NULL);
 	}
 }
 
@@ -489,9 +542,11 @@ tap_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	case SIOCGIFMEDIA:
 		error = ifmedia_ioctl(ifp, ifr, &sc->sc_im, cmd);
 		break;
+#if defined(COMPAT_40) || defined(MODULAR)
 	case SIOCSIFPHYADDR:
 		error = tap_lifaddr(ifp, cmd, (struct ifaliasreq *)data);
 		break;
+#endif
 	default:
 		error = ether_ioctl(ifp, cmd, data);
 		if (error == ENETRESET)
@@ -504,22 +559,24 @@ tap_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	return (error);
 }
 
+#if defined(COMPAT_40) || defined(MODULAR)
 /*
- * Helper function to set Ethernet address.  This shouldn't be done there,
- * and should actually be available to all Ethernet drivers, real or not.
+ * Helper function to set Ethernet address.  This has been replaced by
+ * the generic SIOCALIFADDR ioctl on a PF_LINK socket.
  */
 static int
 tap_lifaddr(struct ifnet *ifp, u_long cmd, struct ifaliasreq *ifra)
 {
-	const struct sockaddr_dl *sdl = satosdl(&ifra->ifra_addr);
+	const struct sockaddr *sa = &ifra->ifra_addr;
 
-	if (sdl->sdl_family != AF_LINK)
+	if (sa->sa_family != AF_LINK)
 		return (EINVAL);
 
-	if_set_sadl(ifp, CLLADDR(sdl), ETHER_ADDR_LEN);
+	if_set_sadl(ifp, sa->sa_data, ETHER_ADDR_LEN, false);
 
 	return (0);
 }
+#endif
 
 /*
  * _init() would typically be called when an interface goes up,
@@ -551,9 +608,9 @@ tap_stop(struct ifnet *ifp, int disable)
 
 	ifp->if_flags &= ~IFF_RUNNING;
 	wakeup(sc);
-	selnotify(&sc->sc_rsel, 1);
+	selnotify(&sc->sc_rsel, 0, 1);
 	if (sc->sc_flags & TAP_ASYNCIO)
-		fownsignal(sc->sc_pgid, SIGIO, POLL_HUP, 0, NULL);
+		softint_schedule(sc->sc_sih);
 }
 
 /*
@@ -599,7 +656,7 @@ tap_clone_creator(int unit)
 		cf->cf_fstate = FSTATE_NOTFOUND;
 	}
 
-	return (struct tap_softc *)config_attach_pseudo(cf);
+	return device_private(config_attach_pseudo(cf));
 }
 
 /*
@@ -610,18 +667,19 @@ tap_clone_creator(int unit)
 static int
 tap_clone_destroy(struct ifnet *ifp)
 {
-	return tap_clone_destroyer((struct device *)ifp->if_softc);
+	struct tap_softc *sc = ifp->if_softc;
+
+	return tap_clone_destroyer(sc->sc_dev);
 }
 
 int
-tap_clone_destroyer(struct device *dev)
+tap_clone_destroyer(device_t dev)
 {
-	struct cfdata *cf = device_cfdata(dev);
+	cfdata_t cf = device_cfdata(dev);
 	int error;
 
 	if ((error = config_detach(dev, 0)) != 0)
-		aprint_error("%s: unable to detach instance\n",
-		    dev->dv_xname);
+		aprint_error_dev(dev, "unable to detach instance\n");
 	free(cf, M_DEVBUF);
 
 	return (error);
@@ -657,7 +715,7 @@ tap_cdev_open(dev_t dev, int flags, int fmt, struct lwp *l)
 	if (minor(dev) == TAP_CLONER)
 		return tap_dev_cloner(l);
 
-	sc = (struct tap_softc *)device_lookup(&tap_cd, minor(dev));
+	sc = device_lookup_private(&tap_cd, minor(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -694,22 +752,21 @@ static int
 tap_dev_cloner(struct lwp *l)
 {
 	struct tap_softc *sc;
-	struct file *fp;
+	file_t *fp;
 	int error, fd;
 
-	if ((error = falloc(l, &fp, &fd)) != 0)
+	if ((error = fd_allocfile(&fp, &fd)) != 0)
 		return (error);
 
 	if ((sc = tap_clone_creator(-1)) == NULL) {
-		FILE_UNUSE(fp, l);
-		ffree(fp);
+		fd_abort(curproc, fp, fd);
 		return (ENXIO);
 	}
 
 	sc->sc_flags |= TAP_INUSE;
 
-	return fdclone(l, fp, fd, FREAD|FWRITE, &tap_fileops,
-	    (void *)(intptr_t)device_unit(&sc->sc_dev));
+	return fd_clone(fp, fd, FREAD|FWRITE, &tap_fileops,
+	    (void *)(intptr_t)device_unit(sc->sc_dev));
 }
 
 /*
@@ -727,7 +784,7 @@ tap_cdev_close(dev_t dev, int flags, int fmt,
     struct lwp *l)
 {
 	struct tap_softc *sc =
-	    (struct tap_softc *)device_lookup(&tap_cd, minor(dev));
+	    device_lookup_private(&tap_cd, minor(dev));
 
 	if (sc == NULL)
 		return (ENXIO);
@@ -742,27 +799,34 @@ tap_cdev_close(dev_t dev, int flags, int fmt,
  * would dead lock.  TAP_GOING ensures that this situation doesn't happen.
  */
 static int
-tap_fops_close(struct file *fp, struct lwp *l)
+tap_fops_close(file_t *fp)
 {
 	int unit = (intptr_t)fp->f_data;
 	struct tap_softc *sc;
 	int error;
 
-	sc = (struct tap_softc *)device_lookup(&tap_cd, unit);
+	sc = device_lookup_private(&tap_cd, unit);
 	if (sc == NULL)
 		return (ENXIO);
 
 	/* tap_dev_close currently always succeeds, but it might not
 	 * always be the case. */
-	if ((error = tap_dev_close(sc)) != 0)
+	KERNEL_LOCK(1, NULL);
+	if ((error = tap_dev_close(sc)) != 0) {
+		KERNEL_UNLOCK_ONE(NULL);
 		return (error);
+	}
 
 	/* Destroy the device now that it is no longer useful,
 	 * unless it's already being destroyed. */
-	if ((sc->sc_flags & TAP_GOING) != 0)
+	if ((sc->sc_flags & TAP_GOING) != 0) {
+		KERNEL_UNLOCK_ONE(NULL);
 		return (0);
+	}
 
-	return tap_clone_destroyer((struct device *)sc);
+	error = tap_clone_destroyer(sc->sc_dev);
+	KERNEL_UNLOCK_ONE(NULL);
+	return error;
 }
 
 static int
@@ -786,10 +850,8 @@ tap_dev_close(struct tap_softc *sc)
 				break;
 
 			ifp->if_opackets++;
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m);
-#endif
+			bpf_mtap(ifp, m);
+			m_freem(m);
 		}
 	}
 	splx(s);
@@ -806,23 +868,30 @@ tap_cdev_read(dev_t dev, struct uio *uio, int flags)
 }
 
 static int
-tap_fops_read(struct file *fp, off_t *offp, struct uio *uio,
+tap_fops_read(file_t *fp, off_t *offp, struct uio *uio,
     kauth_cred_t cred, int flags)
 {
-	return tap_dev_read((intptr_t)fp->f_data, uio, flags);
+	int error;
+
+	KERNEL_LOCK(1, NULL);
+	error = tap_dev_read((intptr_t)fp->f_data, uio, flags);
+	KERNEL_UNLOCK_ONE(NULL);
+	return error;
 }
 
 static int
 tap_dev_read(int unit, struct uio *uio, int flags)
 {
 	struct tap_softc *sc =
-	    (struct tap_softc *)device_lookup(&tap_cd, unit);
+	    device_lookup_private(&tap_cd, unit);
 	struct ifnet *ifp;
 	struct mbuf *m, *n;
 	int error = 0, s;
 
 	if (sc == NULL)
 		return (ENXIO);
+
+	getnanotime(&sc->sc_atime);
 
 	ifp = &sc->sc_ec.ec_if;
 	if ((ifp->if_flags & IFF_UP) == 0)
@@ -841,7 +910,6 @@ tap_dev_read(int unit, struct uio *uio, int flags)
 	s = splnet();
 	if (IFQ_IS_EMPTY(&ifp->if_snd)) {
 		ifp->if_flags &= ~IFF_OACTIVE;
-		splx(s);
 		/*
 		 * We must release the lock before sleeping, and re-acquire it
 		 * after.
@@ -851,6 +919,8 @@ tap_dev_read(int unit, struct uio *uio, int flags)
 			error = EWOULDBLOCK;
 		else
 			error = tsleep(sc, PSOCK|PCATCH, "tap", 0);
+		splx(s);
+
 		if (error != 0)
 			return (error);
 		/* The device might have been downed */
@@ -874,10 +944,7 @@ tap_dev_read(int unit, struct uio *uio, int flags)
 	}
 
 	ifp->if_opackets++;
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	/*
 	 * One read is one packet.
@@ -898,23 +965,55 @@ out:
 }
 
 static int
+tap_fops_stat(file_t *fp, struct stat *st)
+{
+	int error = 0;
+	struct tap_softc *sc;
+	int unit = (uintptr_t)fp->f_data;
+
+	(void)memset(st, 0, sizeof(*st));
+
+	KERNEL_LOCK(1, NULL);
+	sc = device_lookup_private(&tap_cd, unit);
+	if (sc == NULL) {
+		error = ENXIO;
+		goto out;
+	}
+
+	st->st_dev = makedev(cdevsw_lookup_major(&tap_cdevsw), unit);
+	st->st_atimespec = sc->sc_atime;
+	st->st_mtimespec = sc->sc_mtime;
+	st->st_ctimespec = st->st_birthtimespec = sc->sc_btime;
+	st->st_uid = kauth_cred_geteuid(fp->f_cred);
+	st->st_gid = kauth_cred_getegid(fp->f_cred);
+out:
+	KERNEL_UNLOCK_ONE(NULL);
+	return error;
+}
+
+static int
 tap_cdev_write(dev_t dev, struct uio *uio, int flags)
 {
 	return tap_dev_write(minor(dev), uio, flags);
 }
 
 static int
-tap_fops_write(struct file *fp, off_t *offp, struct uio *uio,
+tap_fops_write(file_t *fp, off_t *offp, struct uio *uio,
     kauth_cred_t cred, int flags)
 {
-	return tap_dev_write((intptr_t)fp->f_data, uio, flags);
+	int error;
+
+	KERNEL_LOCK(1, NULL);
+	error = tap_dev_write((intptr_t)fp->f_data, uio, flags);
+	KERNEL_UNLOCK_ONE(NULL);
+	return error;
 }
 
 static int
 tap_dev_write(int unit, struct uio *uio, int flags)
 {
 	struct tap_softc *sc =
-	    (struct tap_softc *)device_lookup(&tap_cd, unit);
+	    device_lookup_private(&tap_cd, unit);
 	struct ifnet *ifp;
 	struct mbuf *m, **mp;
 	int error = 0;
@@ -923,6 +1022,7 @@ tap_dev_write(int unit, struct uio *uio, int flags)
 	if (sc == NULL)
 		return (ENXIO);
 
+	getnanotime(&sc->sc_mtime);
 	ifp = &sc->sc_ec.ec_if;
 
 	/* One write, one packet, that's the rule */
@@ -955,10 +1055,7 @@ tap_dev_write(int unit, struct uio *uio, int flags)
 	ifp->if_ipackets++;
 	m->m_pkthdr.rcvif = ifp;
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 	s =splnet();
 	(*ifp->if_input)(ifp, m);
 	splx(s);
@@ -974,20 +1071,18 @@ tap_cdev_ioctl(dev_t dev, u_long cmd, void *data, int flags,
 }
 
 static int
-tap_fops_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
+tap_fops_ioctl(file_t *fp, u_long cmd, void *data)
 {
-	return tap_dev_ioctl((intptr_t)fp->f_data, cmd, (void *)data, l);
+	return tap_dev_ioctl((intptr_t)fp->f_data, cmd, data, curlwp);
 }
 
 static int
 tap_dev_ioctl(int unit, u_long cmd, void *data, struct lwp *l)
 {
-	struct tap_softc *sc =
-	    (struct tap_softc *)device_lookup(&tap_cd, unit);
-	int error = 0;
+	struct tap_softc *sc = device_lookup_private(&tap_cd, unit);
 
 	if (sc == NULL)
-		return (ENXIO);
+		return ENXIO;
 
 	switch (cmd) {
 	case FIONREAD:
@@ -1004,27 +1099,26 @@ tap_dev_ioctl(int unit, u_long cmd, void *data, struct lwp *l)
 			else
 				*(int *)data = m->m_pkthdr.len;
 			splx(s);
-		} break;
+			return 0;
+		} 
 	case TIOCSPGRP:
 	case FIOSETOWN:
-		error = fsetown(l->l_proc, &sc->sc_pgid, cmd, data);
-		break;
+		return fsetown(&sc->sc_pgid, cmd, data);
 	case TIOCGPGRP:
 	case FIOGETOWN:
-		error = fgetown(l->l_proc, sc->sc_pgid, cmd, data);
-		break;
+		return fgetown(sc->sc_pgid, cmd, data);
 	case FIOASYNC:
 		if (*(int *)data)
 			sc->sc_flags |= TAP_ASYNCIO;
 		else
 			sc->sc_flags &= ~TAP_ASYNCIO;
-		break;
+		return 0;
 	case FIONBIO:
 		if (*(int *)data)
 			sc->sc_flags |= TAP_NBIO;
 		else
 			sc->sc_flags &= ~TAP_NBIO;
-		break;
+		return 0;
 #ifdef OTAPGIFNAME
 	case OTAPGIFNAME:
 #endif
@@ -1034,13 +1128,11 @@ tap_dev_ioctl(int unit, u_long cmd, void *data, struct lwp *l)
 			struct ifnet *ifp = &sc->sc_ec.ec_if;
 
 			strlcpy(ifr->ifr_name, ifp->if_xname, IFNAMSIZ);
-		} break;
+			return 0;
+		}
 	default:
-		error = ENOTTY;
-		break;
+		return ENOTTY;
 	}
-
-	return (0);
 }
 
 static int
@@ -1050,16 +1142,16 @@ tap_cdev_poll(dev_t dev, int events, struct lwp *l)
 }
 
 static int
-tap_fops_poll(struct file *fp, int events, struct lwp *l)
+tap_fops_poll(file_t *fp, int events)
 {
-	return tap_dev_poll((intptr_t)fp->f_data, events, l);
+	return tap_dev_poll((intptr_t)fp->f_data, events, curlwp);
 }
 
 static int
 tap_dev_poll(int unit, int events, struct lwp *l)
 {
 	struct tap_softc *sc =
-	    (struct tap_softc *)device_lookup(&tap_cd, unit);
+	    device_lookup_private(&tap_cd, unit);
 	int revents = 0;
 
 	if (sc == NULL)
@@ -1099,7 +1191,7 @@ tap_cdev_kqfilter(dev_t dev, struct knote *kn)
 }
 
 static int
-tap_fops_kqfilter(struct file *fp, struct knote *kn)
+tap_fops_kqfilter(file_t *fp, struct knote *kn)
 {
 	return tap_dev_kqfilter((intptr_t)fp->f_data, kn);
 }
@@ -1108,11 +1200,12 @@ static int
 tap_dev_kqfilter(int unit, struct knote *kn)
 {
 	struct tap_softc *sc =
-	    (struct tap_softc *)device_lookup(&tap_cd, unit);
+	    device_lookup_private(&tap_cd, unit);
 
 	if (sc == NULL)
 		return (ENXIO);
 
+	KERNEL_LOCK(1, NULL);
 	switch(kn->kn_filter) {
 	case EVFILT_READ:
 		kn->kn_fop = &tap_read_filterops;
@@ -1121,6 +1214,7 @@ tap_dev_kqfilter(int unit, struct knote *kn)
 		kn->kn_fop = &tap_seltrue_filterops;
 		break;
 	default:
+		KERNEL_UNLOCK_ONE(NULL);
 		return (EINVAL);
 	}
 
@@ -1128,6 +1222,7 @@ tap_dev_kqfilter(int unit, struct knote *kn)
 	simple_lock(&sc->sc_kqlock);
 	SLIST_INSERT_HEAD(&sc->sc_rsel.sel_klist, kn, kn_selnext);
 	simple_unlock(&sc->sc_kqlock);
+	KERNEL_UNLOCK_ONE(NULL);
 	return (0);
 }
 
@@ -1136,9 +1231,11 @@ tap_kqdetach(struct knote *kn)
 {
 	struct tap_softc *sc = (struct tap_softc *)kn->kn_hook;
 
+	KERNEL_LOCK(1, NULL);
 	simple_lock(&sc->sc_kqlock);
 	SLIST_REMOVE(&sc->sc_rsel.sel_klist, kn, knote, kn_selnext);
 	simple_unlock(&sc->sc_kqlock);
+	KERNEL_UNLOCK_ONE(NULL);
 }
 
 static int
@@ -1147,8 +1244,9 @@ tap_kqread(struct knote *kn, long hint)
 	struct tap_softc *sc = (struct tap_softc *)kn->kn_hook;
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	struct mbuf *m;
-	int s;
+	int s, rv;
 
+	KERNEL_LOCK(1, NULL);
 	s = splnet();
 	IFQ_POLL(&ifp->if_snd, m);
 
@@ -1157,9 +1255,12 @@ tap_kqread(struct knote *kn, long hint)
 	else
 		kn->kn_data = m->m_pkthdr.len;
 	splx(s);
-	return (kn->kn_data != 0 ? 1 : 0);
+	rv = (kn->kn_data != 0 ? 1 : 0);
+	KERNEL_UNLOCK_ONE(NULL);
+	return rv;
 }
 
+#if defined(COMPAT_40) || defined(MODULAR)
 /*
  * sysctl management routines
  * You can set the address of an interface through:
@@ -1173,7 +1274,7 @@ tap_kqread(struct knote *kn, long hint)
  * (called a link set) which is used at init_sysctl() time to cycle
  * through all those functions to create the kernel's sysctl tree.
  *
- * It is not (currently) possible to use link sets in a LKM, so the
+ * It is not possible to use link sets in a module, so the
  * easiest is to simply call our own setup routine at load time.
  *
  * In the SYSCTL_SETUP blocks you find in the kernel, nodes have the
@@ -1285,8 +1386,9 @@ tap_sysctl_handler(SYSCTLFN_ARGS)
 		return (EINVAL);
 
 	/* Commit change */
-	if (ether_nonstatic_aton(enaddr, addr) != 0)
+	if (ether_aton_r(enaddr, sizeof(enaddr), addr) != 0)
 		return (EINVAL);
-	if_set_sadl(ifp, enaddr, ETHER_ADDR_LEN);
+	if_set_sadl(ifp, enaddr, ETHER_ADDR_LEN, false);
 	return (error);
 }
+#endif

@@ -1,4 +1,4 @@
-# 	$NetBSD: NEWS1200,v 1.42 2007/10/17 19:55:53 garbled Exp $
+# 	$NetBSD: NEWS1200,v 1.50 2011/03/06 17:08:28 bouyer Exp $
 
 #	news1200 config file
 #
@@ -18,8 +18,6 @@ options 	KTRACE			# system call tracing support
 options 	SYSVMSG			# System V message queues
 options 	SYSVSEM			# System V semaphores
 options 	SYSVSHM			# System V shared memory
-#options 	SHMMAXPGS=1024		# 1024 pages is the default
-options 	LKM			# loadable kernel modules
 options 	USERCONF		# userconf(4) support
 #options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
@@ -45,6 +43,7 @@ options 	COMPAT_16		# NetBSD 1.6 binary compatibility
 options 	COMPAT_20		# NetBSD 2.0 binary compatibility
 options 	COMPAT_30		# NetBSD 3.0 binary compatibility
 options 	COMPAT_40		# NetBSD 4.0 binary compatibility
+options 	COMPAT_50		# NetBSD 5.0 binary compatibility
 options 	COMPAT_AOUT_M68K	# compatibility with NetBSD/m68k a.out
 
 #options 	COMPAT_SVR4		# binary compatibility with SVR4
@@ -66,16 +65,16 @@ file-system	PROCFS		# /proc
 file-system	FDESC		# /dev/fd/*
 file-system	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
-#file-system	PORTAL		# portal filesystem (still experimental)
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 #file-system	CODA		# Coda File System; also needs vcode (below)
 file-system	PTYFS		# /dev/pts/N support
 
 #options 	NFSSERVER	# nfs server support
-#options 	QUOTA		# ffs quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# ffs endian independent support
-#options 	SOFTDEP		# ffs soft updates support
+options 	WAPBL		# File system journaling support - Experimental
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
@@ -138,7 +137,7 @@ zstty1	at zsc0 channel 1
 # Misc.
 pseudo-device	loop			# loopback interface; required
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	md		1	# memory disk device
+pseudo-device	md			# memory disk device
 pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	ccd		4	# concatenated and striped disks
 #pseudo-device	raid		4	# RAIDframe disk driver

@@ -1,4 +1,4 @@
-/*      $NetBSD: opms.c,v 1.19 2007/03/04 06:00:43 christos Exp $        */
+/*      $NetBSD: opms.c,v 1.23 2009/03/14 15:36:13 dsl Exp $        */
 
 /*
  * Copyright 1997
@@ -91,7 +91,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.19 2007/03/04 06:00:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.23 2009/03/14 15:36:13 dsl Exp $");
 
 #include "opms.h"
 #if NOPMS > 1
@@ -182,13 +182,13 @@ struct opms_softc
 /*
 ** Forward routine declarations
 */
-int                  opmsprobe       __P((struct device *, 
+int                  opmsprobe(struct device *, 
                                          struct cfdata *, 
-                                         void *));
-void                 opmsattach      __P((struct device *, 
+                                         void *);
+void                 opmsattach(struct device *, 
                                          struct device *, 
-                                         void *));
-int                  opmsintr         __P((void *));
+                                         void *);
+int                  opmsintr(void *);
 
 /* 
 ** Global variables 
@@ -254,10 +254,7 @@ int opmsdebug = KERN_DEBUG_WARNING | KERN_DEBUG_ERROR;
 **--
 */
 int
-opmsprobe(parent, match, aux)
-    struct device *parent;
-    struct cfdata *match;
-    void          *aux;
+opmsprobe(struct device *parent, struct cfdata *match, void *aux)
 {
     struct cfdata             *cf     = match;
     int                       probeOk = 0;    /* assume failure */
@@ -355,10 +352,7 @@ opmsprobe(parent, match, aux)
 **--
 */
 void
-opmsattach(parent, self, aux)
-    struct device *parent;
-    struct device *self;
-    void          *aux;
+opmsattach(struct device *parent, struct device *self, void *aux)
 {
     struct opms_softc          *sc = (void *)self;
     int                       irq = device_cfdata(self)->cf_loc[SPCKBDCF_IRQ];
@@ -373,7 +367,7 @@ opmsattach(parent, self, aux)
     sc->sc_ioh    = (bus_space_handle_t)ia->ia_aux;
     sc->sc_state  = PMS_INIT;
 
-    
+    selinit(&sc->sc_rsel);
     sc->sc_ih     = isa_intr_establish(ia->ia_ic, irq, IST_LEVEL, 
                                        IPL_TTY, opmsintr, sc);
     KERN_DEBUG(opmsdebug, KERN_DEBUG_INFO,
@@ -423,33 +417,19 @@ opmsattach(parent, self, aux)
 **--
 */
 int
-opmsopen(dev, flag, mode, l)
-    dev_t dev;
-    int flag;
-    int mode;
-    struct lwp *l;
+opmsopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-    int                 unit = PMSUNIT(dev);
     struct opms_softc    *sc;
     
-    /* Sanity check the minor device number we have been instructed
-    ** to open and set up our softc structure pointer. 
-    */
-    if (unit >= opms_cd.cd_ndevs)
-    {
-        return ENXIO;
-    }
-    sc = opms_cd.cd_devs[unit];
+    sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
     if (!sc)
-    {
         return ENXIO;
-    }
+
     /* Check to see if the mouse has already been opened. 
     */
     if (sc->sc_state & PMS_OPEN)
-    {
         return EBUSY;
-    }
+
     /* Initialise the mouse softc structure 
     */
     if (clalloc(&sc->sc_q, PMS_BSIZE, 0) == -1)
@@ -509,13 +489,9 @@ opmsopen(dev, flag, mode, l)
 **--
 */
 int
-opmsclose(dev, flag, mode, l)
-    dev_t dev;
-    int flag;
-    int mode;
-    struct lwp *l;
+opmsclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-    struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+    struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
 
     /* Disable the mouse device and interrupts on it. Note that if we don't
     ** flush the device first it seems to generate LOTs of interrupts after
@@ -571,12 +547,9 @@ opmsclose(dev, flag, mode, l)
 **--
 */
 int
-opmsread(dev, uio, flag)
-    dev_t dev;
-    struct uio *uio;
-    int flag;
+opmsread(dev_t dev, struct uio *uio, int flag)
 {
-    struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+    struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
     int s;
     int error = 0;
     size_t length;
@@ -671,14 +644,9 @@ opmsread(dev, uio, flag)
 **--
 */
 int
-opmsioctl(dev, cmd, addr, flag, l)
-    dev_t       dev;
-    u_long      cmd;
-    void *    addr;
-    int         flag;
-    struct lwp *l;
+opmsioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
-    struct opms_softc     *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+    struct opms_softc     *sc = device_lookup_private(&opms_cd,PMSUNIT(dev));
     struct mouseinfo     info;
     int                  oldIpl;
     int                  error;
@@ -785,8 +753,7 @@ opmsioctl(dev, cmd, addr, flag, l)
 **--
 */
 int
-opmsintr(arg)
-        void *arg;
+opmsintr(void *arg)
 {
     struct opms_softc     *sc   = arg;
     static u_char        buttons;
@@ -909,7 +876,7 @@ opmsintr(arg)
                             wakeup((void *)sc);
                         }
                         /* Wakeup any selects waiting */
-                        selwakeup(&sc->sc_rsel);
+                        selnotify(&sc->sc_rsel, 0, 0);
                     }
                 break;
                 default :
@@ -962,12 +929,9 @@ opmsintr(arg)
 **--
 */
 int
-opmspoll(dev, events, l)
-    dev_t dev;
-    int events;
-    struct lwp *l;
+opmspoll(dev_t dev, int events, struct lwp *l)
 {
-    struct opms_softc     *sc     = opms_cd.cd_devs[PMSUNIT(dev)];
+    struct opms_softc     *sc     = device_lookup_private(&opms_cd, PMSUNIT(dev));
     int                  revents = 0;
     int                  oldIpl; 
 
@@ -1016,7 +980,7 @@ static const struct filterops opmsread_filtops =
 int
 opmskqfilter(dev_t dev, struct knote *kn)
 {
-	struct opms_softc *sc = opms_cd.cd_devs[PMSUNIT(dev)];
+	struct opms_softc *sc = device_lookup_private(&opms_cd, PMSUNIT(dev));
 	struct klist *klist;
 	int s;
 

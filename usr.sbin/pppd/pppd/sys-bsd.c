@@ -1,4 +1,4 @@
-/*	$NetBSD: sys-bsd.c,v 1.56 2007/05/27 18:11:38 tls Exp $	*/
+/*	$NetBSD: sys-bsd.c,v 1.63 2011/04/02 10:19:27 mbalmer Exp $	*/
 
 /*
  * sys-bsd.c - System-dependent procedures for setting up
@@ -79,7 +79,7 @@
 #if 0
 #define RCSID	"Id: sys-bsd.c,v 1.47 2000/04/13 12:04:23 paulus Exp "
 #else
-__RCSID("$NetBSD: sys-bsd.c,v 1.56 2007/05/27 18:11:38 tls Exp $");
+__RCSID("$NetBSD: sys-bsd.c,v 1.63 2011/04/02 10:19:27 mbalmer Exp $");
 #endif
 #endif
 
@@ -121,6 +121,27 @@ __RCSID("$NetBSD: sys-bsd.c,v 1.56 2007/05/27 18:11:38 tls Exp $");
 #endif
 #include <ifaddrs.h>
 
+#ifndef IN6_LLADDR_FROM_EUI64
+#ifdef __KAME__
+#define IN6_LLADDR_FROM_EUI64(sin6, eui64) do {			\
+	sin6.sin6_family = AF_INET6;				\
+	sin6.sin6_len = sizeof(struct sockaddr_in6);		\
+	sin6.sin6_addr.s6_addr[0] = 0xfe;			\
+	sin6.sin6_addr.s6_addr[1] = 0x80;			\
+	eui64_copy(eui64, sin6.sin6_addr.s6_addr[8]);		\
+} while (/*CONSTCOND*/0)
+#define IN6_IFINDEX(sin6, ifindex)	 			\
+    /* KAME ifindex hack */					\
+    *(u_int16_t *)&sin6.sin6_addr.s6_addr[2] = htons(ifindex)
+#else
+#define IN6_LLADDR_FROM_EUI64(sin6, eui64) do {			\
+	memset(&sin6.s6_addr, 0, sizeof(struct in6_addr));	\
+	sin6.s6_addr16[0] = htons(0xfe80);			\
+	eui64_copy(eui64, sin6.s6_addr32[2]);			\
+} while (/*CONSTCOND*/0)
+#endif
+#endif
+
 #if RTM_VERSION >= 3
 #include <sys/param.h>
 #if defined(NetBSD) && (NetBSD >= 199703)
@@ -153,6 +174,7 @@ static struct winsize wsinfo;	/* Initial window size info */
 
 static int loop_slave = -1;
 static int loop_master = -1;
+static int doing_cleanup = 0;
 static char loop_name[20];
 
 static unsigned char inbuf[512]; /* buffer for chars read from loopback */
@@ -190,7 +212,7 @@ get_flags(int fd)
     int flags;
 
     if (ioctl(fd, PPPIOCGFLAGS, (caddr_t) &flags) == -1)
-	fatal("ioctl(PPPIOCGFLAGS): %m");
+	fatal("%s: ioctl(PPPIOCGFLAGS): %m", __func__);
 
     SYSDEBUG((LOG_DEBUG, "get flags = %x\n", flags));
     return flags;
@@ -204,7 +226,7 @@ set_flags(int fd, int flags)
     SYSDEBUG((LOG_DEBUG, "set flags = %x\n", flags));
 
     if (ioctl(fd, PPPIOCSFLAGS, (caddr_t) &flags) == -1)
-	fatal("ioctl(PPPIOCSFLAGS, %x): %m", flags, errno);
+	fatal("%s: ioctl(PPPIOCSFLAGS, %x): %m", __func__, flags, errno);
 }
 
 /*
@@ -215,7 +237,7 @@ sys_init(void)
 {
     /* Get an internet socket for doing socket ioctl's on. */
     if ((sock_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-	fatal("Couldn't create IP socket: %m");
+	fatal("%s: Couldn't create IP socket: %m", __func__);
 
 #ifdef INET6
     if ((sock6_fd = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
@@ -238,6 +260,7 @@ sys_cleanup(void)
 {
     struct ifreq ifr;
 
+    doing_cleanup = 1;
     if (if_is_up) {
 	strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
 	if (ioctl(sock_fd, SIOCGIFFLAGS, &ifr) >= 0
@@ -252,6 +275,7 @@ sys_cleanup(void)
 	cifdefaultroute(0, 0, default_route_gateway);
     if (proxy_arp_addr)
 	cifproxyarp(0, proxy_arp_addr);
+    doing_cleanup = 0;
 }
 
 /*
@@ -280,7 +304,8 @@ sys_check_options(void)
 {
 #ifndef CDTRCTS
     if (crtscts == 2) {
-	warn("DTR/CTS flow control is not supported on this system");
+	warn("%s: DTR/CTS flow control is not supported on this system",
+	    __func__);
 	return 0;
     }
 #endif
@@ -302,20 +327,20 @@ ppp_available(void)
     (void)memset(&ifcr, 0, sizeof(ifcr));
 
     if ((s = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-	fatal("socket: %m");
+	fatal("%s: socket: %m", __func__);
 
     if (ioctl(s, SIOCIFGCLONERS, &ifcr) == -1)
-	fatal("ioctl(get cloners): %m");
+	fatal("%s: ioctl(get cloners): %m", __func__);
 
     buf = malloc(ifcr.ifcr_total * IFNAMSIZ);
     if (buf == NULL)
-	fatal("Unable to allocate cloner name buffer: %m");
+	fatal("%s: Unable to allocate cloner name buffer: %m", __func__);
 
     ifcr.ifcr_count = ifcr.ifcr_total;
     ifcr.ifcr_buffer = buf;
 
     if (ioctl(s, SIOCIFGCLONERS, &ifcr) == -1)
-	fatal("ioctl(get cloners): %m");
+	fatal("%s: ioctl(get cloners): %m", __func__);
     (void)close(s);
 
     /*
@@ -358,19 +383,19 @@ tty_establish_ppp(int fd)
 	 * Demand mode - prime the old ppp device to relinquish the unit.
 	 */
 	if (ioctl(ppp_fd, PPPIOCXFERUNIT, 0) < 0)
-	    fatal("ioctl(transfer ppp unit): %m");
+	    fatal("%s: ioctl(transfer ppp unit): %m", __func__);
     }
 
     /*
      * Save the old line discipline of fd, and set it to PPP.
      */
     if (ioctl(fd, TIOCGETD, &initdisc) < 0)
-	fatal("ioctl(TIOCGETD): %m");
+	fatal("%s: ioctl(TIOCGETD): %m", __func__);
     if (ioctl(fd, TIOCSETD, &pppdisc) < 0)
-	fatal("ioctl(TIOCSETD): %m");
+	fatal("%s: ioctl(TIOCSETD): %m", __func__);
 
     if (ioctl(fd, PPPIOCGUNIT, &x) < 0)
-	fatal("ioctl(PPPIOCGUNIT): %m");
+	fatal("%s: ioctl(PPPIOCGUNIT): %m", __func__);
     if (!demand) {
 	/*
 	 * Find out which interface we were given.
@@ -381,10 +406,11 @@ tty_establish_ppp(int fd)
 	 * Check that we got the same unit again.
 	 */
 	if (x != ifunit)
-	    fatal("transfer_ppp failed: wanted unit %d, got %d", ifunit, x);
+	    fatal("%s: transfer_ppp failed: wanted unit %d, got %d",
+		__func__, ifunit, x);
 	x = TTYDISC;
 	if (ioctl(loop_slave, TIOCSETD, &x) == -1)
-	    fatal("ioctl(TIOCGETD): %m");
+	    fatal("%s: ioctl(TIOCGETD): %m", __func__);
     }
 
     ppp_fd = fd;
@@ -403,7 +429,7 @@ tty_establish_ppp(int fd)
      */
     if ((initfdflags = fcntl(fd, F_GETFL)) == -1
 	|| fcntl(fd, F_SETFL, initfdflags | O_NONBLOCK) == -1) {
-	warn("Couldn't set device to non-blocking mode: %m");
+	warn("%s: Couldn't set device to non-blocking mode: %m", __func__);
     }
 
     return fd;
@@ -421,18 +447,19 @@ restore_loop(void)
      * Transfer the ppp interface back to the loopback.
      */
     if (ioctl(ppp_fd, PPPIOCXFERUNIT, 0) < 0)
-	fatal("ioctl(transfer ppp unit): %m");
+	fatal("%s: ioctl(transfer ppp unit): %m", __func__);
     x = PPPDISC;
     if (ioctl(loop_slave, TIOCSETD, &x) < 0)
-	fatal("ioctl(TIOCSETD): %m");
+	fatal("%s: ioctl(TIOCSETD): %m", __func__);
 
     /*
      * Check that we got the same unit again.
      */
     if (ioctl(loop_slave, PPPIOCGUNIT, &x) < 0)
-	fatal("ioctl(PPPIOCGUNIT): %m");
+	fatal("%s: ioctl(PPPIOCGUNIT): %m", __func__);
     if (x != ifunit)
-	fatal("transfer_ppp failed: wanted unit %d, got %d", ifunit, x);
+	fatal("%s: transfer_ppp failed: wanted unit %d, got %d", __func__,
+	    ifunit, x);
     ppp_fd = loop_slave;
 }
 
@@ -451,24 +478,26 @@ void
 tty_disestablish_ppp(fd)
     int fd;
 {
-    if (demand)
+    if (!doing_cleanup && demand)
 	restore_loop();
 
     if (!hungup || demand) {
 
-
 	/* Flush the tty output buffer so that the TIOCSETD doesn't hang.  */
 	if (tcflush(fd, TCIOFLUSH) < 0)
-	    warn("tcflush failed: %m");
+	    if (!doing_cleanup)
+		warn("%s: tcflush failed: %m", __func__);
 
 	/* Restore old line discipline. */
 	if (initdisc >= 0 && ioctl(fd, TIOCSETD, &initdisc) < 0)
-	    error("ioctl(TIOCSETD): %m");
+	    if (!doing_cleanup)
+		error("%s: ioctl(TIOCSETD): %m", __func__);
 	initdisc = -1;
 
 	/* Reset non-blocking mode on fd. */
 	if (initfdflags != -1 && fcntl(fd, F_SETFL, initfdflags) < 0)
-	    warn("Couldn't restore device fd flags: %m");
+	    if (!doing_cleanup)
+		warn("%s: Couldn't restore device fd flags: %m", __func__);
     }
     initfdflags = -1;
 
@@ -493,7 +522,7 @@ cfg_bundle(int mrru, int mtru, int rssn, int tssn)
 
     /* set the mrru, mtu and flags */
     if (ioctl(ppp_dev_fd, PPPIOCSMRRU, &mrru) < 0)
-	error("Couldn't set MRRU: %m");
+	error("%s: Couldn't set MRRU: %m", __func__);
     flags = get_flags(ppp_dev_fd);
     flags &= ~(SC_MP_SHORTSEQ | SC_MP_XSHORTSEQ);
     flags |= (rssn? SC_MP_SHORTSEQ: 0) | (tssn? SC_MP_XSHORTSEQ: 0)
@@ -503,7 +532,7 @@ cfg_bundle(int mrru, int mtru, int rssn, int tssn)
 
     /* connect up the channel */
     if (ioctl(ppp_fd, PPPIOCCONNECT, &ifunit) < 0)
-	fatal("Couldn't attach to PPP unit %d: %m", ifunit);
+	fatal("%s: Couldn't attach to PPP unit %d: %m", __func__, ifunit);
     add_fd(ppp_dev_fd);
 #endif
 }
@@ -547,10 +576,10 @@ bundle_attach(int ifnum)
     if (ioctl(ppp_dev_fd, PPPIOCATTACH, &ifnum) < 0) {
 	if (errno == ENXIO)
 	    return 0;	/* doesn't still exist */
-	fatal("Couldn't attach to interface unit %d: %m\n", ifnum);
+	fatal("%s: Couldn't attach to interface unit %d: %m", __func__, ifnum);
     }
     if (ioctl(ppp_fd, PPPIOCCONNECT, &ifnum) < 0)
-	fatal("Couldn't connect to interface unit %d: %m", ifnum);
+	fatal("%s: Couldn't connect to interface unit %d: %m", __func__, ifnum);
     set_flags(ppp_dev_fd, get_flags(ppp_dev_fd) | SC_MULTILINK);
 
     ifunit = ifnum;
@@ -601,16 +630,17 @@ clean_check(void)
 	    struct ppp_rawin win;
 	    char buf[4 * sizeof(win.buf) + 1];
 	    int i;
-	    warn("Serial link is not 8-bit clean:");
-	    warn("All received characters had %s", s);
+	    warn("%s: Serial link is not 8-bit clean:", __func__);
+	    warn("%s: All received characters had %s", __func__, s);
 	    if (ioctl(ppp_fd, PPPIOCGRAWIN, &win) == -1) {
-		warn("ioctl(PPPIOCGRAWIN): %s", strerror(errno));
+		warn("%s: ioctl(PPPIOCGRAWIN): %s", __func__, strerror(errno));
 		return;
 	    }
 	    for (i = 0; i < sizeof(win.buf); i++)
 		win.buf[i] = win.buf[i] & 0x7f;
 	    strvisx(buf, (char *)win.buf, win.count, VIS_CSTYLE);
-	    warn("Last %d characters were: %s", (int)win.count, buf);
+	    warn("%s: Last %d characters were: %s", __func__, (int)win.count,
+		buf);
 	}
     }
 }
@@ -628,7 +658,7 @@ set_up_tty(int fd, int local)
     struct termios tios;
 
     if (tcgetattr(fd, &tios) < 0)
-	fatal("tcgetattr: %m");
+	fatal("%s: tcgetattr: %m", __func__);
 
     if (!restore_term) {
 	inittermios = tios;
@@ -675,12 +705,13 @@ set_up_tty(int fd, int local)
 	 * since that implies that the serial port is disabled.
 	 */
 	if (inspeed == 0)
-	    fatal("Baud rate for %s is 0; need explicit baud rate", devnam);
+	    fatal("%s: Baud rate for %s is 0; need explicit baud rate",
+		__func__, devnam);
     }
     baud_rate = inspeed;
 
     if (tcsetattr(fd, TCSAFLUSH, &tios) < 0)
-	fatal("tcsetattr: %m");
+	fatal("%s: tcsetattr: %m", __func__);
 
     restore_term = 1;
 }
@@ -703,7 +734,7 @@ restore_tty(int fd)
 	}
 	if (tcsetattr(fd, TCSAFLUSH, &inittermios) < 0)
 	    if (errno != ENXIO)
-		warn("tcsetattr: %m");
+		warn("%s: tcsetattr: %m", __func__);
 	ioctl(fd, TIOCSWINSZ, &wsinfo);
 	restore_term = 0;
     }
@@ -733,14 +764,14 @@ sif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     struct in6_aliasreq addreq6;
 
     if (sock6_fd < 0) {
-	fatal("No IPv6 socket available");
+	fatal("%s: No IPv6 socket available", __func__);
 	/*NOTREACHED*/
     }
 
     /* actually, this part is not kame local - RFC2553 conformant */
     ifindex = if_nametoindex(ifname);
     if (ifindex == 0) {
-	error("sifaddr6: no interface %s", ifname);
+	error("%s: sifaddr6: no interface %s", __func__, ifname);
 	return 0;
     }
 
@@ -748,37 +779,30 @@ sif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     strlcpy(addreq6.ifra_name, ifname, sizeof(addreq6.ifra_name));
 
     /* my addr */
-    addreq6.ifra_addr.sin6_family = AF_INET6;
-    addreq6.ifra_addr.sin6_len = sizeof(struct sockaddr_in6);
-    addreq6.ifra_addr.sin6_addr.s6_addr[0] = 0xfe;
-    addreq6.ifra_addr.sin6_addr.s6_addr[1] = 0x80;
-    memcpy(&addreq6.ifra_addr.sin6_addr.s6_addr[8], &our_eui64,
-	sizeof(our_eui64));
-    /* KAME ifindex hack */
-    *(u_int16_t *)&addreq6.ifra_addr.sin6_addr.s6_addr[2] = htons(ifindex);
+    IN6_LLADDR_FROM_EUI64(addreq6.ifra_addr, our_eui64);
+    IN6_IFINDEX(addreq6.ifra_addr, ifindex);
 
+#ifdef notdef
     /* his addr */
-    addreq6.ifra_dstaddr.sin6_family = AF_INET6;
-    addreq6.ifra_dstaddr.sin6_len = sizeof(struct sockaddr_in6);
-    addreq6.ifra_dstaddr.sin6_addr.s6_addr[0] = 0xfe;
-    addreq6.ifra_dstaddr.sin6_addr.s6_addr[1] = 0x80;
-    memcpy(&addreq6.ifra_dstaddr.sin6_addr.s6_addr[8], &his_eui64,
-	sizeof(our_eui64));
-    /* KAME ifindex hack */
-    *(u_int16_t *)&addreq6.ifra_dstaddr.sin6_addr.s6_addr[2] = htons(ifindex);
+    IN6_LLADDR_FROM_EUI64(addreq6.ifra_dstaddr, his_eui64);
+    IN6_IFINDEX(addreq6.ifra_dstaddr, ifindex);
+#endif
 
-    /* prefix mask: 128bit */
+    /* prefix mask: 72bit */
     addreq6.ifra_prefixmask.sin6_family = AF_INET6;
     addreq6.ifra_prefixmask.sin6_len = sizeof(struct sockaddr_in6);
     memset(&addreq6.ifra_prefixmask.sin6_addr, 0xff,
-	sizeof(addreq6.ifra_prefixmask.sin6_addr));
+	sizeof(addreq6.ifra_prefixmask.sin6_addr) - sizeof(our_eui64));
+    memset((char *)&addreq6.ifra_prefixmask.sin6_addr +
+	sizeof(addreq6.ifra_prefixmask.sin6_addr) - sizeof(our_eui64), 0x00,
+	sizeof(our_eui64));
 
     /* address lifetime (infty) */
     addreq6.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
     addreq6.ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME;
 
     if (ioctl(sock6_fd, SIOCAIFADDR_IN6, &addreq6) < 0) {
-	error("sif6addr: ioctl(SIOCAIFADDR_IN6): %m");
+	error("%s: sif6addr: ioctl(SIOCAIFADDR_IN6): %m", __func__);
 	return 0;
     }
 
@@ -789,14 +813,14 @@ sif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     struct in6_rtmsg rt6;
 
     if (sock6_fd < 0) {
-	fatal("No IPv6 socket available");
+	fatal("%s: No IPv6 socket available", __func__);
 	/*NOTREACHED*/
     }
 
     memset(&ifr, 0, sizeof (ifr));
     strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
     if (ioctl(sock6_fd, SIOCGIFINDEX, (caddr_t) &ifr) < 0) {
-	error("sif6addr: ioctl(SIOCGIFINDEX): %m");
+	error("%s: sif6addr: ioctl(SIOCGIFINDEX): %m", __func__);
 	return 0;
     }
     
@@ -807,20 +831,20 @@ sif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     ifr6.ifr6_prefixlen = 10;
 
     if (ioctl(sock6_fd, SIOCSIFADDR, &ifr6) < 0) {
-	error("sif6addr: ioctl(SIOCSIFADDR): %m");
+	error("%s: sif6addr: ioctl(SIOCSIFADDR): %m", __func__);
 	return 0;
     }
     
     /* Route to remote host */
     memset(&rt6, 0, sizeof(rt6));
     IN6_LLADDR_FROM_EUI64(rt6.rtmsg_dst, his_eui64);
-    rt6.rtmsg_flags = RTF_UP | RTF_HOST;
-    rt6.rtmsg_dst_len = 128;
+    rt6.rtmsg_flags = RTF_UP;
+    rt6.rtmsg_dst_len = 10;
     rt6.rtmsg_ifindex = ifr.ifr_ifindex;
     rt6.rtmsg_metric = 1;
     
     if (ioctl(sock6_fd, SIOCADDRT, &rt6) < 0) {
-	error("sif6addr: ioctl(SIOCADDRT): %m");
+	error("%s: sif6addr: ioctl(SIOCADDRT): %m", __func__);
 	return 0;
     }
 
@@ -840,14 +864,14 @@ cif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     struct in6_ifreq delreq6;
 
     if (sock6_fd < 0) {
-	fatal("No IPv6 socket available");
+	fatal("%s: No IPv6 socket available", __func__);
 	/*NOTREACHED*/
     }
 
     /* actually, this part is not kame local - RFC2553 conformant */
     ifindex = if_nametoindex(ifname);
     if (ifindex == 0) {
-	error("cifaddr6: no interface %s", ifname);
+	error("%s: cifaddr6: no interface %s", __func__, ifname);
 	return 0;
     }
 
@@ -855,18 +879,11 @@ cif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     strlcpy(delreq6.ifr_name, ifname, sizeof(delreq6.ifr_name));
 
     /* my addr */
-    delreq6.ifr_ifru.ifru_addr.sin6_family = AF_INET6;
-    delreq6.ifr_ifru.ifru_addr.sin6_len = sizeof(struct sockaddr_in6);
-    delreq6.ifr_ifru.ifru_addr.sin6_addr.s6_addr[0] = 0xfe;
-    delreq6.ifr_ifru.ifru_addr.sin6_addr.s6_addr[1] = 0x80;
-    memcpy(&delreq6.ifr_ifru.ifru_addr.sin6_addr.s6_addr[8], &our_eui64,
-	sizeof(our_eui64));
-    /* KAME ifindex hack */
-    *(u_int16_t *)&delreq6.ifr_ifru.ifru_addr.sin6_addr.s6_addr[2] =
-	htons(ifindex);
+    IN6_LLADDR_FROM_EUI64(delreq6.ifr_ifru.ifru_addr, our_eui64);
+    IN6_IFINDEX(delreq6.ifr_ifru.ifru_addr, ifindex);
 
     if (ioctl(sock6_fd, SIOCDIFADDR_IN6, &delreq6) < 0) {
-	error("cif6addr: ioctl(SIOCDIFADDR_IN6): %m");
+	error("%s: cif6addr: ioctl(SIOCDIFADDR_IN6): %m", __func__);
 	return 0;
     }
 
@@ -876,14 +893,14 @@ cif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     struct in6_ifreq ifr6;
 
     if (sock6_fd < 0) {
-	fatal("No IPv6 socket available");
+	fatal("%s: No IPv6 socket available", __func__);
 	/*NOTREACHED*/
     }
 
     memset(&ifr, 0, sizeof(ifr));
     strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
     if (ioctl(sock6_fd, SIOCGIFINDEX, (caddr_t) &ifr) < 0) {
-	error("cif6addr: ioctl(SIOCGIFINDEX): %m");
+	error("%s: cif6addr: ioctl(SIOCGIFINDEX): %m", __func__);
 	return 0;
     }
     
@@ -895,10 +912,10 @@ cif6addr(int unit, eui64_t our_eui64, eui64_t his_eui64)
     if (ioctl(sock6_fd, SIOCDIFADDR, &ifr6) < 0) {
 	if (errno != EADDRNOTAVAIL) {
 	    if (! ok_error (errno))
-		error("cif6addr: ioctl(SIOCDIFADDR): %m");
+		error("%s: cif6addr: ioctl(SIOCDIFADDR): %m", __func__);
 	}
         else {
-	    warn("cif6addr: ioctl(SIOCDIFADDR): No such address");
+	    warn("%s: cif6addr: ioctl(SIOCDIFADDR): No such address", __func__);
 	}
         return (0);
     }
@@ -928,9 +945,9 @@ get_pty(int *master_fdp, int *slave_fdp, char *slave_name, int uid)
 	tios.c_oflag  = 0;
 	tios.c_lflag  = 0;
 	if (tcsetattr(*slave_fdp, TCSAFLUSH, &tios) < 0)
-	    warn("couldn't set attributes on pty: %m");
+	    warn("%s: couldn't set attributes on pty: %m", __func__);
     } else
-	warn("couldn't get attributes on pty: %m");
+	warn("%s: couldn't get attributes on pty: %m", __func__);
 
     return 1;
 }
@@ -949,7 +966,7 @@ open_ppp_loopback(void)
     int pppdisc = PPPDISC;
 
     if (openpty(&loop_master, &loop_slave, loop_name, NULL, NULL) < 0)
-	fatal("No free pty for loopback");
+	fatal("%s: No free pty for loopback", __func__);
     SYSDEBUG(("using %s for loopback", loop_name));
 
     if (tcgetattr(loop_slave, &tios) == 0) {
@@ -959,22 +976,22 @@ open_ppp_loopback(void)
 	tios.c_oflag = 0;
 	tios.c_lflag = 0;
 	if (tcsetattr(loop_slave, TCSAFLUSH, &tios) < 0)
-	    warn("couldn't set attributes on loopback: %m");
+	    warn("%s: couldn't set attributes on loopback: %m", __func__);
     }
 
     if ((flags = fcntl(loop_master, F_GETFL)) != -1) 
 	if (fcntl(loop_master, F_SETFL, flags | O_NONBLOCK) == -1)
-	    warn("couldn't set loopback to nonblock: %m");
+	    warn("%s: couldn't set loopback to nonblock: %m", __func__);
 
     ppp_fd = loop_slave;
     if (ioctl(ppp_fd, TIOCSETD, &pppdisc) < 0)
-	fatal("ioctl(TIOCSETD): %m");
+	fatal("%s: ioctl(TIOCSETD): %m", __func__);
 
     /*
      * Find out which interface we were given.
      */
     if (ioctl(ppp_fd, PPPIOCGUNIT, &ifunit) < 0)
-	fatal("ioctl(PPPIOCGUNIT): %m");
+	fatal("%s: ioctl(PPPIOCGUNIT): %m", __func__);
 
     /*
      * Enable debug in the driver if requested.
@@ -1000,7 +1017,7 @@ output(int unit, u_char *p, int len)
 
     if (write(ttyfd, p, len) < 0) {
 	if (errno != EIO)
-	    error("write: %m");
+	    error("%s: write: %m", __func__);
     }
 }
 
@@ -1019,7 +1036,7 @@ wait_input(struct timeval *timo)
     ready = in_fds;
     n = select(max_in_fd + 1, &ready, NULL, &ready, timo);
     if (n < 0 && errno != EINTR)
-	fatal("select: %m");
+	fatal("%s: select: %m", __func__);
 }
 
 
@@ -1029,7 +1046,7 @@ wait_input(struct timeval *timo)
 void add_fd(int fd)
 {
     if (fd >= FD_SETSIZE)
-	fatal("descriptor too big");
+	fatal("%s: descriptor too big", __func__);
     FD_SET(fd, &in_fds);
     if (fd > max_in_fd)
 	max_in_fd = fd;
@@ -1057,11 +1074,11 @@ wait_loop_output(struct timeval *timo)
 
     FD_ZERO(&ready);
     if (loop_master >= FD_SETSIZE)
-	fatal("descriptor too big");
+	fatal("%s: descriptor too big", __func__);
     FD_SET(loop_master, &ready);
     n = select(loop_master + 1, &ready, NULL, &ready, timo);
     if (n < 0 && errno != EINTR)
-	fatal("select: %m");
+	fatal("%s: select: %m", __func__);
 }
 
 
@@ -1076,7 +1093,7 @@ wait_time(struct timeval *timo)
 
     n = select(0, NULL, NULL, NULL, timo);
     if (n < 0 && errno != EINTR)
-	fatal("select: %m");
+	fatal("%s: select: %m", __func__);
 }
 #endif
 
@@ -1092,7 +1109,7 @@ read_packet(u_char *buf)
     if ((len = read(ttyfd, buf, PPP_MTU + PPP_HDRLEN)) < 0) {
 	if (errno == EWOULDBLOCK || errno == EINTR)
 	    return -1;
-	fatal("read: %m");
+	fatal("%s: read: %m", __func__);
     }
     return len;
 }
@@ -1115,9 +1132,9 @@ get_loop_output(void)
     }
 
     if (n == 0)
-	fatal("eof on loopback");
+	fatal("%s: eof on loopback", __func__);
     if (n == -1 && errno != EWOULDBLOCK)
-	fatal("read from loopback: %m");
+	fatal("%s: read from loopback: %m", __func__);
 
     return rv;
 }
@@ -1138,7 +1155,7 @@ netif_set_mtu(int unit, int mtu)
     ifr.ifr_mtu = mtu;
 	
     if (ifunit >= 0 && ioctl(sock_fd, SIOCSIFMTU, (caddr_t) &ifr) < 0)
-	fatal("ioctl(SIOCSIFMTU): %m");
+	fatal("%s: ioctl(SIOCSIFMTU): %m", __func__);
 }
 
 /*
@@ -1153,7 +1170,7 @@ netif_get_mtu(int unit)
     strlcpy(ifr.ifr_name, ifname, sizeof (ifr.ifr_name));
 
     if (ifunit >= 0 && ioctl(sock_fd, SIOCGIFMTU, (caddr_t) &ifr) < 0) {
-	error("ioctl(SIOCGIFMTU): %m (line %d)", __LINE__);
+	error("%s: ioctl(SIOCGIFMTU): %m", __func__);
 	return 0;
     }
     return ifr.ifr_mtu;
@@ -1173,7 +1190,7 @@ tty_send_config(int mtu, u_int32_t asyncmap, int pcomp, int accomp)
 #endif
 
     if (ioctl(ppp_fd, PPPIOCSASYNCMAP, (caddr_t) &asyncmap) < 0)
-	fatal("ioctl(PPPIOCSASYNCMAP): %m");
+	fatal("%s: ioctl(PPPIOCSASYNCMAP): %m", __func__);
 
     x = get_flags(ppp_fd);
     x = pcomp? x | SC_COMP_PROT: x &~ SC_COMP_PROT;
@@ -1190,7 +1207,7 @@ void
 tty_set_xaccm(ext_accm accm)
 {
     if (ioctl(ppp_fd, PPPIOCSXASYNCMAP, accm) < 0 && errno != ENOTTY)
-	warn("ioctl(set extended ACCM): %m");
+	warn("%s: ioctl(set extended ACCM): %m", __func__);
 }
 
 
@@ -1204,9 +1221,9 @@ tty_recv_config(int mru, u_int32_t asyncmap, int pcomp, int accomp)
     int x;
 
     if (ioctl(ppp_fd, PPPIOCSMRU, (caddr_t) &mru) < 0)
-	fatal("ioctl(PPPIOCSMRU): %m");
+	fatal("%s: ioctl(PPPIOCSMRU): %m", __func__);
     if (ioctl(ppp_fd, PPPIOCSRASYNCMAP, (caddr_t) &asyncmap) < 0)
-	fatal("ioctl(PPPIOCSRASYNCMAP): %m");
+	fatal("%s: ioctl(PPPIOCSRASYNCMAP): %m", __func__);
     x = get_flags(ppp_fd);
     x = !accomp? x | SC_REJ_COMP_AC: x &~ SC_REJ_COMP_AC;
     set_flags(ppp_fd, x);
@@ -1279,7 +1296,7 @@ get_ppp_stats(int u, struct pppd_stats *stats)
     memset (&req, 0, sizeof (req));
     strlcpy(req.ifr_name, ifname, sizeof(req.ifr_name));
     if (ioctl(sock_fd, SIOCGPPPSTATS, &req) < 0) {
-	error("Couldn't get PPP statistics: %m");
+	error("%s: Couldn't get PPP statistics: %m", __func__);
 	return 0;
     }
     stats->bytes_in = req.stats.p.ppp_ibytes;
@@ -1302,28 +1319,28 @@ set_filters(struct bpf_program *pass_in, struct bpf_program *pass_out,
 
     if (pass_in->bf_len > 0) {
 	if (ioctl(ppp_fd, PPPIOCSIPASS, pass_in) < 0) {
-	    error("Couldn't set pass-filter-in in kernel: %m");
+	    error("%s: Couldn't set pass-filter-in in kernel: %m", __func__);
 	    ret = 0;
 	}
     }
 
     if (pass_out->bf_len > 0) {
 	if (ioctl(ppp_fd, PPPIOCSOPASS, pass_out) < 0) {
-	    error("Couldn't set pass-filter-out in kernel: %m");
+	    error("%s: Couldn't set pass-filter-out in kernel: %m", __func__);
 	    ret = 0;
 	}
     }
 
     if (active_in->bf_len > 0) {
 	if (ioctl(ppp_fd, PPPIOCSIACTIVE, active_in) < 0) {
-	    error("Couldn't set active-filter-in in kernel: %m");
+	    error("%s: Couldn't set active-filter-in in kernel: %m", __func__);
 	    ret = 0;
 	}
     }
 
     if (active_out->bf_len > 0) {
 	if (ioctl(ppp_fd, PPPIOCSOACTIVE, active_out) < 0) {
-	    error("Couldn't set active-filter-out in kernel: %m");
+	    error("%s: Couldn't set active-filter-out in kernel: %m", __func__);
 	    ret = 0;
 	}
     }
@@ -1345,7 +1362,7 @@ sifvjcomp(int u, int vjcomp, int cidcomp, int maxcid)
     x = cidcomp? x & ~SC_NO_TCP_CCID: x | SC_NO_TCP_CCID;
     set_flags(ppp_fd, x);
     if (vjcomp && ioctl(ppp_fd, PPPIOCSMAXCID, (caddr_t) &maxcid) < 0) {
-	error("ioctl(PPPIOCSMAXCID): %m");
+	error("%s: ioctl(PPPIOCSMAXCID): %m", __func__);
 	return 0;
     }
     return 1;
@@ -1361,12 +1378,12 @@ sifup(int u)
 
     strlcpy(ifr.ifr_name, ifname, sizeof (ifr.ifr_name));
     if (ioctl(sock_fd, SIOCGIFFLAGS, (caddr_t) &ifr) < 0) {
-	error("ioctl (SIOCGIFFLAGS): %m");
+	error("%s: ioctl (SIOCGIFFLAGS): %m", __func__);
 	return 0;
     }
     ifr.ifr_flags |= IFF_UP;
     if (ioctl(sock_fd, SIOCSIFFLAGS, (caddr_t) &ifr) < 0) {
-	error("ioctl(SIOCSIFFLAGS): %m");
+	error("%s: ioctl(SIOCSIFFLAGS): %m", __func__);
 	return 0;
     }
     if_is_up = 1;
@@ -1384,7 +1401,7 @@ sifnpmode(int u, int proto, enum NPmode mode)
     npi.protocol = proto;
     npi.mode = mode;
     if (ioctl(ppp_fd, PPPIOCSNPMODE, &npi) < 0) {
-	error("ioctl(set NP %d mode to %d): %m", proto, mode);
+	error("%s: ioctl(set NP %d mode to %d): %m", __func__, proto, mode);
 	return 0;
     }
     return 1;
@@ -1408,12 +1425,12 @@ sifdown(int u)
 
     strlcpy(ifr.ifr_name, ifname, sizeof (ifr.ifr_name));
     if (ioctl(sock_fd, SIOCGIFFLAGS, (caddr_t) &ifr) < 0) {
-	error("ioctl (SIOCGIFFLAGS): %m");
+	error("%s: ioctl (SIOCGIFFLAGS): %m", __func__);
 	rv = 0;
     } else {
 	ifr.ifr_flags &= ~IFF_UP;
 	if (ioctl(sock_fd, SIOCSIFFLAGS, (caddr_t) &ifr) < 0) {
-	    error("ioctl(SIOCSIFFLAGS): %m");
+	    error("%s: ioctl(SIOCSIFFLAGS): %m", __func__);
 	    rv = 0;
 	} else
 	    if_is_up = 0;
@@ -1453,14 +1470,15 @@ sifaddr(int u, u_int32_t o, u_int32_t h, u_int32_t m)
     strlcpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
     if (ioctl(sock_fd, SIOCDIFADDR, (caddr_t) &ifr) < 0) {
 	if (errno != EADDRNOTAVAIL)
-	    warn("Couldn't remove interface address: %m");
+	    warn("%s: Couldn't remove interface address: %m", __func__);
     }
     if (ioctl(sock_fd, SIOCAIFADDR, (caddr_t) &ifra) < 0) {
 	if (errno != EEXIST) {
-	    error("Couldn't set interface address: %m");
+	    error("%s: Couldn't set interface address: %m", __func__);
 	    return 0;
 	}
-	warn("Couldn't set interface address: Address %I already exists", o);
+	warn("%s: Couldn't set interface address: Address %I already exists",
+	    __func__, o);
     }
     ifaddrs[0] = o;
     ifaddrs[1] = h;
@@ -1484,8 +1502,8 @@ cifaddr(int u, u_int32_t o, u_int32_t h)
     ((struct sockaddr_in *) &ifra.ifra_broadaddr)->sin_addr.s_addr = h;
     BZERO(&ifra.ifra_mask, sizeof(ifra.ifra_mask));
     if (ioctl(sock_fd, SIOCDIFADDR, (caddr_t) &ifra) < 0) {
-	if (errno != EADDRNOTAVAIL)
-	    warn("Couldn't delete interface address: %m");
+	if (!doing_cleanup && errno != EADDRNOTAVAIL)
+	    warn("%s: Couldn't delete interface address: %m", __func__);
 	return 0;
     }
     return 1;
@@ -1521,13 +1539,13 @@ dodefaultroute(u_int32_t g, int cmd)
 	struct sockaddr_in	dst;
 	struct sockaddr_in	gway;
 	struct sockaddr_in	netmask;
-	struct sockaddr_in	genmask;
 	struct sockaddr_dl	ifp;
     } rtmsg;
 
     if ((routes = socket(PF_ROUTE, SOCK_RAW, AF_INET)) < 0) {
-	error("Couldn't %s default route: socket: %m",
-	    cmd == 's' ? "add" : "delete");
+	if (!doing_cleanup)
+	    error("%s: Couldn't %s default route: socket: %m", __func__,
+		cmd == 's' ? "add" : "delete");
 	return 0;
     }
 
@@ -1538,7 +1556,7 @@ dodefaultroute(u_int32_t g, int cmd)
     rtmsg.hdr.rtm_version = RTM_VERSION;
     rtmsg.hdr.rtm_seq = ++rtm_seq;
     rtmsg.hdr.rtm_addrs =
-	RTA_DST | RTA_GATEWAY | RTA_NETMASK | RTA_GENMASK | RTA_IFP;
+	RTA_DST | RTA_GATEWAY | RTA_NETMASK | RTA_IFP;
 
     rtmsg.dst.sin_len = sizeof(rtmsg.dst);
     rtmsg.dst.sin_family = AF_INET;
@@ -1552,10 +1570,6 @@ dodefaultroute(u_int32_t g, int cmd)
     rtmsg.netmask.sin_family = AF_INET;
     rtmsg.netmask.sin_addr.s_addr = 0;
 
-    rtmsg.genmask.sin_len = sizeof(rtmsg.genmask);
-    rtmsg.genmask.sin_family = AF_INET;
-    rtmsg.genmask.sin_addr.s_addr = 0;
-
     rtmsg.ifp.sdl_family = AF_LINK;
     rtmsg.ifp.sdl_len = sizeof(rtmsg.ifp);
     link_addr(ifname, &rtmsg.ifp);
@@ -1563,8 +1577,9 @@ dodefaultroute(u_int32_t g, int cmd)
     rtmsg.hdr.rtm_msglen = sizeof(rtmsg);
 
     if (write(routes, &rtmsg, sizeof(rtmsg)) < 0) {
-	error("Couldn't %s default route: %m",
-	    cmd == 's' ? "add" : "delete");
+	if (!doing_cleanup)
+	    error("%s: Couldn't %s default route: %m", __func__,
+		cmd == 's' ? "add" : "delete");
 	close(routes);
 	return 0;
     }
@@ -1599,12 +1614,12 @@ sifproxyarp(int unit, u_int32_t hisaddr)
      */
     memset(&arpmsg, 0, sizeof(arpmsg));
     if (!get_ether_addr(hisaddr, &arpmsg.hwa)) {
-	error("Cannot determine ethernet address for proxy ARP");
+	error("%s: Cannot determine ethernet address for proxy ARP", __func__);
 	return 0;
     }
 
     if ((routes = socket(PF_ROUTE, SOCK_RAW, AF_INET)) < 0) {
-	error("Couldn't add proxy arp entry: socket: %m");
+	error("%s: Couldn't add proxy arp entry: socket: %m", __func__);
 	return 0;
     }
 
@@ -1620,9 +1635,9 @@ sifproxyarp(int unit, u_int32_t hisaddr)
     arpmsg.dst.sin_other = SIN_PROXY;
 
     arpmsg.hdr.rtm_msglen = (char *) &arpmsg.hwa - (char *) &arpmsg
-	+ arpmsg.hwa.sdl_len;
+	+ RT_ROUNDUP(arpmsg.hwa.sdl_len);
     if (write(routes, &arpmsg, arpmsg.hdr.rtm_msglen) < 0) {
-	error("Couldn't add proxy arp entry: %m");
+	error("%s: Couldn't add proxy arp entry: %m", __func__);
 	close(routes);
 	return 0;
     }
@@ -1649,12 +1664,14 @@ cifproxyarp(int unit, u_int32_t hisaddr)
     arpmsg.hdr.rtm_seq = ++rtm_seq;
 
     if ((routes = socket(PF_ROUTE, SOCK_RAW, AF_INET)) < 0) {
-	error("Couldn't delete proxy arp entry: socket: %m");
+	if (!doing_cleanup)
+	    error("%s: Couldn't delete proxy arp entry: socket: %m", __func__);
 	return 0;
     }
 
     if (write(routes, &arpmsg, arpmsg.hdr.rtm_msglen) < 0) {
-	error("Couldn't delete proxy arp entry: %m");
+	if (!doing_cleanup)
+	    error("%s: Couldn't delete proxy arp entry: %m", __func__);
 	close(routes);
 	return 0;
     }
@@ -1685,7 +1702,7 @@ sifproxyarp(int unit, u_int32_t hisaddr)
      * as our local address.
      */
     if (!get_ether_addr(hisaddr, &dls.sdl)) {
-	error("Cannot determine ethernet address for proxy ARP");
+	error("%s: Cannot determine ethernet address for proxy ARP", __func__);
 	return 0;
     }
 
@@ -1696,7 +1713,7 @@ sifproxyarp(int unit, u_int32_t hisaddr)
     ((struct sockaddr_in *) &arpreq.arp_pa)->sin_addr.s_addr = hisaddr;
     arpreq.arp_flags = ATF_PERM | ATF_PUBL;
     if (ioctl(sock_fd, SIOCSARP, (caddr_t)&arpreq) < 0) {
-	error("Couldn't add proxy arp entry: %m");
+	error("%s: Couldn't add proxy arp entry: %m", __func__);
 	return 0;
     }
 
@@ -1716,7 +1733,7 @@ cifproxyarp(int unit, u_int32_t hisaddr)
     SET_SA_FAMILY(arpreq.arp_pa, AF_INET);
     ((struct sockaddr_in *) &arpreq.arp_pa)->sin_addr.s_addr = hisaddr;
     if (ioctl(sock_fd, SIOCDARP, (caddr_t)&arpreq) < 0) {
-	warn("Couldn't delete proxy arp entry: %m");
+	warn("%s: Couldn't delete proxy arp entry: %m", __func__);
 	return 0;
     }
     proxy_arp_addr = 0;
@@ -1741,7 +1758,7 @@ get_ether_addr(u_int32_t ipaddr, struct sockaddr_dl *hwaddr)
      * address on the same subnet as `ipaddr'.
      */
     if (getifaddrs(&ifap) != 0) {
-	error("getifaddrs: %m");
+	error("%s: getifaddrs: %m", __func__);
 	return 0;
     }
 
@@ -1843,7 +1860,7 @@ get_first_ethernet(void)
      * Scan through the system's network interfaces.
      */
     if (getifaddrs(&ifap) != 0) {
-	warn("getifaddrs: %m");
+	warn("%s: getifaddrs: %m", __func__);
 	return NULL;
     }
     for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
@@ -1894,7 +1911,7 @@ GetMask(u_int32_t addr)
      * Scan through the system's network interfaces.
      */
     if (getifaddrs(&ifap) != 0) {
-	warn("getifaddrs: %m");
+	warn("%s: getifaddrs: %m", __func__);
 	return 0;
     }
 
@@ -1915,7 +1932,7 @@ GetMask(u_int32_t addr)
 	/*
 	 * Get its netmask and OR it into our mask.
 	 */
-	mask |= ((struct sockaddr_in *)&ifa->ifa_netmask)->sin_addr.s_addr;
+	mask |= ((struct sockaddr_in *)ifa->ifa_netmask)->sin_addr.s_addr;
     }
 
     freeifaddrs(ifap);
@@ -1972,7 +1989,8 @@ lock(char *dev)
 	    /* Read the lock file to find out who has the device locked */
 	    n = read(fd, hdb_lock_buffer, 11);
 	    if (n <= 0) {
-		error("Can't read pid from lock file %s", lock_file);
+		error("%s: Can't read pid from lock file %s", __func__,
+		    lock_file);
 		close(fd);
 	    } else {
 		hdb_lock_buffer[n] = 0;
@@ -1981,19 +1999,19 @@ lock(char *dev)
 		    /* pid no longer exists - remove the lock file */
 		    if (unlink(lock_file) == 0) {
 			close(fd);
-			notice("Removed stale lock on %s (pid %d)",
-			       dev, pid);
+			notice("%s: Removed stale lock on %s (pid %d)",
+			    __func__, dev, pid);
 			continue;
 		    } else
-			warn("Couldn't remove stale lock on %s",
-			       dev);
+			warn("%s: Couldn't remove stale lock on %s", __func__,
+			    dev);
 		} else
-		    notice("Device %s is locked by pid %d",
+		    notice("%s: Device %s is locked by pid %d", __func__,
 			   dev, pid);
 	    }
 	    close(fd);
 	} else
-	    error("Can't create lock file %s: %m", lock_file);
+	    error("%s: Can't create lock file %s: %m", __func__, lock_file);
 	free(lock_file);
 	lock_file = NULL;
 	return -1;

@@ -1,4 +1,4 @@
-/*	$NetBSD: l2cap_upper.c,v 1.8 2007/04/29 20:23:36 msaitoh Exp $	*/
+/*	$NetBSD: l2cap_upper.c,v 1.11 2010/01/04 19:20:05 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: l2cap_upper.c,v 1.8 2007/04/29 20:23:36 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: l2cap_upper.c,v 1.11 2010/01/04 19:20:05 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -109,6 +109,9 @@ l2cap_attach(struct l2cap_channel **handle,
 int
 l2cap_bind(struct l2cap_channel *chan, struct sockaddr_bt *addr)
 {
+
+	if (chan->lc_lcid != L2CAP_NULL_CID)
+		return EINVAL;
 
 	memcpy(&chan->lc_laddr, addr, sizeof(struct sockaddr_bt));
 	return 0;
@@ -296,8 +299,10 @@ l2cap_detach(struct l2cap_channel **handle)
  *
  *		proto->newconn(upper, laddr, raddr)
  *
- *	for incoming connections matching the psm and local address of the
- *	channel (NULL psm/address are permitted and match any protocol/device).
+ *	for incoming connections matching the psm and local address of
+ *	the channel. NULL address is permitted and matches any device.
+ *	If L2CAP_PSM_ANY is bound the next higher unused value from the
+ *	dynamic range (above 0x1001) will be selected.
  *
  *	The upper layer should create and return a new channel.
  *
@@ -307,13 +312,31 @@ int
 l2cap_listen(struct l2cap_channel *chan)
 {
 	struct l2cap_channel *used, *prev = NULL;
+	uint32_t psm;
 
 	if (chan->lc_lcid != L2CAP_NULL_CID)
 		return EINVAL;
 
-	if (chan->lc_laddr.bt_psm != L2CAP_PSM_ANY
-	    && L2CAP_PSM_INVALID(chan->lc_laddr.bt_psm))
-		return EADDRNOTAVAIL;
+	/*
+	 * This is simplistic but its not really worth spending a
+	 * lot of time looking for an unused PSM..
+	 */
+	if (chan->lc_laddr.bt_psm == L2CAP_PSM_ANY) {
+		psm = 0x1001;
+		used = LIST_FIRST(&l2cap_listen_list);
+
+		if (used != NULL && used->lc_laddr.bt_psm >= psm) {
+			psm = used->lc_laddr.bt_psm + 0x0002;
+			if ((psm & 0x0100) != 0)
+				psm += 0x0100;
+
+			if (psm > UINT16_MAX)
+				return EADDRNOTAVAIL;
+		}
+
+		chan->lc_laddr.bt_psm = psm;
+	} else if (L2CAP_PSM_INVALID(chan->lc_laddr.bt_psm))
+		return EINVAL;
 
 	/*
 	 * This CID is irrelevant, as the channel is not stored on the active
@@ -407,7 +430,7 @@ l2cap_send(struct l2cap_channel *chan, struct mbuf *m)
 }
 
 /*
- * l2cap_setopt(l2cap_channel, opt, addr)
+ * l2cap_setopt(l2cap_channel, sopt)
  *
  *	Apply configuration options to channel. This corresponds to
  *	"Configure Channel Request" in the L2CAP specification.
@@ -420,14 +443,17 @@ l2cap_send(struct l2cap_channel *chan, struct mbuf *m)
  *	will be made when the change is complete.
  */
 int
-l2cap_setopt(struct l2cap_channel *chan, int opt, void *addr)
+l2cap_setopt(struct l2cap_channel *chan, const struct sockopt *sopt)
 {
 	int mode, err = 0;
 	uint16_t mtu;
 
-	switch (opt) {
+	switch (sopt->sopt_name) {
 	case SO_L2CAP_IMTU:	/* set Incoming MTU */
-		mtu = *(uint16_t *)addr;
+		err = sockopt_get(sopt, &mtu, sizeof(mtu));
+		if (err)
+			break;
+
 		if (mtu < L2CAP_MTU_MINIMUM)
 			err = EINVAL;
 		else if (chan->lc_state == L2CAP_CLOSED)
@@ -438,7 +464,10 @@ l2cap_setopt(struct l2cap_channel *chan, int opt, void *addr)
 		break;
 
 	case SO_L2CAP_LM:	/* set link mode */
-		mode = *(int *)addr;
+		err = sockopt_getint(sopt, &mode);
+		if (err)
+			break;
+
 		mode &= (L2CAP_LM_SECURE | L2CAP_LM_ENCRYPT | L2CAP_LM_AUTH);
 
 		if (mode & L2CAP_LM_SECURE)
@@ -465,42 +494,36 @@ l2cap_setopt(struct l2cap_channel *chan, int opt, void *addr)
 }
 
 /*
- * l2cap_getopt(l2cap_channel, opt, addr)
+ * l2cap_getopt(l2cap_channel, sopt)
  *
  *	Return configuration parameters.
  */
 int
-l2cap_getopt(struct l2cap_channel *chan, int opt, void *addr)
+l2cap_getopt(struct l2cap_channel *chan, struct sockopt *sopt)
 {
 
-	switch (opt) {
+	switch (sopt->sopt_name) {
 	case SO_L2CAP_IMTU:	/* get Incoming MTU */
-		*(uint16_t *)addr = chan->lc_imtu;
-		return sizeof(uint16_t);
+		return sockopt_set(sopt, &chan->lc_imtu, sizeof(uint16_t));
 
 	case SO_L2CAP_OMTU:	/* get Outgoing MTU */
-		*(uint16_t *)addr = chan->lc_omtu;
-		return sizeof(uint16_t);
+		return sockopt_set(sopt, &chan->lc_omtu, sizeof(uint16_t));
 
 	case SO_L2CAP_IQOS:	/* get Incoming QoS flow spec */
-		memcpy(addr, &chan->lc_iqos, sizeof(l2cap_qos_t));
-		return sizeof(l2cap_qos_t);
+		return sockopt_set(sopt, &chan->lc_iqos, sizeof(l2cap_qos_t));
 
 	case SO_L2CAP_OQOS:	/* get Outgoing QoS flow spec */
-		memcpy(addr, &chan->lc_oqos, sizeof(l2cap_qos_t));
-		return sizeof(l2cap_qos_t);
+		return sockopt_set(sopt, &chan->lc_oqos, sizeof(l2cap_qos_t));
 
 	case SO_L2CAP_FLUSH:	/* get Flush Timeout */
-		*(uint16_t *)addr = chan->lc_flush;
-		return sizeof(uint16_t);
+		return sockopt_set(sopt, &chan->lc_flush, sizeof(uint16_t));
 
 	case SO_L2CAP_LM:	/* get link mode */
-		*(int *)addr = chan->lc_mode;
-		return sizeof(int);
+		return sockopt_setint(sopt, chan->lc_mode);
 
 	default:
 		break;
 	}
 
-	return 0;
+	return ENOPROTOOPT;
 }

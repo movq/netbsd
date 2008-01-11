@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2006/04/07 17:52:55 macallan Exp $
+#	$NetBSD: Makefile,v 1.7 2009/02/14 13:48:17 abs Exp $
 
 XMODULEDIR=	${X11USRLIBDIR}/modules/drivers
 
@@ -51,7 +51,8 @@ CPPFLAGS+=	-I${X11SRCDIR.xc}/programs/Xserver/GL/dri \
 CPPFLAGS+=	${X11FLAGS.DRI}
 .endif
 
-.if ${MACHINE} == "macppc" || ${MACHINE} == "sparc" ||${MACHINE} == "sparc64"
+.if ${MACHINE} == "macppc" || ${MACHINE_ARCH} == "sparc" || \
+    ${MACHINE_ARCH} == "sparc64" || ${MACHINE} == "ofppc"
 CPPFLAGS+=	-DAVOID_VGAHW
 .endif
 	

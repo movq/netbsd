@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile,v 1.114 2007/11/12 14:54:43 jmmv Exp $
+#	$NetBSD: Makefile,v 1.145 2011/04/15 18:05:45 elric Exp $
 
 .include <bsd.own.mk>
 
+.if defined(HAVE_GCC)
 .if ${HAVE_GCC} == "4"
 TOOLCHAIN_BITS= gmake .WAIT
 .endif
@@ -15,6 +16,24 @@ TOOLCHAIN_BITS+= .WAIT dbsym mdsetimage
 # XXX Eventually, we want to be able to build dbsym and mdsetimage
 # XXX if EXTERNAL_TOOLCHAIN is set.
 .endif
+.endif
+
+.if defined(HAVE_PCC)
+TOOLCHAIN_BITS= gmake .WAIT
+.if ${TOOLCHAIN_MISSING} == "no"
+TOOLCHAIN_BITS+= binutils .WAIT
+TOOLCHAIN_BITS+= pcc
+.endif
+TOOLCHAIN_BITS+= .WAIT dbsym mdsetimage
+.endif
+
+DTRACE_BITS=
+.if ${MKDTRACE} != "no"
+DTRACE_BITS+= .WAIT libelf
+DTRACE_BITS+= .WAIT libdwarf
+DTRACE_BITS+= .WAIT libctf 
+DTRACE_BITS+= .WAIT ctfconvert ctfmerge
+.endif
 
 LINT_BITS=
 .if ${MKLINT} != "no"
@@ -22,33 +41,51 @@ LINT_BITS= lint lint2
 .endif
 
 # Dependencies in SUBDIR below ordered to maximize parallel ability.
-.if !defined(NOSUBDIR)					# {
-
 SUBDIR=	host-mkdep .WAIT compat .WAIT \
-	binstall .WAIT mktemp .WAIT \
+	binstall .WAIT mktemp .WAIT sed .WAIT \
 		cap_mkdb crunchgen ctags genassym gencat hexdump join \
 		${LINT_BITS} \
-		lorder m4 makewhatis mkdep mtree rpcgen sed tsort uudecode \
-	texinfo .WAIT \
-	yacc .WAIT \
-	lex .WAIT \
-	${TOOLCHAIN_BITS} \
-		asn1_compile atf-compile cat cksum compile_et config db \
-		file lint1 \
-		makefs menuc mkcsmapper mkesdb mklocale mknod msgc \
-		pax .WAIT \
-		disklabel .WAIT \
-		paxctl .WAIT \
-		fdisk .WAIT \
-		installboot .WAIT \
-		pwd_mkdb stat sunlabel zic
+		lorder makewhatis mkdep mtree rpcgen tic tsort \
+		uudecode m4 \
+	.WAIT texinfo \
+	.WAIT yacc \
+	.WAIT awk \
+	.WAIT lex \
+	.WAIT pax \
+	.WAIT ${TOOLCHAIN_BITS} \
+	${DTRACE_BITS} \
+		asn1_compile cat cksum compile_et config db \
+		file lint1 slc \
+		makefs .WAIT menuc mkcsmapper mkesdb mklocale mknod msgc \
+		.WAIT disklabel \
+		.WAIT paxctl \
+		.WAIT fdisk \
+		.WAIT installboot \
+		pwd_mkdb stat strfile sunlabel zic
 
-.if ${MKMAN} != "no"
+.if ${MKLLVM} != "no"
+SUBDIR+= \
+	llvm .WAIT \
+	llvm-lib/libLLVMSupport .WAIT \
+	llvm-tblgen .WAIT \
+	llvm-include .WAIT \
+	llvm-lib .WAIT \
+	llvm-clang
+.endif
+
+.if ${MKMAN} != "no" || ${MKDOC} != "no" || ${MKHTML} != "no"
+.  if ${MKGROFF} != "no"
 SUBDIR+=	groff
+.  endif
+SUBDIR+=	mandoc
 .endif
 
 .if ${MKMAINTAINERTOOLS:Uno} != "no"
 SUBDIR+=	autoconf .WAIT gettext
+.endif
+
+.if ${USE_PIGZGZIP} != "no"
+SUBDIR+=	pigz
 .endif
 
 .if ${MACHINE} == "hp700"
@@ -63,8 +100,8 @@ SUBDIR+=	ibmnws-ncdcs
 SUBDIR+=	macppc-fixcoff
 .endif
 
-.if ${MACHINE} == "prep"
-SUBDIR+=	prep-mkbootimage
+.if (${MACHINE} == "prep" || ${MACHINE} == "rs6000" || ${MACHINE} == "bebox")
+SUBDIR+=	powerpc-mkbootimage
 .endif
 
 .if (${MACHINE_ARCH} == "mipsel" || ${MACHINE_ARCH} == "mipseb")
@@ -79,13 +116,8 @@ SUBDIR+=	sgivol
 SUBDIR+=	sparkcrc
 .endif
 
-.if (${MACHINE} == "sparc" || ${MACHINE} == "sparc64")
+.if (${MACHINE_ARCH} == "sparc" || ${MACHINE_ARCH} == "sparc64")
 SUBDIR+=	fgen
-.endif
-
-.if ${MACHINE} == "bebox"
-SUBDIR+=	bebox-elf2pef
-SUBDIR+=	bebox-mkbootimage
 .endif
 
 .if ${MACHINE} == "amiga"
@@ -97,7 +129,10 @@ SUBDIR+=	amiga-txlt
 SUBDIR+=	hp300-mkboot
 .endif
 
-.endif	# ! NOSUBDIR					# }
+.if ${MACHINE} == "evbarm" || ${MACHINE} == "evbmips" || \
+    ${MACHINE} == "evbppc" || ${MACHINE} == "sandpoint"
+SUBDIR+=	mkubootimage
+.endif
 
 check_MKTOOLS: .PHONY .NOTMAIN
 .if ${MKTOOLS:Uyes} == "no"
@@ -159,10 +194,10 @@ realall realdepend: .MAKE
 _deps:=
 _prev:=
 
-.for d in ${SUBDIR}
+.for d in ${SUBDIR}				# {
 _this:=		${d}
 
-.if ${_this} == ".WAIT"
+.if ${_this} == ".WAIT"				# {
 
 # setup dependency to apply to all/depend targets in the next group
 _deps:=		${_deps} ${_prev:S/^/install-/}
@@ -175,7 +210,7 @@ _deps:=		${_deps} ${_prev:S/^/install-/}
 install-${_prev}: dependall-${_prev}
 .endif
 
-.else
+.else # ${_this} != ".WAIT"			# } {
 
 # order depend/all/install targets for ${d} subdir.
 .ORDER: depend-${d} all-${d} dependall-${d} install-${d}
@@ -188,11 +223,11 @@ install-${_prev}: dependall-${_prev}
 # make all/depend-${d} dependent on list of install targets
 depend-${d} all-${d} dependall-${d}: ${_deps}
 
-.endif
+.endif # ${_this} != ".WAIT"			# }
 
 # stash current name in case the next entry is .WAIT
 _prev:=		${d}
-.endfor
+.endfor						# }
 
 cleandir:
 	rm -f ${CLEANFILES}

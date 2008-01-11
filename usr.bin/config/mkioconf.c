@@ -1,4 +1,4 @@
-/*	$NetBSD: mkioconf.c,v 1.10 2007/12/12 00:03:33 lukem Exp $	*/
+/*	$NetBSD: mkioconf.c,v 1.19 2011/03/03 14:53:01 nakayama Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -92,14 +92,17 @@ mkioconf(void)
 	emithdr(fp);
 	emitcfdrivers(fp);
 	emitexterns(fp);
-	emitcfattachinit(fp);
 	emitloc(fp);
 	emitparents(fp);
 	emitcfdata(fp);
-	emitroots(fp);
-	emitpseudo(fp);
-	if (!do_devsw)
-		emitname2blk(fp);
+	emitcfattachinit(fp);
+
+	if (ioconfname == NULL) {
+		emitroots(fp);
+		emitpseudo(fp);
+		if (!do_devsw)
+			emitname2blk(fp);
+	}
 
 	fflush(fp);
 	if (ferror(fp)) {
@@ -124,8 +127,8 @@ cforder(const void *a, const void *b)
 {
 	int n1, n2;
 
-	n1 = (*(const struct devi **)a)->i_cfindex;
-	n2 = (*(const struct devi **)b)->i_cfindex;
+	n1 = (*(const struct devi * const *)a)->i_cfindex;
+	n2 = (*(const struct devi * const *)b)->i_cfindex;
 	return (n1 - n2);
 }
 
@@ -140,7 +143,7 @@ emithdr(FILE *ofp)
 	autogen_comment(ofp, "ioconf.c");
 
 	(void)snprintf(ifnbuf, sizeof(ifnbuf), "arch/%s/conf/ioconf.incl.%s",
-	    machine, machine);
+	    machine ? machine : "(null)", machine ? machine : "(null)");
 	ifn = sourcepath(ifnbuf);
 	if ((ifp = fopen(ifn, "r")) != NULL) {
 		while ((n = fread(buf, 1, sizeof(buf), ifp)) > 0)
@@ -178,7 +181,7 @@ cf_locators_print(const char *name, void *value, void *arg)
 			    name);
 		fprintf(fp, "\t\"%s\", %d,\n\t{\n", name, a->a_loclen);
 		for (nv = a->a_locs; nv; nv = nv->nv_next)
-			fprintf(fp, "\t\t{\"%s\", \"%s\", %s},\n",
+			fprintf(fp, "\t\t{ \"%s\", \"%s\", %s },\n",
 				nv->nv_name,
 				(nv->nv_str ? nv->nv_str : "NULL"),
 				(nv->nv_str ? nv->nv_str : "0"));
@@ -233,7 +236,13 @@ emitcfdrivers(FILE *fp)
 	}
 
 	NEWLINE;
-	fprintf(fp, "struct cfdriver * const cfdriver_list_initial[] = {\n");
+
+	fprintf(fp,
+	    "%sstruct cfdriver * const cfdriver_%s_%s[] = {\n",
+	    ioconfname ? "static " : "",
+	    ioconfname ? "ioconf" : "list",
+	    ioconfname ? ioconfname : "initial");
+
 	TAILQ_FOREACH(d, &allbases, d_next) {
 		if (!devbase_has_instances(d, WILD))
 			continue;
@@ -281,7 +290,10 @@ emitcfattachinit(FILE *fp)
 	}
 
 	NEWLINE;
-	fprintf(fp, "const struct cfattachinit cfattachinit[] = {\n");
+	fprintf(fp, "%sconst struct cfattachinit cfattach%s%s[] = {\n",
+	    ioconfname ? "static " : "",
+	    ioconfname ? "_ioconf_" : "init",
+	    ioconfname ? ioconfname : "");
 
 	TAILQ_FOREACH(d, &allbases, d_next) {
 		if (!devbase_has_instances(d, WILD))
@@ -353,7 +365,7 @@ emitcfdata(FILE *fp)
 	const char *state, *basename, *attachment;
 	struct nvlist *nv;
 	struct attr *a;
-	char *loc;
+	const char *loc;
 	char locbuf[20];
 	const char *lastname = "";
 
@@ -361,9 +373,12 @@ emitcfdata(FILE *fp)
 		"#define NORM FSTATE_NOTFOUND\n"
 		"#define STAR FSTATE_STAR\n"
 		"\n"
-		"struct cfdata cfdata[] = {\n"
+		"%sstruct cfdata cfdata%s%s[] = {\n"
 		"    /* driver           attachment    unit state "
-		"loc   flags pspec */\n");
+		"loc   flags pspec */\n",
+		    ioconfname ? "static " : "",
+		    ioconfname ? "_ioconf_" : "",
+		    ioconfname ? ioconfname : "");
 	for (p = packed; (i = *p) != NULL; p++) {
 		/* the description */
 		fprintf(fp, "/*%3d: %s at ", i->i_cfindex, i->i_name);
@@ -414,18 +429,18 @@ emitcfdata(FILE *fp)
 			loc = locbuf;
 		} else
 			loc = "loc";
-		fprintf(fp, "    {\"%s\",%s\"%s\",%s%2d, %s, %7s, %#6x, ",
+		fprintf(fp, "    { \"%s\",%s\"%s\",%s%2d, %s, %7s, %#6x, ",
 			    basename, strlen(basename) < 8 ? "\t\t"
 			    				   : "\t",
 			    attachment, strlen(attachment) < 5 ? "\t\t"
 			    				       : "\t",
 			    unit, state, loc, i->i_cfflags);
 		if (ps != NULL)
-			fprintf(fp, "&pspec%d},\n", ps->p_inst);
+			fprintf(fp, "&pspec%d },\n", ps->p_inst);
 		else
-			fputs("NULL},\n", fp);
+			fputs("NULL },\n", fp);
 	}
-	fprintf(fp, "    {%s,%s%s,%s%2d, %s, %7s, %#6x, %s}\n};\n",
+	fprintf(fp, "    { %s,%s%s,%s%2d, %s, %7s, %#6x, %s }\n};\n",
 	    "NULL", "\t\t", "NULL", "\t\t", 0, "0", "NULL", 0, "NULL");
 }
 
@@ -486,7 +501,7 @@ emitname2blk(FILE *fp)
 	fprintf(fp, "struct devnametobdevmaj dev_name2blk[] = {\n");
 
 	TAILQ_FOREACH(dev, &allbases, d_next) {
-		if (dev->d_major == NODEV)
+		if (dev->d_major == NODEVMAJOR)
 			continue;
 
 		fprintf(fp, "\t{ \"%s\", %d },\n",

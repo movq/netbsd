@@ -1,4 +1,4 @@
-/* $NetBSD: hashhl.c,v 1.1 2005/09/28 16:31:45 christos Exp $ */
+/* $NetBSD: hashhl.c,v 1.4 2010/01/17 23:10:20 wiz Exp $ */
 
 /*
  * ----------------------------------------------------------------------------
@@ -16,6 +16,10 @@
 
 #ifdef HASH_ALGORITHM
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 /*
  * Do all the name mangling before we include "namespace.h"
  */
@@ -30,7 +34,7 @@
 #define	HASH_LEN	CONCAT(HASH_ALGORITHM,_DIGEST_LENGTH)
 #define	HASH_STRLEN	CONCAT(HASH_ALGORITHM,_DIGEST_STRING_LENGTH)
 
-#if !defined(_KERNEL) && defined(__weak_alias)
+#if !defined(_KERNEL) && defined(__weak_alias) && !defined(HAVE_NBTOOL_CONFIG_H)
 #define	WA(a,b)	__weak_alias(a,b)
 WA(FNPREFIX(End),CONCAT(_,FNPREFIX(End)))
 WA(FNPREFIX(FileChunk),CONCAT(_,FNPREFIX(FileChunk)))
@@ -51,10 +55,6 @@ WA(FNPREFIX(Data),CONCAT(_,FNPREFIX(Data)))
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
 
 #ifndef MIN
 #define	MIN(x,y)	((x)<(y)?(x):(y))
@@ -106,10 +106,12 @@ FNPREFIX(FileChunk)(const char *filename, char *buf, off_t off, off_t len)
 		}
 		len = sb.st_size;
 	}
-	if (off > 0 && lseek(fd, off, SEEK_SET) < 0)
+	if (off > 0 && lseek(fd, off, SEEK_SET) < 0) {
+		close(fd);
 		return (NULL);
+	}
 
-	while ((nr = read(fd, buffer, (size_t) MIN(sizeof(buffer), len)))
+	while ((nr = read(fd, buffer, (size_t) MIN((off_t)sizeof(buffer), len)))
 	    > 0) {
 		FNPREFIX(Update)(&ctx, buffer, (unsigned int)nr);
 		if (len > 0 && (len -= nr) == 0)

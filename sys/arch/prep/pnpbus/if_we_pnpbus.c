@@ -1,4 +1,4 @@
-/*	$NetBSD: if_we_pnpbus.c,v 1.2 2007/10/17 19:56:52 garbled Exp $	*/
+/*	$NetBSD: if_we_pnpbus.c,v 1.5 2009/03/14 21:04:14 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_we_pnpbus.c,v 1.2 2007/10/17 19:56:52 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_we_pnpbus.c,v 1.5 2009/03/14 21:04:14 dsl Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -251,7 +244,7 @@ we_pnpbus_attach(struct device *parent, struct device *self, void *aux)
 			continue;
 		break;
 	}
-	wsc->sc_ih = pnpbus_intr_establish(i, IPL_NET, dp8390_intr, sc,
+	wsc->sc_ih = pnpbus_intr_establish(i, IPL_NET, IST_PNP, dp8390_intr, sc,
 	    &pna->pna_res);
 	if (wsc->sc_ih == NULL)
 		aprint_error("%s: can't establish interrupt\n",
@@ -259,12 +252,7 @@ we_pnpbus_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static const char *
-we_params(asict, asich, typep, memsizep, flagp, is790p)
-	bus_space_tag_t asict;
-	bus_space_handle_t asich;
-	u_int8_t *typep, *flagp;
-	bus_size_t *memsizep;
-	int *is790p;
+we_params(bus_space_tag_t asict, bus_space_handle_t asich, u_int8_t *typep, bus_size_t *memsizep, u_int8_t *flagp, int *is790p)
 {
 	const char *typestr;
 	bus_size_t memsize;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_output.c,v 1.26 2007/12/29 16:43:17 degroote Exp $	*/
+/*	$NetBSD: ipsec_output.c,v 1.32 2011/02/18 16:12:26 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec_output.c,v 1.26 2007/12/29 16:43:17 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec_output.c,v 1.32 2011/02/18 16:12:26 drochner Exp $");
 
 /*
  * IPsec output processing.
@@ -78,6 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: ipsec_output.c,v 1.26 2007/12/29 16:43:17 degroote E
 
 #include <netipsec/ipsec.h>
 #include <netipsec/ipsec_var.h>
+#include <netipsec/ipsec_private.h>
 #ifdef INET6
 #include <netipsec/ipsec6.h>
 #endif
@@ -122,6 +123,9 @@ ipsec_reinject_ipstack(struct mbuf *m, int af)
 #ifdef INET
 	struct ip * ip;
 #endif /* INET */
+#if defined(INET) || defined(INET6)
+	int rv;
+#endif
 
 	switch (af) {
 #ifdef INET
@@ -132,8 +136,11 @@ ipsec_reinject_ipstack(struct mbuf *m, int af)
 		ip->ip_len = ntohs(ip->ip_len);
 		ip->ip_off = ntohs(ip->ip_off);
 #endif /* __FreeBSD_ */
-		return ip_output(m, NULL, NULL, IP_RAWOUTPUT,
+		KERNEL_LOCK(1, NULL);
+		rv = ip_output(m, NULL, NULL, IP_RAWOUTPUT|IP_NOIPNEWID,
 		    (struct ip_moptions *)NULL, (struct socket *)NULL);
+		KERNEL_UNLOCK_ONE(NULL);
+		return rv;
 
 #endif /* INET */
 #ifdef INET6
@@ -142,7 +149,10 @@ ipsec_reinject_ipstack(struct mbuf *m, int af)
 		 * We don't need massage, IPv6 header fields are always in
 		 * net endian.
 		 */
-		return ip6_output(m, NULL, NULL, 0, NULL, NULL, NULL);
+		KERNEL_LOCK(1, NULL);
+		rv = ip6_output(m, NULL, NULL, 0, NULL, NULL, NULL);
+		KERNEL_UNLOCK_ONE(NULL);
+		return rv;
 #endif /* INET6 */
 	}
 
@@ -210,7 +220,7 @@ ipsec_process_done(struct mbuf *m, struct ipsecrequest *isr)
 		
 		udp->uh_dport = key_portfromsaddr(&saidx->dst);
 		udp->uh_sum = 0;
-       	udp->uh_ulen = htons(m->m_pkthdr.len - (ip->ip_hl << 2));
+		udp->uh_ulen = htons(m->m_pkthdr.len - (ip->ip_hl << 2));
 	}
 #endif /* IPSEC_NAT_T */
 	
@@ -253,6 +263,8 @@ ipsec_process_done(struct mbuf *m, struct ipsecrequest *isr)
 		goto bad;
 	}
 
+	key_sa_recordxfer(sav, m);
+
 	/*
 	 * If there's another (bundled) SA to apply, do so.
 	 * Note that this puts a burden on the kernel stack size.
@@ -261,22 +273,22 @@ ipsec_process_done(struct mbuf *m, struct ipsecrequest *isr)
 	 * doing further processing.
 	 */
 	if (isr->next) {
-		newipsecstat.ips_out_bundlesa++;
-        switch ( saidx->dst.sa.sa_family ) {
+		IPSEC_STATINC(IPSEC_STAT_OUT_BUNDLESA);
+		switch ( saidx->dst.sa.sa_family ) {
 #ifdef INET
-        case AF_INET:
+		case AF_INET:
 			return ipsec4_process_packet(m, isr->next, 0,0);
 #endif /* INET */
 #ifdef INET6
 		case AF_INET6:
-        	return ipsec6_process_packet(m,isr->next);
+			return ipsec6_process_packet(m,isr->next);
 #endif /* INET6 */
 		default :
 			DPRINTF(("ipsec_process_done: unknown protocol family %u\n",
-                               saidx->dst.sa.sa_family));
+			       saidx->dst.sa.sa_family));
 			error = ENXIO;
 			goto bad;
-        }
+		}
 	}
 
 	/*
@@ -312,8 +324,21 @@ ipsec_nextisr(
 	int *error
 )
 {
-#define IPSEC_OSTAT(x,y,z) (isr->saidx.proto == IPPROTO_ESP ? (x)++ : \
-			    isr->saidx.proto == IPPROTO_AH ? (y)++ : (z)++)
+#define	IPSEC_OSTAT(x, y, z)						\
+do {									\
+	switch (isr->saidx.proto) {					\
+	case IPPROTO_ESP:						\
+		ESP_STATINC(x);						\
+		break;							\
+	case IPPROTO_AH:						\
+		AH_STATINC(y);						\
+		break;							\
+	default:							\
+		IPCOMP_STATINC(z);					\
+		break;							\
+	}								\
+} while (/*CONSTCOND*/0)
+
 	struct secasvar *sav;
 
 	IPSEC_SPLASSERT_SOFTNET("ipsec_nextisr");
@@ -391,7 +416,7 @@ again:
 		 * this packet because it is responsibility for
 		 * upper layer to retransmit the packet.
 		 */
-		newipsecstat.ips_out_nosa++;
+		IPSEC_STATINC(IPSEC_STAT_OUT_NOSA);
 		goto bad;
 	}
 	sav = isr->sav;
@@ -420,8 +445,8 @@ again:
 	    (isr->saidx.proto == IPPROTO_IPCOMP && !ipcomp_enable)) {
 		DPRINTF(("ipsec_nextisr: IPsec outbound packet dropped due"
 			" to policy (check your sysctls)\n"));
-		IPSEC_OSTAT(espstat.esps_pdrops, ahstat.ahs_pdrops,
-		    ipcompstat.ipcomps_pdrops);
+		IPSEC_OSTAT(ESP_STAT_PDROPS, AH_STAT_PDROPS,
+		    IPCOMP_STAT_PDROPS);
 		*error = EHOSTUNREACH;
 		goto bad;
 	}
@@ -432,8 +457,8 @@ again:
 	 */
 	if (sav->tdb_xform == NULL) {
 		DPRINTF(("ipsec_nextisr: no transform for SA\n"));
-		IPSEC_OSTAT(espstat.esps_noxform, ahstat.ahs_noxform,
-		    ipcompstat.ipcomps_noxform);
+		IPSEC_OSTAT(ESP_STAT_NOXFORM, AH_STAT_NOXFORM,
+		    IPCOMP_STAT_NOXFORM);
 		*error = EHOSTUNREACH;
 		goto bad;
 	}
@@ -626,7 +651,7 @@ ipsec6_process_packet(
 				goto bad;
 
 			splx(s);
-			return ipsec_reinject_ipstack(m, AF_INET);
+			return ipsec_reinject_ipstack(m, AF_INET6);
 		}
 	}
 

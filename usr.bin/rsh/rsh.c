@@ -1,4 +1,4 @@
-/*	$NetBSD: rsh.c,v 1.29 2006/03/23 23:49:07 wiz Exp $	*/
+/*	$NetBSD: rsh.c,v 1.32 2010/10/02 09:24:16 gson Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1990, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rsh.c	8.4 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: rsh.c,v 1.29 2006/03/23 23:49:07 wiz Exp $");
+__RCSID("$NetBSD: rsh.c,v 1.32 2010/10/02 09:24:16 gson Exp $");
 #endif
 #endif /* not lint */
 
@@ -99,7 +99,8 @@ main(int argc, char **argv)
 #ifdef IN_RCMD
 	char	*locuser = 0, *loop;
 #endif /* IN_RCMD */
-	int argoff, asrsh, ch, dflag, nflag, one, rem, i;
+	int argoff, asrsh, ch, dflag, nflag, one, rem;
+	size_t i;
 	int family = AF_UNSPEC;
 	pid_t pid;
 	uid_t uid;
@@ -134,7 +135,7 @@ main(int argc, char **argv)
 	if ((loop = getenv("RCMD_LOOP")) && strcmp(loop, "YES") == 0)
 		warnx("rcmd appears to be looping!");
 
-	putenv("RCMD_LOOP=YES");
+	setenv("RCMD_LOOP", "YES", 1);
 
 #  define	OPTIONS	"468KLdel:np:u:w"
 

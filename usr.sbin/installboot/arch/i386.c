@@ -1,4 +1,4 @@
-/* $NetBSD: i386.c,v 1.28 2007/06/23 23:18:29 christos Exp $ */
+/* $NetBSD: i386.c,v 1.36 2010/01/17 14:54:44 drochner Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: i386.c,v 1.28 2007/06/23 23:18:29 christos Exp $");
+__RCSID("$NetBSD: i386.c,v 1.36 2010/01/17 14:54:44 drochner Exp $");
 #endif /* !__lint */
 
 #include <sys/param.h>
@@ -87,12 +80,14 @@ static int i386_editboot(ib_params *);
 struct ib_mach ib_mach_i386 =
 	{ "i386", i386_setboot, no_clearboot, i386_editboot,
 		IB_RESETVIDEO | IB_CONSOLE | IB_CONSPEED | IB_CONSADDR |
-		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT };
+		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT |
+		IB_MODULES | IB_BOOTCONF };
 
 struct ib_mach ib_mach_amd64 =
 	{ "amd64", i386_setboot, no_clearboot, i386_editboot,
 		IB_RESETVIDEO | IB_CONSOLE | IB_CONSPEED | IB_CONSADDR |
-		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT };
+		IB_KEYMAP | IB_PASSWORD | IB_TIMEOUT |
+		IB_MODULES | IB_BOOTCONF };
 
 /*
  * Attempting to write the 'labelsector' (or a sector near it - within 8k?)
@@ -119,8 +114,11 @@ pwrite_validate(int fd, const void *buf, size_t n_bytes, off_t offset)
 		return -1;
 	}
 	fsync(fd);
-	if (pread(fd, r_buf, rv, offset) == rv && memcmp(r_buf, buf, rv) == 0)
+	if (pread(fd, r_buf, rv, offset) == rv && memcmp(r_buf, buf, rv) == 0) {
+		free(r_buf);
 		return rv;
+	}
+	free(r_buf);
 	errno = EROFS;
 	return -1;
 }
@@ -205,7 +203,7 @@ show_i386_boot_params(struct x86_boot_params  *bpp)
 	printf("speed %d, ", le32toh(bpp->bp_conspeed));
 	printf("ioaddr %x, ", le32toh(bpp->bp_consaddr));
 	for (i = 0; i < nelem(consoles); i++) {
-		if (consoles[i].dev == le32toh(bpp->bp_consdev))
+		if (consoles[i].dev == (int)le32toh(bpp->bp_consdev))
 			break;
 	}
 	if (i == nelem(consoles))
@@ -226,7 +224,7 @@ static int
 update_i386_boot_params(ib_params *params, struct x86_boot_params  *bpp)
 {
 	struct x86_boot_params bp;
-	int bplen;
+	uint32_t bplen;
 	size_t i;
 
 	bplen = le32toh(bpp->bp_length);
@@ -276,6 +274,10 @@ update_i386_boot_params(ib_params *params, struct x86_boot_params  *bpp)
 	}
 	if (params->flags & IB_KEYMAP)
 		strlcpy(bp.bp_keymap, params->keymap, sizeof bp.bp_keymap);
+	if (params->flags & IB_MODULES)
+		bp.bp_flags ^= htole32(X86_BP_FLAGS_NOMODULES);
+	if (params->flags & IB_BOOTCONF)
+		bp.bp_flags ^= htole32(X86_BP_FLAGS_NOBOOTCONF);
 
 	if (params->flags & (IB_NOWRITE | IB_VERBOSE))
 		show_i386_boot_params(&bp);
@@ -307,10 +309,10 @@ i386_setboot(ib_params *params)
 	assert(params->stage1 != NULL);
 
 	/*
-	 * There is only 8k of space in a UFSv1 partition (and ustarfs)
+	 * There is only 8k of space in a FFSv1 partition (and ustarfs)
 	 * so ensure we don't splat over anything important.
 	 */
-	if (params->s1stat.st_size > sizeof bootstrap) {
+	if (params->s1stat.st_size > (off_t)(sizeof bootstrap)) {
 		warnx("stage1 bootstrap `%s' (%u bytes) is larger than 8192 bytes",
 			params->stage1, (unsigned int)params->s1stat.st_size);
 		return 0;
@@ -392,7 +394,7 @@ i386_setboot(ib_params *params)
 	}
 
 	/*
-	 * If the partion has a FAT (or NTFS) filesystem, then we must
+	 * If the partition has a FAT (or NTFS) filesystem, then we must
 	 * preserve the BIOS Parameter Block (BPB).
 	 * It is also very likely that there isn't 8k of space available
 	 * for (say) bootxx_msdos, and that blindly installing it will trash
@@ -405,13 +407,14 @@ i386_setboot(ib_params *params)
 	 * Specifying 'installboot -f' will delete the old BPB info.
 	 */
 	if (!(params->flags & IB_FORCE)) {
+		#define USE_F ", use -f (may invalidate filesystem)"
 		/*
 		 * For FAT compatibility, the pbr code starts 'jmp xx; nop'
 		 * followed by the BIOS Parameter Block (BPB).
 		 * The 2nd byte (jump offset) is the size of the nop + BPB.
 		 */
 		if (bootstrap.b[0] != 0xeb || bootstrap.b[2] != 0x90) {
-			warnx("No BPB in new bootstrap %02x:%02x:%02x, use -f",
+			warnx("No BPB in new bootstrap %02x:%02x:%02x" USE_F,
 				bootstrap.b[0], bootstrap.b[1], bootstrap.b[2]);
 			return 0;
 		}
@@ -423,7 +426,8 @@ i386_setboot(ib_params *params)
 			u = le16toh(bpb->bpbBytesPerSec)
 			    * le16toh(bpb->bpbResSectors);
 			if (u != 0 && u < params->s1stat.st_size) {
-				warnx("Insufficient reserved space before FAT (%u bytes available), use -f", u);
+				warnx("Insufficient reserved space before FAT "
+					"(%u bytes available)" USE_F, u);
 				return 0;
 			}
 			/* Check we have enough space for the old bpb */
@@ -431,7 +435,7 @@ i386_setboot(ib_params *params)
 				/* old BPB is larger, allow if extra zeros */
 				if (!is_zero(disk_buf.b + 2 + bootstrap.b[1],
 				    disk_buf.b[1] - bootstrap.b[1])) {
-					warnx("Old BPB too big, use -f");
+					warnx("Old BPB too big" USE_F);
 					    return 0;
 				}
 				u = bootstrap.b[1];
@@ -441,6 +445,7 @@ i386_setboot(ib_params *params)
 			}
 			memcpy(bootstrap.b + 2, disk_buf.b + 2, u);
 		}
+		#undef USE_F
 	}
 
 	/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs_subr.c,v 1.14 2008/01/02 11:49:00 ad Exp $	*/
+/*	$NetBSD: kernfs_subr.c,v 1.23 2010/07/21 17:52:12 hannken Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kernfs_subr.c,v 1.14 2008/01/02 11:49:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kernfs_subr.c,v 1.23 2010/07/21 17:52:12 hannken Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"
@@ -143,12 +143,7 @@ static kmutex_t kfs_ihash_lock;
  * the vnode free list.
  */
 int
-kernfs_allocvp(mp, vpp, kfs_type, kt, value)
-	struct mount *mp;
-	struct vnode **vpp;
-	kfstype kfs_type;
-	const struct kern_target *kt;
-	u_int32_t value;
+kernfs_allocvp(struct mount *mp, struct vnode **vpp, kfstype kfs_type, const struct kern_target *kt, u_int32_t value)
 {
 	struct kernfs_node *kfs = NULL, *kfsp;
 	struct vnode *vp = NULL;
@@ -181,8 +176,10 @@ kernfs_allocvp(mp, vpp, kfs_type, kt, value)
 			return (ENOENT);
 		}
 		vp = fvp;
-		if (vget(fvp, LK_EXCLUSIVE))
+		if (vn_lock(fvp, LK_EXCLUSIVE)) {
+			vrele(fvp);
 			goto loop;
+		}
 		*vpp = vp;
 		mutex_exit(&kfs_hashlock);
 		return (0);
@@ -194,8 +191,7 @@ kernfs_allocvp(mp, vpp, kfs_type, kt, value)
 		return (error);
 	}
 
-	MALLOC(kfs, void *, sizeof(struct kernfs_node), M_TEMP, M_WAITOK);
-	memset(kfs, 0, sizeof(*kfs));
+	kfs = malloc(sizeof(struct kernfs_node), M_TEMP, M_WAITOK|M_ZERO);
 	vp->v_data = kfs;
 	cookie = &(VFSTOKERNFS(mp)->fileno_cookie);
 again:
@@ -244,15 +240,14 @@ again:
 }
 
 int
-kernfs_freevp(vp)
-	struct vnode *vp;
+kernfs_freevp(struct vnode *vp)
 {
 	struct kernfs_node *kfs = VTOKERN(vp);
 
 	kernfs_hashrem(kfs);
 	TAILQ_REMOVE(&VFSTOKERNFS(vp->v_mount)->nodelist, kfs, kfs_list);
 
-	FREE(vp->v_data, M_TEMP);
+	free(vp->v_data, M_TEMP);
 	vp->v_data = 0;
 	return (0);
 }
@@ -261,24 +256,22 @@ kernfs_freevp(vp)
  * Initialize kfsnode hash table.
  */
 void
-kernfs_hashinit()
+kernfs_hashinit(void)
 {
 
 	mutex_init(&kfs_hashlock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&kfs_ihash_lock, MUTEX_DEFAULT, IPL_NONE);
-	kfs_hashtbl = hashinit(desiredvnodes / 4, HASH_LIST, M_UFSMNT,
-	    M_WAITOK, &kfs_ihash);
+	kfs_hashtbl = hashinit(desiredvnodes / 4, HASH_LIST, true, &kfs_ihash);
 }
 
 void
-kernfs_hashreinit()
+kernfs_hashreinit(void)
 {
 	struct kernfs_node *pp;
 	struct kfs_hashhead *oldhash, *hash;
 	u_long i, oldmask, mask, val;
 
-	hash = hashinit(desiredvnodes / 4, HASH_LIST, M_UFSMNT, M_WAITOK,
-	    &mask);
+	hash = hashinit(desiredvnodes / 4, HASH_LIST, true, &mask);
 
 	mutex_enter(&kfs_ihash_lock);
 	oldhash = kfs_hashtbl;
@@ -293,27 +286,23 @@ kernfs_hashreinit()
 		}
 	}
 	mutex_exit(&kfs_ihash_lock);
-	hashdone(oldhash, M_UFSMNT);
+	hashdone(oldhash, HASH_LIST, oldmask);
 }
 
 /*
  * Free kfsnode hash table.
  */
 void
-kernfs_hashdone()
+kernfs_hashdone(void)
 {
 
-	hashdone(kfs_hashtbl, M_UFSMNT);
+	hashdone(kfs_hashtbl, HASH_LIST, kfs_ihash);
 	mutex_destroy(&kfs_hashlock);
 	mutex_destroy(&kfs_ihash_lock);
 }
 
 struct vnode *
-kernfs_hashget(type, mp, kt, value)
-	kfstype type;
-	struct mount *mp;
-	const struct kern_target *kt;
-	u_int32_t value;
+kernfs_hashget(kfstype type, struct mount *mp, const struct kern_target *kt, u_int32_t value)
 {
 	struct kfs_hashhead *ppp;
 	struct kernfs_node *pp;
@@ -328,7 +317,7 @@ kernfs_hashget(type, mp, kt, value)
 		    pp->kfs_kt == kt && pp->kfs_value == value) {
 			mutex_enter(&vp->v_interlock);
 			mutex_exit(&kfs_ihash_lock);
-			if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK))
+			if (vget(vp, LK_EXCLUSIVE))
 				goto loop;
 			return (vp);
 		}
@@ -341,13 +330,12 @@ kernfs_hashget(type, mp, kt, value)
  * Insert the kfsnode into the hash table and lock it.
  */
 void
-kernfs_hashins(pp)
-	struct kernfs_node *pp;
+kernfs_hashins(struct kernfs_node *pp)
 {
 	struct kfs_hashhead *ppp;
 
 	/* lock the kfsnode, then put it on the appropriate hash list */
-	lockmgr(&pp->kfs_vnode->v_lock, LK_EXCLUSIVE, NULL);
+	VOP_LOCK(KERNFSTOV(pp), LK_EXCLUSIVE);
 
 	mutex_enter(&kfs_ihash_lock);
 	ppp = &kfs_hashtbl[KFSVALUEHASH(pp->kfs_value)];
@@ -359,8 +347,7 @@ kernfs_hashins(pp)
  * Remove the kfsnode from the hash table.
  */
 void
-kernfs_hashrem(pp)
-	struct kernfs_node *pp;
+kernfs_hashrem(struct kernfs_node *pp)
 {
 	mutex_enter(&kfs_ihash_lock);
 	LIST_REMOVE(pp, kfs_hash);
@@ -369,13 +356,15 @@ kernfs_hashrem(pp)
 
 #ifdef IPSEC
 void
-kernfs_revoke_sa(sav)
-	struct secasvar *sav;
+kernfs_revoke_sa(struct secasvar *sav)
 {
 	struct kernfs_node *kfs, *pnext;
 	struct vnode *vp;
 	struct kfs_hashhead *ppp;
 	struct mbuf *m;
+
+	if (key_setdumpsa_spi == NULL)
+		return;
 
 	ppp = &kfs_hashtbl[KFSVALUEHASH(ntohl(sav->spi))];
 	for (kfs = LIST_FIRST(ppp); kfs; kfs = pnext) {
@@ -394,8 +383,7 @@ kernfs_revoke_sa(sav)
 }
 
 void
-kernfs_revoke_sp(sp)
-	struct secpolicy *sp;
+kernfs_revoke_sp(struct secpolicy *sp)
 {
 	struct kernfs_node *kfs, *pnext;
 	struct vnode *vp;

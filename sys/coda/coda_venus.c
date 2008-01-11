@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_venus.c,v 1.25 2007/03/04 06:01:12 christos Exp $	*/
+/*	$NetBSD: coda_venus.c,v 1.28 2010/07/20 17:26:03 christos Exp $	*/
 
 /*
  *
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_venus.c,v 1.25 2007/03/04 06:01:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_venus.c,v 1.28 2010/07/20 17:26:03 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,7 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: coda_venus.c,v 1.25 2007/03/04 06:01:12 christos Exp
     outp = (struct coda_out_hdr *) inp
 
 #define STRCPY(struc, name, len) \
-    bcopy(name, (char *)inp + (int)inp->struc, len); \
+    memcpy((char *)inp + (int)inp->struc, name, len); \
     ((char*)inp + (int)inp->struc)[len++] = 0; \
     Isize += len
 /* XXX verify that Isize has not overrun available storage */
@@ -308,7 +308,7 @@ venus_ioctl(void *mdp, CodaFid *fid,
     tmp = ((com >> 16) & IOCPARM_MASK) - sizeof (char *) - sizeof (int);
     inp->cmd |= (tmp & IOCPARM_MASK) <<	16;
 
-    if (iap->vi.in_size < 0 || iap->vi.in_size > VC_MAXMSGSIZE) {
+    if (iap->vi.in_size > VC_MAXMSGSIZE || iap->vi.out_size > VC_MAXMSGSIZE) {
 	CODA_FREE(inp, coda_ioctl_size);
 	return (EINVAL);
     }
@@ -447,7 +447,7 @@ venus_readlink(void *mdp, CodaFid *fid,
     if (!error) {
 	    CODA_ALLOC(*str, char *, outp->count);
 	    *len = outp->count;
-	    bcopy((char *)outp + (int)(long)outp->data, *str, *len);
+	    memcpy(*str, (char *)outp + (int)(long)outp->data, *len);
     }
 
 out:
@@ -710,7 +710,7 @@ venus_readdir(void *mdp, CodaFid *fid,
     error = coda_call(mdp, Isize, &Osize, (char *)inp);
     KASSERT(outp != NULL);
     if (!error) {
-	bcopy((char *)outp + (int)(long)outp->data, buffer, outp->size);
+	memcpy(buffer, (char *)outp + (int)(long)outp->data, outp->size);
 	*len = outp->size;
     }
 

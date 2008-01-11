@@ -1,4 +1,4 @@
-/*	$NetBSD: kobj.h,v 1.4 2008/01/07 18:25:56 ad Exp $	*/
+/*	$NetBSD: kobj.h,v 1.15 2010/04/27 00:38:42 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,20 +29,26 @@
 #ifndef _SYS_KOBJ_H_
 #define	_SYS_KOBJ_H_
 
+#define ELFSIZE ARCH_ELFSIZE
+#include <sys/exec.h>
+#include <sys/exec_elf.h>
+
 typedef struct kobj *kobj_t;
 
 /* External interface. */
-int		kobj_open_file(kobj_t *, const char *);
-int		kobj_open_mem(kobj_t *, void *, ssize_t);
-void		kobj_close(kobj_t);
-int		kobj_load(kobj_t);
+int		kobj_load_vfs(kobj_t *, const char *, const bool);
+int		kobj_load_mem(kobj_t *, void *, ssize_t);
+int		kobj_affix(kobj_t, const char *);
 void		kobj_unload(kobj_t);
-void		kobj_stat(kobj_t, vaddr_t *, size_t *, uintptr_t *);
-int		kobj_set_name(kobj_t, const char *);
+int		kobj_stat(kobj_t, vaddr_t *, size_t *);
+int		kobj_find_section(kobj_t, const char *, void **, size_t *);
 
 /* MI-MD interface. */
 uintptr_t	kobj_sym_lookup(kobj_t, uintptr_t);
 int		kobj_reloc(kobj_t, uintptr_t, const void *, bool, bool);
 int		kobj_machdep(kobj_t, void *, size_t, bool);
+
+/* implementation interface. */
+int		kobj_renamespace(Elf_Sym *, size_t, char **, size_t *);
 
 #endif /* !_SYS_KOBJ_H_ */

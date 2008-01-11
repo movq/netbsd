@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_vnops.c,v 1.66 2008/01/02 11:48:34 ad Exp $	*/
+/*	$NetBSD: coda_vnops.c,v 1.79 2011/05/19 03:11:55 rmind Exp $	*/
 
 /*
  *
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_vnops.c,v 1.66 2008/01/02 11:48:34 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_vnops.c,v 1.79 2011/05/19 03:11:55 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,7 +60,6 @@ __KERNEL_RCSID(0, "$NetBSD: coda_vnops.c,v 1.66 2008/01/02 11:48:34 ad Exp $");
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/select.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
 
@@ -136,7 +135,6 @@ const struct vnodeopv_entry_desc coda_vnodeop_entries[] = {
     { &vop_pathconf_desc, coda_vop_error },	/* pathconf */
     { &vop_advlock_desc, coda_vop_nop },	/* advlock */
     { &vop_bwrite_desc, coda_vop_error },	/* bwrite */
-    { &vop_lease_desc, coda_vop_nop },		/* lease */
     { &vop_seek_desc, genfs_seek },		/* seek */
     { &vop_poll_desc, genfs_poll },		/* poll */
     { &vop_getpages_desc, coda_getpages },	/* getpages */
@@ -164,7 +162,7 @@ coda_vop_error(void *anon) {
     return EIO;
 }
 
-/* A generic do-nothing.  For lease_check, advlock */
+/* A generic do-nothing. */
 int
 coda_vop_nop(void *anon) {
     struct vnodeop_desc **desc = (struct vnodeop_desc **)anon;
@@ -245,8 +243,9 @@ coda_open(void *v)
     if (error)
 	return (error);
     if (!error) {
-	CODADEBUG(CODA_OPEN, myprintf(("open: dev %d inode %llu result %d\n",
-				  dev, (unsigned long long)inode, error)); )
+	    CODADEBUG(CODA_OPEN,
+		myprintf(("open: dev 0x%llx inode %llu result %d\n",
+	        (unsigned long long)dev, (unsigned long long)inode, error));)
     }
 
     /* 
@@ -291,7 +290,7 @@ coda_open(void *v)
      * Drop the lock on the container, after we have done VOP_OPEN
      * (which requires a locked vnode).
      */
-    VOP_UNLOCK(container_vp, 0);
+    VOP_UNLOCK(container_vp);
     return(error);
 }
 
@@ -437,7 +436,7 @@ coda_rdwr(struct vnode *vp, struct uio *uiop, enum uio_rw rw, int ioflag,
 	     * Drop lock. 
 	     * XXX Where is reference released.
 	     */
-	    VOP_UNLOCK(cfvp, 0);
+	    VOP_UNLOCK(cfvp);
 	}
 	else {
 	    printf("coda_rdwr: internal VOP_OPEN\n");
@@ -495,8 +494,8 @@ coda_ioctl(void *v)
 /* locals */
     int error;
     struct vnode *tvp;
-    struct nameidata ndp;
     struct PioctlData *iap = (struct PioctlData *)data;
+    namei_simple_flags_t sflags;
 
     MARK_ENTRY(CODA_IOCTL_STATS);
 
@@ -516,10 +515,8 @@ coda_ioctl(void *v)
     /* Should we use the name cache here? It would get it from
        lookupname sooner or later anyway, right? */
 
-    NDINIT(&ndp, LOOKUP, (iap->follow ? FOLLOW : NOFOLLOW), UIO_USERSPACE,
-	iap->path);
-    error = namei(&ndp);
-    tvp = ndp.ni_vp;
+    sflags = iap->follow ? NSM_FOLLOW_NOEMULROOT : NSM_NOFOLLOW_NOEMULROOT;
+    error = namei_simple_user(iap->path, sflags, &tvp);
 
     if (error) {
 	MARK_INT_FAIL(CODA_IOCTL_STATS);
@@ -542,7 +539,7 @@ coda_ioctl(void *v)
 	return(EINVAL);
     }
 
-    if (iap->vi.in_size > VC_MAXDATASIZE) {
+    if (iap->vi.in_size > VC_MAXDATASIZE || iap->vi.out_size > VC_MAXDATASIZE) {
 	vrele(tvp);
 	return(EINVAL);
     }
@@ -706,11 +703,11 @@ coda_abortop(void *v)
 	struct vnode *a_dvp;
 	struct componentname *a_cnp;
     } */ *ap = v;
+
+    (void)ap;
 /* upcall decl */
 /* locals */
 
-    if ((ap->a_cnp->cn_flags & (HASBUF | SAVESTART)) == HASBUF)
-	PNBUF_PUT(ap->a_cnp->cn_pnbuf);
     return (0);
 }
 
@@ -862,7 +859,7 @@ coda_inactive(void *v)
 		   vp, vp->v_usecount);
 	if (cp->c_ovp != NULL)
 	    printf("coda_inactive: %p ovp != NULL\n", vp);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
     } else {
         /* Sanity checks that perhaps should be panic. */
 	if (vp->v_usecount) {
@@ -871,7 +868,7 @@ coda_inactive(void *v)
 	if (cp->c_ovp != NULL) {
 	    printf("coda_inactive: %p ovp != NULL\n", vp);
 	}
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	*ap->a_recycle = true;
     }
 
@@ -1000,21 +997,7 @@ coda_lookup(void *v)
 	&& (error == ENOENT))
     {
 	error = EJUSTRETURN;
-	cnp->cn_flags |= SAVENAME;
 	*ap->a_vpp = NULL;
-    }
-
-    /*
-     * If we are removing, and we are at the last element, and we
-     * found it, then we need to keep the name around so that the
-     * removal will go ahead as planned.
-     * XXX Check against new lookup rules.
-     */
-    if ((cnp->cn_nameiop == DELETE)
-	&& (cnp->cn_flags & ISLASTCN)
-	&& !error)
-    {
-	cnp->cn_flags |= SAVENAME;
     }
 
     /*
@@ -1031,7 +1014,7 @@ coda_lookup(void *v)
 	if (*ap->a_vpp && (*ap->a_vpp != dvp)) {
 	    if (flags & ISDOTDOT)
 		/* ..: unlock parent */
-		VOP_UNLOCK(dvp, 0);
+		VOP_UNLOCK(dvp);
 	    /* all but .: lock child */
 	    vn_lock(*ap->a_vpp, LK_EXCLUSIVE | LK_RETRY);
 	    if (flags & ISDOTDOT)
@@ -1140,10 +1123,6 @@ coda_create(void *v)
 	}
     }
 
-    /* Per vnodeops(9), free name except on success and SAVESTART. */
-    if (error || (cnp->cn_flags & SAVESTART) == 0) {
-	PNBUF_PUT(cnp->cn_pnbuf);
-    }
     return(error);
 }
 
@@ -1276,7 +1255,7 @@ coda_link(void *v)
 	goto exit;
     }
     error = venus_link(vtomi(vp), &cp->c_fid, &dcp->c_fid, nm, len, cred, l);
-    VOP_UNLOCK(vp, 0);
+    VOP_UNLOCK(vp);
 
     /* Invalidate parent's attr cache (the modification time has changed). */
     VTOC(dvp)->c_flags &= ~C_VATTR;
@@ -1464,10 +1443,6 @@ coda_mkdir(void *v)
 	}
     }
 
-    /* Per vnodeops(9), free name except on success and SAVESTART. */
-    if (error || (cnp->cn_flags & SAVESTART) == 0) {
-	PNBUF_PUT(cnp->cn_pnbuf);
-    }
     return(error);
 }
 
@@ -1617,11 +1592,6 @@ coda_symlink(void *v)
     /* unlock and deference parent */
     vput(dvp);
 
-    /* Per vnodeops(9), free name except on success and SAVESTART. */
-    if (error || (cnp->cn_flags & SAVESTART) == 0) {
-	PNBUF_PUT(cnp->cn_pnbuf);
-    }
-
     CODADEBUG(CODA_SYMLINK, myprintf(("in symlink result %d\n",error)); )
     return(error);
 }
@@ -1765,7 +1735,6 @@ coda_reclaim(void *v)
 	}
 #endif
     }
-    cache_purge(vp);
     coda_free(VTOC(vp));
     SET_VTOC(vp) = NULL;
     return (0);
@@ -1788,7 +1757,7 @@ coda_lock(void *v)
 		  coda_f2s(&cp->c_fid)));
     }
 
-    return (lockmgr(&vp->v_lock, ap->a_flags, &vp->v_interlock));
+    return genfs_lock(v);
 }
 
 int
@@ -1807,17 +1776,16 @@ coda_unlock(void *v)
 		  coda_f2s(&cp->c_fid)));
     }
 
-    return (lockmgr(&vp->v_lock, ap->a_flags | LK_RELEASE, &vp->v_interlock));
+    return genfs_unlock(v);
 }
 
 int
 coda_islocked(void *v)
 {
 /* true args */
-    struct vop_islocked_args *ap = v;
     ENTRY;
 
-    return (lockstatus(&ap->a_vp->v_lock));
+    return genfs_islocked(v);
 }
 
 /*
@@ -1832,7 +1800,8 @@ coda_grab_vnode(dev_t dev, ino_t ino, struct vnode **vpp)
 
     /* Obtain mount point structure from device. */
     if (!(mp = devtomp(dev))) {
-	myprintf(("coda_grab_vnode: devtomp(%d) returns NULL\n", dev));
+	myprintf(("coda_grab_vnode: devtomp(0x%llx) returns NULL\n",
+	    (unsigned long long)dev));
 	return(ENXIO);
     }
 
@@ -1843,8 +1812,8 @@ coda_grab_vnode(dev_t dev, ino_t ino, struct vnode **vpp)
      */
     error = VFS_VGET(mp, ino, vpp);
     if (error) {
-	myprintf(("coda_grab_vnode: iget/vget(%d, %llu) returns %p, err %d\n",
-		  dev, (unsigned long long)ino, *vpp, error));
+	myprintf(("coda_grab_vnode: iget/vget(0x%llx, %llu) returns %p, err %d\n",
+	    (unsigned long long)dev, (unsigned long long)ino, *vpp, error));
 	return(ENOENT);
     }
     return(0);
@@ -2014,6 +1983,7 @@ coda_getpages(void *v)
 	 * lock, and if we should serialize getpages calls by some
 	 * mechanism.
 	 */
+	/* XXX VOP_ISLOCKED() may not be used for lock decisions. */
 	waslocked = VOP_ISLOCKED(vp);
 
 	/* Drop the vmobject lock. */
@@ -2050,7 +2020,7 @@ coda_getpages(void *v)
 			printf("coda_getpages: cannot open vnode %p => %d\n",
 			       vp, cerror);
 			if (waslocked == 0)
-				VOP_UNLOCK(vp, 0);
+				VOP_UNLOCK(vp);
 			return cerror;
 		}
 
@@ -2082,7 +2052,7 @@ coda_getpages(void *v)
 
 		/* If we obtained a lock, drop it. */
 		if (waslocked == 0)
-			VOP_UNLOCK(vp, 0);
+			VOP_UNLOCK(vp);
 	}
 
 	return error;

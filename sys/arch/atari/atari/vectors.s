@@ -1,6 +1,7 @@
-/*	$NetBSD: vectors.s,v 1.21 2005/12/11 12:16:54 christos Exp $	*/
+/*	$NetBSD: vectors.s,v 1.23 2011/02/08 20:20:09 rmind Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah
  * Copyright (c) 1990 Regents of the University of California.
  * All rights reserved.
  *
@@ -30,39 +31,7 @@
  *
  *	@(#)vectors.s	7.2 (Berkeley) 5/7/91
  */
-/*
- * Copyright (c) 1988 University of Utah
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)vectors.s	7.2 (Berkeley) 5/7/91
- */
+
 	.data
 GLOBAL(vectab)
 	.long	0x4ef80400	| 0: jmp 0x400:w (unused reset SSP)
@@ -212,44 +181,25 @@ GLOBAL(uservects)
 	VECTOR(badmfpint)	|  95:
 #endif /* NNCRSCSI > 0 */
 
-#if NZS > 0
 	/*
 	 * Interrupts from the 8530 SCC
 	 */
-	ASVECTOR(sccint)	|  96: SCC Tx empty channel B
+	VECTOR(badtrap)		|  96: SCC Tx empty channel B
 	VECTOR(badtrap)		|  97: Not used
-	ASVECTOR(sccint)	|  98: SCC Ext./Status Channel B
+	VECTOR(badtrap)		|  98: SCC Ext./Status Channel B
 	VECTOR(badtrap)		|  99: Not used
-	ASVECTOR(sccint)	| 100: SCC Rx Channel B
+	VECTOR(badtrap)		| 100: SCC Rx Channel B
 	VECTOR(badtrap)		| 101: Not used
-	ASVECTOR(sccint)	| 102: SCC Special Rx cond.  Channel B
+	VECTOR(badtrap)		| 102: SCC Special Rx cond.  Channel B
 	VECTOR(badtrap)		| 103: Not used
-	ASVECTOR(sccint)	| 104: SCC Tx empty channel A
+	VECTOR(badtrap)		| 104: SCC Tx empty channel A
 	VECTOR(badtrap)		| 105: Not used
-	ASVECTOR(sccint)	| 106: SCC Ext./Status Channel A
+	VECTOR(badtrap)		| 106: SCC Ext./Status Channel A
 	VECTOR(badtrap)		| 107: Not used
-	ASVECTOR(sccint)	| 108: SCC Rx Channel A
+	VECTOR(badtrap)		| 108: SCC Rx Channel A
 	VECTOR(badtrap)		| 109: Not used
-	ASVECTOR(sccint)	| 110: SCC Special Rx cond.  Channel A
+	VECTOR(badtrap)		| 110: SCC Special Rx cond.  Channel A
 	VECTOR(badtrap)		| 111: Not used
-#else
-	VECTOR(badtrap)		|  96: Not used
-	VECTOR(badtrap)		|  97: Not used
-	VECTOR(badtrap)		|  98: Not used
-	VECTOR(badtrap)		|  99: Not used
-	VECTOR(badtrap)		| 100: Not used
-	VECTOR(badtrap)		| 101: Not used
-	VECTOR(badtrap)		| 102: Not used
-	VECTOR(badtrap)		| 103: Not used
-	VECTOR(badtrap)		| 104: Not used
-	VECTOR(badtrap)		| 105: Not used
-	VECTOR(badtrap)		| 106: Not used
-	VECTOR(badtrap)		| 107: Not used
-	VECTOR(badtrap)		| 108: Not used
-	VECTOR(badtrap)		| 109: Not used
-	VECTOR(badtrap)		| 110: Not used
-	VECTOR(badtrap)		| 111: Not used
-#endif /* NZS > 0 */
 
 #define BADTRAP16	VECTOR(badtrap) ; VECTOR(badtrap) ; \
 			VECTOR(badtrap) ; VECTOR(badtrap) ; \

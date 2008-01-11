@@ -1,7 +1,7 @@
-/*	$NetBSD: pthread_int.h,v 1.65 2008/01/08 20:56:08 christos Exp $	*/
+/*	$NetBSD: pthread_int.h,v 1.78 2011/03/17 00:43:48 matt Exp $	*/
 
 /*-
- * Copyright (c) 2001, 2002, 2003, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001, 2002, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,6 +37,8 @@
 #ifndef _LIB_PTHREAD_INT_H
 #define _LIB_PTHREAD_INT_H
 
+#include <sys/tls.h>
+
 /* #define PTHREAD__DEBUG */
 #define ERRORCHECK
 
@@ -51,6 +46,10 @@
 #include "pthread_queue.h"
 #include "pthread_md.h"
 
+/* Need to use libc-private names for atomic operations. */
+#include "../../common/lib/libc/atomic/atomic_op_namespace.h"
+
+#include <sys/atomic.h>
 #include <sys/tree.h>
 
 #include <lwp.h>
@@ -82,6 +81,8 @@ struct pthread_attr_private {
 	void *ptap_stackaddr;
 	size_t ptap_stacksize;
 	size_t ptap_guardsize;
+	struct sched_param ptap_sp;
+	int ptap_policy;
 };
 
 struct pthread_lock_ops {
@@ -93,6 +94,9 @@ struct pthread_lock_ops {
 
 struct	__pthread_st {
 	pthread_t	pt_self;	/* Must be first. */
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+	struct tls_tcb	*pt_tls;	/* Thread Local Storage area */
+#endif
 	unsigned int	pt_magic;	/* Magic number */
 	int		pt_state;	/* running, blocked, etc. */
 	pthread_mutex_t	pt_lock;	/* lock on state */
@@ -104,10 +108,11 @@ struct	__pthread_st {
 	char		*pt_name;	/* Thread's name, set by the app. */
 	int		pt_willpark;	/* About to park */
 	lwpid_t		pt_unpark;	/* Unpark this when parking */
-	void		*pt_unparkhint;	/* Hint for the above */
 	struct pthread_lock_ops pt_lockops;/* Cached to avoid PIC overhead */
 	pthread_mutex_t	*pt_droplock;	/* Drop this lock if cancelled */
 	pthread_cond_t	pt_joiners;	/* Threads waiting to join. */
+	void		*(*pt_func)(void *);/* Function to call at start. */
+	void		*pt_arg;	/* Argumen to pass at start. */
 
 	/* Threads to defer waking, usually until pthread_mutex_unlock(). */
 	lwpid_t		pt_waiters[PTHREAD__UNPARK_MAX];
@@ -130,8 +135,9 @@ struct	__pthread_st {
 	struct lwpctl 	*pt_lwpctl;	/* Kernel/user comms area */
 	volatile int	pt_blocking;	/* Blocking in userspace */
 	volatile int	pt_rwlocked;	/* Handed rwlock successfully */
-	volatile int	pt_sleeponq;	/* On a sleep queue */
 	volatile int	pt_signalled;	/* Received pthread_cond_signal() */
+	volatile int	pt_mutexwait;	/* Waiting to acquire mutex */
+	void * volatile pt_mutexnext;	/* Next thread in chain */
 	void * volatile	pt_sleepobj;	/* Object slept on */
 	PTQ_ENTRY(__pthread_st) pt_sleep;
 	void		(*pt_early)(void *);
@@ -186,13 +192,14 @@ extern int 	pthread__unpark_max;
 #define _UC_USER		(1LU << _UC_USER_BIT)
 
 /* Utility functions */
-void	pthread__unpark_all(pthread_t, pthread_spin_t *, pthread_queue_t *)
-			    PTHREAD_HIDE;
-void	pthread__unpark(pthread_t, pthread_spin_t *, pthread_queue_t *,
-			pthread_t) PTHREAD_HIDE;
-int	pthread__park(pthread_t, pthread_spin_t *, pthread_queue_t *,
+void	pthread__unpark_all(pthread_queue_t *, pthread_t, pthread_mutex_t *)
+    PTHREAD_HIDE;
+void	pthread__unpark(pthread_queue_t *, pthread_t, pthread_mutex_t *)
+    PTHREAD_HIDE;
+int	pthread__park(pthread_t, pthread_mutex_t *, pthread_queue_t *,
 		      const struct timespec *, int, const void *)
 		      PTHREAD_HIDE;
+pthread_mutex_t *pthread__hashlock(volatile const void *) PTHREAD_HIDE;
 
 /* Internal locking primitives */
 void	pthread__lockprim_init(void) PTHREAD_HIDE;
@@ -231,16 +238,6 @@ int	pthread__simple_locked_p(__cpu_simple_lock_t *) PTHREAD_HIDE;
 #define	pthread__simple_lock_try(alp)	(*pthread__lock_ops->plo_try)(alp)
 #define	pthread__simple_unlock(alp)	(*pthread__lock_ops->plo_unlock)(alp)
 
-#ifndef _getcontext_u
-int	_getcontext_u(ucontext_t *) PTHREAD_HIDE;
-#endif
-#ifndef _setcontext_u
-int	_setcontext_u(const ucontext_t *) PTHREAD_HIDE;
-#endif
-#ifndef _swapcontext_u
-int	_swapcontext_u(ucontext_t *, const ucontext_t *) PTHREAD_HIDE;
-#endif
-
 void	pthread__testcancel(pthread_t) PTHREAD_HIDE;
 int	pthread__find(pthread_t) PTHREAD_HIDE;
 
@@ -257,13 +254,33 @@ int	pthread__find(pthread_t) PTHREAD_HIDE;
 	_INITCONTEXT_U_MD(ucp)						\
 	} while (/*CONSTCOND*/0)
 
-/* Stack location of pointer to a particular thread */
-#define pthread__id(sp) \
-	((pthread_t) (((vaddr_t)(sp)) & pthread__threadmask))
 
-#ifdef PTHREAD__HAVE_THREADREG
-#define	pthread__self()		pthread__threadreg_get()
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
+static inline pthread_t __constfunc
+pthread__self(void)
+{
+#ifdef __HAVE___LWP_GETTCB_FAST
+	struct tls_tcb * const tcb = __lwp_gettcb_fast();
 #else
+	struct tls_tcb * const tcb = __lwp_getprivate_fast();
+#endif
+	return (pthread_t)tcb->tcb_pthread;
+}
+#elif 0 && defined(__HAVE___LWP_GETPRIVATE_FAST)
+static inline pthread_t __constfunc
+pthread__self(void)
+{
+	return (pthread_t)__lwp_getprivate_fast();
+}
+#else
+/* Stack location of pointer to a particular thread */
+extern vaddr_t	pthread__mainbase;
+extern vaddr_t	pthread__mainstruct;
+static inline pthread_t
+pthread__id(vaddr_t sp) {
+	vaddr_t va = sp & pthread__threadmask;
+	return (pthread_t)(va == pthread__mainbase ? pthread__mainstruct : va);
+}
 #define pthread__self() 	(pthread__id(pthread__sp()))
 #endif
 
@@ -289,15 +306,8 @@ void	pthread__errorfunc(const char *, int, const char *, const char *)
 			   PTHREAD_HIDE;
 char	*pthread__getenv(const char *) PTHREAD_HIDE;
 void	pthread__cancelled(void) PTHREAD_HIDE;
-
-void	*pthread__atomic_cas_ptr(volatile void *, const void *, const void *) PTHREAD_HIDE;
-void	*pthread__atomic_swap_ptr(volatile void *, const void *) PTHREAD_HIDE;
-void	pthread__atomic_or_ulong(volatile unsigned long *, unsigned long) PTHREAD_HIDE;
-void	pthread__membar_full(void) PTHREAD_HIDE;
-void	pthread__membar_producer(void) PTHREAD_HIDE;
-void	pthread__membar_consumer(void) PTHREAD_HIDE;
-
-int	pthread__mutex_deferwake(pthread_t, pthread_mutex_t *) PTHREAD_HIDE;
+void	pthread__mutex_deferwake(pthread_t, pthread_mutex_t *) PTHREAD_HIDE;
+int	pthread__checkpri(int) PTHREAD_HIDE;
 
 #ifndef pthread__smt_pause
 #define	pthread__smt_pause()	/* nothing */
@@ -321,7 +331,5 @@ int	pthread__mutex_deferwake(pthread_t, pthread_mutex_t *) PTHREAD_HIDE;
 #define	RW_OWNER(rw)		((rw)->rw_owner & RW_THREAD)
 #define	RW_COUNT(rw)		((rw)->rw_owner & RW_THREAD)
 #define	RW_FLAGS(rw)		((rw)->rw_owner & ~RW_THREAD)
-
-#define	ptr_owner		ptr_writer
 
 #endif /* _LIB_PTHREAD_INT_H */

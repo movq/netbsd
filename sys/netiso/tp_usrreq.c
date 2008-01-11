@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_usrreq.c,v 1.33 2007/11/09 21:00:06 plunky Exp $	*/
+/*	$NetBSD: tp_usrreq.c,v 1.40 2009/03/18 22:08:57 he Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -65,7 +65,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_usrreq.c,v 1.33 2007/11/09 21:00:06 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_usrreq.c,v 1.40 2009/03/18 22:08:57 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -212,7 +212,7 @@ restart:
 		}
 #endif
 		sbunlock(sb);
-		if (so->so_state & SS_NBIO) {
+		if (so->so_nbio) {
 			return EWOULDBLOCK;
 		}
 		sbwait(sb);
@@ -223,7 +223,7 @@ restart:
 	/* Assuming at most one xpd tpdu is in the buffer at once */
 	while (n != NULL) {
 		m->m_len += n->m_len;
-		bcopy(mtod(n, void *), mtod(m, void *), (unsigned) n->m_len);
+		memcpy(mtod(m, void *), mtod(n, void *), (unsigned) n->m_len);
 		m->m_data += n->m_len;	/* so mtod() in bcopy() above gives
 					 * right addr */
 		n = n->m_next;
@@ -306,7 +306,7 @@ tp_sendoob(struct tp_pcb *tpcb, struct socket *so, struct mbuf *xdata,
 	 */
 	if (sb->sb_mb) {	/* Anything already in eXpedited data
 				 * sockbuf? */
-		if (so->so_state & SS_NBIO) {
+		if (so->so_nbio) {
 			return EWOULDBLOCK;
 		}
 		while (sb->sb_mb) {
@@ -381,7 +381,6 @@ tp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	struct mbuf *control, struct lwp *l)
 {
 	struct tp_pcb *tpcb;
-	int             s;
 	int             error = 0;
 	int             flags, *outflags = &flags;
 	u_long          eotsdu = 0;
@@ -404,7 +403,6 @@ tp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	if (req == PRU_CONTROL)
 		return (EOPNOTSUPP);
 
-	s = splsoftnet();
 	tpcb = sototpcb(so);
 	if (tpcb == 0 && req != PRU_ATTACH) {
 #ifdef TPPT
@@ -419,6 +417,7 @@ tp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	switch (req) {
 
 	case PRU_ATTACH:
+		sosetlock(so);
 		if (tpcb != 0) {
 			error = EISCONN;
 			break;
@@ -725,7 +724,6 @@ tp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		/*
 		 * stat: don't bother with a blocksize.
 		 */
-		splx(s);
 		return (0);
 
 	case PRU_SOCKADDR:
@@ -757,7 +755,6 @@ tp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	}
 #endif
 release:
-	splx(s);
 	return error;
 }
 
@@ -792,6 +789,7 @@ tp_confirm(struct tp_pcb *tpcb)
 int
 tp_snd_control(struct mbuf *m, struct socket *so, struct mbuf **data)
 {
+	struct sockopt sopt;
 	struct cmsghdr *ch;
 	int             error = 0;
 
@@ -799,8 +797,14 @@ tp_snd_control(struct mbuf *m, struct socket *so, struct mbuf **data)
 		ch = mtod(m, struct cmsghdr *);
 		m->m_len -= sizeof(*ch);
 		m->m_data += sizeof(*ch);
-		error = tp_ctloutput(PRCO_SETOPT,
-				     so, ch->cmsg_level, ch->cmsg_type, &m);
+
+		sockopt_init(&sopt, ch->cmsg_level, ch->cmsg_type, 0);
+		error = sockopt_setmbuf(&sopt, m);
+		if (error == 0)
+			error = tp_ctloutput(PRCO_SETOPT, so, &sopt);
+		sockopt_destroy(&sopt);
+		m = NULL;
+
 		if (ch->cmsg_type == TPOPT_DISC_DATA) {
 			if (data && *data) {
 				m_freem(*data);

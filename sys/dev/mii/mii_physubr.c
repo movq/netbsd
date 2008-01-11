@@ -1,4 +1,4 @@
-/*	$NetBSD: mii_physubr.c,v 1.56 2008/01/10 07:29:41 dyoung Exp $	*/
+/*	$NetBSD: mii_physubr.c,v 1.72 2010/08/21 13:18:35 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.56 2008/01/10 07:29:41 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.72 2010/08/21 13:18:35 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -50,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.56 2008/01/10 07:29:41 dyoung Exp 
 #include <sys/kernel.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
+#include <sys/module.h>
 #include <sys/proc.h>
 
 #include <net/if.h>
@@ -58,6 +52,28 @@ __KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.56 2008/01/10 07:29:41 dyoung Exp 
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
+
+const char *(*mii_get_descr)(int, int) = mii_get_descr_stub;
+
+int mii_verbose_loaded = 0;
+
+const char *mii_get_descr_stub(int oui, int model)
+{
+	mii_load_verbose();
+	if (mii_verbose_loaded)
+		return mii_get_descr(oui, model);
+	else
+		return NULL;
+}
+
+/*    
+ * Routine to load the miiverbose kernel module as needed
+ */
+void mii_load_verbose(void)
+{
+	if (mii_verbose_loaded == 0)
+		module_autoload("miiverbose", MODULE_CLASS_MISC);
+}  
 
 static void mii_phy_statusmsg(struct mii_softc *);
 
@@ -266,7 +282,7 @@ mii_phy_auto_timeout(void *arg)
 	struct mii_softc *sc = arg;
 	int s;
 
-	if (!device_is_active(&sc->mii_dev))
+	if (!device_is_active(sc->mii_dev))
 		return;
 
 	s = splnet();
@@ -337,16 +353,6 @@ mii_phy_reset(struct mii_softc *sc)
 		reg = BMCR_RESET | BMCR_ISO;
 	PHY_WRITE(sc, MII_BMCR, reg);
 
-	/*
-	 * It is best to allow a little time for the reset to settle
-	 * in before we start polling the BMCR again.  Notably, the
-	 * DP83840A manual states that there should be a 500us delay
-	 * between asserting software reset and attempting MII serial
-	 * operations.  Also, a DP83815 can get into a bad state on
-	 * cable removal and reinsertion if we do not delay here.
-	 */
-	delay(500);
-
 	/* Wait another 100ms for it to complete. */
 	for (i = 0; i < 100; i++) {
 		reg = PHY_READ(sc, MII_BMCR);
@@ -385,7 +391,7 @@ mii_phy_update(struct mii_softc *sc, int cmd)
 	    sc->mii_media_status != mii->mii_media_status ||
 	    cmd == MII_MEDIACHG) {
 		mii_phy_statusmsg(sc);
-		(*mii->mii_statchg)(device_parent(&sc->mii_dev));
+		(*mii->mii_statchg)(device_parent(sc->mii_dev));
 		sc->mii_media_active = mii->mii_media_active;
 		sc->mii_media_status = mii->mii_media_status;
 	}
@@ -420,6 +426,7 @@ void
 mii_phy_add_media(struct mii_softc *sc)
 {
 	struct mii_data *mii = sc->mii_pdata;
+	device_t self = sc->mii_dev;
 	const char *sep = "";
 	int fdx = 0;
 
@@ -442,7 +449,7 @@ mii_phy_add_media(struct mii_softc *sc)
 			    MII_MEDIA_10_T);
 			PRINT("HomePNA1");
 		}
-		return;
+		goto out;
 	}
 
 	if (sc->mii_capabilities & BMSR_10THDX) {
@@ -534,6 +541,11 @@ mii_phy_add_media(struct mii_softc *sc)
 #undef PRINT
 	if (fdx != 0 && (sc->mii_flags & MIIF_DOPAUSE))
 		mii->mii_media.ifm_mask |= IFM_ETH_FMASK;
+out:
+	if (!pmf_device_register(self, NULL, mii_phy_resume)) {
+		aprint_normal("\n");
+		aprint_error_dev(self, "couldn't establish power handler");
+	}
 }
 
 void
@@ -545,31 +557,29 @@ mii_phy_delete_media(struct mii_softc *sc)
 }
 
 int
-mii_phy_activate(struct device *self, enum devact act)
+mii_phy_activate(device_t self, enum devact act)
 {
-	int rv = 0;
-
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
-		/* Nothing special to do. */
-		break;
+		/* XXX Invalidate parent's media setting? */
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-
-	return (rv);
 }
 
 /* ARGSUSED1 */
 int
-mii_phy_detach(struct device *self, int flags)
+mii_phy_detach(device_t self, int flags)
 {
 	struct mii_softc *sc = device_private(self);
 
+	/* XXX Invalidate parent's media setting? */
+
 	if (sc->mii_flags & MIIF_DOINGAUTO)
-		callout_stop(&sc->mii_nway_ch);
+		callout_halt(&sc->mii_nway_ch, NULL);
+
+	callout_destroy(&sc->mii_nway_ch);
 
 	mii_phy_delete_media(sc);
 	LIST_REMOVE(sc, mii_list);
@@ -636,10 +646,43 @@ mii_phy_flowstatus(struct mii_softc *sc)
 }
 
 bool
-mii_phy_resume(device_t dv)
+mii_phy_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct mii_softc *sc = device_private(dv);
 
 	PHY_RESET(sc);
 	return PHY_SERVICE(sc, sc->mii_pdata, MII_MEDIACHG) == 0;
+}
+
+
+/*
+ * Given an ifmedia word, return the corresponding ANAR value.
+ */
+int
+mii_anar(int media)
+{
+	int rv;
+
+	switch (media & (IFM_TMASK|IFM_NMASK|IFM_FDX)) {
+	case IFM_ETHER|IFM_10_T:
+		rv = ANAR_10|ANAR_CSMA;
+		break;
+	case IFM_ETHER|IFM_10_T|IFM_FDX:
+		rv = ANAR_10_FD|ANAR_CSMA;
+		break;
+	case IFM_ETHER|IFM_100_TX:
+		rv = ANAR_TX|ANAR_CSMA;
+		break;
+	case IFM_ETHER|IFM_100_TX|IFM_FDX:
+		rv = ANAR_TX_FD|ANAR_CSMA;
+		break;
+	case IFM_ETHER|IFM_100_T4:
+		rv = ANAR_T4|ANAR_CSMA;
+		break;
+	default:
+		rv = 0;
+		break;
+	}
+
+	return rv;
 }

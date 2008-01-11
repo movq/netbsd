@@ -1,4 +1,4 @@
-/* $NetBSD: types.h,v 1.39 2007/11/29 00:56:53 ad Exp $ */
+/* $NetBSD: types.h,v 1.45 2011/03/31 15:30:31 skrll Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993
@@ -50,9 +50,18 @@ typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
 #endif
 
 typedef long int	register_t;
+#if defined(_NETBSD_SOURCE)
+#define	PRIxREGISTER	"lx"
+#endif
 
 typedef	volatile int		__cpu_simple_lock_t;
 
@@ -65,9 +74,11 @@ typedef	volatile int		__cpu_simple_lock_t;
 #define	__HAVE_SYSCALL_INTERN
 #define	__HAVE_MINIMAL_EMUL
 #define	__HAVE_AST_PERPROC
-#define	__HAVE_GENERIC_TODR
-#define	__HAVE_TIMECOUNTER
 #define	__HAVE_ATOMIC64_OPS
+#define	__HAVE_CPU_LWP_SETPRIVATE
+#define	__HAVE___LWP_GETPRIVATE_FAST
+#define	__HAVE_COMMON___TLS_GET_ADDR
+#define	__HAVE_TLS_VARIANT_I
 
 #if defined(_KERNEL)
 #define	__HAVE_RAS

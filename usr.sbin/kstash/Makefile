@@ -1,13 +1,12 @@
-# $NetBSD: Makefile,v 1.14 2006/03/23 21:51:14 wiz Exp $
+# $NetBSD: Makefile,v 1.16 2009/04/22 15:23:05 lukem Exp $
 
+WARNS?=	2	# XXX -Wextra -Wsign-compare
 NOLINT= # defined
 
 .include <bsd.own.mk>
 
 DIST=		${NETBSDSRCDIR}/crypto/dist
 .PATH: ${DIST}/heimdal/kdc
-
-WARNS?=  1
 
 PROG= kstash
 
@@ -27,9 +26,9 @@ CPPFLAGS+=-DHAVE_IPV6
 
 VERS!=	cd ${NETBSDSRCDIR}/lib/libvers && ${PRINTOBJDIR}
 
-LDADD+=	-lhdb -lkrb5 -lcrypto -lasn1 -lcom_err \
+LDADD+=	-lhdb -lkrb5 -lhx509 -lcrypto -lasn1 -lcom_err \
 	-L${VERS} -lvers -lroken -lcrypt
-DPADD+=	${LIBHDB} ${LIBKRB5} ${LIBCRYPTO} ${LIBASN1} ${LIBCOM_ERR} \
+DPADD+=	${LIBHDB} ${LIBKRB5} ${LIBHX509} ${LIBCRYPTO} ${LIBASN1} ${LIBCOM_ERR} \
 	${VERS}/libvers.a ${LIBROKEN} ${LIBCRYPT}
 
 MAN=	kstash.8

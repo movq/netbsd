@@ -1,6 +1,6 @@
-# $NetBSD: t_times.sh,v 1.1 2007/11/12 15:18:28 jmmv Exp $
+# $NetBSD: t_times.sh,v 1.5 2010/11/07 17:51:18 jmmv Exp $
 #
-# Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
+# Copyright (c) 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -11,13 +11,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,14 +38,14 @@ empty_head() {
 empty_body() {
 	test_mount
 
-	atf_check 'touch a' 0 null null
+	atf_check -s eq:0 -o empty -e empty touch a
 	eval $(stat -s a | sed -e 's|st_|ost_|g') || atf_fail "stat failed"
 	[ ${ost_birthtime} -eq ${ost_atime} ] || atf_fail "Incorrect atime"
 	[ ${ost_birthtime} -eq ${ost_ctime} ] || atf_fail "Incorrect ctime"
 	[ ${ost_birthtime} -eq ${ost_mtime} ] || atf_fail "Incorrect mtime"
 
 	sleep 1
-	atf_check 'cat a' 0 ignore null
+	atf_check -s eq:0 -o ignore -e empty cat a
 	eval $(stat -s a) || atf_fail "stat failed"
 	[ ${st_atime} -gt ${ost_atime} ] || atf_fail "Incorrect atime"
 	[ ${st_ctime} -eq ${ost_ctime} ] || atf_fail "Incorrect ctime"
@@ -81,7 +74,7 @@ non_empty_body() {
 	eval $(stat -s b | sed -e 's|st_|ost_|g') || atf_fail "stat failed"
 
 	sleep 1
-	atf_check 'cat b' 0 ignore null
+	atf_check -s eq:0 -o ignore -e empty cat b
 	eval $(stat -s b) || atf_fail "stat failed"
 	[ ${st_atime} -gt ${ost_atime} ] || atf_fail "Incorrect atime"
 	[ ${st_ctime} -eq ${ost_ctime} ] || atf_fail "Incorrect ctime"
@@ -103,7 +96,7 @@ link_body() {
 	eval $(stat -s c | sed -e 's|st_|ost_|g') || atf_fail "stat failed"
 
 	sleep 1
-	atf_check 'ln c d' 0 null null
+	atf_check -s eq:0 -o empty -e empty ln c d
 	eval $(stat -s c) || atf_fail "stat failed"
 	[ ${st_atime} -eq ${ost_atime} ] || atf_fail "Incorrect atime"
 	[ ${st_ctime} -gt ${ost_ctime} ] || atf_fail "Incorrect ctime"
@@ -121,12 +114,12 @@ rename_head() {
 rename_body() {
 	test_mount
 
-	atf_check 'mkdir e' 0 null null
+	atf_check -s eq:0 -o empty -e empty mkdir e
 	echo foo >e/a || atf_fail "Creation failed"
 	eval $(stat -s e | sed -e 's|st_|dost_|g') || atf_fail "stat failed"
 	eval $(stat -s e/a | sed -e 's|st_|ost_|g') || atf_fail "stat failed"
 	sleep 1
-	atf_check 'mv e/a e/b' 0 null null
+	atf_check -s eq:0 -o empty -e empty mv e/a e/b
 	eval $(stat -s e | sed -e 's|st_|dst_|g') || atf_fail "stat failed"
 	eval $(stat -s e/b) || atf_fail "stat failed"
 	[ ${st_atime} -eq ${ost_atime} ] || atf_fail "Incorrect atime"

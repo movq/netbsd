@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.25 2007/10/17 19:54:26 garbled Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.39 2011/01/23 09:44:58 skrll Exp $	*/
 
 /*	$OpenBSD: autoconf.c,v 1.15 2001/06/25 00:43:10 mickey Exp $	*/
 
@@ -86,11 +86,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.25 2007/10/17 19:54:26 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.39 2011/01/23 09:44:58 skrll Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_useleds.h"
-#include "opt_power_switch.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,11 +100,13 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.25 2007/10/17 19:54:26 garbled Exp $"
 #include <sys/reboot.h>
 #include <sys/device.h>
 #include <sys/callout.h>
+#include <sys/kmem.h>
 
 #ifdef KGDB
 #include <sys/kgdb.h>
 #endif
 
+#include <machine/pdc.h>
 #include <machine/iomod.h>
 #include <machine/autoconf.h>
 
@@ -118,11 +119,25 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.25 2007/10/17 19:54:26 garbled Exp $"
 #include <dev/cons.h>
 
 #include <hp700/hp700/machdep.h>
-#include <hp700/hp700/power.h>
 #include <hp700/dev/cpudevs.h>
 #include <hp700/gsc/gscbusvar.h>
 
-register_t	kpsw = PSW_Q | PSW_P | PSW_C | PSW_D;
+static TAILQ_HEAD(hppa_pdcmodule_head, hppa_pdcmodule) hppa_pdcmodule_list =
+    TAILQ_HEAD_INITIALIZER(hppa_pdcmodule_list);
+
+struct hppa_pdcmodule {
+	TAILQ_ENTRY(hppa_pdcmodule) hm_link;
+	bool			hm_registered;
+	struct pdc_iodc_read	hm_pir;
+	struct iodc_data	hm_type;
+	struct device_path	hm_dp;
+	hppa_hpa_t		hm_hpa;
+	u_int			hm_hpasz;
+	u_int			hm_naddrs;	/* only PDC_SYSTEM_MAP */
+	u_int			hm_modindex;	/* only PDC_SYSTEM_MAP */
+};
+
+#define	HPPA_SYSTEMMAPMODULES	256
 
 /*
  * LED blinking thing
@@ -133,6 +148,14 @@ static struct callout hp700_led_callout;
 static void hp700_led_blinker(void *);
 extern int hz;
 #endif
+
+void (*cold_hook)(int); /* see below */
+
+struct hppa_pdcmodule *hppa_pdcmodule_create(struct hppa_pdcmodule *,
+    const char *);
+void hppa_walkbus(struct confargs *ca);
+static void hppa_pdc_snake_scan(void);
+static void hppa_pdc_system_map_scan(void);
 
 /*
  * cpu_configure:
@@ -163,14 +186,11 @@ cpu_configure(void)
 	/* in spl*() we trust */
 	hp700_intr_init();
 	__asm volatile("ssm %0, %%r0" :: "i" (PSW_I));
-	kpsw |= PSW_I;
+	curcpu()->ci_psw |= PSW_I;
 	spl0();
 
-	cold = 0;
-#ifdef POWER_SWITCH
-	/* Give OS control over the power switch. */
-	pwr_sw_ctrl(PWR_SW_CTRL_ENABLE);
-#endif /* POWER_SWITCH */
+	if (cold_hook)
+		(*cold_hook)(HPPA_COLD_HOT);
 
 #ifdef USELEDS
 	memset(_hp700_led_on_cycles, 0, sizeof(_hp700_led_on_cycles));
@@ -231,7 +251,7 @@ hp700_led_blinker(void *arg)
 #define HP700_HEARTBEAT_CYCLES	(_HP700_LED_FREQ / 8)
 	if (led_cycle == (0 * HP700_HEARTBEAT_CYCLES) ||
 	    led_cycle == (2 * HP700_HEARTBEAT_CYCLES)) {
-		_hp700_led_on_cycles[HP700_LED_HEARTBEAT] = 
+		_hp700_led_on_cycles[HP700_LED_HEARTBEAT] =
 			HP700_HEARTBEAT_CYCLES;
 	}
 
@@ -312,54 +332,54 @@ bad:
 
 /****************************************************************/
 
-struct device *boot_device = NULL;
+device_t boot_device = NULL;
 
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
 	int pagezero_cookie;
-	struct device *pdev;
+	device_t pdev;
 
 	if ((pdev = device_parent(dev)) == NULL ||
 	    device_parent(pdev) == NULL)
 		return;
 	pagezero_cookie = hp700_pagezero_map();
-	/* Currently only GSC and PCI devices are supported. */
+
 	/*
-	 * The boot device is described in PAGE0->mem_boot. We need to do it 
-	 * this way as the MD device path (DP) information in struct confargs 
-	 * is only available in hp700 MD devices. So boot_device is used to 
+	 * The boot device is described in PAGE0->mem_boot. We need to do it
+	 * this way as the MD device path (DP) information in struct confargs
+	 * is only available in hp700 MD devices. So boot_device is used to
 	 * propagate information down the device tree.
-	 * 
-	 * If the boot device is a GSC network device all we need to compare 
-	 * is the HPA or device path (DP) to get the boot device. 
-	 * If the boot device is a SCSI device below a GSC attached SCSI 
-	 * controller PAGE0->mem_boot.pz_hpa contains the HPA of the SCSI 
-	 * controller. In that case we remember the the pointer to the 
-	 * controller's struct dev in boot_device. The SCSI device is located 
+	 *
+	 * If the boot device is a GSC network device all we need to compare
+	 * is the HPA or device path (DP) to get the boot device.
+	 * If the boot device is a SCSI device below a GSC attached SCSI
+	 * controller PAGE0->mem_boot.pz_hpa contains the HPA of the SCSI
+	 * controller. In that case we remember the pointer to the
+	 * controller's struct dev in boot_device. The SCSI device is located
 	 * later, see below.
 	 */
-	if (device_is_a(pdev, "gsc")
-	    && (hppa_hpa_t)PAGE0->mem_boot.pz_hpa == 
+	if ((device_is_a(pdev, "gsc") || device_is_a(pdev, "phantomas"))
+	    && (hppa_hpa_t)PAGE0->mem_boot.pz_hpa ==
 	    ((struct gsc_attach_args *)aux)->ga_ca.ca_hpa)
 		/* This is (the controller of) the boot device. */
 		boot_device = dev;
 	/*
-	 * If the boot device is a PCI device the HPA is the address where the 
-	 * firmware has maped the PCI memory of the PCI device. This is quite 
-	 * device dependent, so we compare the DP. It encodes the bus routing 
-	 * information to the PCI bus bridge in the DP head and the PCI device 
-	 * and PCI function in the last two DP components. So we compare the 
-	 * head of the DP when a PCI bridge attaches and remember the struct 
-	 * dev of the PCI bridge in boot_dev if it machtes. Later, when PCI 
-	 * devices are attached, we look if this PCI device hangs below the 
-	 * boot PCI bridge. If yes we compare the PCI device and PCI function 
-	 * to the DP tail. In case of a network boot we found the boot device 
-	 * on a match. In case of a SCSI boot device we have to do the same 
+	 * If the boot device is a PCI device the HPA is the address where the
+	 * firmware has mapped the PCI memory of the PCI device. This is quite
+	 * device dependent, so we compare the DP. It encodes the bus routing
+	 * information to the PCI bus bridge in the DP head and the PCI device
+	 * and PCI function in the last two DP components. So we compare the
+	 * head of the DP when a PCI bridge attaches and remember the struct
+	 * dev of the PCI bridge in boot_dev if it machtes. Later, when PCI
+	 * devices are attached, we look if this PCI device hangs below the
+	 * boot PCI bridge. If yes we compare the PCI device and PCI function
+	 * to the DP tail. In case of a network boot we found the boot device
+	 * on a match. In case of a SCSI boot device we have to do the same
 	 * check when SCSI devices are attached like on GSC SCSI controllers.
 	 */
-	if (device_is_a(dev, "dino")) {
+	if (device_is_a(dev, "dino") || device_is_a(dev, "elroy")) {
 		struct confargs *ca = (struct confargs *)aux;
 		int i, n;
 
@@ -371,7 +391,7 @@ device_register(struct device *dev, void *aux)
 			if (PAGE0->mem_boot.pz_dp.dp_bc[i] < 0)
 				continue;
 			/* and compare the rest. */
-			if (PAGE0->mem_boot.pz_dp.dp_bc[i] 
+			if (PAGE0->mem_boot.pz_dp.dp_bc[i]
 			    != ca->ca_dp.dp_bc[n]) {
 				hp700_pagezero_unmap(pagezero_cookie);
 				return;
@@ -402,10 +422,10 @@ device_register(struct device *dev, void *aux)
 	    == PAGE0->mem_boot.pz_dp.dp_mod)
 		/* This is (the controller of) the boot device. */
 		boot_device = dev;
-	/* 
-	 * When SCSI devices are attached, we look if the SCSI device hangs 
-	 * below the controller remembered in boot_device. If so, we compare 
-	 * the SCSI ID and LUN with the DP layer information. If they match 
+	/*
+	 * When SCSI devices are attached, we look if the SCSI device hangs
+	 * below the controller remembered in boot_device. If so, we compare
+	 * the SCSI ID and LUN with the DP layer information. If they match
 	 * we found the boot device.
 	 */
 	if (device_is_a(pdev, "scsibus")
@@ -416,11 +436,10 @@ device_register(struct device *dev, void *aux)
 	    == PAGE0->mem_boot.pz_dp.dp_layers[1])
 		/* This is the boot device. */
 		boot_device = dev;
+
 	hp700_pagezero_unmap(pagezero_cookie);
 	return;
 }
-
-
 
 /*
  * Choose root and swap devices.
@@ -440,7 +459,7 @@ cpu_rootconf(void)
 	}
 	printf("%d dp_layers ", PAGE0->mem_boot.pz_dp.dp_mod);
 	for (n = 0 ; n < 6 ; n++) {
-		printf( "0x%x%c", PAGE0->mem_boot.pz_dp.dp_layers[n], 
+		printf( "0x%x%c", PAGE0->mem_boot.pz_dp.dp_layers[n],
 		    n < 5 ? '/' : ' ');
 	}
 	printf("dp_flags 0x%x pz_class 0x%x\n", PAGE0->mem_boot.pz_dp.dp_flags,
@@ -458,102 +477,156 @@ cpu_rootconf(void)
 #endif
 
 void
-pdc_scanbus_memory_map(struct device *self, struct confargs *ca,
-    void (*callback)(struct device *, struct confargs *))
+hppa_walkbus(struct confargs *ca)
 {
+	struct hppa_pdcmodule nhm, *hm;
 	int i;
-	struct confargs nca;
-	struct pdc_memmap pdc_memmap PDC_ALIGNMENT;
-	struct pdc_iodc_read pdc_iodc_read PDC_ALIGNMENT;
 
-	for (i = 0; i < 16; i++) {
-		memset(&nca, 0, sizeof(nca));
-		nca.ca_dp.dp_bc[0] = -1;
-		nca.ca_dp.dp_bc[1] = -1;
-		nca.ca_dp.dp_bc[2] = -1;
-		nca.ca_dp.dp_bc[3] = -1;
-		nca.ca_dp.dp_bc[4] = ca->ca_dp.dp_mod;
-		nca.ca_dp.dp_bc[5] = ca->ca_dp.dp_mod < 0 ? -1 : 0;
-		nca.ca_dp.dp_mod = i;
+	if (ca->ca_hpabase == 0)
+		return;
+	
+	aprint_verbose(">> Walking bus at HPA 0x%lx\n", ca->ca_hpabase);
 
-		if (pdc_call((iodcio_t)pdc, 0, PDC_MEMMAP, PDC_MEMMAP_HPA, 
-		    &pdc_memmap, &nca.ca_dp) < 0)
+	for (i = 0; i < ca->ca_nmodules; i++) {
+		int error;
+
+ 		memset(&nhm, 0, sizeof(nhm));
+		nhm.hm_dp.dp_bc[0] = ca->ca_dp.dp_bc[1];
+		nhm.hm_dp.dp_bc[1] = ca->ca_dp.dp_bc[2];
+		nhm.hm_dp.dp_bc[2] = ca->ca_dp.dp_bc[3];
+		nhm.hm_dp.dp_bc[3] = ca->ca_dp.dp_bc[4];
+		nhm.hm_dp.dp_bc[4] = ca->ca_dp.dp_bc[5];
+		nhm.hm_dp.dp_bc[5] = ca->ca_dp.dp_mod;
+		nhm.hm_hpa = ca->ca_hpabase + IOMOD_HPASIZE * i;
+		nhm.hm_hpasz = 0;
+		nhm.hm_dp.dp_mod = i;
+		nhm.hm_naddrs = 0;
+
+		error = pdcproc_iodc_read(nhm.hm_hpa, IODC_DATA, NULL,
+		    &nhm.hm_pir, sizeof(nhm.hm_pir), &nhm.hm_type,
+		    sizeof(nhm.hm_type));
+		if (error < 0)
 			continue;
 
-		if (pdc_call((iodcio_t)pdc, 0, PDC_IODC, PDC_IODC_READ,
-		     &pdc_iodc_read, pdc_memmap.hpa, IODC_DATA,
-		     &nca.ca_type, sizeof(nca.ca_type)) < 0)
+		aprint_verbose(">> HPA 0x%lx[0x%x]", nhm.hm_hpa,
+		    nhm.hm_hpasz);
+
+		TAILQ_FOREACH(hm, &hppa_pdcmodule_list, hm_link) {
+			if (nhm.hm_hpa == hm->hm_hpa) {
+				aprint_verbose(" found by firmware\n");
+				break;
+			}
+		}
+
+		/* If we've found the module move onto the next one. */
+		if (hm)
 			continue;
 
-		nca.ca_mod = i;
-		nca.ca_hpa = pdc_memmap.hpa;
-		nca.ca_iot = ca->ca_iot;
-		nca.ca_dmatag = ca->ca_dmatag;
-		nca.ca_irq = HP700CF_IRQ_UNDEF;
-		nca.ca_pdc_iodc_read = &pdc_iodc_read;
-		nca.ca_name = hppa_mod_info(nca.ca_type.iodc_type,
-		    nca.ca_type.iodc_sv_model);
-		(*callback)(self, &nca);
+		/* Expect PDC to report devices of the following types */
+		if (nhm.hm_type.iodc_type == HPPA_TYPE_FIO) {
+			aprint_verbose(" expected to be missing\n");
+			continue;
+		}
+
+		hppa_pdcmodule_create(&nhm, "Bus walk");
 	}
 }
 
 void
-pdc_scanbus_system_map(struct device *self, struct confargs *ca,
-    void (*callback)(struct device *, struct confargs *))
+pdc_scanbus(device_t self, struct confargs *ca,
+    device_t (*callback)(device_t, struct confargs *))
 {
-	int i;
-	int ia;
+	struct hppa_pdcmodule *hm;
 	struct confargs nca;
-	struct pdc_iodc_read pdc_iodc_read PDC_ALIGNMENT;
-	struct pdc_system_map_find_mod pdc_find_mod PDC_ALIGNMENT;
-	struct pdc_system_map_find_addr pdc_find_addr PDC_ALIGNMENT;
+	device_t dev;
+	int ia;
 
-	for (i = 0; i <= 64; i++) {
+	hppa_walkbus(ca);
+
+	TAILQ_FOREACH(hm, &hppa_pdcmodule_list, hm_link) {
+		char buf[128];
+		int error;
+
+		if (hm->hm_registered)
+			continue;
+
+		if (!(hm->hm_dp.dp_bc[0] == ca->ca_dp.dp_bc[1] &&
+		    hm->hm_dp.dp_bc[1] == ca->ca_dp.dp_bc[2] &&
+		    hm->hm_dp.dp_bc[2] == ca->ca_dp.dp_bc[3] &&
+		    hm->hm_dp.dp_bc[3] == ca->ca_dp.dp_bc[4] &&
+		    hm->hm_dp.dp_bc[4] == ca->ca_dp.dp_bc[5] &&
+		    hm->hm_dp.dp_bc[5] == ca->ca_dp.dp_mod))
+			continue;
+
 		memset(&nca, 0, sizeof(nca));
-		nca.ca_dp.dp_bc[0] = ca->ca_dp.dp_bc[1];
-		nca.ca_dp.dp_bc[1] = ca->ca_dp.dp_bc[2];
-		nca.ca_dp.dp_bc[2] = ca->ca_dp.dp_bc[3];
-		nca.ca_dp.dp_bc[3] = ca->ca_dp.dp_bc[4];
-		nca.ca_dp.dp_bc[4] = ca->ca_dp.dp_bc[5];
-		nca.ca_dp.dp_bc[5] = ca->ca_dp.dp_mod;
-		nca.ca_dp.dp_mod = i;
-
-		if (pdc_call((iodcio_t)pdc, 0, PDC_SYSTEM_MAP, 
-		    PDC_SYSTEM_MAP_TRANS_PATH, &pdc_find_mod, &nca.ca_dp) != 0)
-			continue;
-		nca.ca_hpa = pdc_find_mod.hpa;
-		nca.ca_hpasz = pdc_find_mod.size << PGSHIFT;
-		if (pdc_find_mod.naddrs > 0) {
-			nca.ca_naddrs = pdc_find_mod.naddrs;
-			if (nca.ca_naddrs > 16) { 
-				nca.ca_naddrs = 16;
-				printf("WARNING: too many (%d) addrs\n",
-				    pdc_find_mod.naddrs);
-			}
-			for (ia = 0; pdc_call((iodcio_t)pdc, 0, 
-			    PDC_SYSTEM_MAP, PDC_SYSTEM_MAP_FIND_ADDR, 
-			    &pdc_find_addr, pdc_find_mod.mod_index, ia) == 0
-			    && ia < nca.ca_naddrs; ia++) {
-				nca.ca_addrs[ia].addr = pdc_find_addr.hpa;
-				nca.ca_addrs[ia].size = 
-				    pdc_find_addr.size << PGSHIFT;
-			}
-		}
-
-		if (pdc_call((iodcio_t)pdc, 0, PDC_IODC, PDC_IODC_READ,
-		     &pdc_iodc_read, nca.ca_hpa, IODC_DATA,
-		     &nca.ca_type, sizeof(nca.ca_type)) < 0) {
-			continue;
-		}
-
-		nca.ca_mod = i;
 		nca.ca_iot = ca->ca_iot;
 		nca.ca_dmatag = ca->ca_dmatag;
+		nca.ca_pir = hm->hm_pir;
+		nca.ca_type = hm->hm_type;
+		nca.ca_hpa = hm->hm_hpa;
+		nca.ca_dp = hm->hm_dp;
+		nca.ca_hpa = hm->hm_hpa;
+		nca.ca_hpasz = hm->hm_hpasz;
+
+		if (hm->hm_naddrs) {
+			if (hm->hm_naddrs > HP700_MAXIOADDRS) {
+				nca.ca_naddrs = HP700_MAXIOADDRS;
+				aprint_error("WARNING: too many (%d) addrs\n",
+				    hm->hm_naddrs);
+			} else
+				nca.ca_naddrs = hm->hm_naddrs;
+
+			aprint_verbose(">> ADDRS[%d/%d]: ", nca.ca_naddrs,
+			    hm->hm_modindex);
+
+			KASSERT(hm->hm_modindex != -1);
+			for (ia = 0; ia < nca.ca_naddrs; ia++) {
+				struct pdc_system_map_find_addr pdc_find_addr;
+
+				error = pdcproc_system_map_find_addr(
+				    &pdc_find_addr, hm->hm_modindex, ia + 1);
+				if (error < 0)
+					break;
+				nca.ca_addrs[ia].addr = pdc_find_addr.hpa;
+				nca.ca_addrs[ia].size =
+				    pdc_find_addr.size << PGSHIFT;
+
+				aprint_verbose(" 0x%lx[0x%x]",
+				    nca.ca_addrs[ia].addr,
+				    nca.ca_addrs[ia].size);
+			}
+			aprint_verbose("\n");
+		}
+
+		aprint_verbose(">> HPA 0x%lx[0x%x]\n", nca.ca_hpa,
+		    nca.ca_hpasz);
+
+		snprintb(buf, sizeof(buf), PZF_BITS, nca.ca_dp.dp_flags);
+		aprint_verbose(">> probing: flags %s ", buf);
+		if (nca.ca_dp.dp_mod >=0) {
+			int n;
+
+			aprint_verbose(" path ");
+			for (n = 0; n < 6; n++) {
+				if (nca.ca_dp.dp_bc[n] >= 0)
+					aprint_verbose("%d/",
+					    nca.ca_dp.dp_bc[n]);
+			}
+			aprint_verbose("%d", nca.ca_dp.dp_mod);
+		}
+
+		aprint_verbose(" type %x sv %x\n",
+		    nca.ca_type.iodc_type, nca.ca_type.iodc_sv_model);
+
 		nca.ca_irq = HP700CF_IRQ_UNDEF;
-		nca.ca_pdc_iodc_read = &pdc_iodc_read;
 		nca.ca_name = hppa_mod_info(nca.ca_type.iodc_type,
 		    nca.ca_type.iodc_sv_model);
-		(*callback)(self, &nca);
+
+		dev = callback(self, &nca);
+
+		if (dev)
+			hm->hm_registered = true;
+		
 	}
 }
 
@@ -575,4 +648,205 @@ hppa_mod_info(int type, int sv)
 		return fakeid;
 	} else
 		return mi->mi_name;
+}
+
+/*
+ * Create the device on our device list.  Keep the devices in order. */
+struct hppa_pdcmodule *
+hppa_pdcmodule_create(struct hppa_pdcmodule *hm, const char *who)
+{
+	struct hppa_pdcmodule *nhm, *ahm;
+	int i;
+	
+	nhm = kmem_zalloc(sizeof(*nhm), KM_SLEEP);
+
+	nhm->hm_registered = false;
+	nhm->hm_pir = hm->hm_pir;
+	nhm->hm_type = hm->hm_type;
+	nhm->hm_dp = hm->hm_dp;
+	nhm->hm_hpa = hm->hm_hpa;
+	nhm->hm_hpasz = hm->hm_hpasz;
+	nhm->hm_naddrs = hm->hm_naddrs;
+	nhm->hm_modindex = hm->hm_modindex;
+
+	/* Find start of new path */
+	for (i = 0; i < 6; i++) {
+		if (hm->hm_dp.dp_bc[i] != -1)
+			break;
+	}
+
+	/*
+	 * Look, in reverse, for the first device that has a path before our
+	 * new one.  In reverse because PDC reports most (all?) devices in path
+	 * order and therefore the common case is to add to the end of the
+	 * list.
+	 */
+	TAILQ_FOREACH_REVERSE(ahm, &hppa_pdcmodule_list, hppa_pdcmodule_head,
+	    hm_link) {
+		int check;
+		int j, k;
+		
+		for (j = 0; j < 6; j++) {
+			if (ahm->hm_dp.dp_bc[j] != -1)
+				break;
+		}
+
+		for (check = 0, k = i; j < 7 && k < 7; j++, k++) {
+			char nid, aid;
+
+			nid = (k == 6) ? hm->hm_dp.dp_mod : hm->hm_dp.dp_bc[k];
+			aid = (j == 6) ? ahm->hm_dp.dp_mod : ahm->hm_dp.dp_bc[j];
+
+			if (nid == aid)
+				continue;
+			check = nid - aid;
+			break;
+		}
+		if (check >= 0)
+			break;
+		else if (check < 0)
+			continue;
+	}
+	if (ahm == NULL)
+		TAILQ_INSERT_HEAD(&hppa_pdcmodule_list, nhm, hm_link);
+	else
+		TAILQ_INSERT_AFTER(&hppa_pdcmodule_list, ahm, nhm, hm_link);
+
+	if (hm->hm_dp.dp_mod >= 0) {
+		int n;
+
+		aprint_verbose(">> %s device at path ", who);
+		for (n = 0; n < 6; n++) {
+			if (hm->hm_dp.dp_bc[n] >= 0)
+				aprint_verbose("%d/", hm->hm_dp.dp_bc[n]);
+		}
+		aprint_verbose("%d addrs %d\n", hm->hm_dp.dp_mod,
+		    hm->hm_naddrs);
+	}
+
+	return nhm;
+}
+
+/*
+ * This is used for Snake machines
+ */
+static struct hppa_pdcmodule *
+hppa_memmap_query(struct device_path *devp)
+{
+	static struct hppa_pdcmodule nhm;
+	struct pdc_memmap pdc_memmap;
+	int error;
+
+	error = pdcproc_memmap(&pdc_memmap, devp);
+	
+	if (error < 0)
+		return NULL;
+
+	memset(&nhm, 0, sizeof(nhm));
+	nhm.hm_dp = *devp;
+	nhm.hm_hpa = pdc_memmap.hpa;
+	nhm.hm_hpasz = pdc_memmap.morepages;
+	nhm.hm_naddrs = 0;
+	nhm.hm_modindex = -1;
+
+	error = pdcproc_iodc_read(nhm.hm_hpa, IODC_DATA, NULL, &nhm.hm_pir,
+	    sizeof(nhm.hm_pir), &nhm.hm_type, sizeof(nhm.hm_type));
+
+	if (error < 0)
+		return NULL;
+
+	return hppa_pdcmodule_create(&nhm, "PDC (memmap)");
+}
+
+
+static void
+hppa_pdc_snake_scan(void)
+{
+	struct device_path path;
+	struct hppa_pdcmodule *hm;
+	int im, ba;
+
+	memset(&path, 0, sizeof(path));
+	for (im = 0; im < 16; im++) {
+		path.dp_bc[0] = path.dp_bc[1] = path.dp_bc[2] =
+		path.dp_bc[3] = path.dp_bc[4] = path.dp_bc[5] = -1;
+		path.dp_mod = im;
+
+		hm = hppa_memmap_query(&path);
+
+		if (!hm)
+			continue;
+
+		if (hm->hm_type.iodc_type != HPPA_TYPE_BHA)
+			continue;
+
+		path.dp_bc[0] = path.dp_bc[1] =
+		path.dp_bc[2] = path.dp_bc[3] = -1;
+		path.dp_bc[4] = im;
+		path.dp_bc[5] = 0;
+
+		for (ba = 0; ba < 16; ba++) {
+			path.dp_mod = ba;
+			hppa_memmap_query(&path);
+		}
+	}
+}
+
+static void
+hppa_pdc_system_map_scan(void)
+{
+	struct pdc_system_map_find_mod pdc_find_mod;
+	struct device_path path;
+	struct hppa_pdcmodule hm;
+	int error;
+	int im;
+
+	for (im = 0; im < HPPA_SYSTEMMAPMODULES; im++) {
+		memset(&path, 0, sizeof(path));
+		error = pdcproc_system_map_find_mod(&pdc_find_mod, &path, im);
+		if (error == PDC_ERR_NMOD)
+			break;
+
+		if (error < 0)
+			continue;
+
+		memset(&hm, 0, sizeof(hm));
+		hm.hm_dp = path;
+		hm.hm_hpa = pdc_find_mod.hpa;
+		hm.hm_hpasz = pdc_find_mod.size << PGSHIFT;
+		hm.hm_naddrs = pdc_find_mod.naddrs;
+		hm.hm_modindex = im;
+
+		error = pdcproc_iodc_read(hm.hm_hpa, IODC_DATA, NULL,
+		    &hm.hm_pir, sizeof(hm.hm_pir), &hm.hm_type,
+		    sizeof(hm.hm_type));
+		if (error < 0)
+			continue;
+
+		hppa_pdcmodule_create(&hm, "PDC (system map)");
+	}
+}
+
+void
+hppa_modules_scan(void)
+{
+	switch (pdc_gettype()) {
+	case PDC_TYPE_SNAKE:
+		hppa_pdc_snake_scan();
+		break;
+
+	case PDC_TYPE_UNKNOWN:
+		hppa_pdc_system_map_scan();
+	}
+}
+
+void
+hppa_modules_done(void)
+{
+	struct hppa_pdcmodule *hm, *nhm;
+
+	TAILQ_FOREACH_SAFE(hm, &hppa_pdcmodule_list, hm_link, nhm) {
+		TAILQ_REMOVE(&hppa_pdcmodule_list, hm, hm_link);
+		kmem_free(hm, sizeof(*hm));
+	}
 }

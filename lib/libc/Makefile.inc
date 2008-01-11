@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.3 2007/06/03 17:36:08 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.6 2010/05/30 08:28:53 tnozaki Exp $
 #	@(#)Makefile	8.2 (Berkeley) 2/3/94
 #
 # All library objects contain sccsid strings by default; they may be
@@ -20,6 +20,8 @@
 USE_FORT?=	yes
 
 USE_SHLIBDIR=	yes
+
+CITRUS?=	yes
 
 .include <bsd.own.mk>
 
@@ -47,20 +49,12 @@ LINTFLAGS+=	-w
 # ignore 'empty translation unit' warnings.
 LINTFLAGS+=	-X 272
 
-.if exists(${.CURDIR}/arch/${MACHINE_ARCH})
-ARCHSUBDIR=	${MACHINE_ARCH}
-.elif exists(${.CURDIR}/arch/${MACHINE_CPU}) 
-ARCHSUBDIR=	${MACHINE_CPU}
-.else
-.BEGIN:
-	@echo no ARCHSUBDIR for ${MACHINE_ARCH} nor ${MACHINE_CPU}
-	@false
-.endif
+.include "libcincludes.mk"
 
 ARCHDIR=	${.CURDIR}/arch/${ARCHSUBDIR}
 AFLAGS+=	-I${ARCHDIR}
 .if defined(DESTDIR)
-AFLAGS+=	-nostdinc -idirafter ${DESTDIR}/usr/include
+AFLAGS+=	-nostdinc -isystem ${DESTDIR}/usr/include
 .endif
 CLEANFILES+=	tags
 

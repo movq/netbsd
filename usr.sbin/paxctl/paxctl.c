@@ -1,7 +1,8 @@
-/* $NetBSD: paxctl.c,v 1.7 2007/12/26 22:16:31 christos Exp $ */
+/* $NetBSD: paxctl.c,v 1.12 2009/10/27 16:27:47 christos Exp $ */
 
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
+ * Copyright (c) 2008 Christos Zoulas <christos@NetBSD.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +34,7 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #ifdef __RCSID
-__RCSID("$NetBSD: paxctl.c,v 1.7 2007/12/26 22:16:31 christos Exp $");
+__RCSID("$NetBSD: paxctl.c,v 1.12 2009/10/27 16:27:47 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,10 +52,10 @@ __RCSID("$NetBSD: paxctl.c,v 1.7 2007/12/26 22:16:31 christos Exp $");
 #include <string.h>
 
 static void usage(void) __dead;
-static int pax_flag(const char *);
-static int pax_flags_sane(u_long);
-static int pax_haveflags(u_long);
-static void pax_printflags(const char *, int, u_long);
+static uint32_t pax_flag(char);
+static int pax_flags_sane(uint32_t);
+static int pax_haveflags(uint32_t);
+static void pax_printflags(const char *, int, uint32_t);
 
 #ifndef ELF_NOTE_TYPE_PAX_TAG
 /* NetBSD-specific note type: PaX.  There should be 1 NOTE per executable.
@@ -78,7 +79,7 @@ static void pax_printflags(const char *, int, u_long);
 static const struct paxflag {
 	char mark;
 	const char *name;
-	int bits;
+	uint32_t bits;
 } flags[] = {
 	{ 'A', "ASLR, explicit enable",
 	  ELF_NOTE_PAX_ASLR },
@@ -107,28 +108,28 @@ usage(void)
 	exit(1);
 }
 
-static int
-pax_flag(const char *s)
+static uint32_t
+pax_flag(char s)
 {
 	size_t i;
 
-	if (s[0] == '\0' || s[1] != '\0')
-		return -1;
+	if (s == '\0')
+		return (uint32_t)-1;
 
 	for (i = 0; i < __arraycount(flags); i++)
-		if (*s == flags[i].mark)
+		if (s == flags[i].mark)
 			return flags[i].bits;
 
-	return -1;
+	return (uint32_t)-1;
 }
 
 static int
-pax_flags_sane(u_long f)
+pax_flags_sane(uint32_t f)
 {
 	size_t i;
 
 	for (i = 0; i < __arraycount(flags) - 1; i += 2) {
-		int g = flags[i].bits | flags[i+1].bits;
+		uint32_t g = flags[i].bits | flags[i+1].bits;
 		if ((f & g) == g)
 			return 0;
 	}
@@ -137,7 +138,7 @@ pax_flags_sane(u_long f)
 }
 
 static int
-pax_haveflags(u_long f)
+pax_haveflags(uint32_t f)
 {
 	size_t i;
 
@@ -149,7 +150,7 @@ pax_haveflags(u_long f)
 }
 
 static void
-pax_printflags(const char *name, int many, u_long f)
+pax_printflags(const char *name, int many, uint32_t f)
 {
 	size_t i;
 
@@ -163,148 +164,161 @@ pax_printflags(const char *name, int many, u_long f)
 }
 
 static int
-process_one(const char *name, int add_flags, int del_flags, int list, int many)
+process_one(const char *name, uint32_t add_flags, uint32_t del_flags,
+    int list, int many)
 {
 	union {
 	    Elf32_Ehdr h32;
 	    Elf64_Ehdr h64;
 	} e;
 	union {
-	    Elf32_Phdr h32;
-	    Elf64_Phdr h64;
-	} p;
+	    Elf32_Shdr h32;
+	    Elf64_Shdr h64;
+	} s;
 	union {
 	    Elf32_Nhdr h32;
 	    Elf64_Nhdr h64;
 	} n;
-#define EH(field)	(size == 32 ? e.h32.field : e.h64.field)
-#define PH(field)	(size == 32 ? p.h32.field : p.h64.field)
-#define NH(field)	(size == 32 ? n.h32.field : n.h64.field)
-#define SPH(field, val)	do { \
-    if (size == 32) \
-	    p.h32.field val; \
-    else \
-	    p.h64.field val; \
-} while (/*CONSTCOND*/0)
-#define PHSIZE		(size == 32 ? sizeof(p.h32) : sizeof(p.h64))
+#define SWAP(a)	(swap == 0 ? (a) : \
+    /*LINTED*/(sizeof(a) == 1 ? (a) : \
+    /*LINTED*/(sizeof(a) == 2 ? bswap16(a) : \
+    /*LINTED*/(sizeof(a) == 4 ? bswap32(a) : \
+    /*LINTED*/(sizeof(a) == 8 ? bswap64(a) : (abort(), (a)))))))
+#define EH(field)	(size == 32 ? SWAP(e.h32.field) : SWAP(e.h64.field))
+#define SH(field)	(size == 32 ? SWAP(s.h32.field) : SWAP(s.h64.field))
+#define NH(field)	(size == 32 ? SWAP(n.h32.field) : SWAP(n.h64.field))
+#define SHSIZE		(size == 32 ? sizeof(s.h32) : sizeof(s.h64))
 #define NHSIZE		(size == 32 ? sizeof(n.h32) : sizeof(n.h64))
 	struct {
 		char name[ELF_NOTE_PAX_NAMESZ];
 		uint32_t flags;
 	} pax_tag;
-	int i, fd, size, ok = 0, flagged = 0;
+	int fd, size, ok = 0, flagged = 0, swap, error = 1;
+	size_t i;
 
 	fd = open(name, list ? O_RDONLY: O_RDWR, 0);
 	if (fd == -1) {
 		warn("Can't open `%s'", name);
-		return 1;
+		return error;
 	}
 
 	if (read(fd, &e, sizeof(e)) != sizeof(e)) {
 		warn("Can't read ELF header from `%s'", name);
-		return 1;
+		goto out;
 	}
 
 	if (memcmp(e.h32.e_ident, ELFMAG, SELFMAG) != 0) {
-		warn("Bad ELF magic from `%s' (maybe it's not an ELF?)", name);
-		return 1;
+		warnx("Bad ELF magic from `%s' (maybe it's not an ELF?)", name);
+		goto out;
 	}
 
-	if (e.h32.e_ehsize == sizeof(e.h32))
+	if (e.h32.e_ehsize == sizeof(e.h32)) {
 		size = 32;
-	else if (e.h64.e_ehsize == sizeof(e.h64))
+		swap = 0;
+	} else if (e.h64.e_ehsize == sizeof(e.h64)) {
 		size = 64;
-	else {
-		warn("Bad ELF size %d from `%s' (maybe it's not an ELF?)",
+		swap = 0;
+	} else if (bswap16(e.h32.e_ehsize) == sizeof(e.h32)) {
+		size = 32;
+		swap = 1;
+	} else if (bswap16(e.h64.e_ehsize) == sizeof(e.h64)) {
+		size = 64;
+		swap = 1;
+	} else {
+		warnx("Bad ELF size %d from `%s' (maybe it's not an ELF?)",
 		    (int)e.h32.e_ehsize, name);
-		return 1;
+		goto out;
 	}
 
-	for (i = 0; i < EH(e_phnum); i++) {
-		if (pread(fd, &p, PHSIZE, (off_t)EH(e_phoff) + i * PHSIZE) !=
-		    PHSIZE) {
-			warn("Can't read program header data from `%s'", name);
-			return 1;
+	for (i = 0; i < EH(e_shnum); i++) {
+		if ((size_t)pread(fd, &s, SHSIZE,
+		    (off_t)EH(e_shoff) + i * SHSIZE) != SHSIZE) {
+			warn("Can't read section header data from `%s'", name);
+			goto out;
 		}
 
-		if (PH(p_type) != PT_NOTE)
+		if (SH(sh_type) != SHT_NOTE)
 			continue;
 
-		if (pread(fd, &n, NHSIZE, (off_t)PH(p_offset)) != NHSIZE) {
+		if (pread(fd, &n, NHSIZE, (off_t)SH(sh_offset)) != NHSIZE) {
 			warn("Can't read note header from `%s'", name);
-			return 1;
+			goto out;
 		}
 		if (NH(n_type) != ELF_NOTE_TYPE_PAX_TAG ||
 		    NH(n_descsz) != ELF_NOTE_PAX_DESCSZ ||
 		    NH(n_namesz) != ELF_NOTE_PAX_NAMESZ)
 			continue;
-		if (pread(fd, &pax_tag, sizeof(pax_tag), PH(p_offset) + NHSIZE)
+		if (pread(fd, &pax_tag, sizeof(pax_tag), SH(sh_offset) + NHSIZE)
 		    != sizeof(pax_tag)) {
 			warn("Can't read pax_tag from `%s'", name);
-			return 1;
+			goto out;
 		}
 		if (memcmp(pax_tag.name, ELF_NOTE_PAX_NAME,
 		    sizeof(pax_tag.name)) != 0) {
 			warn("Unknown pax_tag name `%*.*s' from `%s'",
 			    ELF_NOTE_PAX_NAMESZ, ELF_NOTE_PAX_NAMESZ,
 			    pax_tag.name, name);
-			return 1;
+			goto out;
 		}
 		ok = 1;
 
 		if (list) {
-			if (!pax_haveflags(pax_tag.flags))
+			if (!pax_haveflags(SWAP(pax_tag.flags)))
 				break;
 
-			if (!pax_flags_sane(pax_tag.flags))
-				warnx("Current flags %x don't make sense",
-				    pax_tag.flags);
+			if (!pax_flags_sane(SWAP(pax_tag.flags)))
+				warnx("Current flags 0x%x don't make sense",
+				    (uint32_t)SWAP(pax_tag.flags));
 
 			if (many)
 				(void)printf("%s: ", name);
 			(void)printf("PaX flags:\n");
 
-			pax_printflags(name, many, pax_tag.flags);
-
+			pax_printflags(name, many, SWAP(pax_tag.flags));
 			flagged = 1;
-
 			break;
 		}
 
-		pax_tag.flags |= add_flags;
-		pax_tag.flags &= ~del_flags;
+		pax_tag.flags |= SWAP(add_flags);
+		pax_tag.flags &= SWAP(~del_flags);
 
-		if (!pax_flags_sane(pax_tag.flags)) {
-			warn("New flags %x don't make sense", pax_tag.flags);
-			return 1;
+		if (!pax_flags_sane(SWAP(pax_tag.flags))) {
+			warnx("New flags 0x%x don't make sense",
+			    (uint32_t)SWAP(pax_tag.flags));
+			goto out;
 		}
 
 		if (pwrite(fd, &pax_tag, sizeof(pax_tag),
-		    (off_t)PH(p_offset) + NHSIZE) != sizeof(pax_tag))
+		    (off_t)SH(sh_offset) + NHSIZE) != sizeof(pax_tag))
 			warn("Can't modify flags on `%s'", name);
 		break;
 	}
 
-	(void)close(fd);
-
 	if (!ok) {
-		warn("Could not find an ELF PaX PT_NOTE section in `%s'", name);
-		return 1;
+		warnx("Could not find an ELF PaX SHT_NOTE section in `%s'",
+		    name);
+		goto out;
 	}
 
+	error = 0;
 	if (list && !flagged) {
 		if (many)
 			(void)printf("%s: ", name);
 		(void)printf("No PaX flags.\n");
 	}
-	return 0;
+out:
+	(void)close(fd);
+	return error;
 }
 
 int
 main(int argc, char **argv)
 {
 	char *opt;
-	int i, add_flags = 0, del_flags = 0, list = 0, bad = 0, many;
+	int i, list = 0, bad = 0, many, minus;
+	uint32_t add_flags = 0, del_flags = 0;
+
+	setprogname(argv[0]);
 
 	if (argc < 2)
 		usage();
@@ -313,18 +327,33 @@ main(int argc, char **argv)
 		opt = argv[i];
 
 		if (*opt == '-' || *opt == '+') {
-			int t;
+			uint32_t t;
+			minus = 0;
 
-			t = pax_flag(opt + 1);
-			if (t == -1)
-				usage();
-
-			if (*opt == '-')
-				del_flags |= t;
-			else
-				add_flags |= t;
-
-			opt = NULL;
+			while (*opt) {
+				switch (*opt) {
+				case '+':
+					minus = 0;
+					opt++;
+					break;
+				case '-':
+					minus = 1;
+					opt++;
+					break;
+				case ',':
+					opt++;
+					break;
+				default:
+					t = pax_flag(*opt++);
+					if (t == (uint32_t)-1)
+						usage();
+					if (minus)
+						del_flags |= t;
+					else
+						add_flags |= t;
+					break;
+				}
+			}
 		} else
 			break;
 	}

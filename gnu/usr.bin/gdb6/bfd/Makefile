@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.2 2006/05/29 19:18:56 nathanw Exp $
+#	$NetBSD: Makefile,v 1.5 2010/03/14 00:26:09 mrg Exp $
 
 .include <bsd.own.mk>
 
-MKPRIVATELIB=	yes
+LIBISPRIVATE=	yes
 
 LIB=		bfd
 
@@ -34,32 +34,32 @@ COPTS.elf64.c=                -O1
 .endif
 
 ${OBJS} ${SOBJS}: elf32-target.h elf64-target.h
-targets.o targets.so: targmatch.h Makefile
+targets.o targets.pico: targmatch.h Makefile
 
 targmatch.h: config.bfd targmatch.sed
 	${_MKTARGET_CREATE}
-	sed -f ${.ALLSRC:M*.sed} ${.ALLSRC:M*.bfd} >$@
+	${TOOL_SED} -f ${.ALLSRC:M*.sed} ${.ALLSRC:M*.bfd} >$@
 
 elf32-target.h: elfxx-target.h
 	${_MKTARGET_CREATE}
-	sed -e s/NN/32/g < $> > $@
+	${TOOL_SED} -e s/NN/32/g < $> > $@
 
 elf64-target.h: elfxx-target.h
 	${_MKTARGET_CREATE}
-	sed -e s/NN/64/g < $> > $@
+	${TOOL_SED} -e s/NN/64/g < $> > $@
 
 elf32-ia64.c: elfxx-ia64.c
 	${_MKTARGET_CREATE}
-	sed -e s/NN/32/g < $> > $@
+	${TOOL_SED} -e s/NN/32/g < $> > $@
 
 elf64-ia64.c: elfxx-ia64.c
 	${_MKTARGET_CREATE}
-	sed -e s/NN/64/g < $> > $@
+	${TOOL_SED} -e s/NN/64/g < $> > $@
 
 peigen.c: peXXigen.c
 	${_MKTARGET_CREATE}
-	sed -e s/XX/pe/g < $> > $@
+	${TOOL_SED} -e s/XX/pe/g < $> > $@
 
 pepigen.c: peXXigen.c
 	${_MKTARGET_CREATE}
-	sed -e s/XX/pep/g < $> > $@
+	${TOOL_SED} -e s/XX/pep/g < $> > $@

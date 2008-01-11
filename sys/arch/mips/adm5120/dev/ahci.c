@@ -1,4 +1,4 @@
-/*	$NetBSD: ahci.c,v 1.2 2007/12/15 00:39:21 perry Exp $	*/
+/*	$NetBSD: ahci.c,v 1.6 2011/04/04 19:58:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -45,13 +45,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahci.c,v 1.2 2007/12/15 00:39:21 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahci.c,v 1.6 2011/04/04 19:58:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -246,14 +239,14 @@ struct ahci_pipe {
 	u_int32_t toggle;
 };
 
-static int	ahci_match(struct device *, struct cfdata *, void *);
-static void	ahci_attach(struct device *, struct device *, void *);
+static int	ahci_match(device_t, struct cfdata *, void *);
+static void	ahci_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(ahci, sizeof(struct ahci_softc),
     ahci_match, ahci_attach, NULL, NULL);
 
 static int
-ahci_match(struct device *parent, struct cfdata *cf, void *aux)
+ahci_match(device_t parent, struct cfdata *cf, void *aux)
 {
 	struct obio_attach_args *aa = aux;
 
@@ -270,10 +263,10 @@ ahci_match(struct device *parent, struct cfdata *cf, void *aux)
  * Attach SL11H/SL811HS. Return 0 if success.
  */
 void
-ahci_attach(struct device *parent, struct device *self, void *aux)
+ahci_attach(device_t parent, device_t self, void *aux)
 {
 	struct obio_attach_args *aa = aux;
-	struct ahci_softc *sc = (void *) self;
+	struct ahci_softc *sc = device_private(self);
 
 	printf("\n");
 	sc->sc_dmat = aa->oba_dt;
@@ -289,8 +282,7 @@ ahci_attach(struct device *parent, struct device *self, void *aux)
 	/* Map the device. */
 	if (bus_space_map(sc->sc_st, aa->oba_addr,
 	    512, 0, &sc->sc_ioh) != 0) {
-		printf("%s: unable to map device\n",
-		    USBDEVNAME(sc->sc_bus.bdev));
+		aprint_error_dev(self, "unable to map device\n");
 		return;
 	}
 
@@ -298,14 +290,14 @@ ahci_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = adm5120_intr_establish(aa->oba_irq, INTR_IRQ, ahci_intr, sc);
 
 	if (sc->sc_ih == NULL) {
-		printf("%s: unable to register interrupt handler\n",
-		    USBDEVNAME(sc->sc_bus.bdev));
+		aprint_error_dev(self,
+		    "unable to register interrupt handler\n");
 		return;
 	}
 
 	SIMPLEQ_INIT(&sc->sc_free_xfers);
 
-	usb_callout_init(sc->sc_poll_handle);
+	callout_init(&sc->sc_poll_handle, 0);
 
 	REG_WRITE(ADMHCD_REG_INTENABLE, 0); /* disable interrupts */
 	REG_WRITE(ADMHCD_REG_CONTROL, ADMHCD_SW_RESET); /* reset */
@@ -357,11 +349,12 @@ ahci_intr(void *arg)
 	}
 
 #ifdef AHCI_DEBUG
-	bitmask_snprintf(r,
-		(sl11read(sc, SL11_CTRL) & SL11_CTRL_SUSPEND)
-		? "\20\x8""D+\7RESUME\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA"
-		: "\20\x8""D+\7RESET\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA",
-		bitbuf, sizeof(bitbuf));
+	snprintb(bitbuf, sizeof(bitbuf),
+	    ((sl11read(sc, SL11_CTRL) & SL11_CTRL_SUSPEND)
+	    ? "\20\x8""D+\7RESUME\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA"
+	    : "\20\x8""D+\7RESET\6INSERT\5SOF\4res\3""BABBLE\2USBB\1USBA"),
+	    r);
+		
 	DPRINTF(D_XFER, ("I=%s ", bitbuf));
 #endif /* AHCI_DEBUG */
 #endif
@@ -444,7 +437,7 @@ ahci_poll_hub(void *arg)
 	static int p0_state=0;
 	static int p1_state=0;
 
-	usb_callout(sc->sc_poll_handle, sc->sc_interval, ahci_poll_hub, xfer);
+	callout_reset(&sc->sc_poll_handle, sc->sc_interval, ahci_poll_hub, xfer);
 
 	/* USB spec 11.13.3 (p.260) */
 	p = KERNADDR(&xfer->dmabuf, 0);
@@ -1003,7 +996,7 @@ ahci_root_intr_start(usbd_xfer_handle xfer)
 	DPRINTF(D_TRACE, ("SLRIstart "));
 
 	sc->sc_interval = MS_TO_TICKS(xfer->pipe->endpoint->edesc->bInterval);
-	usb_callout(sc->sc_poll_handle, sc->sc_interval, ahci_poll_hub, xfer);
+	callout_reset(&sc->sc_poll_handle, sc->sc_interval, ahci_poll_hub, xfer);
 	sc->sc_intr_xfer = xfer;
 	return USBD_IN_PROGRESS;
 }
@@ -1021,7 +1014,7 @@ ahci_root_intr_close(usbd_pipe_handle pipe)
 
 	DPRINTF(D_TRACE, ("SLRIclose "));
 
-	usb_uncallout(sc->sc_poll_handle, ahci_poll_hub, sc->sc_intr_xfer);
+	callout_stop(&sc->sc_poll_handle);
 	sc->sc_intr_xfer = NULL;
 }
 
@@ -1250,8 +1243,8 @@ ahci_device_intr_start(usbd_xfer_handle xfer)
 	xfer->hcpriv = sx;
 
 	/* initialize callout */
-	usb_callout_init(sx->sx_callout_t);
-	usb_callout(sx->sx_callout_t, 
+	callout_init(&sx->sx_callout_t, 0);
+	callout_reset(&sx->sx_callout_t, 
 		MS_TO_TICKS(pipe->endpoint->edesc->bInterval),
 		ahci_poll_device, sx);
 
@@ -1276,7 +1269,7 @@ ahci_poll_device(void *arg)
 
 	DPRINTF(D_TRACE, ("pldev"));
 
-	usb_callout(sx->sx_callout_t,
+	callout_reset(&sx->sx_callout_t,
 		MS_TO_TICKS(pipe->endpoint->edesc->bInterval),
 		ahci_poll_device, sx);
 
@@ -1311,7 +1304,7 @@ ahci_device_intr_abort(usbd_xfer_handle xfer)
 
 	sx = xfer->hcpriv;
 	if (sx) {
-		usb_uncallout(sx->sx_callout_t, ahci_poll_device, sx);
+		callout_stop(&sx->sx_callout_t);
 		free(sx, M_USB);
 		xfer->hcpriv = NULL;
 	} else {
@@ -1640,9 +1633,8 @@ ahci_transaction(struct ahci_softc *sc, usbd_pipe_handle pipe,
 
 	DPRINTF(D_XFER, ("t=%d i=%x ", AHCI_TIMEOUT - timeout, isr));
 #if AHCI_DEBUG
-	bitmask_snprintf(result,
-		"\20\x8STALL\7NAK\6OV\5SETUP\4DATA1\3TIMEOUT\2ERR\1ACK",
-		str, sizeof(str));
+	snprintb(str, sizeof(str),
+	    "\20\x8STALL\7NAK\6OV\5SETUP\4DATA1\3TIMEOUT\2ERR\1ACK", result);
 	DPRINTF(D_XFER, ("STAT=%s ", str));
 #endif
 

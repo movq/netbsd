@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu.c,v 1.14 2007/03/07 09:23:32 he Exp $	*/
+/*	$NetBSD: fpu.c,v 1.23 2011/01/23 09:44:59 skrll Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,18 +34,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.14 2007/03/07 09:23:32 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.23 2011/01/23 09:44:59 skrll Exp $");
 
-#include <sys/param.h>       
+#include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/signalvar.h>
-#include <sys/user.h>
 
-#include <machine/cpu.h>
+#include <uvm/uvm_extern.h>
+
 #include <machine/cpufunc.h>
 #include <machine/frame.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
+#include <machine/pmap.h>
 
 #include <hppa/hppa/machdep.h>
 
@@ -83,11 +78,9 @@ u_int fpu_version;
 /* The number of times we have had to switch the FPU context. */
 u_int fpu_csw;
 
-/* The U-space physical address of the proc in the FPU, or zero. */
-paddr_t fpu_cur_uspace;
-
 /* In locore.S, this swaps states in and out of the FPU. */
-void hppa_fpu_swap(struct pcb *, struct pcb *);
+void hppa_fpu_swapout(struct pcb *);
+void hppa_fpu_swap(struct fpreg *, struct fpreg *);
 
 #ifdef FPEMUL
 /*
@@ -146,8 +139,8 @@ const int _frame_reg_positions[32] = {
 void
 hppa_fpu_bootstrap(u_int ccr_enable)
 {
-	u_int32_t junk[2];
-	u_int32_t vers[2];
+	uint32_t junk[2];
+	uint32_t vers[2];
 	extern u_int hppa_fpu_nop0;
 	extern u_int hppa_fpu_nop1;
 
@@ -197,7 +190,7 @@ hppa_fpu_bootstrap(u_int ccr_enable)
 		 * swapped in.
 		 */
 		fpu_csw = 0;
-		fpu_cur_uspace = 0;
+		curcpu()->ci_fpu_state = 0;
 		mtctl(ccr_enable & (CCR_MASK ^ HPPA_FPUS), CR_CCR);	
 	} 
 #ifdef FPEMUL
@@ -222,19 +215,24 @@ void
 hppa_fpu_flush(struct lwp *l)
 {
 	struct trapframe *tf = l->l_md.md_regs;
+	struct pcb *pcb = lwp_getpcb(l);
+	struct cpu_info *ci = curcpu();
+
+	if (!fpu_present)
+		return;
 
 	/*
 	 * If we have a hardware FPU, and this process'
 	 * state is currently in it, swap it out.
 	 */
-
-	if (!fpu_present || fpu_cur_uspace == 0 ||
-	    fpu_cur_uspace != tf->tf_cr30) {
+	
+	if (ci->ci_fpu_state == 0 ||
+	    ci->ci_fpu_state != tf->tf_cr30) {
 		return;
 	}
 
-	hppa_fpu_swap(&l->l_addr->u_pcb, NULL);
-	fpu_cur_uspace = 0;
+	hppa_fpu_swapout(pcb);
+	ci->ci_fpu_state = 0;
 }
 
 #ifdef FPEMUL
@@ -246,6 +244,7 @@ static int hppa_fpu_ls(struct trapframe *, struct lwp *);
 static int 
 hppa_fpu_ls(struct trapframe *frame, struct lwp *l)
 {
+	struct pcb *pcb = lwp_getpcb(l);
 	u_int inst, inst_b, inst_x, inst_s, inst_t;
 	int log2size;
 	u_int *base;
@@ -275,14 +274,14 @@ hppa_fpu_ls(struct trapframe *frame, struct lwp *l)
 	 * The space must be the user's space, else we
 	 * segfault.
 	 */
-	if (inst_s != l->l_addr->u_pcb.pcb_space)
-		return (EFAULT);
+	if (inst_s != pcb->pcb_space)
+		return EFAULT;
 
 	/* See whether or not this is a doubleword load/store. */
 	log2size = (inst & OPCODE_DOUBLE) ? 3 : 2;
 
 	/* Get the floating point register. */
-	fpreg = ((char *)l->l_addr->u_pcb.pcb_fpregs) + (inst_t << log2size);
+	fpreg = ((char *)pcb->pcb_fpregs) + (inst_t << log2size);
 
 	/* Get the base register. */
 	base = FRAME_REG(frame, inst_b, r0);
@@ -343,8 +342,6 @@ hppa_fpu_ls(struct trapframe *frame, struct lwp *l)
 	error = (inst & OPCODE_STORE) ?
 		copyout(fpreg, (void *) offset, 1 << log2size) :
 		copyin((const void *) offset, fpreg, 1 << log2size);
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)fpreg,
-		sizeof(l->l_addr->u_pcb.pcb_fpregs));
 	return error;
 }
 
@@ -354,6 +351,7 @@ hppa_fpu_ls(struct trapframe *frame, struct lwp *l)
 void 
 hppa_fpu_emulate(struct trapframe *frame, struct lwp *l, u_int inst)
 {
+	struct pcb *pcb = lwp_getpcb(l);
 	u_int opcode, class, sub;
 	u_int *fpregs;
 	int exception;
@@ -394,7 +392,7 @@ hppa_fpu_emulate(struct trapframe *frame, struct lwp *l, u_int inst)
 #endif
 
 	/* Get this LWP's FPU registers. */
-	fpregs = (u_int *) l->l_addr->u_pcb.pcb_fpregs;
+	fpregs = (u_int *)pcb->pcb_fpregs;
 
 	/* Dispatch on the opcode. */
 	switch (opcode) {
@@ -449,8 +447,6 @@ hppa_fpu_emulate(struct trapframe *frame, struct lwp *l, u_int inst)
 		ksi.ksi_addr = (void *)frame->tf_iioq_head;
 		trapsignal(l, &ksi);
 	}
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)fpregs,
-		sizeof(l->l_addr->u_pcb.pcb_fpregs));
 }
 
 #endif /* FPEMUL */

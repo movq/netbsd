@@ -1,7 +1,7 @@
-/* $NetBSD: envstat.c,v 1.58 2007/11/16 08:01:38 xtraeme Exp $ */
+/* $NetBSD: envstat.c,v 1.85 2010/12/16 14:37:23 pgoyette Exp $ */
 
 /*-
- * Copyright (c) 2007 Juan Romero Pardines.
+ * Copyright (c) 2007, 2008 Juan Romero Pardines.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,93 +25,111 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * TODO
- *
- *  o Some checks should be added to ensure that the user does not
- *    set unwanted values for the critical limits.
- */
-
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: envstat.c,v 1.58 2007/11/16 08:01:38 xtraeme Exp $");
+__RCSID("$NetBSD: envstat.c,v 1.85 2010/12/16 14:37:23 pgoyette Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <err.h>
 #include <errno.h>
+#include <paths.h>
 #include <syslog.h>
-#include <prop/proplib.h>
 #include <sys/envsys.h>
+#include <sys/ioctl.h>
 #include <sys/types.h>
+#include <sys/queue.h>
+#include <prop/proplib.h>
 
 #include "envstat.h"
-
-#define _PATH_DEV_SYSMON	"/dev/sysmon"
+#include "prog_ops.h"
 
 #define ENVSYS_DFLAG	0x00000001	/* list registered devices */
 #define ENVSYS_FFLAG	0x00000002	/* show temp in farenheit */
 #define ENVSYS_LFLAG	0x00000004	/* list sensors */
 #define ENVSYS_XFLAG	0x00000008	/* externalize dictionary */
-#define ENVSYS_IFLAG 	0x00000010	/* skips invalid sensors */
-#define ENVSYS_SFLAG	0x00000020	/* removes all properties set */
+#define ENVSYS_IFLAG 	0x00000010	/* skip invalid sensors */
+#define ENVSYS_SFLAG	0x00000020	/* remove all properties set */
+#define ENVSYS_TFLAG	0x00000040	/* make statistics */
+#define ENVSYS_KFLAG	0x00000100	/* show temp in kelvin */
 
-struct envsys_sensor {
-	bool	invalid;
-	bool	visible;
-	bool	percentage;
+/* Sensors */
+typedef struct envsys_sensor {
+	SIMPLEQ_ENTRY(envsys_sensor) entries;
 	int32_t	cur_value;
 	int32_t	max_value;
 	int32_t	min_value;
 	int32_t	avg_value;
-	int32_t critcap_value;
 	int32_t	critmin_value;
 	int32_t	critmax_value;
+	int32_t	warnmin_value;
+	int32_t	warnmax_value;
 	char	desc[ENVSYS_DESCLEN];
 	char	type[ENVSYS_DESCLEN];
 	char	drvstate[ENVSYS_DESCLEN];
 	char	battcap[ENVSYS_DESCLEN];
 	char 	dvname[ENVSYS_DESCLEN];
-};
+	bool	invalid;
+	bool	visible;
+	bool	percentage;
+} *sensor_t;
 
-struct envsys_dvprops {
+/* Sensor statistics */
+typedef struct envsys_sensor_stats {
+	SIMPLEQ_ENTRY(envsys_sensor_stats) entries;
+	int32_t	max;
+	int32_t	min;
+	int32_t avg;
+	char	desc[ENVSYS_DESCLEN];
+} *sensor_stats_t;
+
+/* Device properties */
+typedef struct envsys_dvprops {
 	uint64_t	refresh_timo;
-	char 		refresh_units[ENVSYS_DESCLEN];
-	/* more values could be added in the future */
-};
+	/* more members could be added in the future */
+} *dvprops_t;
 
-static unsigned int interval, flags, width;
-static char *mydevname, *sensors;
-static struct envsys_sensor *gesen;
-static size_t gnelems, newsize;
+/* A simple queue to manage all sensors */
+static SIMPLEQ_HEAD(, envsys_sensor) sensors_list =
+    SIMPLEQ_HEAD_INITIALIZER(sensors_list);
 
-static int parse_dictionary(int);
-static int send_dictionary(FILE *, int);
-static int find_sensors(prop_array_t, const char *, struct envsys_dvprops *);
-static void print_sensors(struct envsys_sensor *, size_t, const char *);
-static int check_sensors(struct envsys_sensor *, char *, size_t);
-static int usage(void);
+/* A simple queue to manage statistics for all sensors */
+static SIMPLEQ_HEAD(, envsys_sensor_stats) sensor_stats_list =
+    SIMPLEQ_HEAD_INITIALIZER(sensor_stats_list);
 
+static unsigned int 	interval, flags, width;
+static char 		*mydevname, *sensors;
+static bool 		statistics;
+static u_int		header_passes;
+
+static int 		parse_dictionary(int);
+static int 		send_dictionary(FILE *);
+static int 		find_sensors(prop_array_t, const char *, dvprops_t);
+static void 		print_sensors(void);
+static int 		check_sensors(char *);
+static int 		usage(void);
+
+static int		sysmonfd; /* fd of /dev/sysmon */
 
 int main(int argc, char **argv)
 {
 	prop_dictionary_t dict;
-	int c, fd, rval;
+	int c, rval = 0;
 	char *endptr, *configfile = NULL;
 	FILE *cf;
 
-	rval = flags = interval = width = 0;
-	newsize = gnelems = 0;
-	gesen = NULL;
+	if (prog_init && prog_init() == -1)
+		err(1, "init failed");
 
 	setprogname(argv[0]);
 
-	while ((c = getopt(argc, argv, "c:Dd:fIi:lrSs:w:x")) != -1) {
+	while ((c = getopt(argc, argv, "c:Dd:fIi:klrSs:Tw:Wx")) != -1) {
 		switch (c) {
 		case 'c':	/* configuration file */
 			configfile = strdup(optarg);
@@ -137,12 +155,15 @@ int main(int argc, char **argv)
 			if (*endptr != '\0')
 				errx(EXIT_FAILURE, "bad interval '%s'", optarg);
 			break;
+		case 'k':	/* display temperature in Kelvin */
+			flags |= ENVSYS_KFLAG;
+			break;
 		case 'l':	/* list sensors */
 			flags |= ENVSYS_LFLAG;
 			break;
 		case 'r':
-			/* 
-			 * This flag doesn't do anything... it's only here for
+			/*
+			 * This flag is noop.. it's only here for
 			 * compatibility with the old implementation.
 			 */
 			break;
@@ -154,13 +175,18 @@ int main(int argc, char **argv)
 			if (sensors == NULL)
 				err(EXIT_FAILURE, "strdup");
 			break;
+		case 'T':	/* make statistics */
+			flags |= ENVSYS_TFLAG;
+			break;
 		case 'w':	/* width value for the lines */
-			width = strtoul(optarg, &endptr, 10);
+			width = (unsigned int)strtoul(optarg, &endptr, 10);
 			if (*endptr != '\0')
 				errx(EXIT_FAILURE, "bad width '%s'", optarg);
 			break;
 		case 'x':	/* print the dictionary in raw format */
 			flags |= ENVSYS_XFLAG;
+			break;
+		case 'W':	/* No longer used, retained for campatability */
 			break;
 		case '?':
 		default:
@@ -175,11 +201,25 @@ int main(int argc, char **argv)
 	if (argc > 0)
 		usage();
 
-	if ((fd = open(_PATH_DEV_SYSMON, O_RDONLY)) == -1)
-		err(EXIT_FAILURE, "%s", _PATH_DEV_SYSMON);
+	/* Check if we want to make statistics */
+	if (flags & ENVSYS_TFLAG) {
+		if (!interval)
+			errx(EXIT_FAILURE,
+		    	    "-T cannot be used without an interval (-i)");
+		else
+			statistics = true;
+	}
 
+	if (mydevname && sensors)
+		errx(EXIT_FAILURE, "-d flag cannot be used with -s");
+
+	/* Open the device in ro mode */
+	if ((sysmonfd = prog_open(_PATH_SYSMON, O_RDONLY)) == -1)
+		err(EXIT_FAILURE, "%s", _PATH_SYSMON);
+
+	/* Print dictionary in raw mode */
 	if (flags & ENVSYS_XFLAG) {
-		rval = prop_dictionary_recv_ioctl(fd,
+		rval = prop_dictionary_recv_ioctl(sysmonfd,
 						  ENVSYS_GETDICTIONARY,
 						  &dict);
 		if (rval)
@@ -187,26 +227,32 @@ int main(int argc, char **argv)
 
 		config_dict_dump(dict);
 
+	/* Remove all properties set in dictionary */
 	} else if (flags & ENVSYS_SFLAG) {
-		(void)close(fd);
+		/* Close the ro descriptor */
+		(void)prog_close(sysmonfd);
 
-		if ((fd = open(_PATH_DEV_SYSMON, O_RDWR)) == -1)
-			err(EXIT_FAILURE, "%s", _PATH_DEV_SYSMON);
+		/* open the fd in rw mode */
+		if ((sysmonfd = prog_open(_PATH_SYSMON, O_RDWR)) == -1)
+			err(EXIT_FAILURE, "%s", _PATH_SYSMON);
 
 		dict = prop_dictionary_create();
 		if (!dict)
 			err(EXIT_FAILURE, "prop_dictionary_create");
-		
+
 		rval = prop_dictionary_set_bool(dict,
 						"envsys-remove-props",
 					        true);
 		if (!rval)
 			err(EXIT_FAILURE, "prop_dict_set_bool");
 
-		rval = prop_dictionary_send_ioctl(dict, fd, ENVSYS_REMOVEPROPS);
+		/* send the dictionary to the kernel now */
+		rval = prop_dictionary_send_ioctl(dict, sysmonfd,
+		    ENVSYS_REMOVEPROPS);
 		if (rval)
 			warnx("%s", strerror(rval));
 
+	/* Set properties in dictionary */
 	} else if (configfile) {
 		/*
 		 * Parse the configuration file.
@@ -216,46 +262,42 @@ int main(int argc, char **argv)
 			errx(EXIT_FAILURE, "%s", strerror(errno));
 		}
 
-		rval = send_dictionary(cf, fd);
+		rval = send_dictionary(cf);
 		(void)fclose(cf);
 
-#define MISSING_FLAG()					\
-do {							\
-	if (sensors && !mydevname)			\
-		errx(EXIT_FAILURE, "-s requires -d");	\
-} while (/* CONSTCOND */ 0)
-
+	/* Show sensors with interval */
 	} else if (interval) {
-		MISSING_FLAG();
 		for (;;) {
-			rval = parse_dictionary(fd);
+			rval = parse_dictionary(sysmonfd);
 			if (rval)
 				break;
 
 			(void)fflush(stdout);
 			(void)sleep(interval);
 		}
+	/* Show sensors without interval */
 	} else {
-		MISSING_FLAG();
-		rval = parse_dictionary(fd);
+		rval = parse_dictionary(sysmonfd);
 	}
 
 	if (sensors)
 		free(sensors);
 	if (mydevname)
 		free(mydevname);
-	(void)close(fd);
+	(void)prog_close(sysmonfd);
 
 	return rval ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 static int
-send_dictionary(FILE *cf, int fd)
+send_dictionary(FILE *cf)
 {
 	prop_dictionary_t kdict, udict;
 	int error = 0;
 
-	error = prop_dictionary_recv_ioctl(fd, ENVSYS_GETDICTIONARY, &kdict);
+	/* Retrieve dictionary from kernel */
+	error = prop_dictionary_recv_ioctl(sysmonfd,
+	    ENVSYS_GETDICTIONARY, &kdict);
       	if (error)
 		return error;
 
@@ -269,17 +311,18 @@ send_dictionary(FILE *cf, int fd)
 	/*
 	 * Close the read only descriptor and open a new one read write.
 	 */
-	(void)close(fd);
-	if ((fd = open(_PATH_DEV_SYSMON, O_RDWR)) == -1) {
+	(void)prog_close(sysmonfd);
+	if ((sysmonfd = prog_open(_PATH_SYSMON, O_RDWR)) == -1) {
 		error = errno;
-		warn("%s", _PATH_DEV_SYSMON);
+		warn("%s", _PATH_SYSMON);
 		return error;
 	}
 
-	/* 
+	/*
 	 * Send our sensor properties dictionary to the kernel then.
 	 */
-	error = prop_dictionary_send_ioctl(udict, fd, ENVSYS_SETDICTIONARY);
+	error = prop_dictionary_send_ioctl(udict,
+	    sysmonfd, ENVSYS_SETDICTIONARY);
 	if (error)
 		warnx("%s", strerror(error));
 
@@ -287,10 +330,34 @@ send_dictionary(FILE *cf, int fd)
 	return error;
 }
 
+static sensor_stats_t
+find_stats_sensor(const char *desc)
+{
+	sensor_stats_t stats;
+
+	/*
+	 * If we matched a sensor by its description return it, otherwise
+	 * allocate a new one.
+	 */
+	SIMPLEQ_FOREACH(stats, &sensor_stats_list, entries)
+		if (strcmp(stats->desc, desc) == 0)
+			return stats;
+
+	stats = calloc(1, sizeof(*stats));
+	if (stats == NULL)
+		return NULL;
+
+	(void)strlcpy(stats->desc, desc, sizeof(stats->desc));
+	SIMPLEQ_INSERT_TAIL(&sensor_stats_list, stats, entries);
+
+	return stats;
+}
+
 static int
 parse_dictionary(int fd)
 {
-	struct envsys_dvprops *edp = NULL;
+	sensor_t sensor = NULL;
+	dvprops_t edp = NULL;
 	prop_array_t array;
 	prop_dictionary_t dict;
 	prop_object_iterator_t iter;
@@ -303,12 +370,14 @@ parse_dictionary(int fd)
 	if (rval)
 		return rval;
 
+	/* No drivers registered? */
 	if (prop_dictionary_count(dict) == 0) {
 		warnx("no drivers registered");
 		goto out;
 	}
 
 	if (mydevname) {
+		/* -d flag specified, print sensors only for this device */
 		obj = prop_dictionary_get(dict, mydevname);
 		if (prop_object_type(obj) != PROP_TYPE_ARRAY) {
 			warnx("unknown device `%s'", mydevname);
@@ -320,11 +389,8 @@ parse_dictionary(int fd)
 		if (rval)
 			goto out;
 
-		if ((flags & ENVSYS_LFLAG) == 0)
-			print_sensors(gesen, gnelems, mydevname);
-		if (interval)
-			(void)printf("\n");
 	} else {
+		/* print sensors for all devices registered */
 		iter = prop_dictionary_iterator(dict);
 		if (iter == NULL) {
 			rval = EINVAL;
@@ -333,7 +399,6 @@ parse_dictionary(int fd)
 
 		/* iterate over the dictionary returned by the kernel */
 		while ((obj = prop_object_iterator_next(iter)) != NULL) {
-
 			array = prop_dictionary_get_keysym(dict, obj);
 			if (prop_object_type(array) != PROP_TYPE_ARRAY) {
 				warnx("no sensors found");
@@ -341,7 +406,7 @@ parse_dictionary(int fd)
 				goto out;
 			}
 
-			edp = (struct envsys_dvprops *)malloc(sizeof(*edp));
+			edp = calloc(1, sizeof(*edp));
 			if (!edp) {
 				rval = ENOMEM;
 				goto out;
@@ -361,30 +426,33 @@ parse_dictionary(int fd)
 				else
 					(void)printf("%d seconds)\n",
 					    (int)edp->refresh_timo);
-				continue;
 			}
-			
-			if ((flags & ENVSYS_LFLAG) == 0) {
-				(void)printf("[%s]\n", dnp);
-				print_sensors(gesen, gnelems, dnp);
-			}
-
-			if (interval)
-				(void)printf("\n");
 
 			free(edp);
 			edp = NULL;
 		}
-
 		prop_object_iterator_release(iter);
 	}
 
+	/* print sensors now */
+	if (sensors) {
+		char *str = strdup(sensors);
+		if (!str) {
+			rval = ENOMEM;
+			goto out;
+		}
+		rval = check_sensors(str);
+		free(str);
+	}
+	if ((flags & ENVSYS_LFLAG) == 0 && (flags & ENVSYS_DFLAG) == 0)
+		print_sensors();
+	if (interval)
+		(void)printf("\n");
+
 out:
-	if (gesen) {
-		free(gesen);
-		gesen = NULL;
-		gnelems = 0;
-		newsize = 0;
+	while ((sensor = SIMPLEQ_FIRST(&sensors_list))) {
+		SIMPLEQ_REMOVE_HEAD(&sensors_list, entries);
+		free(sensor);
 	}
 	if (edp)
 		free(edp);
@@ -393,32 +461,20 @@ out:
 }
 
 static int
-find_sensors(prop_array_t array, const char *dvname, struct envsys_dvprops *edp)
+find_sensors(prop_array_t array, const char *dvname, dvprops_t edp)
 {
 	prop_object_iterator_t iter;
 	prop_object_t obj, obj1, obj2;
 	prop_string_t state, desc = NULL;
-	struct envsys_sensor *esen = NULL;
-	int rval = 0;
-	char *str = NULL;
-
-	newsize += prop_array_count(array) * sizeof(*gesen);
-	esen = realloc(gesen, newsize);
-	if (esen == NULL) {
-		if (gesen)
-			free(gesen);
-		gesen = NULL;
-		return ENOMEM;
-	}
-	gesen = esen;
+	sensor_t sensor = NULL;
+	sensor_stats_t stats = NULL;
 
 	iter = prop_array_iterator(array);
 	if (!iter)
-		return EINVAL;
+		return ENOMEM;
 
 	/* iterate over the array of dictionaries */
 	while ((obj = prop_object_iterator_next(iter)) != NULL) {
-
 		/* get the refresh-timeout property */
 		obj2 = prop_dictionary_get(obj, "device-properties");
 		if (obj2) {
@@ -430,11 +486,39 @@ find_sensors(prop_array_t array, const char *dvname, struct envsys_dvprops *edp)
 				continue;
 		}
 
-		/* copy device name */
-		(void)strlcpy(gesen[gnelems].dvname, dvname,
-		    sizeof(gesen[gnelems].dvname));
+		/* new sensor coming */
+		sensor = calloc(1, sizeof(*sensor));
+		if (sensor == NULL) {
+			prop_object_iterator_release(iter);
+			return ENOMEM;
+		}
 
-		gesen[gnelems].visible = false;
+		/* copy device name */
+		(void)strlcpy(sensor->dvname, dvname, sizeof(sensor->dvname));
+
+		/* description string */
+		desc = prop_dictionary_get(obj, "description");
+		if (desc) {
+			/* copy description */
+			(void)strlcpy(sensor->desc,
+			    prop_string_cstring_nocopy(desc),
+		    	    sizeof(sensor->desc));
+		} else {
+			free(sensor);
+			continue;
+		}
+
+		/* type string */
+		obj1  = prop_dictionary_get(obj, "type");
+		if (obj1) {
+			/* copy type */
+			(void)strlcpy(sensor->type,
+		    	    prop_string_cstring_nocopy(obj1),
+		    	    sizeof(sensor->type));
+		} else {
+			free(sensor);
+			continue;
+		}
 
 		/* check sensor's state */
 		state = prop_dictionary_get(obj, "state");
@@ -442,100 +526,88 @@ find_sensors(prop_array_t array, const char *dvname, struct envsys_dvprops *edp)
 		/* mark sensors with invalid/unknown state */
 		if ((prop_string_equals_cstring(state, "invalid") ||
 		     prop_string_equals_cstring(state, "unknown")))
-			gesen[gnelems].invalid = true;
-		else
-			gesen[gnelems].invalid = false;
-
-		/* description string */
-		desc = prop_dictionary_get(obj, "description");
-		if (desc) {
-			/* copy description */
-			(void)strlcpy(gesen[gnelems].desc,
-			    prop_string_cstring_nocopy(desc),
-		    	    sizeof(gesen[gnelems].desc));
-		} else
-			continue;
-
-		/* type string */
-		obj1  = prop_dictionary_get(obj, "type");
-		/* copy type */
-		(void)strlcpy(gesen[gnelems].type,
-		    prop_string_cstring_nocopy(obj1),
-		    sizeof(gesen[gnelems].type));
+			sensor->invalid = true;
 
 		/* get current drive state string */
 		obj1 = prop_dictionary_get(obj, "drive-state");
-		if (obj1)
-			(void)strlcpy(gesen[gnelems].drvstate,
+		if (obj1) {
+			(void)strlcpy(sensor->drvstate,
 			    prop_string_cstring_nocopy(obj1),
-			    sizeof(gesen[gnelems].drvstate));
+			    sizeof(sensor->drvstate));
+		}
 
 		/* get current battery capacity string */
 		obj1 = prop_dictionary_get(obj, "battery-capacity");
-		if (obj1)
-			(void)strlcpy(gesen[gnelems].battcap,
+		if (obj1) {
+			(void)strlcpy(sensor->battcap,
 			    prop_string_cstring_nocopy(obj1),
-			    sizeof(gesen[gnelems].battcap));
+			    sizeof(sensor->battcap));
+		}
 
 		/* get current value */
 		obj1 = prop_dictionary_get(obj, "cur-value");
-		gesen[gnelems].cur_value = prop_number_integer_value(obj1);
+		if (obj1)
+			sensor->cur_value = prop_number_integer_value(obj1);
 
 		/* get max value */
 		obj1 = prop_dictionary_get(obj, "max-value");
 		if (obj1)
-			gesen[gnelems].max_value =
-			    prop_number_integer_value(obj1);
-		else
-			gesen[gnelems].max_value = 0;
+			sensor->max_value = prop_number_integer_value(obj1);
 
 		/* get min value */
 		obj1 = prop_dictionary_get(obj, "min-value");
 		if (obj1)
-			gesen[gnelems].min_value =
-			    prop_number_integer_value(obj1);
-		else
-			gesen[gnelems].min_value = 0;
+			sensor->min_value = prop_number_integer_value(obj1);
 
 		/* get avg value */
 		obj1 = prop_dictionary_get(obj, "avg-value");
 		if (obj1)
-			gesen[gnelems].avg_value =
-			    prop_number_integer_value(obj1);
-		else
-			gesen[gnelems].avg_value = 0;
+			sensor->avg_value = prop_number_integer_value(obj1);
 
 		/* get percentage flag */
 		obj1 = prop_dictionary_get(obj, "want-percentage");
 		if (obj1)
-			gesen[gnelems].percentage = prop_bool_true(obj1);
+			sensor->percentage = prop_bool_true(obj1);
 
 		/* get critical max value if available */
 		obj1 = prop_dictionary_get(obj, "critical-max");
-		if (obj1) {
-			gesen[gnelems].critmax_value =
-			    prop_number_integer_value(obj1);
-		} else
-			gesen[gnelems].critmax_value = 0;
+		if (obj1)
+			sensor->critmax_value = prop_number_integer_value(obj1);
+
+		/* get maximum capacity value if available */
+		obj1 = prop_dictionary_get(obj, "maximum-capacity");
+		if (obj1)
+			sensor->critmax_value = prop_number_integer_value(obj1);
 
 		/* get critical min value if available */
 		obj1 = prop_dictionary_get(obj, "critical-min");
-		if (obj1) {
-			gesen[gnelems].critmin_value =
-			    prop_number_integer_value(obj1);
-		} else
-			gesen[gnelems].critmin_value = 0;
+		if (obj1)
+			sensor->critmin_value = prop_number_integer_value(obj1);
 
 		/* get critical capacity value if available */
 		obj1 = prop_dictionary_get(obj, "critical-capacity");
-		if (obj1) {
-			gesen[gnelems].critcap_value =
-			    prop_number_integer_value(obj1);
-		} else
-			gesen[gnelems].critcap_value = 0;
+		if (obj1)
+			sensor->critmin_value = prop_number_integer_value(obj1);
 
-		/* pass to the next struct and increase the counter */
-		gnelems++;
+		/* get warning max value if available */
+		obj1 = prop_dictionary_get(obj, "warning-max");
+		if (obj1)
+			sensor->warnmax_value = prop_number_integer_value(obj1);
+
+		/* get high capacity value if available */
+		obj1 = prop_dictionary_get(obj, "high-capacity");
+		if (obj1)
+			sensor->warnmax_value = prop_number_integer_value(obj1);
+
+		/* get warning min value if available */
+		obj1 = prop_dictionary_get(obj, "warning-min");
+		if (obj1)
+			sensor->warnmin_value = prop_number_integer_value(obj1);
+
+		/* get warning capacity value if available */
+		obj1 = prop_dictionary_get(obj, "warning-capacity");
+		if (obj1)
+			sensor->warnmin_value = prop_number_integer_value(obj1);
 
 		/* print sensor names if -l was given */
 		if (flags & ENVSYS_LFLAG) {
@@ -546,221 +618,434 @@ find_sensors(prop_array_t array, const char *dvname, struct envsys_dvprops *edp)
 				(void)printf("%s\n",
 				    prop_string_cstring_nocopy(desc));
 		}
+
+		/* Add the sensor into the list */
+		SIMPLEQ_INSERT_TAIL(&sensors_list, sensor, entries);
+
+		/* Collect statistics if flag enabled */
+		if (statistics) {
+			/* ignore sensors not relevant for statistics */
+			if ((strcmp(sensor->type, "Indicator") == 0) ||
+			    (strcmp(sensor->type, "Battery charge") == 0) ||
+			    (strcmp(sensor->type, "Drive") == 0))
+				continue;
+
+			/* ignore invalid data */
+			if (sensor->invalid || !sensor->cur_value)
+				continue;
+
+			/* find or allocate a new statistics sensor */
+			stats = find_stats_sensor(sensor->desc);
+			if (stats == NULL) {
+				free(sensor);
+				prop_object_iterator_release(iter);
+				return ENOMEM;
+			}
+
+			/* collect data */
+			if (!stats->max)
+				stats->max = sensor->cur_value;
+			if (!stats->min)
+				stats->min = sensor->cur_value;
+
+			if (sensor->cur_value > stats->max)
+				stats->max = sensor->cur_value;
+
+			if (sensor->cur_value < stats->min)
+				stats->min = sensor->cur_value;
+
+			/* compute avg value */
+			if (stats->max && stats->min)
+				stats->avg =
+				    (sensor->cur_value + stats->max +
+				    stats->min) / 3;
+		}
 	}
 
 	/* free memory */
 	prop_object_iterator_release(iter);
-
-	/* 
-	 * if -s was specified, we need a way to mark if a sensor
-	 * was found.
-	 */
-	if (sensors) {
-		str = strdup(sensors);
-		if (!str)
-			return ENOMEM;
-
-		rval = check_sensors(gesen, str, gnelems);
-		free(str);
-	}
-
-	return rval;
+	return 0;
 }
 
 static int
-check_sensors(struct envsys_sensor *es, char *str, size_t nelems)
+check_sensors(char *str)
 {
-	int i;
-	char *sname;
+	sensor_t sensor = NULL;
+	char *dvstring, *sstring, *p, *last;
+	bool sensor_found = false;
 
-	sname = strtok(str, ",");
-	while (sname) {
-		for (i = 0; i < nelems; i++) {
-			if (strcmp(sname, es[i].desc) == 0) {
-				es[i].visible = true;
+	/*
+	 * Parse device name and sensor description and find out
+	 * if the sensor is valid.
+	 */
+	for ((p = strtok_r(str, ",", &last)); p;
+	     (p = strtok_r(NULL, ",", &last))) {
+		/* get device name */
+		dvstring = strtok(p, ":");
+		if (dvstring == NULL) {
+			warnx("missing device name");
+			return EINVAL;
+		}
+
+		/* get sensor description */
+		sstring = strtok(NULL, ":");
+		if (sstring == NULL) {
+			warnx("missing sensor description");
+			return EINVAL;
+		}
+
+		SIMPLEQ_FOREACH(sensor, &sensors_list, entries) {
+			/* skip until we match device */
+			if (strcmp(dvstring, sensor->dvname))
+				continue;
+			if (strcmp(sstring, sensor->desc) == 0) {
+				sensor->visible = true;
+				sensor_found = true;
 				break;
 			}
 		}
-		if (i >= nelems) {
-			if (mydevname) {
-				warnx("unknown sensor `%s' for device `%s'",
-				    sname, mydevname);
-				return EINVAL;
-			}
+		if (sensor_found == false) {
+			warnx("unknown sensor `%s' for device `%s'",
+		       	    sstring, dvstring);
+			return EINVAL;
 		}
-		sname = strtok(NULL, ",");
+		sensor_found = false;
 	}
 
 	/* check if all sensors were ok, and error out if not */
-	for (i = 0; i < nelems; i++) {
-		if (es[i].visible)
+	SIMPLEQ_FOREACH(sensor, &sensors_list, entries)
+		if (sensor->visible)
 			return 0;
-	}
 
 	warnx("no sensors selected to display");
 	return EINVAL;
 }
 
 static void
-print_sensors(struct envsys_sensor *es, size_t nelems, const char *dvname)
+print_sensors(void)
 {
-	size_t maxlen = 0;
+	sensor_t sensor;
+	sensor_stats_t stats = NULL;
+	size_t maxlen = 0, ilen;
 	double temp = 0;
-	const char *invalid = "N/A";
-	const char *degrees = NULL;
-	int i;
+	const char *invalid = "N/A", *degrees, *tmpstr, *stype;
+	const char *a, *b, *c, *d, *e, *units;
+
+	tmpstr = stype = d = e = NULL;
 
 	/* find the longest description */
-	for (i = 0; i < nelems; i++) {
-		if (strlen(es[i].desc) > maxlen)
-			maxlen = strlen(es[i].desc);
-	}
+	SIMPLEQ_FOREACH(sensor, &sensors_list, entries)
+		if (strlen(sensor->desc) > maxlen)
+			maxlen = strlen(sensor->desc);
 
 	if (width)
 		maxlen = width;
 
+	/*
+	 * Print a header at the bottom only once showing different
+	 * members if the statistics flag is set or not.
+	 *
+	 * As bonus if -s is set, only print this header every 10 iterations
+	 * to avoid redundancy... like vmstat(1).
+	 */
+
+	a = "Current";
+	units = "Unit";
+	if (statistics) {
+		b = "Max";
+		c = "Min";
+		d = "Avg";
+	} else {
+		b = "CritMax";
+		c = "WarnMax";
+		d = "WarnMin";
+		e = "CritMin";
+	}
+
+	if (!sensors || (!header_passes && sensors) ||
+	    (header_passes == 10 && sensors)) {
+		if (statistics)
+			(void)printf("%s%*s  %9s %8s %8s %8s %6s\n",
+			    mydevname ? "" : "  ", (int)maxlen,
+			    "", a, b, c, d, units);
+		else
+			(void)printf("%s%*s  %9s %8s %8s %8s %8s %4s\n",
+			    mydevname ? "" : "  ", (int)maxlen,
+			    "", a, b, c, d, e, units);
+		if (sensors && header_passes == 10)
+			header_passes = 0;
+	}
+	if (sensors)
+		header_passes++;
+
 	/* print the sensors */
-	for (i = 0; i < nelems; i++) {
-		/* skip sensors that don't belong to device 'dvname' */
-		if (strcmp(es[i].dvname, dvname))
-			continue;
-
+	SIMPLEQ_FOREACH(sensor, &sensors_list, entries) {
 		/* skip sensors that were not marked as visible */
-		if (sensors && !es[i].visible)
+		if (sensors && !sensor->visible)
 			continue;
 
-		/* Do not print invalid sensors if -I is set */
-		if ((flags & ENVSYS_IFLAG) && es[i].invalid)
+		/* skip invalid sensors if -I is set */
+		if ((flags & ENVSYS_IFLAG) && sensor->invalid)
 			continue;
 
+		/* print device name */
+		if (!mydevname) {
+			if (tmpstr == NULL || strcmp(tmpstr, sensor->dvname))
+				printf("[%s]\n", sensor->dvname);
+
+			tmpstr = sensor->dvname;
+		}
+
+		/* find out the statistics sensor */
+		if (statistics) {
+			stats = find_stats_sensor(sensor->desc);
+			if (stats == NULL) {
+				/* No statistics for this sensor */
+				continue;
+			}
+		}
+
+		/* print sensor description */
 		(void)printf("%s%*.*s", mydevname ? "" : "  ", (int)maxlen,
-		    (int)maxlen, es[i].desc);
+		    (int)maxlen, sensor->desc);
 
-		if (es[i].invalid) {
-			(void)printf(": %10s\n", invalid);
+		/* print invalid string */
+		if (sensor->invalid) {
+			(void)printf(": %9s\n", invalid);
 			continue;
 		}
 
 		/*
 		 * Indicator and Battery charge sensors.
 		 */
-		if ((strcmp(es[i].type, "Indicator") == 0) ||
-		    (strcmp(es[i].type, "Battery charge") == 0)) {
+		if ((strcmp(sensor->type, "Indicator") == 0) ||
+		    (strcmp(sensor->type, "Battery charge") == 0)) {
 
-			(void)printf(": %10s", es[i].cur_value ? "ON" : "OFF");
+			(void)printf(":%10s", sensor->cur_value ? "ON" : "OFF");
 
-/* converts the value to degC or degF */
-#define CONVERTTEMP(a, b, c)					\
+/* convert and print a temp value in degC, degF, or Kelvin */
+#define PRINTTEMP(a)						\
 do {								\
-	if (b) 							\
-		(a) = ((b) / 1000000.0) - 273.15;		\
-	if (flags & ENVSYS_FFLAG) {				\
-		if (b)						\
-			(a) = (9.0 / 5.0) * (a) + 32.0;		\
-		(c) = "degF";					\
+	if (a) {						\
+		temp = ((a) / 1000000.0);			\
+		if (flags & ENVSYS_FFLAG) {			\
+			temp = temp * (9.0 / 5.0) - 459.67;	\
+			degrees = "degF";			\
+		} else if (flags & ENVSYS_KFLAG) {		\
+			degrees = "K";				\
+		} else {					\
+			temp = temp - 273.15;			\
+			degrees = "degC";			\
+		}						\
+		(void)printf("%*.3f ", (int)ilen, temp);	\
+		ilen = 8;					\
 	} else							\
-		(c) = "degC";					\
+		ilen += 9;					\
 } while (/* CONSTCOND */ 0)
 
-
 		/* temperatures */
-		} else if (strcmp(es[i].type, "Temperature") == 0) {
+		} else if (strcmp(sensor->type, "Temperature") == 0) {
 
-			CONVERTTEMP(temp, es[i].cur_value, degrees);
-			(void)printf(": %10.3f %s", temp, degrees);
-			
-			if (es[i].critmax_value || es[i].critmin_value)
-				(void)printf("  ");
+			ilen = 10;
+			degrees = "";
+			(void)printf(":");
+			PRINTTEMP(sensor->cur_value);
+			stype = degrees;
 
-			if (es[i].critmax_value) {
-				CONVERTTEMP(temp, es[i].critmax_value, degrees);
-				(void)printf("max: %8.3f %s  ", temp, degrees);
+			if (statistics) {
+				/* show statistics if flag set */
+				PRINTTEMP(stats->max);
+				PRINTTEMP(stats->min);
+				PRINTTEMP(stats->avg);
+				ilen += 2;
+			} else {
+				PRINTTEMP(sensor->critmax_value);
+				PRINTTEMP(sensor->warnmax_value);
+				PRINTTEMP(sensor->warnmin_value);
+				PRINTTEMP(sensor->critmin_value);
 			}
-
-			if (es[i].critmin_value) {
-				CONVERTTEMP(temp, es[i].critmin_value, degrees);
-				(void)printf("min: %8.3f %s", temp, degrees);
-			}
-#undef CONVERTTEMP
+			(void)printf("%*s", (int)ilen - 4, stype);
+#undef PRINTTEMP
 
 		/* fans */
-		} else if (strcmp(es[i].type, "Fan") == 0) {
+		} else if (strcmp(sensor->type, "Fan") == 0) {
+			stype = "RPM";
 
-			(void)printf(": %10u RPM", es[i].cur_value);
+			(void)printf(":%10u ", sensor->cur_value);
 
-			if (es[i].critmax_value || es[i].critmin_value)
-				(void)printf("   ");
-			if (es[i].critmax_value)
-				(void)printf("max: %8u RPM   ",
-				    es[i].critmax_value);
-			if (es[i].critmin_value)
-				(void)printf("min: %8u RPM",
-				    es[i].critmin_value);
+			ilen = 8;
+			if (statistics) {
+				/* show statistics if flag set */
+				(void)printf("%8u %8u %8u ",
+				    stats->max, stats->min, stats->avg);
+				ilen += 2;
+			} else {
+				if (sensor->critmax_value) {
+					(void)printf("%*u ", (int)ilen,
+					    sensor->critmax_value);
+					ilen = 8;
+				} else
+					ilen += 9;
+
+				if (sensor->warnmax_value) {
+					(void)printf("%*u ", (int)ilen,
+					    sensor->warnmax_value);
+					ilen = 8;
+				} else
+					ilen += 9;
+
+				if (sensor->warnmin_value) {
+					(void)printf("%*u ", (int)ilen,
+					    sensor->warnmin_value);
+					ilen = 8;
+				} else
+					ilen += 9;
+
+				if (sensor->critmin_value) {
+					(void)printf( "%*u ", (int)ilen,
+					    sensor->critmin_value);
+					ilen = 8;
+				} else
+					ilen += 9;
+
+			}
+
+			(void)printf("%*s", (int)ilen - 4, stype);
 
 		/* integers */
-		} else if (strcmp(es[i].type, "Integer") == 0) {
+		} else if (strcmp(sensor->type, "Integer") == 0) {
 
-			(void)printf(": %10d", es[i].cur_value);
+			stype = "none";
+
+			(void)printf(":%10d ", sensor->cur_value);
+
+			ilen = 8;
+			if (statistics) {
+				/* show statistics if flag set */
+				(void)printf("%8u %8u %8u ",
+				    stats->max, stats->min, stats->avg);
+				ilen += 2;
+			} else {
+				if (sensor->critmax_value) {
+					(void)printf("%*u ", (int)ilen,
+					    sensor->critmax_value);
+					ilen = 8;
+				} else
+					ilen += 9;
+
+				if (sensor->warnmax_value) {
+					(void)printf("%*u ", (int)ilen,
+					    sensor->warnmax_value);
+					ilen = 8;
+				} else
+					ilen += 9;
+
+				if (sensor->warnmin_value) {
+					(void)printf("%*u ", (int)ilen,
+					    sensor->warnmin_value);
+					ilen = 8;
+				} else
+					ilen += 9;
+
+				if (sensor->critmin_value) {
+					(void)printf( "%*u ", (int)ilen,
+					    sensor->critmin_value);
+					ilen = 8;
+				} else
+					ilen += 9;
+
+			}
+
+			(void)printf("%*s", (int)ilen - 4, stype);
 
 		/* drives  */
-		} else if (strcmp(es[i].type, "Drive") == 0) {
+		} else if (strcmp(sensor->type, "Drive") == 0) {
 
-			(void)printf(": %10s", es[i].drvstate);
+			(void)printf(":%10s", sensor->drvstate);
 
 		/* Battery capacity */
-		} else if (strcmp(es[i].type, "Battery capacity") == 0) {
+		} else if (strcmp(sensor->type, "Battery capacity") == 0) {
 
-			(void)printf(": %10s", es[i].battcap);
+			(void)printf(":%10s", sensor->battcap);
 
 		/* everything else */
 		} else {
-			const char *type;
+			if (strcmp(sensor->type, "Voltage DC") == 0)
+				stype = "V";
+			else if (strcmp(sensor->type, "Voltage AC") == 0)
+				stype = "VAC";
+			else if (strcmp(sensor->type, "Ampere") == 0)
+				stype = "A";
+			else if (strcmp(sensor->type, "Watts") == 0)
+				stype = "W";
+			else if (strcmp(sensor->type, "Ohms") == 0)
+				stype = "Ohms";
+			else if (strcmp(sensor->type, "Watt hour") == 0)
+				stype = "Wh";
+			else if (strcmp(sensor->type, "Ampere hour") == 0)
+				stype = "Ah";
 
-			if (strcmp(es[i].type, "Voltage DC") == 0)
-				type = "V";
-			else if (strcmp(es[i].type, "Voltage AC") == 0)
-				type = "VAC";
-			else if (strcmp(es[i].type, "Ampere") == 0)
-				type = "A";
-			else if (strcmp(es[i].type, "Watts") == 0)
-				type = "W";
-			else if (strcmp(es[i].type, "Ohms") == 0)
-				type = "Ohms";
-			else if (strcmp(es[i].type, "Watt hour") == 0)
-				type = "Wh";
-			else if (strcmp(es[i].type, "Ampere hour") == 0)
-				type = "Ah";
-			else
-				type = NULL;
+			(void)printf(":%10.3f ",
+			    sensor->cur_value / 1000000.0);
 
-			(void)printf(": %10.3f %s",
-			    es[i].cur_value / 1000000.0, type);
+			ilen = 8;
+			if (!statistics) {
 
-			if (es[i].percentage && es[i].max_value) {
+/* Print percentage of max_value */
+#define PRINTPCT(a)							\
+do {									\
+	if (sensor->a && sensor->max_value) {				\
+		(void)printf("%*.3f%%", (int)ilen,			\
+			(sensor->a * 100.0) / sensor->max_value);	\
+		ilen = 8;						\
+	} else								\
+		ilen += 9;						\
+} while ( /* CONSTCOND*/ 0 )
+
+/* Print a generic sensor value */
+#define PRINTVAL(a)							\
+do {									\
+	if (sensor->a) {						\
+		(void)printf("%*.3f ", (int)ilen, sensor->a / 1000000.0); \
+		ilen = 8;						\
+	} else								\
+		ilen += 9;						\
+} while ( /* CONSTCOND*/ 0 )
+
+
+				if (sensor->percentage) {
+					PRINTPCT(critmax_value);
+					PRINTPCT(warnmax_value);
+					PRINTPCT(warnmin_value);
+					PRINTPCT(critmin_value);
+				} else {
+
+					PRINTVAL(critmax_value);
+					PRINTVAL(warnmax_value);
+					PRINTVAL(warnmin_value);
+					PRINTVAL(critmin_value);
+#undef PRINTPCT
+#undef PRINTVAL
+				}
+			}
+
+			if (statistics && !sensor->percentage) {
+				/* show statistics if flag set */
+				(void)printf("%8.3f %8.3f %8.3f ",
+				    stats->max / 1000000.0,
+				    stats->min / 1000000.0,
+				    stats->avg / 1000000.0);
+				ilen += 2;
+			}
+
+			(void)printf("%*s", (int)ilen - 4, stype);
+
+			if (sensor->percentage && sensor->max_value) {
 				(void)printf(" (%5.2f%%)",
-				    (es[i].cur_value * 100.0) /
-				    es[i].max_value);
+				    (sensor->cur_value * 100.0) /
+				    sensor->max_value);
 			}
-
-			if (es[i].critcap_value) {
-				(void)printf(" critical (%5.2f%%)",
-				    (es[i].critcap_value * 100.0) /
-				    es[i].max_value);
-			}
-
-			if (es[i].critmax_value || es[i].critmin_value)
-				(void)printf("     ");
-			if (es[i].critmax_value)
-				(void)printf("max: %8.3f %s     ",
-				    es[i].critmax_value / 1000000.0,
-				    type);
-			if (es[i].critmin_value)
-				(void)printf("min: %8.3f %s",
-				    es[i].critmin_value / 1000000.0,
-				    type);
-
 		}
-
 		(void)printf("\n");
 	}
 }
@@ -768,9 +1053,9 @@ do {								\
 static int
 usage(void)
 {
-	(void)fprintf(stderr, "Usage: %s [-DfIlrSx] ", getprogname());
+	(void)fprintf(stderr, "Usage: %s [-DfIklrSTx] ", getprogname());
 	(void)fprintf(stderr, "[-c file] [-d device] [-i interval] ");
-	(void)fprintf(stderr, "[-s sensor,...] [-w width]\n");
+	(void)fprintf(stderr, "[-s device:sensor,...] [-w width]\n");
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }

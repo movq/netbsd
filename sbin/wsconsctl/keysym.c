@@ -1,4 +1,4 @@
-/*	$NetBSD: keysym.c,v 1.7 2006/02/05 18:11:46 jmmv Exp $ */
+/*	$NetBSD: keysym.c,v 1.10 2010/01/29 09:49:34 drochner Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -129,7 +122,7 @@ bcmp_ksym(const void *a, const void *b)
 static void
 sort_ksym_tab(void)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < NUMKSYMS; i++)
 		ksym_tab_by_ksym[i] = ksym_tab_by_name[i];
@@ -187,7 +180,7 @@ ksym_upcase(keysym_t ksym)
 	if (ksym >= KS_f1 && ksym <= KS_f20)
 		return KS_F1 - KS_f1 + ksym;
 
-	if (KS_GROUP(ksym) == KS_GROUP_Ascii && ksym <= 0xff &&
+	if (KS_GROUP(ksym) == KS_GROUP_Plain && ksym <= 0xff &&
 	    latin1_to_upper[ksym] != 0x00)
 		return latin1_to_upper[ksym];
 

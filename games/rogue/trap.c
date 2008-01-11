@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.7 2007/12/27 23:53:01 dholland Exp $	*/
+/*	$NetBSD: trap.c,v 1.10 2009/08/12 08:44:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)trap.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: trap.c,v 1.7 2007/12/27 23:53:01 dholland Exp $");
+__RCSID("$NetBSD: trap.c,v 1.10 2009/08/12 08:44:45 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,7 +59,7 @@ trap traps[MAX_TRAPS];
 boolean trap_door = 0;
 short bear_trap = 0;
 
-const char *const trap_strings[TRAPS * 2] = {
+static const char *const trap_strings[TRAPS * 2] = {
 	"trap door",
 			"you fell down a trap",
 	"bear trap",
@@ -74,9 +74,8 @@ const char *const trap_strings[TRAPS * 2] = {
 			"a gush of water hits you on the head"
 };
 
-short
-trap_at(row, col)
-	int row, col;
+static short
+trap_at(int row, int col)
 {
 	short i;
 
@@ -89,8 +88,7 @@ trap_at(row, col)
 }
 
 void
-trap_player(row, col)
-	short row, col;
+trap_player(short row, short col)
 {
 	short t;
 
@@ -127,7 +125,7 @@ trap_player(row, col)
 		}
 		print_stats(STAT_HP | STAT_STRENGTH);
 		if (rogue.hp_current <= 0) {
-			killed_by((object *) 0, POISON_DART);
+			killed_by((object *)0, POISON_DART);
 		}
 		break;
 	case SLEEPING_GAS_TRAP:
@@ -136,13 +134,13 @@ trap_player(row, col)
 		break;
 	case RUST_TRAP:
 		messagef(1, "%s", trap_strings[(t*2)+1]);
-		rust((object *) 0);
+		rust(NULL);
 		break;
 	}
 }
 
 void
-add_traps()
+add_traps(void)
 {
 	short i, n, tries = 0;
 	short row, col;
@@ -187,7 +185,7 @@ add_traps()
 }
 
 void
-id_trap()
+id_trap(void)
 {
 	short dir, row, col, d, t;
 
@@ -215,7 +213,7 @@ id_trap()
 }
 
 void
-show_traps()
+show_traps(void)
 {
 	short i, j;
 
@@ -229,9 +227,7 @@ show_traps()
 }
 
 void
-search(n, is_auto)
-	short n;
-	boolean is_auto;
+search(short n, boolean is_auto)
 {
 	short s, i, j, row, col, t;
 	short shown = 0, found = 0;
@@ -280,7 +276,7 @@ search(n, is_auto)
 			}
 		}
 		if ((!is_auto) && (reg_search = !reg_search)) {
-			(void) reg_move();
+			(void)reg_move();
 		}
 	}
 }

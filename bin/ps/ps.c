@@ -1,7 +1,7 @@
-/*	$NetBSD: ps.c,v 1.64 2007/10/24 12:10:11 yamt Exp $	*/
+/*	$NetBSD: ps.c,v 1.75 2010/05/31 03:18:33 rmind Exp $	*/
 
 /*
- * Copyright (c) 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000-2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,15 +60,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)ps.c	8.4 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: ps.c,v 1.64 2007/10/24 12:10:11 yamt Exp $");
+__RCSID("$NetBSD: ps.c,v 1.75 2010/05/31 03:18:33 rmind Exp $");
 #endif
 #endif /* not lint */
 
@@ -96,6 +89,7 @@ __RCSID("$NetBSD: ps.c,v 1.64 2007/10/24 12:10:11 yamt Exp $");
 #include <fcntl.h>
 #include <kvm.h>
 #include <limits.h>
+#include <locale.h>
 #include <nlist.h>
 #include <paths.h>
 #include <pwd.h>
@@ -110,7 +104,7 @@ __RCSID("$NetBSD: ps.c,v 1.64 2007/10/24 12:10:11 yamt Exp $");
  * ARGOPTS must contain all option characters that take arguments
  * (except for 't'!) - it is used in kludge_oldps_options()
  */
-#define	GETOPTSTR	"acCeghjk:LlM:mN:O:o:p:rSsTt:U:uvW:wx"
+#define	GETOPTSTR	"aAcCeghjk:LlM:mN:O:o:p:rSsTt:U:uvW:wx"
 #define	ARGOPTS		"kMNOopUW"
 
 struct kinfo_proc2 *kinfo;
@@ -158,10 +152,14 @@ main(int argc, char *argv[])
 	struct varent *vent;
 	struct winsize ws;
 	struct kinfo_lwp *kl, *l;
-	int ch, flag, i, j, fmt, lineno, nentries, nlwps;
+	int ch, i, j, fmt, lineno, nentries, nlwps;
+	long long flag;
 	int prtheader, wflag, what, xflg, mode, showlwps;
 	char *nlistf, *memf, *swapf, errbuf[_POSIX2_LINE_MAX];
 	char *ttname;
+
+	setprogname(argv[0]);
+	(void)setlocale(LC_ALL, "");
 
 	if ((ioctl(STDOUT_FILENO, TIOCGWINSZ, (char *)&ws) == -1 &&
 	     ioctl(STDERR_FILENO, TIOCGWINSZ, (char *)&ws) == -1 &&
@@ -181,6 +179,10 @@ main(int argc, char *argv[])
 	mode = PRINTMODE;
 	while ((ch = getopt(argc, argv, GETOPTSTR)) != -1)
 		switch((char)ch) {
+		case 'A':
+			/* "-A" shows all processes, like "-ax" */
+			xflg = 1;
+			/*FALLTHROUGH*/
 		case 'a':
 			what = KERN_PROC_ALL;
 			flag = 0;
@@ -280,9 +282,10 @@ main(int argc, char *argv[])
 
 			flag = 0;
 			ttypath = NULL;
-			if (strcmp(ttname, "?") == 0)
+			if (strcmp(ttname, "?") == 0) {
 				flag = KERN_PROC_TTY_NODEV;
-			else if (strcmp(ttname, "-") == 0)
+				xflg = 1;
+			} else if (strcmp(ttname, "-") == 0)
 				flag = KERN_PROC_TTY_REVOKE;
 			else if (strcmp(ttname, "co") == 0)
 				ttypath = _PATH_CONSOLE;
@@ -410,7 +413,7 @@ main(int argc, char *argv[])
 		for (i = 0; i < nentries; i++) {
 			struct kinfo_proc2 *ki = &kinfo[i];
 
-			if (xflg == 0 && (ki->p_tdev == NODEV ||
+			if (xflg == 0 && (ki->p_tdev == (uint32_t)NODEV ||
 			    (ki->p_flag & P_CONTROLT) == 0))
 				continue;
 
@@ -446,7 +449,7 @@ main(int argc, char *argv[])
 	for (i = lineno = 0; i < nentries; i++) {
 		struct kinfo_proc2 *ki = &kinfo[i];
 
-		if (xflg == 0 && (ki->p_tdev == NODEV ||
+		if (xflg == 0 && (ki->p_tdev == (uint32_t)NODEV ||
 		    (ki->p_flag & P_CONTROLT ) == 0))
 			continue;
 		kl = kvm_getlwps(kd, ki->p_pid, (u_long)ki->p_paddr,
@@ -580,7 +583,7 @@ pscomp(const void *a, const void *b)
 	struct varent *ve;
 	const sigset_t *sa, *sb;
 
-#define	V_SIZE(k) (k->p_vm_dsize + k->p_vm_ssize + k->p_vm_tsize)
+#define	V_SIZE(k) ((k)->p_vm_msize)
 #define	RDIFF_N(t, n) \
 	if (((const t *)((const char *)ka + v->off))[n] > ((const t *)((const char *)kb + v->off))[n]) \
 		return 1; \
@@ -626,7 +629,7 @@ pscomp(const void *a, const void *b)
 				if (sa->__bits[i] < sb->__bits[i])
 					return -1;
 				i++;
-			} while (i < sizeof sa->__bits / sizeof sa->__bits[0]);
+			} while (i < (int)__arraycount(sa->__bits));
 			continue;
 		case INT64:
 			RDIFF(int64_t);
@@ -757,9 +760,9 @@ usage(void)
 
 	(void)fprintf(stderr,
 	    "usage:\t%s\n\t   %s\n\t%s\n",
-	    "ps [-acCehjlmrsSTuvwx] [-k key] [-O|o fmt] [-p pid] [-t tty]",
-	    "[-M core] [-N system] [-W swap] [-U username]",
-	    "ps [-L]");
+	    "ps [-AaCcehjlmrSsTuvwx] [-k key] [-M core] [-N system] [-O fmt]",
+	    "[-o fmt] [-p pid] [-t tty] [-U username] [-W swap]",
+	    "ps -L");
 	exit(1);
 	/* NOTREACHED */
 }

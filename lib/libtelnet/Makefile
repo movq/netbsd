@@ -1,9 +1,9 @@
 #	from: @(#)Makefile	8.2 (Berkeley) 12/15/93
-#	$NetBSD: Makefile,v 1.28 2007/05/28 12:06:22 tls Exp $
+#	$NetBSD: Makefile,v 1.32 2011/04/24 19:00:56 elric Exp $
 
 USE_FORT?= yes	# network protocol library
 
-MKPRIVATELIB=	yes
+LIBISPRIVATE=	yes
 
 .include <bsd.own.mk>
 
@@ -22,7 +22,6 @@ CPPFLAGS+= -DDES_ENCRYPTION
 
 SRCS+=	kerberos5.c
 CPPFLAGS+= -DKRB5
-CPPFLAGS+= -I${DESTDIR}/usr/include/krb5
 .endif
 
 .if ${USE_PAM} != "no" && ${MKCRYPTO} != "no"
@@ -30,7 +29,7 @@ SRCS+=	sra.c pk.c
 CPPFLAGS+= -DSRA
 .endif
 
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 .for f in auth enc_des kerberos5 pk
 COPTS.${f}.c+=  -Wno-pointer-sign
 .endfor

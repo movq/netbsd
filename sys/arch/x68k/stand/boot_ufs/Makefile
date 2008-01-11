@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.21 2007/03/03 07:10:30 isaki Exp $
+#	$NetBSD: Makefile,v 1.25 2011/01/22 19:19:24 joerg Exp $
 
 NOMAN=		# defined
 
@@ -6,7 +6,8 @@ NOMAN=		# defined
 
 BOOT=	boot_ufs
 VERSIONFILE=	${.CURDIR}/version
-VERSION!=	awk -F: '$$1 ~ /^[0-9.]*$$/ { it = $$1; } END { print it }' ${VERSIONFILE}
+VERSION!=	${TOOL_AWK} -F: '$$1 ~ /^[0-9.]*$$/ { it = $$1; } \
+			END { print it }' ${VERSIONFILE}
 NEWVERSWHAT=	"${BOOT}"
 
 # text and bss addresses in hex
@@ -33,7 +34,8 @@ SRCS+=		vers.c
 CLEANFILES+=	vers.c
 vers.c:	${VERSIONFILE}
 	${_MKTARGET_CREATE}
-	${HOST_SH} ${S}/conf/newvers_stand.sh -DM ${.ALLSRC} ${MACHINE} ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh \
+	    ${.ALLSRC} ${MACHINE} ${NEWVERSWHAT}
 
 CFLAGS=	-Os -fomit-frame-pointer
 CFLAGS+= -W -Wall -Wstrict-prototypes -Wmissing-prototypes
@@ -44,13 +46,8 @@ CPPFLAGS+= -DSCSI_ADHOC_BOOTPART
 CPPFLAGS+= -DUSE_FFS -DUSE_LFS -DUSE_UFS1 -DUSE_UFS2 -D__daddr_t=int32_t
 CPPFLAGS+= -I${COMMONDIR} -I${LIBIOCS} -I${S} -I. -D_STANDALONE
 AFLAGS=	   ${CFLAGS:M-[ID]*}
-.if ${OBJECT_FMT} == "ELF"
 LINKFLAGS=   -n -Bstatic -T ${.CURDIR}/${BOOT}.ldscript -M
 LINKFLAGS+=  -noinhibit-exec	# XXX
-.else
-LINKFLAGS=   -n -Bstatic -Ttext ${TEXT} -M
-OBJCOPY?=  objcopy
-.endif
 
 .include "${.CURDIR}/../Makefile.booters"
 .include "${S}/../common/lib/libc/Makefile.inc"
@@ -60,26 +57,20 @@ CLEANFILES+=	$(PROG).x $(PROG).map
 
 $(PROG): $(OBJS)
 	${_MKTARGET_LINK}
-.if ${OBJECT_FMT} == "ELF"
 	:
 	: Note:	"relocation truncated to fit: R_68K_16" messages are expected.
 	:	Other errors are fatal.
 	:
-.endif
 	$(LD) $(LINKFLAGS) -o $(PROG).x $(OBJS) $(LDADD) >$(PROG).map
 	@grep first_kbyte $(PROG).map
 	@if [ `(echo ibase=16;						\
-		sed -n	-e '/[ 	]first_kbyte/{'				\
+		${TOOL_SED} -n	-e '/[ 	]first_kbyte/{'			\
 			-e 's/.*0x\([0-9a-fA-F]*\).*/\1-$(TEXT)-400/p'	\
 			-e '}' $(PROG).map |				\
 		tr a-f A-F) | bc` -gt 0 ];				\
 	then echo '$(BOOT): first_kbyte exceeds the first killobyte';	\
 		exit 1;							\
 	fi
-.if ${OBJECT_FMT} == "ELF"
 	mv -f $(PROG).x $(PROG)
-.else
-	$(OBJCOPY) -O binary $(PROG).x $(PROG)
-.endif
 
 .include <bsd.prog.mk>

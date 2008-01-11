@@ -1,11 +1,12 @@
-#	$NetBSD: Makefile,v 1.51 2007/09/28 09:12:49 lukem Exp $
+#	$NetBSD: Makefile,v 1.54 2010/02/03 15:34:44 roy Exp $
 
 HOSTLIB=	nbcompat
 
 SRCS=		atoll.c basename.c dirname.c fgetln.c flock.c fparseln.c \
-		getmode.c getopt_long.c gettemp.c heapsort.c \
+		fpurge.c getmode.c getopt_long.c gettemp.c heapsort.c \
 		issetugid.c lchflags.c lchmod.c lchown.c libyywrap.c \
-		md2.c md2hl.c md4c.c md4hl.c md5c.c md5hl.c mkdtemp.c \
+		md2.c md2hl.c md4c.c md4hl.c md5c.c md5hl.c \
+		mi_vector_hash.c mkdtemp.c \
 		mkstemp.c pread.c putc_unlocked.c pwcache.c pwrite.c \
 		pw_scan.c \
 		raise_default_signal.c rmd160.c rmd160hl.c \
@@ -58,7 +59,7 @@ _CURDIR:=	${.CURDIR}
 .include "${.CURDIR}/db/Makefile.inc"
 .CURDIR:=	${_CURDIR}
 
-SRCS:=		${SRCS:Nndbm*.c}
+SRCS:=		${SRCS:M*.c}
 
 config.cache: include/.stamp configure nbtool_config.h.in defs.mk.in
 	rm -f ${.TARGET}
@@ -75,7 +76,7 @@ regen:
 	cd ${.CURDIR} && ${TOOLDIR}/bin/${_TOOL_PREFIX}autoheader
 
 include/.stamp:
-	mkdir -p include/sys include/machine include/rpc
+	mkdir -p include/sys include/machine include/rpc include/arpa
 	@touch ${.TARGET}
 
 cleandir:

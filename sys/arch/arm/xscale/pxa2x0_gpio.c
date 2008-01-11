@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_gpio.c,v 1.9 2007/10/17 19:53:44 garbled Exp $	*/
+/*	$NetBSD: pxa2x0_gpio.c,v 1.13 2009/08/04 12:11:33 kiyohara Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxa2x0_gpio.c,v 1.9 2007/10/17 19:53:44 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxa2x0_gpio.c,v 1.13 2009/08/04 12:11:33 kiyohara Exp $");
 
 #include "opt_pxa2x0_gpio.h"
 
@@ -202,14 +202,12 @@ pxa2x0_gpio_intr_establish(u_int gpio, int level, int spl, int (*func)(void *),
 	struct gpio_irq_handler *gh;
 	u_int32_t bit, reg;
 
-#ifdef DEBUG
 #ifdef PXAGPIO_HAS_GPION_INTRS
 	if (gpio >= GPIO_NPINS)
 		panic("pxa2x0_gpio_intr_establish: bad pin number: %d", gpio);
 #else
 	if (gpio > 1)
 		panic("pxa2x0_gpio_intr_establish: bad pin number: %d", gpio);
-#endif
 #endif
 
 	if (!GPIO_IS_GPIO_IN(pxa2x0_gpio_get_function(gpio)))
@@ -229,8 +227,7 @@ pxa2x0_gpio_intr_establish(u_int gpio, int level, int spl, int (*func)(void *),
 	if (sc->sc_handlers[gpio] != NULL)
 		panic("pxa2x0_gpio_intr_establish: illegal shared interrupt");
 
-	MALLOC(gh, struct gpio_irq_handler *, sizeof(struct gpio_irq_handler),
-	    M_DEVBUF, M_NOWAIT);
+	gh = malloc(sizeof(struct gpio_irq_handler), M_DEVBUF, M_NOWAIT);
 
 	gh->gh_func = func;
 	gh->gh_arg = arg;
@@ -310,13 +307,13 @@ pxa2x0_gpio_intr_disestablish(void *cookie)
 	if (gh->gh_gpio == 1) {
 #if 0
 		pxa2x0_intr_disestablish(sc->sc_irqcookie[1]);
-		sc->sc_irqcookie[0] = NULL;
+		sc->sc_irqcookie[1] = NULL;
 #else
-		panic("pxa2x0_gpio_intr_disestablish: can't unhook GPIO#0");
+		panic("pxa2x0_gpio_intr_disestablish: can't unhook GPIO#1");
 #endif
 	}
 
-	FREE(gh, M_DEVBUF);
+	free(gh, M_DEVBUF);
 }
 
 static int
@@ -853,10 +850,6 @@ struct pxa2x0_gpioconf pxa27x_com_ffuart_gpioconf[] = {
 	{  -1 }
 };
 
-struct pxa2x0_gpioconf pxa27x_com_hwuart_gpioconf[] = {
-	{  -1 }
-};
-
 struct pxa2x0_gpioconf pxa27x_com_stuart_gpioconf[] = {
 	{  46, GPIO_CLR | GPIO_ALT_FN_2_IN },	/* STD_RXD */
 	{  47, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* STD_TXD */
@@ -878,6 +871,16 @@ struct pxa2x0_gpioconf pxa27x_i2s_gpioconf[] = {
 	{  -1 }
 };
 
+struct pxa2x0_gpioconf pxa27x_ohci_gpioconf[] = {
+#if 0	/* We can select and/or. */
+	{  88, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* USBHPWR1 */
+	{  89, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* USBHPEN1 */
+	{ 119, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* USBHPWR2 */
+	{ 120, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* USBHPEN2 */
+#endif
+	{  -1 }
+};
+
 struct pxa2x0_gpioconf pxa27x_pcic_gpioconf[] = {
 	{  48, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* nPOE */
 	{  49, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* nPWE */
@@ -886,7 +889,6 @@ struct pxa2x0_gpioconf pxa27x_pcic_gpioconf[] = {
 	{  55, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* nPREG */
 	{  56, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* nPWAIT */
 	{  57, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* nIOIS16 */
-	{ 104, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* pSKTSEL */
 
 #if 0	/* We can select and/or. */
 	{  85, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* nPCE1 */
@@ -896,6 +898,9 @@ struct pxa2x0_gpioconf pxa27x_pcic_gpioconf[] = {
 	{  54, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* nPCE2 */
 	{  78, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* nPCE2 */
 	{ 105, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* nPCE2 */
+
+	{  79, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* pSKTSEL */
+	{ 104, GPIO_CLR | GPIO_ALT_FN_1_OUT },	/* pSKTSEL */
 #endif
 
 	{  -1 }
@@ -924,14 +929,11 @@ struct pxa2x0_gpioconf pxa27x_pxaacu_gpioconf[] = {
 
 struct pxa2x0_gpioconf pxa27x_pxamci_gpioconf[] = {
 	{  32, GPIO_CLR | GPIO_ALT_FN_2_OUT },	/* MMCLK */
-	{ 112, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMCMD */
 	{  92, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMDAT<0> */
-
-#if 0	/* optional */
 	{ 109, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMDAT<1> */
 	{ 110, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMDAT<2>/MMCCS<0> */
 	{ 111, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMDAT<3>/MMCCS<1> */
-#endif
+	{ 112, GPIO_CLR | GPIO_ALT_FN_1_IN },	/* MMCMD */
 
 	{  -1 }
 };

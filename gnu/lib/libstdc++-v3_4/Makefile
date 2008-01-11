@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2006/11/09 20:07:15 christos Exp $
+#	$NetBSD: Makefile,v 1.7 2011/05/26 12:56:27 joerg Exp $
 
 REQUIRETOOLS=	yes
 NOLINT=		# defined
@@ -6,11 +6,17 @@ NOLINT=		# defined
 .include <bsd.own.mk>
 
 LIB=		stdc++
+LDADD=		-lgcc_s
+
+LIBDPLIBS+=	m ${.CURDIR}/../../../lib/libm
+
+CWARNFLAGS.clang+=	-Wno-logical-op-parentheses \
+			-Wno-deprecated-writable-strings -Wno-parentheses
 
 .if exists(${.CURDIR}/arch/${MACHINE_ARCH}/defs.mk) && ${MKGCC} != "no"
 .include "${.CURDIR}/arch/${MACHINE_ARCH}/defs.mk"
 
-SHLIB_MAJOR=	6
+SHLIB_MAJOR=	7
 SHLIB_MINOR=	0
 
 SUBDIR=		include
@@ -125,9 +131,4 @@ CLEANFILES+= unwind.h
 ${OBJS}: ${.CURDIR}/arch/${MACHINE_ARCH}/defs.mk
 .else
 .include <bsd.prog.mk> # do nothing
-.endif
-
-.if (${OBJECT_FMT} == "a.out")
-LDADD=	${DESTDIR}/usr/lib/c++rt0.o
-DPADD=	${DESTDIR}/usr/lib/c++rt0.o
 .endif

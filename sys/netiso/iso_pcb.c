@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_pcb.c,v 1.41 2007/12/20 19:53:35 dyoung Exp $	*/
+/*	$NetBSD: iso_pcb.c,v 1.49 2009/04/18 14:58:06 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -62,7 +62,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iso_pcb.c,v 1.41 2007/12/20 19:53:35 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iso_pcb.c,v 1.49 2009/04/18 14:58:06 tsutsui Exp $");
 
 #include "opt_iso.h"
 
@@ -113,7 +113,7 @@ iso_pcballoc(struct socket *so, void *v)
 		printf("iso_pcballoc(so %p)\n", so);
 	}
 #endif
-	MALLOC(isop, struct isopcb *, sizeof(*isop), M_PCB, M_NOWAIT|M_ZERO);
+	isop = malloc(sizeof(*isop), M_PCB, M_NOWAIT|M_ZERO);
 	if (isop == NULL)
 		return ENOBUFS;
 	isop->isop_head = head;
@@ -213,19 +213,29 @@ iso_pcbbind(void *v, struct mbuf *nam, struct lwp *l)
 		isop->isop_mladdr = nam;
 		isop->isop_laddr = mtod(nam, struct sockaddr_iso *);
 	}
-	bcopy((void *) siso, (void *) isop->isop_laddr, siso->siso_len);
+	memcpy((void *) isop->isop_laddr, (void *) siso, siso->siso_len);
 	if (siso->siso_tlen == 0)
 		goto noname;
 	if ((isop->isop_socket->so_options & SO_REUSEADDR) == 0 &&
 	    iso_pcblookup(head, 0, (void *) 0, isop->isop_laddr))
 		return EADDRINUSE;
 	if (siso->siso_tlen <= 2) {
-		bcopy(TSEL(siso), suf.data, sizeof(suf.data));
+		memcpy(suf.data, TSEL(siso), sizeof(suf.data));
 		suf.s = ntohs(suf.s);
-		if (suf.s < ISO_PORT_RESERVED &&
-		    (l == NULL || kauth_authorize_generic(l->l_cred,
-		     KAUTH_GENERIC_ISSUSER, NULL)))
-			return EACCES;
+		if (suf.s < ISO_PORT_RESERVED) {
+			int error;
+
+			if (l == NULL)
+				error = EACCES;
+			else
+				error = kauth_authorize_network(l->l_cred,
+				    KAUTH_NETWORK_BIND,
+				    KAUTH_REQ_NETWORK_BIND_PRIVPORT,
+				    isop->isop_socket, siso, NULL);
+
+			if (error)
+				return (error);
+		}
 	} else {
 		char  *cp;
 noname:
@@ -334,7 +344,7 @@ iso_pcbconnect(void *v, struct mbuf *nam, struct lwp *l)
 #ifdef ARGO_DEBUG
 		if (argo_debug[D_ISO]) {
 			printf("iso_pcbconnect localzero 2, rt %p",
-			       rtcache_getrt(&isop->isop_route));
+			       rtcache_validate(&isop->isop_route));
 			printf(" ia %p\n", ia);
 		}
 #endif
@@ -375,7 +385,7 @@ iso_pcbconnect(void *v, struct mbuf *nam, struct lwp *l)
 		siso->siso_nlen = ia->ia_addr.siso_nlen;
 		newtsel = WRITABLE_TSEL(siso);
 		memmove(newtsel, oldtsel, tlen);
-		bcopy(ia->ia_addr.siso_data, siso->siso_data, nlen);
+		memcpy(siso->siso_data, ia->ia_addr.siso_data, nlen);
 		siso->siso_tlen = tlen;
 		siso->siso_family = AF_ISO;
 		siso->siso_len = totlen;
@@ -406,7 +416,7 @@ iso_pcbconnect(void *v, struct mbuf *nam, struct lwp *l)
 			isop->isop_faddr = mtod(m, struct sockaddr_iso *);
 		}
 	}
-	bcopy((void *) siso, (void *) isop->isop_faddr, siso->siso_len);
+	memcpy((void *) isop->isop_faddr, (void *) siso, siso->siso_len);
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_ISO]) {
 		printf("in iso_pcbconnect after bcopy isop %p isop->sock %p\n",
@@ -485,23 +495,12 @@ iso_pcbdetach(void *v)
 		    isop, isop->isop_socket, so);
 	}
 #endif
-#ifdef TPCONS
-	if (isop->isop_chan) {
-		struct pklcd *lcp = (struct pklcd *) isop->isop_chan;
-		if (--isop->isop_refcnt > 0)
-			return;
-		if (lcp && lcp->lcd_state == DATA_TRANSFER) {
-			lcp->lcd_upper = 0;
-			lcp->lcd_upnext = 0;
-			pk_disconnect(lcp);
-		}
-		isop->isop_chan = 0;
-	}
-#endif
 	if (so) {		/* in the x.25 domain, we sometimes have no
 				 * socket */
 		so->so_pcb = 0;
+		/* sofree drops the lock */
 		sofree(so);
+		mutex_enter(softnet_lock);
 	}
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_ISO]) {
@@ -647,10 +646,10 @@ iso_pcblookup(
 			continue;
 		if (isop->isop_laddr->siso_tlen != llen)
 			continue;
-		if (bcmp(lp, TSEL(isop->isop_laddr), llen))
+		if (memcmp(lp, TSEL(isop->isop_laddr), llen))
 			continue;
 		if (fportlen && isop->isop_faddr &&
-		    bcmp(fport, TSEL(isop->isop_faddr), (unsigned) fportlen))
+		    memcmp(fport, TSEL(isop->isop_faddr), (unsigned) fportlen))
 			continue;
 		/*
 		 * PHASE2 addrmatch1 should be iso_addrmatch(a, b, mask)

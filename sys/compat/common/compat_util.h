@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_util.h,v 1.18 2007/04/22 08:29:55 dsl Exp $	*/
+/*	$NetBSD: compat_util.h,v 1.22 2009/12/14 04:09:38 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,7 @@
 
 /*
  * Copyright (c) 1995 Frank van der Linden
+ * Copyright (c) 2009 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -77,9 +71,6 @@ struct emul_flags_xtab {
 	unsigned long nval;
 };
 
-void *	stackgap_init(const struct proc *, size_t);
-void	*stackgap_alloc(const struct proc *, void **, size_t);
-
 void emul_find_root(struct lwp *, struct exec_package *);
 
 int emul_find_interp(struct lwp *, struct exec_package *, const char *);
@@ -88,5 +79,10 @@ unsigned long emul_flags_translate(const struct emul_flags_xtab *tab,
 				   unsigned long in, unsigned long *leftover);
 
 void compat_offseterr(struct vnode *, const char *);
+
+int compat_elf_check_interp(struct exec_package *, char *, const char *);
+
+void compat_sysctl_init(void);
+void compat_sysctl_fini(void);
 
 #endif /* !_COMPAT_UTIL_H_ */

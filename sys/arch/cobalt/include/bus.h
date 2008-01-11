@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.21 2007/03/04 05:59:43 christos Exp $	*/
+/*	$NetBSD: bus.h,v 1.23 2009/08/20 11:50:11 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -93,6 +86,16 @@ void	bus_space_unmap (bus_space_tag_t, bus_space_handle_t, bus_size_t);
 
 int	bus_space_subregion(bus_space_tag_t t, bus_space_handle_t bsh,
 	    bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp);
+
+/*
+ *	paddr_t bus_space_mmap(bus_space_tag_t t,
+ *          bus_addr_t addr, off_t offset, int prot, int flags);
+ *
+ * Mmap bus space for a user application.
+ */
+
+paddr_t	bus_space_mmap(bus_space_tag_t t, bus_addr_t addr, off_t off, int prot,
+    int flags);
 
 /*
  *	int bus_space_alloc(bus_space_tag_t t, bus_addr_t, rstart,

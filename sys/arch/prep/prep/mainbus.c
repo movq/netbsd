@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.27 2007/10/17 19:56:54 garbled Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.30 2011/05/17 17:34:52 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.27 2007/10/17 19:56:54 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.30 2011/05/17 17:34:52 dyoung Exp $");
 
 #include "opt_pci.h"
 #include "opt_residual.h"
@@ -116,7 +116,7 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 	for (i = 0; i < CPU_MAXNUM; i++) {
 		ca.ca_name = "cpu";
 		ca.ca_node = i;
-		config_found_ia(self, "mainbus", &ca, mainbus_print);
+		config_found_ia(self, "mainbus", &ca, NULL);
 	}
 
 	/*
@@ -158,6 +158,7 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 
 /* scan pnpbus first */
 #if NPNPBUS > 0
+	mba.mba_paa.paa_name = "pnpbus";
 	mba.mba_paa.paa_iot = &genppc_isa_io_space_tag;
 	mba.mba_paa.paa_memt = &genppc_isa_mem_space_tag;
 	mba.mba_paa.paa_ic = &genppc_ict;
@@ -166,7 +167,8 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 #endif /* NPNPBUS */
 
 #if NPCI > 0
-	bzero(&mba, sizeof(mba));
+	memset(&mba, 0, sizeof(mba));
+	mba.mba_pba._pba_busname = NULL;
 	mba.mba_pba.pba_iot = &prep_io_space_tag;
 	mba.mba_pba.pba_memt = &prep_mem_space_tag;
 	mba.mba_pba.pba_dmat = &pci_bus_dma_tag;
@@ -174,7 +176,7 @@ mainbus_attach(struct device *parent, struct device *self, void *aux)
 	mba.mba_pba.pba_pc = genppc_pct;
 	mba.mba_pba.pba_bus = 0;
 	mba.mba_pba.pba_bridgetag = NULL;
-	mba.mba_pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	mba.mba_pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	config_found_ia(self, "pcibus", &mba.mba_pba, pcibusprint);
 #endif /* NPCI */
 

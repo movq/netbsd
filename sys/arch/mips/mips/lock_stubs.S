@@ -1,4 +1,4 @@
-/*	$NetBSD: lock_stubs.S,v 1.7 2007/11/29 01:04:20 ad Exp $	*/
+/*	$NetBSD: lock_stubs.S,v 1.14 2011/02/20 07:45:47 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,8 @@
 #include "opt_lockdebug.h"
 #include "opt_multiprocessor.h"
 
+#include <sys/errno.h>
+
 #include <machine/asm.h>
 #include <machine/cpu.h>
 
@@ -49,40 +44,34 @@
 #define	FULL
 #endif
 
-#if defined(__mips_n32) || defined(_LP64)
-#define	LL	lld
-#define	SC	scd
-#define	LDPTR	ld
-#define	STPTR	sd
-#else /* !(n32 || LP64) */
-#define	LL	ll
-#define	SC	sc
-#define	LDPTR	lw
-#define	STPTR	sw
-#endif /* !(n32 || LP64) */
-
 #if MIPS_HAS_LLSC != 0 && defined(MULTIPROCESSOR)
 #define	SYNC		sync
 #define	BDSYNC		sync
 #else
 #define	SYNC		/* nothing */
 #define	BDSYNC		nop
-#endif	/* MIPS_HAS_LLSC != 0 && defined(MULTIPROCESSOR) */
+#endif /* MIPS_HAS_LLSC != 0 && defined(MULTIPROCESSOR) */
 
-STRONG_ALIAS(mb_read, mb_memory)
-STRONG_ALIAS(mb_write, mb_memory)
-
-/*
- * void mb_memory(void);
- */
-LEAF(mb_memory)
-	j	ra
-	 BDSYNC
-END(mb_memory)
 
 #if MIPS_HAS_LLSC != 0
 
+/*
+ * Set ISA level for the assembler.
+ * XXX Clean up with a macro?  Same code fragment is in mipsX_subr.S too.
+ * XXX Key off build abi instead of processor type?
+ */
+#if defined(MIPS3)
 	.set	mips3
+#endif
+
+#if defined(MIPS32)
+	.set	mips32
+#endif
+
+#if defined(MIPS64)
+	.set	mips64
+#endif
+
 	.set	noreorder
 	.set	noat
 
@@ -92,26 +81,37 @@ END(mb_memory)
  */
 LEAF(_atomic_cas_ulong)
 1:
-	LL	t0, (a0)
+	LONG_LL	t0, (a0)
 	bne	t0, a1, 2f
-	 addu	t1, zero, a2
-	SC	t1, (a0)
-	beq	t1, zero, 1b
+	 move t1, a2
+	LONG_SC	t1, (a0)
+	beqz	t1, 1b
 	 nop
+#ifdef MULTIPROCESSOR
+	sync
+#endif
 	j	ra
-	 addu	v0, zero, a1
+	 move	v0, a1
 2:
 	j	ra
-	 addu	v0, zero, t0
+	 move	v0, t0
 END(_atomic_cas_ulong)
 
 STRONG_ALIAS(atomic_cas_ulong,_atomic_cas_ulong)
 STRONG_ALIAS(_atomic_cas_ptr,_atomic_cas_ulong)
 STRONG_ALIAS(atomic_cas_ptr,_atomic_cas_ulong)
 
-#if defined(__mips_n32) || defined(_LP64)
+STRONG_ALIAS(_atomic_cas_ulong_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_ulong_ni,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_ptr_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_ptr_ni,_atomic_cas_ulong)
+
+#if defined(_LP64)
 STRONG_ALIAS(_atomic_cas_64,_atomic_cas_ulong)
 STRONG_ALIAS(atomic_cas_64,_atomic_cas_ulong)
+
+STRONG_ALIAS(_atomic_cas_64_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_64_ni,_atomic_cas_ulong)
 #endif
 
 /*
@@ -120,22 +120,98 @@ STRONG_ALIAS(atomic_cas_64,_atomic_cas_ulong)
  */
 LEAF(_atomic_cas_uint)
 1:
-	ll	t0, (a0)
+	INT_LL	t0, (a0)
 	bne	t0, a1, 2f
-	 addu	t1, zero, a2
-	sc	t1, (a0)
-	beq	t1, zero, 1b
+	 move	t1, a2
+	INT_SC	t1, (a0)
+	beqz	t1, 1b
 	 nop
+#ifdef MULTIPROCESSOR
+	sync
+#endif
 	j	ra
-	 addu	v0, zero, a1
+	 move	v0, a1
 2:
 	j	ra
-	 addu	v0, zero, t0
+	 move	v0, t0
 END(_atomic_cas_uint)
 
 STRONG_ALIAS(_atomic_cas_32,_atomic_cas_uint)
 STRONG_ALIAS(atomic_cas_32,_atomic_cas_uint)
 STRONG_ALIAS(atomic_cas_uint,_atomic_cas_uint)
+
+STRONG_ALIAS(_atomic_cas_32_ni,_atomic_cas_uint)
+STRONG_ALIAS(atomic_cas_32_ni,_atomic_cas_uint)
+STRONG_ALIAS(_atomic_cas_uint_ni,_atomic_cas_uint)
+STRONG_ALIAS(atomic_cas_uint_ni,_atomic_cas_uint)
+
+/*
+ * int ucas_32(volatile uint32_t *ptr, uint32_t old, uint32_t new, uint32_t *ret)
+ */
+LEAF(ucas_32)
+	.set at
+	PTR_LA	v0, _C_LABEL(ucaserr)
+	.set noat
+	PTR_L	v1, L_PCB(MIPS_CURLWP)
+	PTR_S	v0, PCB_ONFAULT(v1)
+	bltz	a0, _C_LABEL(ucaserr)
+	 nop
+	move	v0, zero
+
+1:	INT_LL	t0, 0(a0)
+	 nop
+	bne	t0, a1, 2f
+	 move	t1, a2
+	INT_SC	t1, 0(a0)
+	beqz	t1, 1b
+	 nop
+
+2:	PTR_S	zero, PCB_ONFAULT(v1)
+	j	ra
+	 INT_S	t0, 0(a3)
+END(ucas_32)
+
+STRONG_ALIAS(ucas_int, ucas_32)
+STRONG_ALIAS(ucas_uint, ucas_32)
+#ifndef _LP64
+STRONG_ALIAS(ucas_long, ucas_32)
+STRONG_ALIAS(ucas_ulong, ucas_32)
+STRONG_ALIAS(ucas_ptr, ucas_32)
+#endif
+
+#ifndef __mips_o32
+/*
+ * int ucas_64(volatile uint64_t *ptr, uint64_t old, uint64_t new, uint64_t *ret)
+ */
+LEAF(ucas_64)
+	.set at
+	PTR_LA	v0, _C_LABEL(ucaserr)
+	.set noat
+	PTR_L	v1, L_PCB(MIPS_CURLWP)
+	PTR_S	v0, PCB_ONFAULT(v1)
+	bltz	a0, _C_LABEL(ucaserr)
+	 nop
+	move	v0, zero
+
+1:	REG_LL	t0, 0(a0)
+	 nop
+	bne	t0, a1, 2f
+	 move	t1, a2
+	REG_SC	t1, 0(a0)
+	beqz	t1, 1b
+	 nop
+
+2:	PTR_S	zero, PCB_ONFAULT(v1)
+	j	ra
+	 REG_S	t0, 0(a3)
+END(ucas_64)
+#ifdef _LP64
+STRONG_ALIAS(ucas_ptr, ucas_64)
+STRONG_ALIAS(ucas_long, ucas_64)
+STRONG_ALIAS(ucas_ulong, ucas_64)
+#endif
+
+#endif /* !__mips_o32 */
 
 #ifndef LOCKDEBUG
 
@@ -143,13 +219,13 @@ STRONG_ALIAS(atomic_cas_uint,_atomic_cas_uint)
  * void	mutex_enter(kmutex_t *mtx);
  */
 LEAF(mutex_enter)
-	LL	t0, MTX_OWNER(a0)
+	PTR_LL	t0, MTX_OWNER(a0)
 1:
-	bne	t0, zero, 2f
-	 addu	t2, zero, MIPS_CURLWP
-	SC	t2, MTX_OWNER(a0)
-	beq	t2, zero, 1b
-	 LL	t0, MTX_OWNER(a0)
+	bnez	t0, 2f
+	 move	t2, MIPS_CURLWP
+	PTR_SC	t2, MTX_OWNER(a0)
+	beqz	t2, 1b
+	 PTR_LL	t0, MTX_OWNER(a0)
 	j	ra
 	 BDSYNC
 2:
@@ -161,14 +237,14 @@ END(mutex_enter)
  * void	mutex_exit(kmutex_t *mtx);
  */
 LEAF(mutex_exit)
-	LL	t0, MTX_OWNER(a0)
+	PTR_LL	t0, MTX_OWNER(a0)
 	BDSYNC
 1:
 	bne	t0, MIPS_CURLWP, 2f
-	 addu	t2, zero, zero
-	SC	t2, MTX_OWNER(a0)
-	beq	t2, zero, 1b
-	 LL	t0, MTX_OWNER(a0)
+	 move	t2, zero
+	PTR_SC	t2, MTX_OWNER(a0)
+	beqz	t2, 1b
+	 PTR_LL	t0, MTX_OWNER(a0)
 	j	ra
 	 nop
 2:
@@ -179,42 +255,78 @@ END(mutex_exit)
 /*
  * void	mutex_spin_enter(kmutex_t *mtx);
  */
-LEAF(mutex_spin_enter)
-	lw	t2, L_CPU(MIPS_CURLWP)
-	li	t7, -1
-	lw	t6, CPU_INFO_MTX_COUNT(t2)
-	lw	t1, MTX_IPL(a0)
-	addu	t6, t6, t7
-	sw	t6, CPU_INFO_MTX_COUNT(t2)
-	mfc0	v0, MIPS_COP_0_STATUS
-	and	t1, t1, MIPS_INT_MASK
-	nor	t1, zero, t1
-	and	t1, t1, v0
-	DYNAMIC_STATUS_MASK(t1,t0)
-	mtc0	t1, MIPS_COP_0_STATUS
-	COP0_SYNC
-	bne	t6, t7, 1f
-	 and	v0, v0, (MIPS_INT_MASK | MIPS_SR_INT_IE)
-	sw	v0, CPU_INFO_MTX_OLDSPL(t2)
+NESTED(mutex_spin_enter, CALLFRAME_SIZ, ra)
+	move	t0, a0
+	PTR_L	t2, L_CPU(MIPS_CURLWP)
+	INT_L	ta0, MTX_IPL(t0)
+	INT_L	ta1, CPU_INFO_CPL(t2)
+
+	/*
+	 * If the current IPL is less than the mutex's IPL, we need to raise
+	 * our IPL to the mutex'es 
+	 */
+	sltu	v1, ta1, ta0		# v1 = ta1 < ta0
+	beqz	v1, 1f
+	 nop
+	 
+
+	/*
+	 * We need to raise our IPL.  But it means calling another routine
+	 * but it's written to have little overhead.  call splraise
+	 * (only uses a0-a3 and v0-v1)
+	 */
+	move	t3, ra			# need to save ra
+	jal	_C_LABEL(splraise)
+	 move	a0, ta0
+	move	ra, t3			# move ra back
+#ifdef PARANOIA
+10:	bne	ta1, v0, 10b		# loop forever if v0 != ta1
+	 nop
+#endif /* PARANOIA */
+
+	/*
+	 * If this is the first lock of the mutex, store the previous IPL for
+	 * exit.  Even if an interrupt happens, the mutex count will not change.
+	 */
 1:
-#if defined(FULL)
-	ll	t0, MTX_LOCK(a0)
+	INT_L	ta2, CPU_INFO_MTX_COUNT(t2)
 	nop
+	INT_ADDU ta3, ta2, -1
+	INT_S	ta3, CPU_INFO_MTX_COUNT(t2)
+	bltz	ta2, 2f
+	 nop
+	INT_S	ta1, CPU_INFO_MTX_OLDSPL(t2)
 2:
-	bne	t0, zero, 3f
+#ifdef PARANOIA
+	INT_L	ta1, CPU_INFO_MTX_OLDSPL(t2)
+	INT_L	ta2, CPU_INFO_CPL(t2)	# get updated CPL
+	nop
+	sltu	v0, ta2, ta0		# v0 = cpl < mtx_ipl
+	sltu	v1, ta2, ta1		# v1 = cpl < oldspl
+	sll	v0, 1
+	or	v0, v1
+12:	bnez	v0, 12b			# loop forever if any are true
+	 nop
+#endif /* PARANOIA */
+#if defined(FULL)
+	INT_LL	t3, MTX_LOCK(t0)
+	nop
+3:
+	bnez	t3, 4f
 	 li	t1, 1
-	sc	t1, MTX_LOCK(a0)
-	beq	t1, zero, 2b
-	 ll	t0, MTX_LOCK(a0)
+	INT_SC	t1, MTX_LOCK(t0)
+	beqz	t1, 3b
+	 INT_LL	t3, MTX_LOCK(t0)
 	j	ra
 	 BDSYNC
-3:
+4:
+	move	a0, t0
 	j	_C_LABEL(mutex_spin_retry)
 	 nop
 #else
 	j	ra
 	 nop
-#endif
+#endif /* FULL */
 END(mutex_spin_enter)
 
 #endif	/* !LOCKDEBUG */
@@ -234,14 +346,14 @@ END(mutex_spin_enter)
  *
  * o All of the critical sections are 20 bytes in size, and the entry
  *   to each critical section is aligned on a 16 byte boundary (see
- *   top of _lock_ras() for why).  The entry is defined here as the
+ *   top of _restart_lock_ras() for why).  The entry is defined here as the
  *   point after where a restart occurs if we trap within the section.
  *
- * o The entire code block is aligned on a 128 byte boundary, and is
- *   128 bytes in size.  This is to allow us to do an pessimistic check
+ * o The entire code block is aligned on a 256 byte boundary, and is
+ *   256 bytes in size.  This is to allow us to do an pessimistic check
  *   after taking a trap with:
  *
- *	if ((addr & ~127) == _lock_ras_start)
+ *	if ((addr & ~255) == _lock_ras_start)
  *		addr = _lock_ras(addr);
  *
  *   See definition of MIPS_LOCK_RAS_SIZE in asm.h.
@@ -259,24 +371,27 @@ END(mutex_spin_enter)
  *     unsigned long old, unsigned long new);
  */
 	.text
-	.align	7
+#if MIPS_LOCK_RAS_SIZE != 256
+#error RAS alignment needs to be fixed
+#endif
+	.p2align 8
 
 EXPORT(_lock_ras_start)
-
-	.space	12
-
+	nop
+	nop
+	nop
 LEAF_NOPROFILE(_atomic_cas_ulong)
-	LDPTR	t0, (a0)	/* <- critical section start */
+	PTR_L	t0, (a0)	/* <- critical section start */
 _atomic_cas_start:
 	 nop
 	bne	t0, a1, 1f
  	 nop
-	STPTR	a2, (a0)	/* <- critical section end */
+	PTR_S	a2, (a0)	/* <- critical section end */
 	j	ra
-	 addu	v0, zero, a1
+	 move	v0, a1
 1:
 	j	ra
-	 addu	v0, zero, t0
+	 move	v0, t0
 END(_atomic_cas_ulong)
 
 STRONG_ALIAS(atomic_cas_ulong,_atomic_cas_ulong)
@@ -287,20 +402,48 @@ STRONG_ALIAS(atomic_cas_uint,_atomic_cas_ulong)
 STRONG_ALIAS(_atomic_cas_ptr,_atomic_cas_ulong)
 STRONG_ALIAS(atomic_cas_ptr,_atomic_cas_ulong)
 
+STRONG_ALIAS(_atomic_cas_ulong_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_ulong_ni,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_32_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_32_ni,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_uint_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_uint_ni,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_ptr_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_ptr_ni,_atomic_cas_ulong)
+
+	.p2align 5
+	nop
+	nop
+	nop
+LEAF_NOPROFILE(_ucas_32_ras)
+	PTR_L	t0, (a0)	/* <- critical section start */
+_ucas_32_ras_start:
+	 nop
+	bne	t0, a1, 1f
+ 	 nop
+	PTR_S	a2, (a0)	/* <- critical section end */
+1:
+	PTR_S	zero, PCB_ONFAULT(v1)
+	j	ra
+	 INT_S	t0, 0(a3)
+END(_ucas_32_ras)
+
+
 #ifndef LOCKDEBUG
+	.p2align 5
+	nop
+	nop
+	nop
 /*
  * int mutex_enter(kmutex_t *mtx);
  */
-	nop
-	nop
-	nop
 LEAF_NOPROFILE(mutex_enter)
-	LDPTR	t0, (a0)	/* <- critical section start */
+	PTR_L	t0, (a0)	/* <- critical section start */
 _mutex_enter_start:
-	nop
-	bne	t0, zero, 1f
+	 nop
+	bnez	t0, 1f
 	 nop			
-	STPTR	MIPS_CURLWP, (a0)/* <- critical section end */
+	PTR_S	MIPS_CURLWP, (a0)/* <- critical section end */
 	j	ra
 	 nop
 1:	j	_C_LABEL(mutex_vector_enter)
@@ -310,53 +453,77 @@ END(mutex_enter)
 /*
  * int mutex_exit(kmutex_t *mtx);
  */
+	.p2align 5
 	nop
 	nop
 	nop
 LEAF_NOPROFILE(mutex_exit)
-	LDPTR	t0, (a0)	/* <- critical section start */
+	PTR_L	t0, (a0)	/* <- critical section start */
 _mutex_exit_start:
 	 nop
 	bne	t0, MIPS_CURLWP, 1f
 	 nop			
-	STPTR	zero, (a0)	/* <- critical section end */
+	PTR_S	zero, (a0)	/* <- critical section end */
 	j	ra
 	 nop
 1:	j	_C_LABEL(mutex_vector_exit)
 END(mutex_exit)
 	 nop
 
-	.align	7			/* Get out of the RAS block */
+#if MIPS_LOCK_RAS_SIZE != 256
+#error RAS alignment needs to be fixed
+#endif
+	.p2align 8		/* Get out of the RAS block */
 
 /*
  * void	mutex_spin_enter(kmutex_t *mtx);
  */
-LEAF(mutex_spin_enter)
-	lw	t2, L_CPU(MIPS_CURLWP)
-	li	t7, -1
-	lw	t6, CPU_INFO_MTX_COUNT(t2)
-	lw	t1, MTX_IPL(a0)
-	addu	t6, t6, t7
-	sw	t6, CPU_INFO_MTX_COUNT(t2)
-	mfc0	v0, MIPS_COP_0_STATUS
-	and	t1, t1, MIPS_INT_MASK
-	nor	t1, zero, t1
-	and	t1, t1, v0
-	DYNAMIC_STATUS_MASK(t1,t0)
-	mtc0	t1, MIPS_COP_0_STATUS
-	COP0_SYNC
-	bne	t6, t7, 1f
-	 and	v0, v0, (MIPS_INT_MASK | MIPS_SR_INT_IE)
-	sw	v0, CPU_INFO_MTX_OLDSPL(t2)
+NESTED(mutex_spin_enter, CALLFRAME_SIZ, ra)
+	move	t0, a0
+	PTR_L	t2, L_CPU(MIPS_CURLWP)
+	INT_L	a0, MTX_IPL(t0)
+	INT_L	ta1, CPU_INFO_CPL(t2)		# get current cpl
+	nop
+
+	/*
+	 * If the current IPL is less than the mutex's IPL, we need to raise
+	 * our IPL to the mutex'es 
+	 */
+	sltu	a3, ta1, a0			# a3 = ta1 < a0
+	beqz	a3, 1f
+	 nop
+
+	/*
+	 * We need to raise our IPL.
+	 * call splraise (only uses a0-a3, v0-v1, and ra)
+	 */
+	move	t3, ra
+	jal	_C_LABEL(splraise)
+	 nop
+	move	ra, t3
+
+	/*
+	 * If this is the first lock of the mutex, store the previous IPL
+	 * for exit.
+	 */
 1:
+	INT_L	ta2, CPU_INFO_MTX_COUNT(t2)
+	nop
+	INT_ADDU ta3, ta2, -1
+	INT_S	ta3, CPU_INFO_MTX_COUNT(t2)
+
+	bnez	ta2, 2f
+	 nop
+	INT_S	ta1, CPU_INFO_MTX_OLDSPL(t2)
+2:
 #if defined(DIAGNOSTIC)
-	lw	t0, MTX_LOCK(a0)
+	INT_L	t3, MTX_LOCK(t0)
 	li	t1, 1
-	bne	t0, zero, 2f
+	bnez	t3, 3f
 	 nop
 	j	ra
-	 sw	t1, MTX_LOCK(a0)
-2:
+	 INT_S	t1, MTX_LOCK(t0)
+3:
 	j	_C_LABEL(mutex_spin_retry)
 	 nop
 #else	/* DIAGNOSTIC */
@@ -390,14 +557,17 @@ END(mutex_spin_enter)
  *	t2	clobbered
  */
 
-LEAF_NOPROFILE(_lock_ras)
+LEAF_NOPROFILE(_restart_lock_ras)
 	li	t1, -16
 	and	t2, k1, t1
 	la	t0, _atomic_cas_start
 	beq	t2, t0, 1f
 	 nop
+	addiu	t0, _ucas_32_ras_start - _atomic_cas_start
+	beq	t2, t0, 1f
+	 nop
 #ifndef LOCKDEBUG
-	addiu	t0, _mutex_enter_start - _atomic_cas_start
+	addiu	t0, _mutex_enter_start - _ucas_32_ras_start
 	beq	t2, t0, 1f
 	 nop
 	addiu	t0, _mutex_exit_start - _mutex_enter_start
@@ -409,9 +579,36 @@ LEAF_NOPROFILE(_lock_ras)
 1:
 	j	ra
 	 addiu	k1, t0, -4
-END(_lock_ras)
+END(_restart_lock_ras)
 
+/*
+ * int ucas_32(volatile uint32_t *ptr, uint32_t old, uint32_t new, uint32_t *ret)
+ */
+LEAF(ucas_32)
+	PTR_L	v1, L_PCB(MIPS_CURLWP)
+	PTR_LA	v0, _C_LABEL(ucaserr)
+	PTR_S	v0, PCB_ONFAULT(v1)
+	bltz	a0, _C_LABEL(ucaserr)
+	 nop
+	b	_C_LABEL(_ucas_32_ras)
+	 move	v0, zero
+END(ucas_32)
+
+STRONG_ALIAS(ucas_int, ucas_32)
+STRONG_ALIAS(ucas_uint, ucas_32)
+STRONG_ALIAS(ucas_long, ucas_32)
+STRONG_ALIAS(ucas_ulong, ucas_32)
+STRONG_ALIAS(ucas_ptr, ucas_32)
 #endif	/* MIPS_HAS_LLSC == 0 */
+
+/*
+ *
+ */
+LEAF(ucaserr)
+	PTR_S	zero, PCB_ONFAULT(v1)		# reset fault handler
+	j	ra
+	 li	v0, EFAULT			# return EFAULT on error
+END(ucaserr)
 
 #ifndef LOCKDEBUG
 
@@ -419,33 +616,68 @@ END(_lock_ras)
  * void	mutex_spin_exit(kmutex_t *mtx);
  */
 LEAF(mutex_spin_exit)
+	PTR_L	t2, L_CPU(MIPS_CURLWP)
 #if defined(DIAGNOSTIC)
-	lw	t0, MTX_LOCK(a0)
+	INT_L	t0, MTX_LOCK(a0)
+	nop
 	SYNC
-	beq	t0, zero, 2f
-	 lw	t1, L_CPU(MIPS_CURLWP)
-	sw	zero, MTX_LOCK(a0)
+	beqz	t0, 2f
+	 nop
+	INT_S	zero, MTX_LOCK(a0)
 #elif defined(MULTIPROCESSOR)
 	SYNC
-	lw	t1, L_CPU(MIPS_CURLWP)
-	sw      zero, MTX_LOCK(a0)
-#else
-	lw	t1, L_CPU(MIPS_CURLWP)
+	INT_S	zero, MTX_LOCK(a0)
+#endif
+
+	/*
+	 * We need to grab this before the mutex count is incremented
+	 * because if we get an interrupt, it may see the count as zero
+	 * and overwrite the oldspl value with a bogus value.
+	 */
+#ifdef PARANOIA
+	INT_L	a2, MTX_IPL(a0)
 	nop
 #endif
-	lw	t0, CPU_INFO_MTX_COUNT(t1)
-	lw	a0, CPU_INFO_MTX_OLDSPL(t1)
-	addiu	t0, t0, 1
-	sw	t0, CPU_INFO_MTX_COUNT(t1)
-	bne	t0, zero, 1f
-	 mfc0	v0, MIPS_COP_0_STATUS
-	and	a0, a0, (MIPS_INT_MASK | MIPS_SR_INT_IE)
-	li	v1, ~(MIPS_INT_MASK | MIPS_SR_INT_IE)
-	and	v1, v1, v0
-	or	v1, v1, a0
-	DYNAMIC_STATUS_MASK(v1,t0)
-	mtc0	v1, MIPS_COP_0_STATUS
-	COP0_SYNC
+	INT_L	a0, CPU_INFO_MTX_OLDSPL(t2)
+
+	/*
+	 * Increment the mutex count
+	 */
+	INT_L	t0, CPU_INFO_MTX_COUNT(t2)
+	nop
+	INT_ADDU t0, t0, 1
+	INT_S	t0, CPU_INFO_MTX_COUNT(t2)
+
+	/*
+	 * If the IPL doesn't change, nothing to do
+	 */
+	INT_L	a1, CPU_INFO_CPL(t2)
+
+#ifdef PARANOIA
+	sltu	v0, a1, a2		# v0 = cpl < mtx_ipl
+	sltu	v1, a1, a0		# v1 = cpl < oldspl
+	sll	v0, 1
+	or	v0, v1
+12:	bnez	v0, 12b			# loop forever if either is true
+	 nop
+#endif /* PARANOIA */
+
+	beq	a0, a1, 1f		# if oldspl == cpl
+	 nop				#   no reason to drop ipl
+
+	bltz	t0, 1f			# there are still holders
+	 nop				# so don't drop IPL
+
+	/*
+	 * Mutex count is zero so we need to restore the old IPL
+	 */
+#ifdef PARANOIA
+	sltiu	v0, a0, IPL_HIGH+1
+13:	beqz	v0, 13b			# loop forever if ipl > IPL_HIGH
+	 nop
+#endif
+	j	 _C_LABEL(splx)
+	 nop
 1:
 	j	ra
 	 nop

@@ -1,4 +1,4 @@
-/*	$NetBSD: merge.c,v 1.11 2003/08/07 16:43:42 agc Exp $	*/
+/*	$NetBSD: merge.c,v 1.13 2011/05/18 19:36:36 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)merge.c	8.2 (Berkeley) 2/14/94";
 #else
-__RCSID("$NetBSD: merge.c,v 1.11 2003/08/07 16:43:42 agc Exp $");
+__RCSID("$NetBSD: merge.c,v 1.13 2011/05/18 19:36:36 dsl Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -67,10 +67,10 @@ __RCSID("$NetBSD: merge.c,v 1.11 2003/08/07 16:43:42 agc Exp $");
 __weak_alias(mergesort,_mergesort)
 #endif
 
-static void setup __P((u_char *, u_char *, size_t, size_t,
-    int (*)(const void *, const void *)));
-static void insertionsort __P((u_char *, size_t, size_t,
-    int (*)(const void *, const void *)));
+static void setup(u_char *, u_char *, size_t, size_t,
+    int (*)(const void *, const void *));
+static void insertionsort(u_char *, size_t, size_t,
+    int (*)(const void *, const void *));
 
 #define ISIZE sizeof(int)
 #define PSIZE sizeof(u_char *)
@@ -112,9 +112,10 @@ mergesort(base, nmemb, size, cmp)
 	void *base;
 	size_t nmemb;
 	size_t size;
-	int (*cmp) __P((const void *, const void *));
+	int (*cmp)(const void *, const void *);
 {
-	int i, sense;
+	size_t i;
+	int sense;
 	int big, iflag;
 	u_char *f1, *f2, *t, *b, *tp2, *q, *l1, *l2;
 	u_char *list2, *list1, *p2, *p, *last, **p1;
@@ -282,7 +283,7 @@ COPY:	    			b = t;
 void
 setup(list1, list2, n, size, cmp)
 	size_t n, size;
-	int (*cmp) __P((const void *, const void *));
+	int (*cmp)(const void *, const void *);
 	u_char *list1, *list2;
 {
 	int i, length, size2, tmp, sense;
@@ -361,7 +362,7 @@ static void
 insertionsort(a, n, size, cmp)
 	u_char *a;
 	size_t n, size;
-	int (*cmp) __P((const void *, const void *));
+	int (*cmp)(const void *, const void *);
 {
 	u_char *ai, *s, *t, *u, tmp;
 	int i;

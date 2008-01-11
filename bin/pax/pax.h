@@ -1,4 +1,4 @@
-/*	$NetBSD: pax.h,v 1.27 2007/12/02 21:36:44 wiz Exp $	*/
+/*	$NetBSD: pax.h,v 1.30 2009/04/07 19:52:35 perry Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -89,6 +89,7 @@ typedef struct pattern {
 	int		flgs;		/* processing/state flags */
 #define MTCH		0x1		/* pattern has been matched */
 #define DIR_MTCH	0x2		/* pattern matched a directory */
+#define NOGLOB_MTCH	0x4		/* non-globbing match */
 	struct pattern	*fow;		/* next pattern */
 } PATTERN;
 
@@ -268,7 +269,7 @@ typedef struct oplist {
 /*
  * Macros to manipulate off_t as a unsigned long or unsigned long long
  */
-#if defined(NET2_STAT) || defined(_LP64)
+#if defined(_LP64)
 #define	OFFT_F			"%lu"
 #define	OFFT_FP(x)		"%" x "lu"
 #define	OFFT_T			u_long
@@ -285,5 +286,5 @@ typedef struct oplist {
 #define	OFFT_ASC(w,x,y,z)	ull_asc((unsigned long long)w,x,y,z)
 #define	OFFT_OCT(w,x,y,z)	ull_oct((unsigned long long)w,x,y,z)
 #define	STRTOOFFT(x,y,z)	strtoll(x,y,z)
-#define	OFFT_MAX		ULLONG_MAX
+#define	OFFT_MAX		LLONG_MAX
 #endif

@@ -1,5 +1,7 @@
-#	$NetBSD: Makefile,v 1.20 2006/08/27 01:37:28 christos Exp $
+#	$NetBSD: Makefile,v 1.28 2011/03/06 17:08:16 bouyer Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
+
+WARNS?=	3	# XXX: sign-compare issues in ../fsck_ffs
 
 .include <bsd.own.mk>
 
@@ -16,19 +18,29 @@ FSCK_FFS=${NETBSDSRCDIR}/sbin/fsck_ffs
 CPPFLAGS+= -I${FSCK} -I${FSCK_FFS}
 .PATH:	${FSCK} ${FSCK_FFS} ${NETBSDSRCDIR}/sys/ufs/ffs
 
-LDADD+= -lutil -ledit -ltermcap
+SRCS+=	vfs_wapbl.c wapbl.c
+
+.PATH:	${NETBSDSRCDIR}/sys/ufs/ufs
+SRCS+=	quota2_subr.c
+
+.PATH:	${NETBSDSRCDIR}/sys/kern
+CPPFLAGS+=-DWAPBL_DEBUG_PRINT=0
+
+SRCS+=	quota2.c
+
+LDADD+= -lutil -ledit -lterminfo -lprop
 .ifndef HOSTPROG
-DPADD+= ${LIBUTIL} ${LIBEDIT} ${LIBTERMCAP}
+DPADD+= ${LIBUTIL} ${LIBEDIT} ${LIBTERMINFO} ${LIBPROP}
 .endif
 
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 .for f in fsdb ffs_appleufs
 COPTS.${f}.c+=	-Wno-pointer-sign
 .endfor
 .endif
 
-.if ${HAVE_GCC} == 4 && ${MACHINE_ARCH} == "m68000"
-COPTS.pass1.c+=	-O0
+.if ${MACHINE_ARCH} == "m68000"
+COPTS.pass1.c+=	-fno-tree-fre -fno-tree-lrs
 .endif
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: hfs_vfsops.c,v 1.13 2007/12/08 19:29:43 pooka Exp $	*/
+/*	$NetBSD: hfs_vfsops.c,v 1.26 2010/06/24 13:03:09 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2007 The NetBSD Foundation, Inc.
@@ -99,7 +99,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hfs_vfsops.c,v 1.13 2007/12/08 19:29:43 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hfs_vfsops.c,v 1.26 2010/06/24 13:03:09 hannken Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -127,15 +127,19 @@ __KERNEL_RCSID(0, "$NetBSD: hfs_vfsops.c,v 1.13 2007/12/08 19:29:43 pooka Exp $"
 #include <sys/conf.h>
 #include <sys/kauth.h>
 #include <sys/stat.h>
+#include <sys/module.h>
 
+#include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h>
 
 #include <fs/hfs/hfs.h>
 #include <fs/hfs/libhfs.h>
 
+MODULE(MODULE_CLASS_VFS, hfs, NULL);
+
 MALLOC_JUSTDEFINE(M_HFSMNT, "hfs mount", "hfs mount structures");
 
-extern struct lock hfs_hashlock;
+extern kmutex_t hfs_hashlock;
 
 const struct vnodeopv_desc * const hfs_vnodeopv_descs[] = {
 	&hfs_vnodeop_opv_desc,
@@ -164,21 +168,36 @@ struct vfsops hfs_vfsops = {
 	NULL,				/* vfs_snapshot */
 	vfs_stdextattrctl,
 	(void *)eopnotsupp,		/* vfs_suspendctl */
+	genfs_renamelock_enter,
+	genfs_renamelock_exit,
+	(void *)eopnotsupp,
 	hfs_vnodeopv_descs,
 	0,
 	{ NULL, NULL },
 };
-VFS_ATTACH(hfs_vfsops); /* XXX Is this needed? */
 
 static const struct genfs_ops hfs_genfsops = {
         .gop_size = genfs_size,
 };
 
+static int
+hfs_modcmd(modcmd_t cmd, void *arg)
+{
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		return vfs_attach(&hfs_vfsops);
+	case MODULE_CMD_FINI:
+		return vfs_detach(&hfs_vfsops);
+	default:
+		return ENOTTY;
+	}
+}
+
 int
 hfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
-	struct nameidata nd;
 	struct hfs_args *args = data;
 	struct vnode *devvp;
 	struct hfsmount *hmp;
@@ -217,10 +236,10 @@ hfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		/*
 		 * Look up the name and verify that it's sane.
 		 */
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec);
-		if ((error = namei(&nd)) != 0)
+		error = namei_simple_user(args->fspec,
+					NSM_FOLLOW_NOEMULROOT, &devvp);
+		if (error != 0)
 			return error;
-		devvp = nd.ni_vp;
 	
 		if (!update) {
 			/*
@@ -255,17 +274,20 @@ hfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	/*
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
+	 *
+	 * Permission to update a mount is checked higher, so here we presume
+	 * updating the mount is okay (for example, as far as securelevel goes)
+	 * which leaves us with the normal check.
 	 */
-	if (error == 0 && kauth_authorize_generic(l->l_cred,
-            KAUTH_GENERIC_ISSUSER, NULL) != 0) {
+	if (error == 0) {
 		accessmode = VREAD;
 		if (update ?
 			(mp->mnt_iflag & IMNT_WANTRDWR) != 0 :
 			(mp->mnt_flag & MNT_RDONLY) == 0)
 			accessmode |= VWRITE;
 		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-		error = VOP_ACCESS(devvp, accessmode, l->l_cred);
-		VOP_UNLOCK(devvp, 0);
+		error = genfs_can_mount(devvp, accessmode, l->l_cred);
+		VOP_UNLOCK(devvp);
 	}
 
 	if (error != 0)
@@ -274,19 +296,6 @@ hfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	if (update) {
 		printf("HFS: live remounting not yet supported!\n");
 		error = EINVAL;
-		goto error;
-	}
-
-	/*
-	 * Disallow multiple mounts of the same device.
-	 * Disallow mounting of a device that is currently in use
-	 * (except for root, which might share swap device for miniroot).
-	 * Flush out any old buffers remaining from a previous use.
-	 */
-	if ((error = vfs_mountedon(devvp)) != 0)
-		goto error;
-	if (vcount(devvp) > 1 && devvp != rootvp) {
-		error = EBUSY;
 		goto error;
 	}
 
@@ -429,7 +438,7 @@ hfs_unmount(struct mount *mp, int mntflags)
 	cbargs.closevol = (void*)&argsclose;
 	hfslib_close_volume(&hmp->hm_vol, &cbargs);
 	
-	vput(hmp->hm_devvp);
+	vrele(hmp->hm_devvp);
 
 	free(hmp, M_HFSMNT);
 	mp->mnt_data = NULL;
@@ -531,6 +540,7 @@ hfs_vget_internal(struct mount *mp, ino_t ino, uint8_t fork,
 	if (fork != HFS_RSRCFORK)
 	    fork = HFS_DATAFORK;
 
+ retry:
 	/* Check if this vnode has already been allocated. If so, just return it. */
 	if ((*vpp = hfs_nhashget(dev, cnid, fork, LK_EXCLUSIVE)) != NULL)
 		return 0;
@@ -538,24 +548,22 @@ hfs_vget_internal(struct mount *mp, ino_t ino, uint8_t fork,
 	/* Allocate a new vnode/inode. */
 	if ((error = getnewvnode(VT_HFS, mp, hfs_vnodeop_p, &vp)) != 0)
 		goto error;
+	hnode = malloc(sizeof(struct hfsnode), M_TEMP,
+		M_WAITOK | M_ZERO);
 
 	/*
 	 * If someone beat us to it while sleeping in getnewvnode(),
 	 * push back the freshly allocated vnode we don't need, and return.
 	 */
+	mutex_enter(&hfs_hashlock);
+	if (hfs_nhashget(dev, cnid, fork, 0) != NULL) {
+		mutex_exit(&hfs_hashlock);
+		ungetnewvnode(vp);
+		free(hnode, M_TEMP);
+		goto retry;
+	}
 
-	do {
-		if ((*vpp = hfs_nhashget(dev, cnid, fork, LK_EXCLUSIVE))
-		    != NULL) {
-			ungetnewvnode(vp);
-			return 0;
-		}
-	} while (lockmgr(&hfs_hashlock, LK_EXCLUSIVE|LK_SLEEPFAIL, 0));
-
-	vp->v_vflag |= VV_LOCKSWORK;
-	
-	MALLOC(hnode, struct hfsnode *, sizeof(struct hfsnode), M_TEMP,
-		M_WAITOK + M_ZERO);
+	vp->v_vflag |= VV_LOCKSWORK;	
 	vp->v_data = hnode;
 	genfs_node_init(vp, &hfs_genfsops);
 	
@@ -573,11 +581,11 @@ hfs_vget_internal(struct mount *mp, ino_t ino, uint8_t fork,
 	 * to read the disk.
 	 */
 	hnode->h_dev = dev;
-	hnode->h_rec.cnid = cnid;
+	hnode->h_rec.u.cnid = cnid;
 	hnode->h_fork = fork;
 
 	hfs_nhashinsert(hnode);
-	lockmgr(&hfs_hashlock, LK_RELEASE, 0);
+	mutex_exit(&hfs_hashlock);
 
 
 	/*
@@ -610,10 +618,10 @@ hfs_vget_internal(struct mount *mp, ino_t ino, uint8_t fork,
 	hfs_vinit(mp, hfs_specop_p, hfs_fifoop_p, &vp);
 
 	hnode->h_devvp = hmp->hm_devvp;	
-	VREF(hnode->h_devvp);  /* Increment the ref count to the volume's device. */
+	vref(hnode->h_devvp);  /* Increment the ref count to the volume's device. */
 
 	/* Make sure UVM has allocated enough memory. (?) */
-	if (hnode->h_rec.rec_type == HFS_REC_FILE) {
+	if (hnode->h_rec.u.rec_type == HFS_REC_FILE) {
 		if (hnode->h_fork == HFS_DATAFORK)
 			uvm_vnp_setsize(vp,
 			    hnode->h_rec.file.data_fork.logical_size);

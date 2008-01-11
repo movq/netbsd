@@ -1,14 +1,5 @@
-#	$NetBSD: Makefile,v 1.7 1998/12/15 22:07:11 pk Exp $
-#
-# ldd(1) is toolchain dependent
-#
+#	$NetBSD: Makefile,v 1.16 2011/04/15 08:47:02 plunky Exp $
 
-.include <bsd.own.mk>			# get OBJECT_FMT definition
-
-.if (${OBJECT_FMT} == "ELF")
-SUBDIR+= ldd_elf
-.else
-SUBDIR+= ldd_aout
-.endif
+SUBDIR+= 	elf32 elf64 elf32_compat .WAIT build
 
 .include <bsd.subdir.mk>

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.26 2007/05/28 12:06:19 tls Exp $
+# $NetBSD: Makefile,v 1.28 2008/08/29 00:02:22 gmcgarry Exp $
 
 USE_FORT?= yes	# network protocol library
 
@@ -33,6 +33,7 @@ CLEANFILES+=	kadm5_err.h kadm5_err.c
 
 SRCS	 =					\
 	acl.c					\
+	ad.c					\
 	bump_pw_expire.c			\
 	chpass_c.c				\
 	chpass_s.c				\
@@ -73,6 +74,8 @@ SRCS	 =					\
 	set_modifier.c				\
 	$(ERR_FILES)
 
+MAN= kadm5_pwcheck.3
+
 ASN1!=		cd ${NETBSDSRCDIR}/lib/libasn1 && ${PRINTOBJDIR}
 KRB5!=		cd ${NETBSDSRCDIR}/lib/libkrb5 && ${PRINTOBJDIR}
 HDB!=		cd ${NETBSDSRCDIR}/lib/libhdb && ${PRINTOBJDIR}
@@ -99,7 +102,7 @@ CPPFLAGS+=-DHAVE_IPV6
 CPPFLAGS+=	-DNO_DLOPEN
 .endif
 
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 COPTS.marshall.c+=	-Wno-pointer-sign
 .endif
 

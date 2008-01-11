@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_32_filio.c,v 1.13 2008/01/05 19:14:09 dsl Exp $	 */
+/*	$NetBSD: svr4_32_filio.c,v 1.17 2009/05/24 21:41:25 ad Exp $	 */
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_filio.c,v 1.13 2008/01/05 19:14:09 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_filio.c,v 1.17 2009/05/24 21:41:25 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -66,28 +59,31 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_filio.c,v 1.13 2008/01/05 19:14:09 dsl Exp $
 
 
 int
-svr4_32_fil_ioctl(struct file *fp, struct lwp *l, register_t *retval, int fd, u_long cmd, void *data)
+svr4_32_fil_ioctl(file_t *fp, struct lwp *l, register_t *retval, int fd, u_long cmd, void *data)
 {
 	int error;
 	int num;
-	struct filedesc *fdp = p->p_fd;
-	int (*ctl)(struct file *, u_long, void *, struct lwp *) =
-			fp->f_ops->fo_ioctl;
+	int (*ctl)(file_t *, u_long, void *) = fp->f_ops->fo_ioctl;
+	filedesc_t *fdp;
+	fdfile_t *ff;
 
 	*retval = 0;
 
-        if ((fp = fd_getfile(fdp, fd)) == NULL)
+        if ((fp = fd_getfile(fd)) == NULL)
                 return EBADF;
+	fdp = curlwp->l_fd;
+	ff = fdp->fd_dt->dt_ff[fd];
+	error = 0;
+
 	switch (cmd) {
 	case SVR4_FIOCLEX:
-		fdp->fd_ofileflags[fd] |= UF_EXCLOSE;
-		FILE_UNLOCK(fp);
-		return 0;
+		ff->ff_exclose = true;
+		fdp->fd_exclose = true;
+		break;
 
 	case SVR4_FIONCLEX:
-		fdp->fd_ofileflags[fd] &= ~UF_EXCLOSE;
-		FILE_UNLOCK(fp);
-		return 0;
+		ff->ff_exclose = false;
+		break;
 
 	case SVR4_FIOGETOWN:
 	case SVR4_FIOSETOWN:
@@ -102,21 +98,19 @@ svr4_32_fil_ioctl(struct file *fp, struct lwp *l, register_t *retval, int fd, u_
 		case SVR4_FIONREAD:	cmd = FIONREAD;  break;
 		}
 
-		FILE_USE(fp);
 		error = copyin(data, &num, sizeof(num));
 
 		if (error == 0)
-			error = (*ctl)(fp, cmd,  &num, p);
-		FILE_UNUSE(fp, l);
-
-		if (error)
-			return error;
-
-		return copyout(&num, data, sizeof(num));
+			error = (*ctl)(fp, cmd,  &num);
+		if (error == 0)
+			error = copyout(&num, data, sizeof(num));
+		break;
 
 	default:
-		FILE_UNLOCK(fp);
 		DPRINTF(("Unknown svr4_32 filio %lx\n", cmd));
-		return 0;	/* ENOSYS really */
+		break;
 	}
+
+	fd_putfile(fd);
+	return error;
 }

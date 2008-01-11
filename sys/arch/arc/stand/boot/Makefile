@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.6 2006/08/28 13:42:39 tsutsui Exp $
+# $NetBSD: Makefile,v 1.12 2011/02/20 07:52:43 matt Exp $
 
 .include <bsd.own.mk>
 .include <bsd.sys.mk>	# for ${HOST_SH}
@@ -12,8 +12,12 @@ BINMODE= 444
 
 NETBSD_VERS!=	${HOST_SH} ${S}/conf/osrelease.sh
 
-SRCS=	start.S
+.PATH:		${S}/dev/arcbios
+
+SRCS=	start.S arcbios_calls.S
 SRCS+=	boot.c bootinfo.c conf.c devopen.c disk.c getchar.c getopt.c putchar.c
+
+.include "${S}/dev/arcbios/Makefile.inc"
 
 # XXX SHOULD NOT NEED TO DEFINE THESE!
 LIBCRT0=
@@ -21,40 +25,25 @@ LIBC=
 LIBCRTBEGIN=
 LIBCRTEND=
 
-AFLAGS=    -x assembler-with-cpp -traditional-cpp -mno-abicalls -mips2
+AFLAGS=    -x assembler-with-cpp -mno-abicalls -mips2
 AFLAGS+=   -D_LOCORE -D_KERNEL
 CFLAGS=    -Os -mmemcpy -G 1024
-CFLAGS+=   -ffreestanding -mno-abicalls -msoft-float -mips2
+CFLAGS+=   -ffreestanding -mno-abicalls -msoft-float -mips2 -mabi=32
 CFLAGS+=   -Werror -Wall -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 CPPFLAGS+= -nostdinc -I. -I${S}
 CPPFLAGS+= -D_STANDALONE -DNO_ABICALLS -D${MACHINE}
-CPPFLAGS+= -DLIBSA_USE_MEMSET -DLIBSA_USE_MEMCPY
 CPPFLAGS+= -DNETBSD_VERS='"${NETBSD_VERS}"'
 #CPPFLAGS+= -DBOOT_DEBUG
 LDSCRIPT=  ${S}/arch/mips/conf/stand.ldscript
 TEXTADDR=  0x80f00000
-
-.if !make(obj) && !make(clean) && !make(cleandir)
-.BEGIN: machine mips
-.NOPATH: machine mips
-
-machine::
-	-rm -f $@
-	ln -s ${S}/arch/${MACHINE}/include $@
-
-mips::
-	-rm -f $@
-	ln -s ${S}/arch/mips/include $@
-.endif
-
-CLEANFILES+= machine mips
 
 # if there is a 'version' file, add rule for vers.c and add it to SRCS
 # and CLEANFILES
 .if exists(version)
 .PHONY: vers.c
 vers.c: ${.CURDIR}/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/version ${MACHINE}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${.CURDIR}/version ${MACHINE}
 
 SRCS+=	vers.c
 CLEANFILES+= vers.c
@@ -75,7 +64,7 @@ LIBZ=    ${ZLIB}
 
 LIBS=  ${LIBSA} ${LIBKERN} ${LIBZ}
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 cleanlibdir:
 	-rm -rf lib
 
@@ -89,4 +78,5 @@ ${PROG}: ${OBJS} ${LIBS}
 
 CLEANFILES+=	${PROG}.elf ${PROG}.map
 
+.include <bsd.klinks.mk>
 .include <bsd.prog.mk>

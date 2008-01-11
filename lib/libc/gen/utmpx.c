@@ -1,4 +1,4 @@
-/*	$NetBSD: utmpx.c,v 1.24 2006/11/26 17:33:23 christos Exp $	 */
+/*	$NetBSD: utmpx.c,v 1.26 2009/01/11 02:46:27 christos Exp $	 */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: utmpx.c,v 1.24 2006/11/26 17:33:23 christos Exp $");
+__RCSID("$NetBSD: utmpx.c,v 1.26 2009/01/11 02:46:27 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -63,12 +56,38 @@ __RCSID("$NetBSD: utmpx.c,v 1.24 2006/11/26 17:33:23 christos Exp $");
 
 static FILE *fp;
 static int readonly = 0;
+static int version = 1;
 static struct utmpx ut;
 static char utfile[MAXPATHLEN] = _PATH_UTMPX;
 
 static struct utmpx *utmp_update(const struct utmpx *);
 
-static const char vers[] = "utmpx-1.00";
+static const char vers[] = "utmpx-2.00";
+
+struct otimeval {
+	long tv_sec;
+	long tv_usec;
+};
+
+static void
+old2new(struct utmpx *utx)
+{
+	struct otimeval otv;
+	struct timeval *tv = &utx->ut_tv;
+	(void)memcpy(&otv, tv, sizeof(otv));
+	tv->tv_sec = otv.tv_sec;
+	tv->tv_usec = otv.tv_usec;
+}
+
+static void
+new2old(struct utmpx *utx)
+{
+	struct timeval tv;
+	struct otimeval *otv = (void *)&utx->ut_tv;
+	(void)memcpy(&tv, otv, sizeof(tv));
+	otv->tv_sec = (long)tv.tv_sec;
+	otv->tv_usec = (long)tv.tv_usec;
+}
 
 void
 setutxent()
@@ -125,14 +144,17 @@ getutxent()
 			/* old file, read signature record */
 			if (fread(&ut, sizeof(ut), 1, fp) != 1)
 				goto failclose;
-			if (memcmp(ut.ut_user, vers, sizeof(vers)) != 0 ||
+			if (memcmp(ut.ut_user, vers, 5) != 0 ||
 			    ut.ut_type != SIGNATURE)
 				goto failclose;
 		}
+		version = ut.ut_user[6] - '0';
 	}
 
 	if (fread(&ut, sizeof(ut), 1, fp) != 1)
 		goto fail;
+	if (version == 1)
+		old2new(&ut);
 
 	return &ut;
 failclose:
@@ -255,6 +277,8 @@ pututxline(const struct utmpx *utx)
 			return NULL;
 	}
 
+	if (version == 1)
+		new2old(&temp);
 	if (fwrite(&temp, sizeof (temp), 1, fp) != 1)
 		goto fail;
 

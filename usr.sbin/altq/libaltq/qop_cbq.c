@@ -1,4 +1,4 @@
-/*	$NetBSD: qop_cbq.c,v 1.6 2002/05/31 06:53:48 itojun Exp $	*/
+/*	$NetBSD: qop_cbq.c,v 1.9 2010/01/06 06:30:37 mbalmer Exp $	*/
 /*	$KAME: qop_cbq.c,v 1.7 2002/05/31 06:03:35 kjc Exp $	*/
 /*
  * Copyright (c) Sun Microsystems, Inc. 1993-1998 All rights reserved.
@@ -421,9 +421,10 @@ qcmd_cbq_add_ctl_filters(const char *ifname, const char *clname)
 	struct flow_filter6	sfilt6;
 	u_int8_t ctl6_protos[3] = {IPPROTO_ICMPV6, IPPROTO_IGMP, IPPROTO_RSVP};
 #endif
-	int error, i;
+	int error;
+	size_t i;
 
-	for (i = 0; i < (int)sizeof(ctl_protos); i++) {
+	for (i = 0; i < sizeof(ctl_protos); i++) {
 		memset(&sfilt, 0, sizeof(sfilt));
 		sfilt.ff_flow.fi_family = AF_INET;
 		sfilt.ff_flow.fi_proto = ctl_protos[i];
@@ -556,7 +557,7 @@ qop_cbq_add_class(struct classinfo **rp, const char *class_name,
 	cbq_clinfo->bandwidth = bandwidth;
 	cbq_clinfo->allocated = 0;
 
-	/* if average paket size isn't specified, set if mtu. */
+	/* if average packet size isn't specified, set if mtu. */
 	if (av_pkt_size == 0) {	/* use default */
 		av_pkt_size = ifinfo->ifmtu;
 		if (av_pkt_size > MCLBYTES)	/* do what TCP does */
@@ -681,7 +682,7 @@ qop_cbq_modify_class(struct classinfo *clinfo, u_int pri, u_int bandwidth,
 		}
 	}
 
-	/* if average paket size isn't specified, set if mtu. */
+	/* if average packet size isn't specified, set if mtu. */
 	if (av_pkt_size == 0) {	/* use default */
 		av_pkt_size = ifinfo->ifmtu;
 		if (av_pkt_size > MCLBYTES)	/* do what TCP does */
@@ -755,7 +756,7 @@ cbq_class_spec(struct ifinfo *ifinfo, u_long parent_class,
 {
 	struct cbq_ifinfo *cbq_ifinfo = ifinfo->private;
 	double          maxq, maxidle_s, maxidle, minidle,
-			offtime, nsPerByte, ptime, cptime;
+			lofftime, nsPerByte, ptime, cptime;
 	double		z = (double)(1 << RM_FILTER_GAIN);
 	double          g = (1.0 - 1.0 / z);
 	double          f;
@@ -836,22 +837,22 @@ cbq_class_spec(struct ifinfo *ifinfo, u_long parent_class,
 	if (IsDebug(DEBUG_ALTQ))
 		LOG(LOG_DEBUG, 0, "  maxidle=%.2f us", maxidle/1000.0);
 	if (minburst)
-		offtime = cptime * (1.0 + 1.0/(1.0 - g) * (1.0 - gtom) / gtom);
+		lofftime = cptime * (1.0 + 1.0/(1.0 - g) * (1.0 - gtom) / gtom);
 	else
-		offtime = cptime;
+		lofftime = cptime;
 	minidle = -((double)max_pkt_size * (double)nsPerByte);
 	if (IsDebug(DEBUG_ALTQ))
-		LOG(LOG_DEBUG, 0, "  offtime=%.2f us minidle=%.2f us",
-		    offtime/1000.0, minidle/1000.0);
+		LOG(LOG_DEBUG, 0, "  lofftime=%.2f us minidle=%.2f us",
+		    lofftime/1000.0, minidle/1000.0);
 
 	maxidle = ((maxidle * 8.0) / nsPerByte) * pow(2, RM_FILTER_GAIN);
 #if 1 /* ALTQ */
-	/* also scale offtime and minidle */
- 	offtime = (offtime * 8.0) / nsPerByte * pow(2, RM_FILTER_GAIN);
+	/* also scale lofftime and minidle */
+ 	lofftime = (lofftime * 8.0) / nsPerByte * pow(2, RM_FILTER_GAIN);
 	minidle = ((minidle * 8.0) / nsPerByte) * pow(2, RM_FILTER_GAIN);
 #endif
 	maxidle = maxidle / 1000.0;
-	offtime = offtime / 1000.0;
+	lofftime = lofftime / 1000.0;
 	minidle = minidle / 1000.0;
 	/* adjust queue size when maxdelay is specified.
 	   queue size should be relative to its share */
@@ -898,7 +899,7 @@ cbq_class_spec(struct ifinfo *ifinfo, u_long parent_class,
 	cl_spec->maxq = (u_int) maxq;
 	cl_spec->maxidle = (u_int) fabs(maxidle);
 	cl_spec->minidle = (int)minidle;
-	cl_spec->offtime = (u_int) fabs(offtime);
+	cl_spec->offtime = (u_int) fabs(lofftime);
 
 	cl_spec->parent_class_handle = parent_class;
 	cl_spec->borrow_class_handle = borrow_class;

@@ -1,4 +1,4 @@
-/*	$NetBSD: recvjob.c,v 1.20 2005/11/28 03:26:06 christos Exp $	*/
+/*	$NetBSD: recvjob.c,v 1.22 2009/01/18 09:57:26 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -33,15 +33,15 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)recvjob.c	8.2 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: recvjob.c,v 1.20 2005/11/28 03:26:06 christos Exp $");
+__RCSID("$NetBSD: recvjob.c,v 1.22 2009/01/18 09:57:26 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -143,8 +143,8 @@ readjob(void)
 					    printer);
 				return(nfiles);
 			}
-		} while (*cp++ != '\n' && (cp - line + 1) < sizeof(line));
-		if (cp - line + 1 >= sizeof(line))
+		} while (*cp++ != '\n' && (size_t)(cp - line + 1) < sizeof(line));
+		if ((size_t)(cp - line + 1) >= sizeof(line))
 			frecverr("readjob overflow");
 		*--cp = '\0';
 		cp = line;

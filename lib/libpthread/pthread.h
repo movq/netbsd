@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread.h,v 1.24 2007/12/24 14:46:28 ad Exp $	*/
+/*	$NetBSD: pthread.h,v 1.34 2010/08/06 05:25:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,6 +36,7 @@
 
 #include <time.h>	/* For timespec */
 #include <sched.h>
+#include <sys/featuretest.h>
 
 #include <pthread_types.h>
 
@@ -111,8 +105,10 @@ int	pthread_cond_init(pthread_cond_t * __restrict,
 int	pthread_cond_destroy(pthread_cond_t *);
 int	pthread_cond_wait(pthread_cond_t * __restrict,
 	    pthread_mutex_t * __restrict);
+#ifndef __LIBC12_SOURCE__
 int	pthread_cond_timedwait(pthread_cond_t * __restrict,
 	    pthread_mutex_t * __restrict, const struct timespec * __restrict);
+#endif
 int	pthread_cond_signal(pthread_cond_t *);
 int	pthread_cond_broadcast(pthread_cond_t *);
 int	pthread_condattr_init(pthread_condattr_t *);
@@ -168,10 +164,12 @@ int	pthread_rwlock_rdlock(pthread_rwlock_t *);
 int	pthread_rwlock_tryrdlock(pthread_rwlock_t *);
 int	pthread_rwlock_wrlock(pthread_rwlock_t *);
 int	pthread_rwlock_trywrlock(pthread_rwlock_t *);
+#ifndef __LIBC12_SOURCE__
 int	pthread_rwlock_timedrdlock(pthread_rwlock_t * __restrict,
 	    const struct timespec * __restrict);
 int	pthread_rwlock_timedwrlock(pthread_rwlock_t * __restrict,
 	    const struct timespec * __restrict);
+#endif
 int	pthread_rwlock_unlock(pthread_rwlock_t *);
 int	pthread_rwlockattr_init(pthread_rwlockattr_t *);
 int	pthread_rwlockattr_destroy(pthread_rwlockattr_t *);
@@ -186,16 +184,23 @@ int	pthread_barrierattr_destroy(pthread_barrierattr_t *);
 int	pthread_getschedparam(pthread_t, int * __restrict,
 	    struct sched_param * __restrict);
 int	pthread_setschedparam(pthread_t, int, const struct sched_param *);
+int	pthread_setschedprio(pthread_t, int);
 
 int 	*pthread__errno(void);
 
 #if defined(_NETBSD_SOURCE)
+int	pthread_getaffinity_np(pthread_t, size_t, cpuset_t *);
+int	pthread_setaffinity_np(pthread_t, size_t, cpuset_t *);
+int	pthread_getattr_np(pthread_t, pthread_attr_t *);
+
 int	pthread_mutex_held_np(pthread_mutex_t *);
 pthread_t pthread_mutex_owner_np(pthread_mutex_t *);
 
 int	pthread_rwlock_held_np(pthread_rwlock_t *);
 int	pthread_rwlock_wrheld_np(pthread_rwlock_t *);
 int	pthread_rwlock_rdheld_np(pthread_rwlock_t *);
+
+int	pthread_cond_has_waiters_np(pthread_cond_t *);
 #endif	/* _NETBSD_SOURCE */
 
 __END_DECLS
@@ -310,8 +315,10 @@ int	__libc_cond_signal(pthread_cond_t *);
 int	__libc_cond_broadcast(pthread_cond_t *);
 int	__libc_cond_wait(pthread_cond_t * __restrict,
 	    pthread_mutex_t * __restrict);
+#ifndef __LIBC12_SOURCE__
 int	__libc_cond_timedwait(pthread_cond_t * __restrict,
 	    pthread_mutex_t * __restrict, const struct timespec * __restrict);
+#endif
 int	__libc_cond_destroy(pthread_cond_t *);
 __END_DECLS
 

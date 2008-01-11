@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.94 2007/12/09 09:16:28 apb Exp $	*/
+/*	$NetBSD: init.c,v 1.100 2009/12/29 17:07:17 elad Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n"
-"	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)init.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: init.c,v 1.94 2007/12/09 09:16:28 apb Exp $");
+__RCSID("$NetBSD: init.c,v 1.100 2009/12/29 17:07:17 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -170,8 +170,10 @@ void collect_child(pid_t, int);
 pid_t start_getty(session_t *);
 void transition_handler(int);
 void alrm_handler(int);
+int has_securelevel(void);
 void setsecuritylevel(int);
 int getsecuritylevel(void);
+int securelevel_present;
 int setupargv(session_t *, struct ttyent *);
 int clang;
 
@@ -323,6 +325,13 @@ main(int argc, char **argv)
 	/* Create "init.root" sysctl node. */
 	(void)createsysctlnode();
 #endif /* !LETS_GET_SMALL && CHROOT*/
+
+	/*
+	 * Securelevel might not be supported by the kernel. Query for it, and
+	 * set a variable indicating whether we should attempt anything with it
+	 * or not.
+	 */
+	securelevel_present = has_securelevel();
 
 	/*
 	 * Start the state machine.
@@ -481,6 +490,30 @@ disaster(int sig)
 }
 
 /*
+ * Check if securelevel is present.
+ */
+int
+has_securelevel(void)
+{
+#ifdef KERN_SECURELVL
+	int name[2], curlevel;
+	size_t len;
+
+	name[0] = CTL_KERN;
+	name[1] = KERN_SECURELVL;
+	len = sizeof curlevel;
+	if (sysctl(name, 2, &curlevel, &len, NULL, 0) == -1) {
+		/* If it doesn't exist, it's okay. */
+		if (errno == ENOENT) 
+			return 0;
+	}
+	return 1;
+#else
+	return 0;
+#endif
+}
+
+/*
  * Get the security level of the kernel.
  */
 int
@@ -489,6 +522,9 @@ getsecuritylevel(void)
 #ifdef KERN_SECURELVL
 	int name[2], curlevel;
 	size_t len;
+
+	if (!securelevel_present)
+		return -1;
 
 	name[0] = CTL_KERN;
 	name[1] = KERN_SECURELVL;
@@ -511,6 +547,9 @@ setsecuritylevel(int newlevel)
 {
 #ifdef KERN_SECURELVL
 	int name[2], curlevel;
+
+	if (!securelevel_present)
+		return;
 
 	curlevel = getsecuritylevel();
 	if (newlevel == curlevel)
@@ -1138,7 +1177,7 @@ read_ttys(void)
 		make_utmpx("", BOOT_MSG, BOOT_TIME, 0, &boot_time, 0);
 
 		/*
-		 * If wtmpx is not empty, pick the the down time from there
+		 * If wtmpx is not empty, pick the down time from there
 		 */
 		if (stat(_PATH_WTMPX, &st) != -1 && st.st_size != 0) {
 			struct timeval down_time;
@@ -1304,7 +1343,7 @@ make_utmpx(const char *name, const char *line, int type, pid_t pid,
 	ut.ut_session = session;
 
 	eline = line + strlen(line);
-	if (eline - line >= sizeof(ut.ut_id))
+	if ((size_t)(eline - line) >= sizeof(ut.ut_id))
 		line = eline - sizeof(ut.ut_id);
 	(void)strncpy(ut.ut_id, line, sizeof(ut.ut_id));
 
@@ -1622,8 +1661,6 @@ mfs_dev(void)
 	/* Mount an mfs over /mnt so we can create a console entry */
 	switch ((pid = fork())) {
 	case 0:
-		if (fs_size == NULL)
-			return(-1);
 		(void)execl(INIT_MOUNT_MFS, "mount_mfs",
 		    "-b", "4096", "-f", "512",
 		    "-s", 64, "-n", 10,
@@ -1644,6 +1681,7 @@ mfs_dev(void)
 	}
 
 	{
+		dev_t dev;
 #ifdef CPU_CONSDEV
 		static int name[2] = { CTL_MACHDEP, CPU_CONSDEV };
 		size_t olen;
@@ -1652,13 +1690,13 @@ mfs_dev(void)
 		    NULL, 0) == -1)
 #endif
 			dev = makedev(0, 0);
+
+		/* Make a console for us, so we can see things happening */
+		if (mknod("/mnt/console", 0666 | S_IFCHR, dev) == -1)
+			return(-1);
+		(void)freopen("/mnt/console", "a", stderr);
 	}
 
-	/* Make a console for us, so we can see things happening */
-	if (mknod("/mnt/console", 0666 | S_IFCHR, dev) == -1)
-		return(-1);
-
-	(void)freopen("/mnt/console", "a", stderr);
 #endif
 
 	/* Run the makedev script to create devices */
@@ -1679,11 +1717,12 @@ mfs_dev(void)
 	default:
 		if (waitpid(pid, &status, 0) == -1)
 			break;
-		if (status != 0) {
-			errno = EINVAL;
-			break;
-		}
-		/* Check /dev/console got created */
+		if (status != 0)
+			warn("MAKEDEV exit status %d\n", status);
+		/*
+		 * If /dev/console got created, then return 0
+		 * regardless of MAKEDEV exit status.
+		 */
 		if (access(_PATH_CONSOLE, F_OK) == 0)
 			return 0;
 		_exit(11);

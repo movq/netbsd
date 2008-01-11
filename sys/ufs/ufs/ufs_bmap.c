@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_bmap.c,v 1.47 2008/01/02 11:49:13 ad Exp $	*/
+/*	$NetBSD: ufs_bmap.c,v 1.49 2011/03/06 17:08:39 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.47 2008/01/02 11:49:13 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.49 2011/03/06 17:08:39 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -164,11 +164,13 @@ ufs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 		 * return a request for a zeroed out buffer if attempts
 		 * are made to read a BLK_NOCOPY or BLK_SNAP block.
 		 */
-		if ((ip->i_flags & SF_SNAPSHOT) && daddr > 0 &&
+		if ((ip->i_flags & (SF_SNAPSHOT | SF_SNAPINVAL)) == SF_SNAPSHOT
+		    && daddr > 0 &&
 		    daddr < ump->um_seqinc) {
 			*bnp = -1;
 		} else if (*bnp == 0) {
-			if (ip->i_flags & SF_SNAPSHOT) {
+			if ((ip->i_flags & (SF_SNAPSHOT | SF_SNAPINVAL))
+			    == SF_SNAPSHOT) {
 				*bnp = blkptrtodb(ump, bn * ump->um_seqinc);
 			} else {
 				*bnp = -1;
@@ -261,7 +263,7 @@ ufs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 			bp->b_flags |= B_READ;
 			BIO_SETPRIO(bp, BPRIO_TIMECRITICAL);
 			VOP_STRATEGY(vp, bp);
-			curproc->p_stats->p_ru.ru_inblock++;	/* XXX */
+			curlwp->l_ru.ru_inblock++;	/* XXX */
 			if ((error = biowait(bp)) != 0) {
 				brelse(bp, 0);
 				return (error);
@@ -305,14 +307,15 @@ ufs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 	 * return a request for a zeroed out buffer if attempts are made
 	 * to read a BLK_NOCOPY or BLK_SNAP block.
 	 */
-	if ((ip->i_flags & SF_SNAPSHOT) && daddr > 0 &&
-	    daddr < ump->um_seqinc) {
+	if ((ip->i_flags & (SF_SNAPSHOT | SF_SNAPINVAL)) == SF_SNAPSHOT
+	    && daddr > 0 && daddr < ump->um_seqinc) {
 		*bnp = -1;
 		return (0);
 	}
 	*bnp = blkptrtodb(ump, daddr);
 	if (*bnp == 0) {
-		if (ip->i_flags & SF_SNAPSHOT) {
+		if ((ip->i_flags & (SF_SNAPSHOT | SF_SNAPINVAL))
+		    == SF_SNAPSHOT) {
 			*bnp = blkptrtodb(ump, bn * ump->um_seqinc);
 		} else {
 			*bnp = -1;

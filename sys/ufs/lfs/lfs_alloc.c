@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_alloc.c,v 1.105 2008/01/02 11:49:10 ad Exp $	*/
+/*	$NetBSD: lfs_alloc.c,v 1.110 2010/06/24 13:03:19 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.105 2008/01/02 11:49:10 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.110 2010/06/24 13:03:19 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -94,8 +87,6 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.105 2008/01/02 11:49:10 ad Exp $");
 
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
-
-extern kmutex_t ufs_hashlock;
 
 /* Constants for inode free bitmap */
 #define BMSHIFT 5	/* 2 ** 5 = 32 */
@@ -245,7 +236,7 @@ lfs_valloc(struct vnode *pvp, int mode, kauth_cred_t cred,
 	if (fs->lfs_freehd == LFS_UNUSED_INUM) {
 		if ((error = lfs_extend_ifile(fs, cred)) != 0) {
 			LFS_PUT_HEADFREE(fs, cip, cbp, new_ino);
-			VOP_UNLOCK(fs->lfs_ivnode, 0);
+			VOP_UNLOCK(fs->lfs_ivnode);
 			lfs_segunlock(fs);
 			return error;
 		}
@@ -261,7 +252,7 @@ lfs_valloc(struct vnode *pvp, int mode, kauth_cred_t cred,
 	mutex_exit(&lfs_lock);
 	++fs->lfs_nfiles;
 
-	VOP_UNLOCK(fs->lfs_ivnode, 0);
+	VOP_UNLOCK(fs->lfs_ivnode);
 	lfs_segunlock(fs);
 
 	return lfs_ialloc(fs, pvp, new_ino, new_gen, vpp);
@@ -313,7 +304,7 @@ lfs_ialloc(struct lfs *fs, struct vnode *pvp, ino_t new_ino, int new_gen,
 	uvm_vnp_setsize(vp, 0);
 	lfs_mark_vnode(vp);
 	genfs_node_init(vp, &lfs_genfsops);
-	VREF(ip->i_devvp);
+	vref(ip->i_devvp);
 	return (0);
 }
 
@@ -351,10 +342,6 @@ lfs_vcreate(struct mount *mp, ino_t ino, struct vnode *vp)
 	LIST_INIT(&ip->i_lfs_segdhd);
 #ifdef QUOTA
 	ufsquota_init(ip);
-#endif
-#ifdef DEBUG
-	if (ino == LFS_IFILE_INUM)
-		vp->v_vnlock->lk_wmesg = "inlock";
 #endif
 }
 
@@ -588,7 +575,7 @@ lfs_vfree(struct vnode *vp, ino_t ino, int mode)
 	mutex_exit(&lfs_lock);
 	--fs->lfs_nfiles;
 
-	VOP_UNLOCK(fs->lfs_ivnode, 0);
+	VOP_UNLOCK(fs->lfs_ivnode);
 	lfs_segunlock(fs);
 
 	return (0);

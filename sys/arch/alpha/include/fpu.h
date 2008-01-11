@@ -1,4 +1,4 @@
-/* $NetBSD: fpu.h,v 1.4 2001/04/26 03:10:46 ross Exp $ */
+/* $NetBSD: fpu.h,v 1.6 2008/05/10 15:31:04 martin Exp $ */
 
 /*-
  * Copyright (c) 2001 Ross Harvey

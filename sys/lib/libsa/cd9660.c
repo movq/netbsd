@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660.c,v 1.23 2007/11/24 13:20:54 isaki Exp $	*/
+/*	$NetBSD: cd9660.c,v 1.26 2010/10/18 11:08:26 ws Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -196,13 +196,14 @@ cd9660_open(const char *path, struct open_file *f)
 	bno = isonum_732(pp->block) + isonum_711(pp->extlen);
 
 	rc = ENOENT;
-	/*
-	 * Remove extra separators
-	 */
-	while (*path == '/')
-		path++;
 
 	while (*path) {
+		/*
+		 * Remove extra separators
+		 */
+		while (*path == '/')
+			path++;
+
 		if ((char *)pp >= (char *)buf + psize)
 			break;
 		if (isonum_722(pp->parent) != parent)
@@ -277,6 +278,7 @@ cd9660_open(const char *path, struct open_file *f)
 	fp->bno = isonum_733(dp->extent);
 	fp->size = isonum_733(dp->size);
 	dealloc(buf, buf_size);
+	fsmod = "cd9660";
 
 	return 0;
 
@@ -344,6 +346,8 @@ cd9660_read(struct open_file *f, void *start, size_t size, size_t *resid)
 			size -= ISO_DEFAULT_BLOCK_SIZE;
 		}
 	}
+	if(fp->off > fp->size)
+		size += fp->off - fp->size;
 	if (resid)
 		*resid = size;
 	return rc;

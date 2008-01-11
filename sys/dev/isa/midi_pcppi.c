@@ -1,4 +1,4 @@
-/*	$NetBSD: midi_pcppi.c,v 1.17 2007/12/16 19:01:36 christos Exp $	*/
+/*	$NetBSD: midi_pcppi.c,v 1.23 2009/04/10 10:18:50 mlelstv Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: midi_pcppi.c,v 1.17 2007/12/16 19:01:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: midi_pcppi.c,v 1.23 2009/04/10 10:18:50 mlelstv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,16 +60,18 @@ struct midi_pcppi_softc {
 	midisyn sc_midisyn;
 };
 
-int	midi_pcppi_match(struct device *, struct cfdata *, void *);
-void	midi_pcppi_attach(struct device *, struct device *, void *);
+static int	midi_pcppi_match(device_t, cfdata_t , void *);
+static void	midi_pcppi_attach(device_t, device_t, void *);
+static int	midi_pcppi_detach(device_t, int);
 
 void	midi_pcppi_on   (midisyn *, uint_fast16_t, midipitch_t, int16_t);
 void	midi_pcppi_off  (midisyn *, uint_fast16_t, uint_fast8_t);
 void	midi_pcppi_close(midisyn *);
 static void midi_pcppi_repitchv(midisyn *, uint_fast16_t, midipitch_t);
 
-CFATTACH_DECL(midi_pcppi, sizeof(struct midi_pcppi_softc),
-    midi_pcppi_match, midi_pcppi_attach, NULL, NULL);
+CFATTACH_DECL3_NEW(midi_pcppi, sizeof(struct midi_pcppi_softc),
+    midi_pcppi_match, midi_pcppi_attach, midi_pcppi_detach, NULL, NULL, NULL,
+    DVF_DETACH_SHUTDOWN);
 
 struct midisyn_methods midi_pcppi_hw = {
 	.close    = midi_pcppi_close,
@@ -87,23 +82,20 @@ struct midisyn_methods midi_pcppi_hw = {
 
 int midi_pcppi_attached = 0;	/* Not very nice */
 
-int
-midi_pcppi_match(struct device *parent, struct cfdata *match,
-    void *aux)
+static int
+midi_pcppi_match(device_t parent, cfdata_t match, void *aux)
 {
 	return (!midi_pcppi_attached);
 }
 
-void
-midi_pcppi_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+static void
+midi_pcppi_attach(device_t parent, device_t self, void *aux)
 {
-	struct midi_pcppi_softc *sc = (struct midi_pcppi_softc *)self;
+	struct midi_pcppi_softc *sc = device_private(self);
 	struct pcppi_attach_args *pa = (struct pcppi_attach_args *)aux;
 	midisyn *ms;
 
+	sc->sc_mididev.dev = self;
 	ms = &sc->sc_midisyn;
 	ms->mets = &midi_pcppi_hw;
 	strcpy(ms->name, "PC speaker");
@@ -119,6 +111,15 @@ midi_pcppi_attach(parent, self, aux)
 			aprint_error_dev(self,
 			    "couldn't establish power handler\n"); 
 }
+
+static int
+midi_pcppi_detach(device_t self, int flags)
+{
+	KASSERT(midi_pcppi_attached > 0);
+
+	midi_pcppi_attached--;
+	return mididetach(self, flags);
+} 
 
 void
 midi_pcppi_on(midisyn *ms,
@@ -141,8 +142,7 @@ midi_pcppi_off(midisyn *ms, uint_fast16_t voice, uint_fast8_t vel)
 }
 
 void
-midi_pcppi_close(ms)
-	midisyn *ms;
+midi_pcppi_close(midisyn *ms)
 {
 	pcppi_tag_t t = ms->data;
 

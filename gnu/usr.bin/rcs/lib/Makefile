@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.21 2004/05/23 02:24:51 lukem Exp $
+#	$NetBSD: Makefile,v 1.23 2011/05/26 12:56:29 joerg Exp $
 
-MKPRIVATELIB=	yes
+LIBISPRIVATE=	yes
 
 # Define FSYNC_ALL to get slower but safer writes in case of crashes in
 # the middle of CVS/RCS changes
@@ -18,5 +18,7 @@ LIB=	rcs
 SRCS=	maketime.c merger.c partime.c rcsedit.c rcsfcmp.c rcsfnms.c rcsgen.c \
 	rcskeep.c rcskeys.c rcslex.c rcsmap.c rcsrev.c rcssyn.c rcstime.c \
 	rcsutil.c version.c
+
+CWARNFLAGS.clang+=	-Wno-format-security
 
 .include <bsd.lib.mk>

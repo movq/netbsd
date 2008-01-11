@@ -1,4 +1,4 @@
-/*	$NetBSD: underscore.c,v 1.9 2007/01/21 13:25:36 jdc Exp $	*/
+/*	$NetBSD: underscore.c,v 1.11 2010/02/03 15:34:40 roy Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: underscore.c,v 1.9 2007/01/21 13:25:36 jdc Exp $");
+__RCSID("$NetBSD: underscore.c,v 1.11 2010/02/03 15:34:40 roy Exp $");
 #endif				/* not lint */
 
 #include "curses.h"
@@ -77,7 +70,9 @@ int
 wunderscore(WINDOW *win)
 {
 	/* If can underscore, set the screen underscore bit. */
-	if ((__tc_us != NULL && __tc_ue != NULL) || __tc_uc != NULL) {
+	if ((enter_underline_mode != NULL && exit_underline_mode != NULL) ||
+	    underline_char != NULL)
+	{
 #ifdef DEBUG
 		__CTRACE(__CTRACE_ATTR, "wunderscore\n");
 #endif
@@ -93,7 +88,7 @@ wunderscore(WINDOW *win)
 int
 wunderend(WINDOW *win)
 {
-	if (__tc_ue != NULL) {
+	if (exit_underline_mode != NULL) {
 #ifdef DEBUG
 		__CTRACE(__CTRACE_ATTR, "wunderend\n");
 #endif

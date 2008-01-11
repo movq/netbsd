@@ -1,9 +1,11 @@
-/*	$NetBSD: ipfstat.c,v 1.15 2007/06/16 10:52:25 martin Exp $	*/
+/*	$NetBSD: ipfstat.c,v 1.18 2009/08/19 08:35:32 darrenr Exp $	*/
 
 /*
  * Copyright (C) 2002-2006 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
+ *
+ * Copyright 2008 Sun Microsystems, Inc.
  */
 #ifdef __FreeBSD__
 # ifndef __FreeBSD_cc_version
@@ -71,7 +73,7 @@
 
 #if !defined(lint)
 static const char sccsid[] = "@(#)fils.c	1.21 4/20/96 (C) 1993-2000 Darren Reed";
-static const char rcsid[] = "@(#)Id: ipfstat.c,v 1.44.2.23 2007/05/31 13:13:02 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ipfstat.c,v 1.44.2.27 2009/07/21 09:13:13 darrenr Exp";
 #endif
 
 #ifdef __hpux
@@ -474,7 +476,7 @@ u_32_t *frfp;
 		ipfo.ipfo_type = IPFOBJ_FRAGSTAT;
 		ipfo.ipfo_size = sizeof(ipfrstat_t);
 		ipfo.ipfo_ptr = (void *)*ifrstpp;
-	
+
 		if (ioctl(ipf_fd, SIOCGFRST, &ipfo) == -1) {
 			perror("ioctl(SIOCGFRST)");
 			exit(-1);
@@ -792,6 +794,8 @@ char *group, *comment;
 	frgroup_t *g;
 	ipfobj_t obj;
 	int n;
+	void *buf;
+	size_t bufsiz;
 
 	if (use_inet6 == 1)
 		fb.fr_v = 6;
@@ -818,16 +822,20 @@ char *group, *comment;
 	obj.ipfo_size = sizeof(rule);
 	obj.ipfo_ptr = &rule;
 
-	do {
-		u_long array[1000];
+	/*
+	 * The API does not know how much we need for filter data. Assume
+	 * 10K is large enough. XXX: The code silently fails elsewhere on
+	 * allocation, we do the same here.
+	 */
+	if ((buf = malloc(bufsiz = sizeof(*fp) + 10240)) == NULL)
+		return;
 
-		memset(array, 0xff, sizeof(array));
-		fp = (frentry_t *)array;
+	do {
+		memset(buf, 0xff, bufsiz);
+		fp = buf;
 		rule.iri_rule = fp;
 		if (ioctl(ipf_fd, SIOCIPFITER, &obj) == -1) {
 			perror("ioctl(SIOCIPFITER)");
-			n = IPFGENITER_IPF;
-			ioctl(ipf_fd, SIOCIPFDELTOK, &n);
 			return;
 		}
 		if (bcmp(fp, &zero, sizeof(zero)) == 0)
@@ -886,9 +894,6 @@ char *group, *comment;
 		}
 	} while (fp->fr_next != NULL);
 
-	n = IPFGENITER_IPF;
-	ioctl(ipf_fd, SIOCIPFDELTOK, &n);
-
 	if (group == NULL) {
 		while ((g = grtop) != NULL) {
 			printf("# Group %s\n", g->fg_name);
@@ -897,6 +902,7 @@ char *group, *comment;
 			free(g);
 		}
 	}
+	free(buf);
 }
 
 
@@ -1120,7 +1126,7 @@ ips_stat_t *ipsp;
 		PRINTF("\t%u%% hash efficiency\n", ipsp->iss_active ?
 			(u_int)(ipsp->iss_inuse * 100 / ipsp->iss_active) : 0);
 
-		minlen = ipsp->iss_max;
+		minlen = ipsp->iss_inuse;
 		totallen = 0;
 		maxlen = 0;
 
@@ -1128,7 +1134,7 @@ ips_stat_t *ipsp;
 			if (buckets[i] > maxlen)
 				maxlen = buckets[i];
 			if (buckets[i] < minlen)
-					minlen = buckets[i];
+				minlen = buckets[i];
 			totallen += buckets[i];
 		}
 
@@ -1205,6 +1211,7 @@ int topclosed;
 	int i, j, winy, tsentry, maxx, maxy, redraw = 0, ret = 0;
 	int len, srclen, dstlen, forward = 1, c = 0;
 	ips_stat_t ipsst, *ipsstp = &ipsst;
+	int token_type = IPFGENITER_STATE;
 	statetop_t *tstable = NULL, *tp;
 	const char *errstr = "";
 	ipstate_t ips;
@@ -1348,6 +1355,8 @@ int topclosed;
 			}
 		}
 
+		(void) ioctl(state_fd, SIOCIPFDELTOK, &token_type);
+
 
 		/* sort the array */
 		if (tsentry != -1) {
@@ -1485,14 +1494,14 @@ int topclosed;
 		printw("Src: %s, Dest: %s, Proto: %s, Sorted by: %s\n\n",
 		       str1, str2, str3, str4);
 
-		/* 
+		/*
 		 * For an IPv4 IP address we need at most 15 characters,
 		 * 4 tuples of 3 digits, separated by 3 dots. Enforce this
 		 * length, so the colums do not change positions based
 		 * on the size of the IP address. This length makes the
-		 * output fit in a 80 column terminal. 
+		 * output fit in a 80 column terminal.
 		 * We are lacking a good solution for IPv6 addresses (that
-		 * can be longer that 15 characters), so we do not enforce 
+		 * can be longer that 15 characters), so we do not enforce
 		 * a maximum on the IP field size.
 		 */
 		if (srclen < 15)
@@ -1811,7 +1820,7 @@ int *port;
 			*port = -1;
 		} else if (!sscanf(comma + 1, "%d", port) ||
 			   (*port < 0) || (*port > 65535)) {
-			fprintf(stderr, "Invalid port specfication in %s\n",
+			fprintf(stderr, "Invalid port specification in %s\n",
 				argument);
 			free(s);
 			exit(-2);
@@ -1823,6 +1832,7 @@ int *port;
 	/* get ip address */
 	if (!strcasecmp(s, "any")) {
 		ip->in4.s_addr = INADDR_ANY;
+		ok = 1;
 #ifdef	USE_INET6
 		ip->in6 = in6addr_any;
 	} else if (use_inet6 && inet_pton(AF_INET6, s, &ip->in6)) {
@@ -2044,8 +2054,6 @@ const void *b;
 ipstate_t *fetchstate(src, dst)
 ipstate_t *src, *dst;
 {
-	int i;
-
 	if (live_kernel == 1) {
 		ipfgeniter_t state;
 		ipfobj_t obj;
@@ -2061,10 +2069,6 @@ ipstate_t *src, *dst;
 
 		if (ioctl(state_fd, SIOCGENITER, &obj) != 0)
 			return NULL;
-		if (dst->is_next == NULL) {
-			i = IPFGENITER_STATE;
-			ioctl(state_fd, SIOCIPFDELTOK, &i);
-		}
 	} else {
 		if (kmemcpy((char *)dst, (u_long)src, sizeof(*dst)))
 			return NULL;

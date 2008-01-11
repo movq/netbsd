@@ -1,4 +1,4 @@
-/*	$NetBSD: libkern.h,v 1.72 2007/12/25 18:33:44 perry Exp $	*/
+/*	$NetBSD: libkern.h,v 1.97 2011/02/19 02:02:14 matt Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -43,25 +43,25 @@
 #define LIBKERN_BODY
 #endif
 
-LIBKERN_INLINE int imax __P((int, int)) __attribute__ ((unused));
-LIBKERN_INLINE int imin __P((int, int)) __attribute__ ((unused));
-LIBKERN_INLINE u_int max __P((u_int, u_int)) __attribute__ ((unused));
-LIBKERN_INLINE u_int min __P((u_int, u_int)) __attribute__ ((unused));
-LIBKERN_INLINE long lmax __P((long, long)) __attribute__ ((unused));
-LIBKERN_INLINE long lmin __P((long, long)) __attribute__ ((unused));
-LIBKERN_INLINE u_long ulmax __P((u_long, u_long)) __attribute__ ((unused));
-LIBKERN_INLINE u_long ulmin __P((u_long, u_long)) __attribute__ ((unused));
-LIBKERN_INLINE int abs __P((int)) __attribute__ ((unused));
+LIBKERN_INLINE int imax(int, int) __unused;
+LIBKERN_INLINE int imin(int, int) __unused;
+LIBKERN_INLINE u_int max(u_int, u_int) __unused;
+LIBKERN_INLINE u_int min(u_int, u_int) __unused;
+LIBKERN_INLINE long lmax(long, long) __unused;
+LIBKERN_INLINE long lmin(long, long) __unused;
+LIBKERN_INLINE u_long ulmax(u_long, u_long) __unused;
+LIBKERN_INLINE u_long ulmin(u_long, u_long) __unused;
+LIBKERN_INLINE int abs(int) __unused;
 
-LIBKERN_INLINE int isspace __P((int)) __unused;
-LIBKERN_INLINE int isascii __P((int)) __unused;
-LIBKERN_INLINE int isupper __P((int)) __unused;
-LIBKERN_INLINE int islower __P((int)) __unused;
-LIBKERN_INLINE int isalpha __P((int)) __unused;
-LIBKERN_INLINE int isdigit __P((int)) __unused;
-LIBKERN_INLINE int isxdigit __P((int)) __unused;
-LIBKERN_INLINE int toupper __P((int)) __unused;
-LIBKERN_INLINE int tolower __P((int)) __unused;
+LIBKERN_INLINE int isspace(int) __unused;
+LIBKERN_INLINE int isascii(int) __unused;
+LIBKERN_INLINE int isupper(int) __unused;
+LIBKERN_INLINE int islower(int) __unused;
+LIBKERN_INLINE int isalpha(int) __unused;
+LIBKERN_INLINE int isdigit(int) __unused;
+LIBKERN_INLINE int isxdigit(int) __unused;
+LIBKERN_INLINE int toupper(int) __unused;
+LIBKERN_INLINE int tolower(int) __unused;
 
 #ifdef LIBKERN_BODY
 LIBKERN_INLINE int
@@ -179,10 +179,10 @@ tolower(int ch)
 #else
 #ifdef __STDC__
 #define	assert(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("", __FILE__, __LINE__, #e))
+			    kern_assert("", __FILE__, __LINE__, #e))
 #else
 #define	assert(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("", __FILE__, __LINE__, "e"))
+			    kern_assert("", __FILE__, __LINE__, "e"))
 #endif
 #endif
 
@@ -192,37 +192,51 @@ tolower(int ch)
 #endif
 #endif
 
+#define	CTASSERT(x)		__CTASSERT(x)
+
 #ifndef DIAGNOSTIC
 #define _DIAGASSERT(a)	(void)0
 #ifdef lint
-#define	KASSERT(e)	/* NOTHING */
+#define	KASSERTMSG(e, msg)	/* NOTHING */
+#define	KASSERT(e)		/* NOTHING */
 #else /* !lint */
-#define	KASSERT(e)	((void)0)
+#define	KASSERTMSG(e, msg)	((void)0)
+#define	KASSERT(e)		((void)0)
 #endif /* !lint */
 #else /* DIAGNOSTIC */
 #define _DIAGASSERT(a)	assert(a)
+#define	KASSERTMSG(e, msg) do {		\
+	if (__predict_false(!(e)))	\
+		panic msg;		\
+	} while (/*CONSTCOND*/ 0)
 #ifdef __STDC__
 #define	KASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("diagnostic ", __FILE__, __LINE__, #e))
+			    kern_assert("diagnostic ", __FILE__, __LINE__, #e))
 #else
 #define	KASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("diagnostic ", __FILE__, __LINE__,"e"))
+			    kern_assert("diagnostic ", __FILE__, __LINE__,"e"))
 #endif
 #endif
 
 #ifndef DEBUG
 #ifdef lint
-#define	KDASSERT(e)	/* NOTHING */
+#define	KDASSERTMSG(e,msg)	/* NOTHING */
+#define	KDASSERT(e)		/* NOTHING */
 #else /* lint */
-#define	KDASSERT(e)	((void)0)
+#define	KDASSERTMSG(e,msg)	((void)0)
+#define	KDASSERT(e)		((void)0)
 #endif /* lint */
 #else
+#define	KDASSERTMSG(e, msg) do {	\
+	if (__predict_false(!(e)))	\
+		panic msg;		\
+	} while (/*CONSTCOND*/ 0)
 #ifdef __STDC__
 #define	KDASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("debugging ", __FILE__, __LINE__, #e))
+			    kern_assert("debugging ", __FILE__, __LINE__, #e))
 #else
 #define	KDASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __kernassert("debugging ", __FILE__, __LINE__, "e"))
+			    kern_assert("debugging ", __FILE__, __LINE__, "e"))
 #endif
 #endif
 /*
@@ -235,29 +249,32 @@ tolower(int ch)
     ((size_t)(unsigned long)(&(((type *)0)->member)))
 #endif
 
-/* Prototypes for non-quad routines. */
-/* XXX notyet #ifdef _STANDALONE */
-int	 bcmp __P((const void *, const void *, size_t));
-void	 bzero __P((void *, size_t));
-/* #endif */
+#define	MTPRNG_RLEN		624
+struct mtprng_state {
+	unsigned int mt_idx; 
+	uint32_t mt_elem[MTPRNG_RLEN];
+	uint32_t mt_count;
+	uint32_t mt_sparse[3];
+};
 
 /* Prototypes for which GCC built-ins exist. */
-void	*memcpy __P((void *, const void *, size_t));
-int	 memcmp __P((const void *, const void *, size_t));
-void	*memset __P((void *, int, size_t));
-#if __GNUC_PREREQ__(2, 95) && (__GNUC_PREREQ__(4, 0) || !defined(__vax__))
+void	*memcpy(void *, const void *, size_t);
+int	 memcmp(const void *, const void *, size_t);
+void	*memset(void *, int, size_t);
+#if __GNUC_PREREQ__(2, 95) && (__GNUC_PREREQ__(4, 0) || !defined(__vax__)) && \
+    !defined(_STANDALONE)
 #define	memcpy(d, s, l)		__builtin_memcpy(d, s, l)
 #define	memcmp(a, b, l)		__builtin_memcmp(a, b, l)
 #endif
-#if __GNUC_PREREQ__(2, 95) && !defined(__vax__)
+#if __GNUC_PREREQ__(2, 95) && !defined(__vax__) && !defined(_STANDALONE)
 #define	memset(d, v, l)		__builtin_memset(d, v, l)
 #endif
 
-char	*strcpy __P((char *, const char *));
-int	 strcmp __P((const char *, const char *));
-size_t	 strlen __P((const char *));
+char	*strcpy(char *, const char *);
+int	 strcmp(const char *, const char *);
+size_t	 strlen(const char *);
 char	*strsep(char **, const char *);
-#if __GNUC_PREREQ__(2, 95)
+#if __GNUC_PREREQ__(2, 95) && !defined(_STANDALONE)
 #define	strcpy(d, s)		__builtin_strcpy(d, s)
 #define	strcmp(a, b)		__builtin_strcmp(a, b)
 #define	strlen(a)		__builtin_strlen(a)
@@ -269,52 +286,66 @@ char	*strsep(char **, const char *);
 #endif
 
 /* These exist in GCC 3.x, but we don't bother. */
-char	*strcat __P((char *, const char *));
-char	*strncpy __P((char *, const char *, size_t));
-int	 strncmp __P((const char *, const char *, size_t));
-char	*strchr __P((const char *, int));
-char	*strrchr __P((const char *, int));
+char	*strcat(char *, const char *);
+char	*strncpy(char *, const char *, size_t);
+int	 strncmp(const char *, const char *, size_t);
+char	*strchr(const char *, int);
+char	*strrchr(const char *, int);
 
-char	*strstr __P((const char *, const char *));
+char	*strstr(const char *, const char *);
 
 /*
  * ffs is an instruction on vax.
  */
-int	 ffs __P((int));
+int	 ffs(int);
 #if __GNUC_PREREQ__(2, 95) && (!defined(__vax__) || __GNUC_PREREQ__(4,1))
 #define	ffs(x)		__builtin_ffs(x)
 #endif
 
-void	 __kernassert __P((const char *, const char *, int, const char *));
+void	 kern_assert(const char *, const char *, int, const char *);
 unsigned int
-	bcdtobin __P((unsigned int));
+	bcdtobin(unsigned int);
 unsigned int
-	bintobcd __P((unsigned int));
+	bintobcd(unsigned int);
 u_int32_t
-	inet_addr __P((const char *));
+	inet_addr(const char *);
 struct in_addr;
-int	inet_aton __P((const char *, struct in_addr *));
-char	*intoa __P((u_int32_t));
+int	inet_aton(const char *, struct in_addr *);
+char	*intoa(u_int32_t);
 #define inet_ntoa(a) intoa((a).s_addr)
-void	*memchr __P((const void *, int, size_t));
-void	*memmove __P((void *, const void *, size_t));
-int	 pmatch __P((const char *, const char *, const char **));
-u_int32_t arc4random __P((void));
-void	 arc4randbytes __P((void *, size_t));
+void	*memchr(const void *, int, size_t);
+void	*memmove(void *, const void *, size_t);
+int	 pmatch(const char *, const char *, const char **);
+u_int32_t arc4random(void);
+void	 arc4randbytes(void *, size_t);
 #ifndef SMALL_RANDOM
-void	 srandom __P((unsigned long));
-char	*initstate __P((unsigned long, char *, size_t));
-char	*setstate __P((char *));
+void	 srandom(unsigned long);
+char	*initstate(unsigned long, char *, size_t);
+char	*setstate(char *);
 #endif /* SMALL_RANDOM */
-long	 random __P((void));
-int	 scanc __P((u_int, const u_char *, const u_char *, int));
-int	 skpc __P((int, size_t, u_char *));
-int	 strcasecmp __P((const char *, const char *));
-size_t	 strlcpy __P((char *, const char *, size_t));
-size_t	 strlcat __P((char *, const char *, size_t));
-int	 strncasecmp __P((const char *, const char *, size_t));
-u_long	 strtoul __P((const char *, char **, int));
-long long strtoll __P((const char *, char **, int));
-unsigned long long strtoull __P((const char *, char **, int));
-uintmax_t strtoumax __P((const char *, char **, int));
+long	 random(void);
+void	 mtprng_init32(struct mtprng_state *, uint32_t);
+void	 mtprng_initarray(struct mtprng_state *, const uint32_t *, size_t);
+uint32_t mtprng_rawrandom(struct mtprng_state *);
+uint32_t mtprng_random(struct mtprng_state *);
+int	 scanc(u_int, const u_char *, const u_char *, int);
+int	 skpc(int, size_t, u_char *);
+int	 strcasecmp(const char *, const char *);
+size_t	 strlcpy(char *, const char *, size_t);
+size_t	 strlcat(char *, const char *, size_t);
+int	 strncasecmp(const char *, const char *, size_t);
+u_long	 strtoul(const char *, char **, int);
+long long strtoll(const char *, char **, int);
+unsigned long long strtoull(const char *, char **, int);
+uintmax_t strtoumax(const char *, char **, int);
+int	 snprintb(char *, size_t, const char *, uint64_t);
+int	 snprintb_m(char *, size_t, const char *, uint64_t, size_t);
+int	 kheapsort(void *, size_t, size_t, int (*)(const void *, const void *),
+		   void *);
+uint32_t crc32(uint32_t, const uint8_t *, size_t);
+unsigned int	popcount(unsigned int) __constfunc;
+unsigned int	popcountl(unsigned long) __constfunc;
+unsigned int	popcountll(unsigned long long) __constfunc;
+unsigned int	popcount32(uint32_t) __constfunc;
+unsigned int	popcount64(uint64_t) __constfunc;
 #endif /* !_LIB_LIBKERN_LIBKERN_H_ */

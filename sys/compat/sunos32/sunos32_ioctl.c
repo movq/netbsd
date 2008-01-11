@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos32_ioctl.c,v 1.27 2008/01/05 19:14:08 dsl Exp $	*/
+/*	$NetBSD: sunos32_ioctl.c,v 1.29 2008/05/29 14:51:26 mrg Exp $	*/
 /* from: NetBSD: sunos_ioctl.c,v 1.35 2001/02/03 22:20:02 mrg Exp 	*/
 
 /*
@@ -13,8 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -56,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos32_ioctl.c,v 1.27 2008/01/05 19:14:08 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos32_ioctl.c,v 1.29 2008/05/29 14:51:26 mrg Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd32.h"
@@ -433,26 +431,23 @@ stio2stios(struct sunos_termio *t, struct sunos_termios *ts)
 static int
 sunos32_do_ioctl(int fd, int cmd, void *arg, struct lwp *l)
 {
-	struct file *fp;
+	file_t *fp;
 	struct vnode *vp;
 	int error;
 
-	if ((fp = fd_getfile(l->l_proc->p_fd, fd)) == NULL)
+	if ((fp = fd_getfile(fd)) == NULL)
 		return EBADF;
-
 	if ((fp->f_flag & (FREAD|FWRITE)) == 0) {
-		FILE_UNLOCK(fp);
+		fd_putfile(fd);
 		return EBADF;
 	}
-
-	FILE_USE(fp);
-	error = fp->f_ops->fo_ioctl(fp, cmd, arg, l);
+	error = fp->f_ops->fo_ioctl(fp, cmd, arg);
 	if (error == EIO && cmd == TIOCGPGRP) {
 		vp = (struct vnode *)fp->f_data;
 		if (vp != NULL && vp->v_type == VCHR && major(vp->v_rdev) == 21)
 			error = ENOTTY;
 	}
-	FILE_UNUSE(fp, l);
+	fd_putfile(fd);
 	return error;
 }
 
@@ -1060,7 +1055,7 @@ sunos32_sys_fcntl(struct lwp *l, const struct sunos32_sys_fcntl_args *uap, regis
 				return error;
 			sunos_to_bsd_flock(&ifl, &fl);
 
-			error = do_fcntl_lock(l, SCARG(uap, fd), SCARG(uap, cmd), &fl);
+			error = do_fcntl_lock(SCARG(uap, fd), SCARG(uap, cmd), &fl);
 			if (error || SCARG(uap, cmd) != F_GETLK)
 				return error;
 

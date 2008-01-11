@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.58 2008/01/10 16:04:57 tsutsui Exp $	*/
+/*	$NetBSD: clock.c,v 1.63 2010/12/20 00:25:45 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -83,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.58 2008/01/10 16:04:57 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.63 2010/12/20 00:25:45 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -122,14 +122,14 @@ static volatile void *intersil_va;
 
 #define intersil_clear() (void)intersil_clock->clk_intr_reg
 
-static int  oclock_match(struct device *, struct cfdata *, void *);
-static void oclock_attach(struct device *, struct device *, void *);
+static int  oclock_match(device_t, cfdata_t, void *);
+static void oclock_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(oclock, sizeof(struct intersil7170_softc),
+CFATTACH_DECL_NEW(oclock, sizeof(struct intersil7170_softc),
     oclock_match, oclock_attach, NULL, NULL);
 
 static int 
-oclock_match(struct device *parent, struct cfdata *cf, void *aux)
+oclock_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -149,16 +149,18 @@ oclock_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void 
-oclock_attach(struct device *parent, struct device *self, void *aux)
+oclock_attach(device_t parent, device_t self, void *aux)
 {
+	struct intersil7170_softc *sc = device_private(self);
 	struct confargs *ca = aux;
-	struct intersil7170_softc *sc = (void *)self;
+
+	sc->sc_dev = self;
 
 	/* Get a mapping for it. */
 	sc->sc_bst = ca->ca_bustag;
 	if (bus_space_map(sc->sc_bst, ca->ca_paddr, sizeof(struct intersil7170),
 	    0, &sc->sc_bsh) != 0) {
-		printf(": can't map registers\n");
+		aprint_error(": can't map registers\n");
 		return;
 	}
 
@@ -182,7 +184,7 @@ oclock_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_year0 = 1968;
 	intersil7170_attach(sc);
 
-	printf("\n");
+	aprint_normal("\n");
 
 	/*
 	 * Can not hook up the ISR until cpu_initclocks()
@@ -292,7 +294,7 @@ setstatclockrate(int newhz)
 }
 
 /*
- * This is is called by the "custom" interrupt handler.
+ * This is called by the "custom" interrupt handler.
  * Note that we can get ZS interrupts while this runs,
  * and zshard may touch the interrupt_reg, so we must
  * be careful to use the single_inst_* macros to modify
@@ -301,6 +303,8 @@ setstatclockrate(int newhz)
 void
 clock_intr(struct clockframe cf)
 {
+
+	idepth++;
 
 	/* Read the clock interrupt register. */
 	intersil_clear();
@@ -313,7 +317,7 @@ clock_intr(struct clockframe cf)
 	intersil_clear();
 
 	intrcnt[CLOCK_PRI]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	{ /* Entertainment! */
 #ifdef	LED_IDLE_CHECK
@@ -326,4 +330,6 @@ clock_intr(struct clockframe cf)
 
 	/* Call common clock interrupt handler. */
 	hardclock(&cf);
+
+	idepth--;
 }

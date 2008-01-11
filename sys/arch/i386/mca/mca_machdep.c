@@ -1,4 +1,4 @@
-/*	$NetBSD: mca_machdep.c,v 1.34 2007/12/01 16:49:56 ad Exp $	*/
+/*	$NetBSD: mca_machdep.c,v 1.40 2011/04/03 22:29:27 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mca_machdep.c,v 1.34 2007/12/01 16:49:56 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mca_machdep.c,v 1.40 2011/04/03 22:29:27 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -85,7 +78,7 @@ struct bios_config {
 #define FEATURE_DMA3	0x80	/* DMA channel 3 used by hard disk BIOS	*/
 	uint8_t		feature2;
 	uint8_t		pad[9];
-} __attribute__ ((packed));
+} __packed;
 
 /*
  * Used to encode DMA channel into ISA DMA cookie. We use upper 4 bits of
@@ -136,7 +129,8 @@ int MCA_system = 0;
 /* Used to kick MCA DMA controller */
 #define DMA_CMD		0x18		/* command the controller */
 #define DMA_EXEC	0x1A		/* tell controller how to do things */
-static bus_space_handle_t dmaiot, dmacmdh, dmaexech;
+static bus_space_handle_t dmacmdh, dmaexech;
+static bus_space_tag_t dmaiot;
 
 /*
  * MCA DMA controller commands. The exact sense of individual bits
@@ -164,7 +158,7 @@ static bus_space_handle_t dmaiot, dmacmdh, dmaexech;
  * Map the MCA DMA controller registers.
  */
 void
-mca_attach_hook(struct device *parent, struct device *self,
+mca_attach_hook(device_t parent, device_t self,
     struct mcabus_attach_args *mba)
 {
 	dmaiot = mba->mba_iot;
@@ -242,7 +236,7 @@ mca_intr_disestablish(mca_chipset_tag_t mc, void *cookie)
  * Handle a NMI.
  * return true to panic system, false to ignore.
  */
-int
+void
 mca_nmi(void)
 {
 	/*
@@ -278,9 +272,8 @@ mca_nmi(void)
    out:
 	if (!mcanmi) {
 		/* no CHCK bits asserted, assume ISA NMI */
-		return (x86_nmi());
-	} else
-		return(0);
+		x86_nmi();
+	}
 }
 
 /*
@@ -314,7 +307,7 @@ mca_busprobe(void)
 	paddr = (regs.ES << 4) + regs.BX;
 	scp = (struct bios_config *)ISA_HOLE_VADDR(paddr);
 
-	bitmask_snprintf((scp->feature2 << 8) | scp->feature1,
+	snprintb(buf, sizeof(buf),
 		"\20"
 		"\01MCA+ISA"
 		"\02MCA"
@@ -331,8 +324,7 @@ mca_busprobe(void)
 		"\015MMF"
 		"\016GPDF"
 		"\017KBDF"
-		"\020DMA32\n",
-		buf, sizeof(buf));
+		"\020DMA32\n", (scp->feature2 << 8) | scp->feature1);
 
 	aprint_verbose("BIOS CFG: Model-SubM-Rev: %02x-%02x-%02x, 0x%s\n",
 		scp->model, scp->submodel, scp->bios_rev, buf);

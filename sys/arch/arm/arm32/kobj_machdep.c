@@ -1,4 +1,4 @@
-/*	$NetBSD: kobj_machdep.c,v 1.1 2008/01/04 16:23:39 ad Exp $	*/
+/*	$NetBSD: kobj_machdep.c,v 1.3 2009/08/17 19:44:32 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.1 2008/01/04 16:23:39 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.3 2009/08/17 19:44:32 dsl Exp $");
 
 #define	ELFSIZE		ARCH_ELFSIZE
 
@@ -98,44 +91,64 @@ kobj_reloc(kobj_t ko, uintptr_t relocbase, const void *data,
 
 	switch (rtype) {
 	case R_ARM_NONE:	/* none */
-		break;
+		return 0;
 
 	case R_ARM_ABS32:
 		addr = kobj_sym_lookup(ko, symidx);
 		if (addr == 0)
-			return -1;
-		if (*where != addr)
-			*where = addr;
-
-		break;
+			break;
+		*where = addr + addend;
+		return 0;
 
 	case R_ARM_COPY:	/* none */
-		/*
-		 * There shouldn't be copy relocations in kernel
-		 * objects.
-		 */
-		printf("kobj_reloc: unexpected R_COPY relocation\n");
-		return -1;
+		/* There shouldn't be copy relocations in kernel objects. */
+		break;
 
 	case R_ARM_JUMP_SLOT:
 		addr = kobj_sym_lookup(ko, symidx);
-		if (addr) {
-			*where = addr;
-			return 0;
-		}
-		return -1;
+		if (addr == 0)
+			break;
+		*where = addr;
+		return 0;
 
 	case R_ARM_RELATIVE:	/* A + B */
 		addr = relocbase + addend;
 		if (*where != addr)
 			*where = addr;
-		break;
+		return 0;
+
+	case R_ARM_PC24:
+		if (local)
+			return 0;
+
+		/* Remove the instruction from the 24 bit offset */
+		addend &= 0x00ffffff;
+
+		/* Sign extend if necessary */
+		if (addend & 0x00800000)
+			addend |= 0xff000000;
+
+		addr = kobj_sym_lookup(ko, symidx);
+		if (addr == 0)
+			break;
+
+		addend += ((uint32_t *)addr - (uint32_t *)where);
+
+		if ((addend & 0xff800000) != 0x00000000 &&
+		    (addend & 0xff800000) != 0xff800000) {
+			printf ("Relocation %x too far @ %p\n", addend, where);
+			return -1;
+		}
+		*where = (*where & 0xff000000) | (addend & 0x00ffffff);
+		return 0;
 
 	default:
-		printf("kobj_reloc: unexpected relocation type %d\n", rtype);
-		return -1;
+		break;
 	}
-	return 0;
+
+	printf("kobj_reloc: unexpected/invalid relocation type %d @ %p symidx %u\n",
+	    rtype, where, symidx);
+	return -1;
 }
 
 int

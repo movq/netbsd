@@ -1,6 +1,7 @@
-/*	$NetBSD: ite.c,v 1.53 2007/11/19 18:51:45 ad Exp $	*/
+/*	$NetBSD: ite.c,v 1.59 2011/04/24 16:26:58 rmind Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
  *
@@ -36,45 +37,6 @@
  *
  *	@(#)ite.c	7.6 (Berkeley) 5/16/91
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: ite.c 1.1 90/07/09$
- *
- *	@(#)ite.c	7.6 (Berkeley) 5/16/91
- */
 
 /*
  * ite - bitmaped terminal.
@@ -83,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.53 2007/11/19 18:51:45 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.59 2011/04/24 16:26:58 rmind Exp $");
 
 #include "ite.h"
 #if NITE > 0
@@ -106,6 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.53 2007/11/19 18:51:45 ad Exp $");
 #include <machine/cpu.h>
 #include <machine/kbio.h>
 #include <machine/bus.h>
+#include <machine/autoconf.h>
 #include <machine/grfioctl.h>
 #include <machine/iteioctl.h>
 
@@ -117,7 +80,6 @@ __KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.53 2007/11/19 18:51:45 ad Exp $");
 void opm_bell(void);
 #endif
 
-#define SUBR_CNPROBE(min)	itesw[min].ite_cnprobe(min)
 #define SUBR_INIT(ip)		ip->isw->ite_init(ip)
 #define SUBR_DEINIT(ip)		ip->isw->ite_deinit(ip)
 #define SUBR_PUTC(ip,c,dy,dx,m)	ip->isw->ite_putc(ip,c,dy,dx,m)
@@ -161,7 +123,6 @@ struct itesw itesw[] = {
 	{0,	tv_init,	tv_deinit,	0,
 	 0,	0,		0}
 };
-int	nitesw = sizeof(itesw) / sizeof(itesw[0]);
 
 /*
  * # of chars are output in a single itestart() call.
@@ -171,7 +132,6 @@ int	nitesw = sizeof(itesw) / sizeof(itesw[0]);
  */
 #define ITEBURST 64
 
-int	nite = NITE;
 struct	tty *ite_tty[NITE];
 struct	ite_softc *kbd_ite = NULL;
 struct  ite_softc con_itesoftc;
@@ -188,10 +148,10 @@ void	itestart(struct tty *);
 void iteputchar(int, struct ite_softc *);
 void ite_putstr(const u_char *, int, dev_t);
 
-void iteattach(struct device *, struct device *, void *);
-int itematch(struct device *, struct cfdata *, void *);
+int itematch(device_t, cfdata_t, void *);
+void iteattach(device_t, device_t, void *);
 
-CFATTACH_DECL(ite, sizeof(struct ite_softc),
+CFATTACH_DECL_NEW(ite, sizeof(struct ite_softc),
     itematch, iteattach, NULL, NULL);
 
 extern struct cfdriver ite_cd;
@@ -210,7 +170,7 @@ const struct cdevsw ite_cdevsw = {
 };
 
 int
-itematch(struct device *pdp, struct cfdata *cdp, void *auxp)
+itematch(device_t pdp, cfdata_t cdp, void *auxp)
 {
 	struct grf_softc *gp;
 	
@@ -226,46 +186,38 @@ itematch(struct device *pdp, struct cfdata *cdp, void *auxp)
  * an ite device, it is also called from ite_cninit().
  */
 void
-iteattach(struct device *pdp, struct device *dp, void *auxp)
+iteattach(device_t pdp, device_t dp, void *auxp)
 {
 	struct ite_softc *ip;
 	struct grf_softc *gp;
 
 	gp = (struct grf_softc *)auxp;
-	if (dp) {
-		ip = (struct ite_softc *)dp;
-		if(con_itesoftc.grf != NULL
-			/*&& con_itesoftc.grf->g_unit == gp->g_unit*/) {
-			/*
-			 * console reinit copy params over.
-			 * and console always gets keyboard
-			 */
-			memcpy(&ip->grf, &con_itesoftc.grf,
-			    (char *)&ip[1] - (char *)&ip->grf);
-			con_itesoftc.grf = NULL;
-			kbd_ite = ip;
-		}
-		ip->grf = gp;
-		iteinit(device_unit(&ip->device)); /* XXX */
-		printf(": rows %d cols %d", ip->rows, ip->cols);
-		if (kbd_ite == NULL)
-			kbd_ite = ip;
-		printf("\n");
-	} else {
-		if (con_itesoftc.grf != NULL)
-			return;
-		con_itesoftc.grf = gp;
-		con_itesoftc.tabs = cons_tabs;
+	ip = device_private(dp);
+	if(con_itesoftc.grf != NULL
+		/*&& con_itesoftc.grf->g_unit == gp->g_unit*/) {
+		/*
+		 * console reinit copy params over.
+		 * and console always gets keyboard
+		 */
+		memcpy(&ip->grf, &con_itesoftc.grf,
+		    (char *)&ip[1] - (char *)&ip->grf);
+		con_itesoftc.grf = NULL;
+		kbd_ite = ip;
 	}
+	ip->grf = gp;
+	iteinit(device_unit(&ip->device)); /* XXX */
+	aprint_normal(": rows %d cols %d", ip->rows, ip->cols);
+	if (kbd_ite == NULL)
+		kbd_ite = ip;
+	aprint_normal("\n");
 }
 
 struct ite_softc *
 getitesp(dev_t dev)
 {
-	extern int x68k_realconfig;
 
 	if (x68k_realconfig && con_itesoftc.grf == NULL)
-		return(ite_cd.cd_devs[UNIT(dev)]);
+		return device_lookup_private(&ite_cd, UNIT(dev));
 
 	if (con_itesoftc.grf == NULL)
 		panic("no ite_softc for console");
@@ -295,6 +247,17 @@ iteinit(dev_t dev)
 		ip->tabs = malloc(MAX_TABS*sizeof(u_char), M_DEVBUF, M_WAITOK);
 	ite_reset(ip);
 	ip->flags |= ITE_INITED;
+}
+
+void
+ite_config_console(void)
+{
+	struct grf_softc *gp = &congrf;
+
+	if (con_itesoftc.grf != NULL)
+		return;
+	con_itesoftc.grf = gp;
+	con_itesoftc.tabs = cons_tabs;
 }
 
 /*
@@ -389,7 +352,7 @@ iteopen(dev_t dev, int mode, int devtype, struct lwp *l)
 	if (unit >= ite_cd.cd_ndevs || (ip = getitesp(dev)) == NULL)
 		return (ENXIO);
 	if (!ite_tty[unit]) {
-		tp = ite_tty[unit] = ttymalloc();
+		tp = ite_tty[unit] = tty_alloc();
 		tty_attach(tp);
 	} else
 		tp = ite_tty[unit];
@@ -433,7 +396,7 @@ iteclose(dev_t dev, int flag, int mode, struct lwp *l)
 	ttyclose(tp);
 	iteoff(dev, 0);
 #if 0
-	ttyfree(tp);
+	tty_free(tp);
 	ite_tty[UNIT(dev)] = (struct tty *)0;
 #endif
 	return(0);

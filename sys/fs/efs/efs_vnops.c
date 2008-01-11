@@ -1,4 +1,4 @@
-/*	$NetBSD: efs_vnops.c,v 1.13 2008/01/02 11:48:40 ad Exp $	*/
+/*	$NetBSD: efs_vnops.c,v 1.24 2011/05/19 03:11:56 rmind Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble <rumble@ephemeral.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efs_vnops.c,v 1.13 2008/01/02 11:48:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efs_vnops.c,v 1.24 2011/05/19 03:11:56 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -30,9 +30,12 @@ __KERNEL_RCSID(0, "$NetBSD: efs_vnops.c,v 1.13 2008/01/02 11:48:40 ad Exp $");
 #include <sys/dirent.h>
 #include <sys/lockf.h>
 #include <sys/unistd.h>
+#include <sys/buf.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/genfs_node.h>
+#include <miscfs/fifofs/fifo.h>
+#include <miscfs/specfs/specdev.h>
 
 #include <fs/efs/efs.h>
 #include <fs/efs/efs_sb.h>
@@ -86,7 +89,7 @@ efs_lookup(void *v)
 		if (err)
 			return (err);
 
-		VOP_UNLOCK(ap->a_dvp, 0);	/* preserve lock order */
+		VOP_UNLOCK(ap->a_dvp);	/* preserve lock order */
 
 		err = VFS_VGET(ap->a_dvp->v_mount, ino, &vp);
 		if (err) {
@@ -108,7 +111,6 @@ efs_lookup(void *v)
 				    cnp->cn_cred);
 				if (err)
 					return (err);
-				cnp->cn_flags |= SAVENAME;
 				return (EJUSTRETURN);
 			}
 			return (err);
@@ -125,12 +127,31 @@ efs_lookup(void *v)
 	return (0);
 }
 
+static int
+efs_check_possible(struct vnode *vp, struct efs_inode *eip, mode_t mode)
+{
+
+	if ((mode & VWRITE) && (vp->v_mount->mnt_flag & MNT_RDONLY))
+		return (EROFS);
+
+	return 0;
+}
+
 /*
  * Determine the accessiblity of a file based on the permissions allowed by the
  * specified credentials.
  *
  * Returns 0 on success.
  */
+static int
+efs_check_permitted(struct vnode *vp, struct efs_inode *eip, mode_t mode,
+    kauth_cred_t cred)
+{
+
+	return genfs_can_access(vp->v_type, eip->ei_mode, eip->ei_uid,
+	    eip->ei_gid, mode, cred);
+}
+
 static int
 efs_access(void *v)
 {
@@ -142,12 +163,15 @@ efs_access(void *v)
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct efs_inode *eip = EFS_VTOI(vp);
+	int error;
 
-	if ((ap->a_mode & VWRITE) && (vp->v_mount->mnt_flag & MNT_RDONLY))
-		return (EROFS);
+	error = efs_check_possible(vp, eip, ap->a_mode);
+	if (error)
+		return error;
 
-	return (vaccess(vp->v_type, eip->ei_mode, eip->ei_uid, eip->ei_gid,
-	    ap->a_mode, ap->a_cred));
+	error = efs_check_permitted(vp, eip, ap->a_mode, ap->a_cred);
+
+	return error;
 }
 
 /*
@@ -231,12 +255,11 @@ efs_read(void *v)
 	} */ *ap = v;
 	struct efs_extent ex;
 	struct efs_extent_iterator exi;
-	void *win;
 	struct uio *uio = ap->a_uio;
 	struct efs_inode *eip = EFS_VTOI(ap->a_vp);
 	off_t start;
 	vsize_t len;
-	int err, ret, flags;
+	int err, ret;
 	const int advice = IO_ADV_DECODE(ap->a_ioflag);
 
 	if (ap->a_vp->v_type == VDIR)
@@ -266,13 +289,8 @@ efs_read(void *v)
 		len = MIN(len - start, uio->uio_resid);
 		len = MIN(len, eip->ei_size - uio->uio_offset);
 
-		win = ubc_alloc(&ap->a_vp->v_uobj, uio->uio_offset,
-		    &len, advice, UBC_READ);
-
-		flags = UBC_WANT_UNMAP(ap->a_vp) ? UBC_UNMAP : 0;
-
-		err = uiomove(win, len, uio);
-		ubc_release(win, flags);
+		err = ubc_uiomove(&ap->a_vp->v_uobj, uio, len, advice,
+		    UBC_READ | UBC_PARTIALOK | UBC_UNMAP_FLAG(ap->a_vp));
 		if (err) {
 			EFS_DPRINTF(("efs_read: uiomove error %d\n",
 			    err));
@@ -564,7 +582,7 @@ efs_inactive(void *v)
 	struct efs_inode *eip = EFS_VTOI(ap->a_vp);
 
 	*ap->a_recycle = (eip->ei_mode == 0);
-	VOP_UNLOCK(ap->a_vp, 0);
+	VOP_UNLOCK(ap->a_vp);
 
 	return (0);
 }
@@ -579,7 +597,6 @@ efs_reclaim(void *v)
 	struct vnode *vp = ap->a_vp;
 
 	efs_ihashrem(EFS_VTOI(vp));
-	cache_purge(vp);
 	genfs_node_destroy(vp);
 	pool_put(&efs_inode_pool, vp->v_data);
 	vp->v_data = NULL;
@@ -820,7 +837,6 @@ const struct vnodeopv_entry_desc efs_vnodeop_entries[] = {
 							/* balloc */
 							/* vfree */
 							/* truncate */
-	{ &vop_lease_desc,	genfs_lease_check },	/* lease */
 							/* whiteout */
 	{ &vop_getpages_desc,	genfs_getpages	},	/* getpages */
 	{ &vop_putpages_desc,	genfs_putpages	},	/* putpages */
@@ -831,4 +847,114 @@ const struct vnodeopv_entry_desc efs_vnodeop_entries[] = {
 const struct vnodeopv_desc efs_vnodeop_opv_desc = {
 	&efs_vnodeop_p,
 	efs_vnodeop_entries
+};
+
+int (**efs_specop_p)(void *);
+const struct vnodeopv_entry_desc efs_specop_entries[] = {
+	{ &vop_default_desc,	vn_default_error},	/* error handler */
+	{ &vop_lookup_desc,	spec_lookup	},	/* lookup */
+	{ &vop_create_desc,	spec_create	},	/* create */
+	{ &vop_mknod_desc,	spec_mknod	},	/* mknod */
+	{ &vop_open_desc,	spec_open	},	/* open */
+	{ &vop_close_desc,	spec_close	},	/* close */
+	{ &vop_access_desc,	efs_access	},	/* access */
+	{ &vop_getattr_desc,	efs_getattr	},	/* getattr */
+	{ &vop_setattr_desc,	genfs_eopnotsupp},	/* setattr */
+	{ &vop_read_desc,	spec_read	},	/* read */
+	{ &vop_write_desc,	spec_write	},	/* write */
+	{ &vop_ioctl_desc,	spec_ioctl	},	/* ioctl */
+	{ &vop_fcntl_desc,	genfs_fcntl	},	/* fcntl */
+	{ &vop_poll_desc,	spec_poll	},	/* poll */
+	{ &vop_kqfilter_desc,	spec_kqfilter	},	/* kqfilter */
+	{ &vop_revoke_desc,	spec_revoke	},	/* revoke */
+	{ &vop_mmap_desc,	spec_mmap	},	/* mmap */
+	{ &vop_fsync_desc,	spec_fsync	},	/* fsync */
+	{ &vop_seek_desc,	spec_seek	},	/* seek */
+	{ &vop_remove_desc,	spec_remove	},	/* remove */
+	{ &vop_link_desc,	spec_link	},	/* link */
+	{ &vop_rename_desc,	spec_rename	},	/* rename */
+	{ &vop_mkdir_desc,	spec_mkdir	},	/* mkdir */
+	{ &vop_rmdir_desc,	spec_rmdir	},	/* rmdir */
+	{ &vop_symlink_desc,	spec_symlink	},	/* symlink */
+	{ &vop_readdir_desc,	spec_readdir	},	/* readdir */
+	{ &vop_readlink_desc,	spec_readlink	},	/* readlink */
+	{ &vop_abortop_desc,	spec_abortop	},	/* abortop */
+	{ &vop_inactive_desc,	efs_inactive	},	/* inactive */
+	{ &vop_reclaim_desc,	efs_reclaim	},	/* reclaim */
+	{ &vop_lock_desc,	genfs_lock,	},	/* lock */
+	{ &vop_unlock_desc,	genfs_unlock,	},	/* unlock */
+	{ &vop_islocked_desc,	genfs_islocked,	},	/* islocked */
+	{ &vop_bmap_desc,	spec_bmap	},	/* bmap */
+	{ &vop_print_desc,	efs_print	},	/* print */
+	{ &vop_pathconf_desc,	spec_pathconf	},	/* pathconf */
+	{ &vop_advlock_desc,	spec_advlock	},	/* advlock */
+							/* blkatoff */
+							/* valloc */
+							/* balloc */
+							/* vfree */
+							/* truncate */
+							/* whiteout */
+	{ &vop_getpages_desc,	spec_getpages	},	/* getpages */
+	{ &vop_putpages_desc,	spec_putpages	},	/* putpages */
+	{ &vop_bwrite_desc,	vn_bwrite	},	/* bwrite */
+	{ &vop_strategy_desc,	spec_strategy	},	/* strategy */
+	{ NULL, NULL }
+};
+const struct vnodeopv_desc efs_specop_opv_desc = {
+	&efs_specop_p,
+	efs_specop_entries
+};
+
+int (**efs_fifoop_p)(void *);
+const struct vnodeopv_entry_desc efs_fifoop_entries[] = {
+	{ &vop_default_desc,	vn_default_error},	/* error handler */
+	{ &vop_lookup_desc,	vn_fifo_bypass	},	/* lookup */
+	{ &vop_create_desc,	vn_fifo_bypass	},	/* create */
+	{ &vop_mknod_desc,	vn_fifo_bypass	},	/* mknod */
+	{ &vop_open_desc,	vn_fifo_bypass	},	/* open */
+	{ &vop_close_desc,	vn_fifo_bypass	},	/* close */
+	{ &vop_access_desc,	efs_access	},	/* access */
+	{ &vop_getattr_desc,	efs_getattr	},	/* getattr */
+	{ &vop_setattr_desc,	genfs_eopnotsupp},	/* setattr */
+	{ &vop_read_desc,	vn_fifo_bypass	},	/* read */
+	{ &vop_write_desc,	vn_fifo_bypass	},	/* write */
+	{ &vop_ioctl_desc,	vn_fifo_bypass	},	/* ioctl */
+	{ &vop_fcntl_desc,	genfs_fcntl	},	/* fcntl */
+	{ &vop_poll_desc,	vn_fifo_bypass	},	/* poll */
+	{ &vop_kqfilter_desc,	vn_fifo_bypass	},	/* kqfilter */
+	{ &vop_revoke_desc,	vn_fifo_bypass	},	/* revoke */
+	{ &vop_mmap_desc,	vn_fifo_bypass	},	/* mmap */
+	{ &vop_fsync_desc,	vn_fifo_bypass	},	/* fsync */
+	{ &vop_seek_desc,	vn_fifo_bypass	},	/* seek */
+	{ &vop_remove_desc,	vn_fifo_bypass	},	/* remove */
+	{ &vop_link_desc,	vn_fifo_bypass	},	/* link */
+	{ &vop_rename_desc,	vn_fifo_bypass	},	/* rename */
+	{ &vop_mkdir_desc,	vn_fifo_bypass	},	/* mkdir */
+	{ &vop_rmdir_desc,	vn_fifo_bypass	},	/* rmdir */
+	{ &vop_symlink_desc,	vn_fifo_bypass	},	/* symlink */
+	{ &vop_readdir_desc,	vn_fifo_bypass	},	/* readdir */
+	{ &vop_readlink_desc,	vn_fifo_bypass	},	/* readlink */
+	{ &vop_abortop_desc,	vn_fifo_bypass	},	/* abortop */
+	{ &vop_inactive_desc,	efs_inactive	},	/* inactive */
+	{ &vop_reclaim_desc,	efs_reclaim	},	/* reclaim */
+	{ &vop_lock_desc,	genfs_lock,	},	/* lock */
+	{ &vop_unlock_desc,	genfs_unlock,	},	/* unlock */
+	{ &vop_islocked_desc,	genfs_islocked,	},	/* islocked */
+	{ &vop_bmap_desc,	vn_fifo_bypass	},	/* bmap */
+	{ &vop_print_desc,	efs_print	},	/* print */
+	{ &vop_pathconf_desc,	vn_fifo_bypass	},	/* pathconf */
+	{ &vop_advlock_desc,	vn_fifo_bypass	},	/* advlock */
+							/* blkatoff */
+							/* valloc */
+							/* balloc */
+							/* vfree */
+							/* truncate */
+							/* whiteout */
+	{ &vop_bwrite_desc,	vn_bwrite	},	/* bwrite */
+	{ &vop_strategy_desc,	vn_fifo_bypass	},	/* strategy */
+	{ NULL, NULL }
+};
+const struct vnodeopv_desc efs_fifoop_opv_desc = {
+	&efs_fifoop_p,
+	efs_fifoop_entries
 };

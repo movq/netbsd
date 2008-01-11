@@ -1,4 +1,4 @@
-/*	$NetBSD: puc.c,v 1.29 2006/11/16 01:33:10 christos Exp $	*/
+/*	$NetBSD: puc.c,v 1.32 2011/05/28 10:48:50 ryo Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998, 1999
@@ -53,7 +53,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puc.c,v 1.29 2006/11/16 01:33:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puc.c,v 1.32 2011/05/28 10:48:50 ryo Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,6 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: puc.c,v 1.29 2006/11/16 01:33:10 christos Exp $");
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pucvar.h>
+#include <dev/pci/pcidevs.h>
 #include <sys/termios.h>
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -70,8 +71,6 @@ __KERNEL_RCSID(0, "$NetBSD: puc.c,v 1.29 2006/11/16 01:33:10 christos Exp $");
 #include "opt_puccn.h"
 
 struct puc_softc {
-	struct device		sc_dev;
-
 	/* static configuration data */
 	const struct puc_device_description *sc_desc;
 
@@ -87,7 +86,7 @@ struct puc_softc {
 
 	/* per-port dynamic data */
         struct {
-		struct device	*dev;
+		device_t 	dev;
 
                 /* filled in by port attachments */
                 int             (*ihand)(void *);
@@ -100,8 +99,7 @@ static int	puc_print(void *, const char *);
 static const char *puc_port_type_name(int);
 
 static int
-puc_match(struct device *parent, struct cfdata *match,
-    void *aux)
+puc_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct puc_device_description *desc;
@@ -141,9 +139,9 @@ puc_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-puc_attach(struct device *parent, struct device *self, void *aux)
+puc_attach(device_t parent, device_t self, void *aux)
 {
-	struct puc_softc *sc = (struct puc_softc *)self;
+	struct puc_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct puc_attach_args paa;
 	pci_intr_handle_t intrhandle;
@@ -170,11 +168,11 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 #else
 		printf(": unknown PCI communications device\n");
 		printf("%s: compile kernel with PUC_PRINT_REGS and larger\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(self));
 		printf("%s: mesage buffer (via 'options MSGBUFSIZE=...'),\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(self));
 		printf("%s: and report the result with send-pr\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(self));
 #endif
 		return;
 	}
@@ -223,13 +221,13 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 		if (sc->sc_bar_mappings[i].mapped)
 			continue;
 
-		printf("%s: couldn't map BAR at offset 0x%lx\n",
-		    sc->sc_dev.dv_xname, (long)(PCI_MAPREG_START + 4 * i));
+		aprint_error_dev(self, "couldn't map BAR at offset 0x%lx\n",
+		    (long)(PCI_MAPREG_START + 4 * i));
 	}
 
 	/* Map interrupt. */
 	if (pci_intr_map(pa, &intrhandle)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
 	/*
@@ -248,6 +246,21 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 	 * XXX It's not pretty, but hey, what is?
 	 */
 
+	/* SB16C10xx board specific initialization */
+	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_SYSTEMBASE &&
+	    (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SYSTEMBASE_SB16C1054 ||
+	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SYSTEMBASE_SB16C1058)) {
+		if (!sc->sc_bar_mappings[1].mapped) {
+			aprint_error_dev(self,
+			    "optional register is not mapped\n");
+			return;
+		}
+#define SB16C105X_OPT_IMRREG0 0x0000000c
+		/* enable port 0-7 interrupt */
+		bus_space_write_1(sc->sc_bar_mappings[1].t,
+		    sc->sc_bar_mappings[1].h, SB16C105X_OPT_IMRREG0, 0xff);
+	}
+
 	/* Configure each port. */
 	for (i = 0; PUC_PORT_VALID(sc->sc_desc, i); i++) {
 		bus_space_handle_t subregion_handle;
@@ -256,7 +269,7 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 		barindex = PUC_PORT_BAR_INDEX(sc->sc_desc->ports[i].bar);
 		if (!sc->sc_bar_mappings[barindex].mapped) {
 			printf("%s: %s port uses unmapped BAR (0x%x)\n",
-			    sc->sc_dev.dv_xname,
+			    device_xname(self),
 			    puc_port_type_name(sc->sc_desc->ports[i].type),
 			    sc->sc_desc->ports[i].bar);
 			continue;
@@ -286,15 +299,14 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 		    sc->sc_bar_mappings[barindex].s -
 		      sc->sc_desc->ports[i].offset,
 		    &subregion_handle) != 0) {
-			printf("%s: couldn't get subregion for port %d\n",
-			    sc->sc_dev.dv_xname, i);
+			aprint_error_dev(self, "couldn't get subregion for port %d\n", i);
 			continue;
 		}
 		paa.h = subregion_handle;
 
 #if 0
 		printf("%s: port %d: %s @ (index %d) 0x%x (0x%lx, 0x%lx)\n",
-		    sc->sc_dev.dv_xname, paa.port,
+		    device_xname(self), paa.port,
 		    puc_port_type_name(paa.type), barindex, (int)paa.a,
 		    (long)paa.t, (long)paa.h);
 #endif
@@ -307,7 +319,7 @@ puc_attach(struct device *parent, struct device *self, void *aux)
 	}
 }
 
-CFATTACH_DECL(puc, sizeof(struct puc_softc),
+CFATTACH_DECL_NEW(puc, sizeof(struct puc_softc),
     puc_match, puc_attach, NULL, NULL);
 
 static int

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: h_funcs.subr,v 1.1 2007/11/12 15:18:21 jmmv Exp $
+# $NetBSD: h_funcs.subr,v 1.4 2011/02/21 10:14:29 pooka Exp $
 #
 # Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -13,13 +13,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,13 +40,23 @@ test_mount() {
 	require_fs tmpfs
 
 	Mount_Point=$(pwd)/mntpt
-	atf_check "mkdir ${Mount_Point}" 0 null null
+	atf_check -s eq:0 -o empty -e empty mkdir ${Mount_Point}
 	if [ $# -gt 0 ]; then
-		atf_check "mount -t tmpfs $* tmpfs ${Mount_Point}" \
-		    0 null null
-	else
-		atf_check "mount -t tmpfs tmpfs ${Mount_Point}" \
-		    0 null null
+		mount -t tmpfs $* tmpfs ${Mount_Point} 2> mounterr
+		if [ $? -ne 0 ]; then
+			if grep 'Operation not supp' mounterr > /dev/null ; then
+				atf_skip "tmpfs not supported"
+			fi 
+			atf_fail "mount tmpfs"
+		fi
+        else
+		mount -t tmpfs tmpfs ${Mount_Point} 2> mounterr
+		if [ $? -ne 0 ]; then
+			if grep 'Operation not supp' mounterr > /dev/null ; then
+				atf_skip "tmpfs not supported"
+			fi 
+			atf_fail "mount tmpfs"
+		fi
 	fi
 	cd ${Mount_Point}
 }
@@ -65,8 +68,8 @@ test_mount() {
 #
 test_unmount() {
 	cd - >/dev/null
-	atf_check "umount ${Mount_Point}" 0 null null
-	atf_check "rmdir ${Mount_Point}" 0 null null
+	atf_check -s eq:0 -o empty -e empty umount ${Mount_Point}
+	atf_check -s eq:0 -o empty -e empty rmdir ${Mount_Point}
 	Mount_Point=
 }
 

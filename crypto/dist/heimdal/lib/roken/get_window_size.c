@@ -33,10 +33,8 @@
 
 #ifdef HAVE_CONFIG_H
 #include <config.h>
-#ifdef __RCSID
-__RCSID("$Heimdal: get_window_size.c,v 1.9 1999/12/02 16:58:46 joda Exp $"
-        "$NetBSD: get_window_size.c,v 1.2 2002/09/13 19:09:01 thorpej Exp $");
-#endif
+__RCSID("$Heimdal: get_window_size.c 21005 2007-06-08 01:54:35Z lha $"
+        "$NetBSD: get_window_size.c,v 1.7 2010/01/24 16:45:57 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -61,25 +59,37 @@ __RCSID("$Heimdal: get_window_size.c,v 1.9 1999/12/02 16:58:46 joda Exp $"
 #include <termios.h>
 #endif
 
-#include <roken.h>
+#include "roken.h"
 
-int
-get_window_size(int fd, struct winsize *wp)
+int ROKEN_LIB_FUNCTION
+get_window_size(int fd, int *lines, int *columns)
 {
-    int ret = -1;
+    int ret;
+    char *s;
     
-    memset(wp, 0, sizeof(*wp));
-
 #if defined(TIOCGWINSZ)
-    ret = ioctl(fd, TIOCGWINSZ, wp);
+    {
+	struct winsize ws;
+	ret = ioctl(fd, TIOCGWINSZ, &ws);
+	if (ret != -1) {
+	    if (lines)
+		*lines = ws.ws_row;
+	    if (columns)
+		*columns = ws.ws_col;
+	    return 0;
+	}
+    }
 #elif defined(TIOCGSIZE)
     {
 	struct ttysize ts;
 	
 	ret = ioctl(fd, TIOCGSIZE, &ts);
-	if(ret == 0) {
-	    wp->ws_row = ts.ts_lines;
-	    wp->ws_col = ts.ts_cols;
+	if (ret != -1) {
+	    if (lines)
+		*lines = ts.ws_lines;
+	    if (columns)
+		*columns = ts.ts_cols;
+	    return 0;
 	}
     }
 #elif defined(HAVE__SCRSIZE)
@@ -87,19 +97,24 @@ get_window_size(int fd, struct winsize *wp)
 	int dst[2];
 	
 	_scrsize(dst);
-	wp->ws_row = dst[1];
-	wp->ws_col = dst[0];
-	ret = 0;
+	if (lines)
+	    *lines = dst[1];
+	if (columns)
+	    *columns = dst[0];
+	return 0;
     }
 #endif
-    if (ret != 0) {
-        char *s;
-        if((s = getenv("COLUMNS")))
-	    wp->ws_col = atoi(s);
-	if((s = getenv("LINES")))
-	    wp->ws_row = atoi(s);
-	if(wp->ws_col > 0 && wp->ws_row > 0)
-	    ret = 0;
+    if (columns) {
+    	if ((s = getenv("COLUMNS")))
+	    *columns = atoi(s);
+	else
+	    return -1;
     }
-    return ret;
+    if (lines) {
+	if ((s = getenv("LINES")))
+	    *lines = atoi(s);
+	else
+	    return -1;
+    }
+    return 0;
 }

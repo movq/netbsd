@@ -1,4 +1,4 @@
-/* 	$NetBSD: if_temac.c,v 1.2 2007/03/04 05:59:46 christos Exp $ */
+/* 	$NetBSD: if_temac.c,v 1.7 2010/04/05 07:19:30 joerg Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -40,9 +40,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_temac.c,v 1.2 2007/03/04 05:59:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_temac.c,v 1.7 2010/04/05 07:19:30 joerg Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,9 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_temac.c,v 1.2 2007/03/04 05:59:46 christos Exp $"
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <machine/bus.h>
 
@@ -205,8 +202,6 @@ static void 	temac_start(struct ifnet *);
 static void 	temac_stop(struct ifnet *, int);
 
 /* Media management. */
-static int	temac_mediachange(struct ifnet *);
-static void	temac_mediastatus(struct ifnet *, struct ifmediareq *);
 static int	temac_mii_readreg(struct device *, int, int);
 static void	temac_mii_statchg(struct device *);
 static void	temac_mii_tick(void *);
@@ -500,8 +495,8 @@ temac_attach(struct device *parent, struct device *self, void *aux)
 	mii->mii_readreg = temac_mii_readreg;
 	mii->mii_writereg = temac_mii_writereg;
 	mii->mii_statchg = temac_mii_statchg;
-	ifmedia_init(&mii->mii_media, 0, temac_mediachange,
-	    temac_mediastatus);
+	sc->sc_ec.ec_mii = mii;
+	ifmedia_init(&mii->mii_media, 0, ether_mediachange, ether_mediastatus);
 
 	mii_attach(&sc->sc_dev, mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, 0);
@@ -593,7 +588,9 @@ temac_init(struct ifnet *ifp)
 	cdmac_rx_reset(sc);
 
 	/* Set current media. */
-	mii_mediachg(&sc->sc_mii);
+	if ((error = ether_mediachange(ifp)) != 0)
+		return error;
+
 	callout_schedule(&sc->sc_mii_tick, hz);
 
 	/* Enable EMAC engine. */
@@ -649,25 +646,13 @@ static int
 temac_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct temac_softc 	*sc = (struct temac_softc *)ifp->if_softc;
-	struct ifreq 		*ifr = (struct ifreq *)data;
 	int 			s, ret;
 
 	s = splnet();
-	if (sc->sc_dead) {
+	if (sc->sc_dead)
 		ret = EIO;
-	} else
-		switch (cmd) {
-		case SIOCSIFMEDIA:
-		case SIOCGIFMEDIA:
-			ret = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media,
-			    cmd);
-			break;
-
-		default:
-			ret = ether_ioctl(ifp, cmd, data);
-			break;
-		}
-
+	else
+		ret = ether_ioctl(ifp, cmd, data);
 	splx(s);
 	return (ret);
 }
@@ -839,30 +824,6 @@ temac_stop(struct ifnet *ifp, int disable)
 	ifp->if_flags &= ~(IFF_RUNNING|IFF_OACTIVE);
 }
 
-/*
- * Media management.
- */
-static int
-temac_mediachange(struct ifnet *ifp)
-{
-	struct temac_softc 	*sc = (struct temac_softc *)ifp->if_softc;
-
-	if (ifp->if_flags & IFF_UP)
-		mii_mediachg(&sc->sc_mii);
-	return (0);
-}
-
-static void
-temac_mediastatus(struct ifnet *ifp, struct ifmediareq *imr)
-{
-	struct temac_softc 	*sc = (struct temac_softc *)ifp->if_softc;
-
-	mii_pollstat(&sc->sc_mii);
-
-	imr->ifm_status = sc->sc_mii.mii_media_status;
-	imr->ifm_active = sc->sc_mii.mii_media_active;
-}
-
 static int
 temac_mii_readreg(struct device *self, int phy, int reg)
 {
@@ -930,8 +891,8 @@ temac_mii_tick(void *arg)
 	struct temac_softc 	*sc = (struct temac_softc *)arg;
 	int 			s;
 
-	if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
-		return ;
+	if (!device_is_active(&sc->sc_dev))
+		return;
 
 	s = splnet();
 	mii_tick(&sc->sc_mii);
@@ -1247,10 +1208,7 @@ temac_rxreap(struct temac_softc *sc)
 			continue;
  		}
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf != NULL)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		ifp->if_ipackets++;
 		(ifp->if_input)(ifp, m);

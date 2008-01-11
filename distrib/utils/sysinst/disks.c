@@ -1,4 +1,4 @@
-/*	$NetBSD: disks.c,v 1.96 2007/06/18 16:58:42 xtraeme Exp $ */
+/*	$NetBSD: disks.c,v 1.113 2011/04/04 08:30:12 mbalmer Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -56,6 +52,12 @@
 #include <sys/disklabel.h>
 #undef static
 
+#include <dev/scsipi/scsipi_all.h>
+#include <sys/scsiio.h>
+
+#include <dev/ata/atareg.h>
+#include <sys/ataio.h>
+
 #include "defs.h"
 #include "md.h"
 #include "msg_defs.h"
@@ -66,6 +68,7 @@
 #define MAX_DISKS 15
 struct disk_desc {
 	char	dd_name[SSTRSIZE];
+	char	dd_descr[70];
 	uint	dd_no_mbr;
 	uint	dd_cyl;
 	uint	dd_head;
@@ -87,6 +90,215 @@ static void fixsb(const char *, const char *, char);
 #endif
 
 static const char *disk_names[] = { DISK_NAMES, "vnd", NULL };
+
+/* from src/sbin/atactl/atactl.c
+ * extract_string: copy a block of bytes out of ataparams and make
+ * a proper string out of it, truncating trailing spaces and preserving
+ * strict typing. And also, not doing unaligned accesses.
+ */
+static void
+ata_extract_string(char *buf, size_t bufmax,
+		   uint8_t *bytes, unsigned numbytes,
+		   int needswap)
+{
+	unsigned i;
+	size_t j;
+	unsigned char ch1, ch2;
+
+	for (i = 0, j = 0; i < numbytes; i += 2) {
+		ch1 = bytes[i];
+		ch2 = bytes[i+1];
+		if (needswap && j < bufmax-1) {
+			buf[j++] = ch2;
+		}
+		if (j < bufmax-1) {
+			buf[j++] = ch1;
+		}
+		if (!needswap && j < bufmax-1) {
+			buf[j++] = ch2;
+		}
+	}
+	while (j > 0 && buf[j-1] == ' ') {
+		j--;
+	}
+	buf[j] = '\0';
+}
+
+/*
+ * from src/sbin/scsictl/scsi_subr.c
+ */
+#define STRVIS_ISWHITE(x) ((x) == ' ' || (x) == '\0' || (x) == (u_char)'\377')
+
+static void
+scsi_strvis(char *sdst, size_t dlen, const char *ssrc, size_t slen)
+{
+	u_char *dst = (u_char *)sdst;
+	const u_char *src = (const u_char *)ssrc;
+
+	/* Trim leading and trailing blanks and NULs. */
+	while (slen > 0 && STRVIS_ISWHITE(src[0]))
+		++src, --slen;
+	while (slen > 0 && STRVIS_ISWHITE(src[slen - 1]))
+		--slen;
+
+	while (slen > 0) {
+		if (*src < 0x20 || *src >= 0x80) {
+			/* non-printable characters */
+			dlen -= 4;
+			if (dlen < 1)
+				break;
+			*dst++ = '\\';
+			*dst++ = ((*src & 0300) >> 6) + '0';
+			*dst++ = ((*src & 0070) >> 3) + '0';
+			*dst++ = ((*src & 0007) >> 0) + '0';
+		} else if (*src == '\\') {
+			/* quote characters */
+			dlen -= 2;
+			if (dlen < 1)
+				break;
+			*dst++ = '\\';
+			*dst++ = '\\';
+		} else {
+			/* normal characters */
+			if (--dlen < 1)
+				break;
+			*dst++ = *src;
+		}
+		++src, --slen;
+	}
+
+	*dst++ = 0;
+}
+
+
+static int
+get_descr_scsi(struct disk_desc *dd, int fd)
+{
+	struct scsipi_inquiry_data inqbuf;
+	struct scsipi_inquiry cmd;
+	scsireq_t req;
+        /* x4 in case every character is escaped, +1 for NUL. */
+	char vendor[(sizeof(inqbuf.vendor) * 4) + 1],
+	     product[(sizeof(inqbuf.product) * 4) + 1],
+	     revision[(sizeof(inqbuf.revision) * 4) + 1];
+	char size[5];
+	int error;
+
+	memset(&inqbuf, 0, sizeof(inqbuf));
+	memset(&cmd, 0, sizeof(cmd));
+	memset(&req, 0, sizeof(req));
+
+	cmd.opcode = INQUIRY;
+	cmd.length = sizeof(inqbuf);
+	memcpy(req.cmd, &cmd, sizeof(cmd));
+	req.cmdlen = sizeof(cmd);
+	req.databuf = &inqbuf;
+	req.datalen = sizeof(inqbuf);
+	req.timeout = 10000;
+	req.flags = SCCMD_READ;
+	req.senselen = SENSEBUFLEN;
+
+	error = ioctl(fd, SCIOCCOMMAND, &req);
+	if (error == -1 || req.retsts != SCCMD_OK)
+		return 0;
+
+	scsi_strvis(vendor, sizeof(vendor), inqbuf.vendor,
+	    sizeof(inqbuf.vendor));
+	scsi_strvis(product, sizeof(product), inqbuf.product,
+	    sizeof(inqbuf.product));
+	scsi_strvis(revision, sizeof(revision), inqbuf.revision,
+	    sizeof(inqbuf.revision));
+
+	humanize_number(size, sizeof(size),
+	    (uint64_t)dd->dd_secsize * (uint64_t)dd->dd_totsec,
+	    "", HN_AUTOSCALE, HN_B | HN_NOSPACE | HN_DECIMAL);
+
+	snprintf(dd->dd_descr, sizeof(dd->dd_descr),
+	    "%s (%s, %s %s)",
+	    dd->dd_name, size, vendor, product);
+
+	return 1;
+}
+
+static int
+get_descr_ata(struct disk_desc *dd, int fd)
+{
+	struct atareq req;
+	static union {
+		unsigned char inbuf[DEV_BSIZE];
+		struct ataparams inqbuf;
+	} inbuf;
+	struct ataparams *inqbuf = &inbuf.inqbuf;
+	char model[sizeof(inqbuf->atap_model)+1];
+	char size[5];
+	int error, needswap = 0;
+
+	memset(&inbuf, 0, sizeof(inbuf));
+	memset(&req, 0, sizeof(req));
+
+	req.flags = ATACMD_READ;
+	req.command = WDCC_IDENTIFY;
+	req.databuf = (void *)&inbuf;
+	req.datalen = sizeof(inbuf);
+	req.timeout = 1000;
+
+	error = ioctl(fd, ATAIOCCOMMAND, &req);
+	if (error == -1 || req.retsts != ATACMD_OK)
+		return 0;
+
+#if BYTE_ORDER == LITTLE_ENDIAN
+	/*
+	 * On little endian machines, we need to shuffle the string
+	 * byte order.  However, we don't have to do this for NEC or
+	 * Mitsumi ATAPI devices
+	 */
+
+	if (!((inqbuf->atap_config & WDC_CFG_ATAPI_MASK) == WDC_CFG_ATAPI &&
+	      ((inqbuf->atap_model[0] == 'N' &&
+		  inqbuf->atap_model[1] == 'E') ||
+	       (inqbuf->atap_model[0] == 'F' &&
+		  inqbuf->atap_model[1] == 'X')))) {
+		needswap = 1;
+	}
+#endif
+
+	ata_extract_string(model, sizeof(model),
+	    inqbuf->atap_model, sizeof(inqbuf->atap_model), needswap);
+	humanize_number(size, sizeof(size),
+	    (uint64_t)dd->dd_secsize * (uint64_t)dd->dd_totsec,
+	    "", HN_AUTOSCALE, HN_B | HN_NOSPACE | HN_DECIMAL);
+
+	snprintf(dd->dd_descr, sizeof(dd->dd_descr), "%s (%s, %s)",
+	    dd->dd_name, size, model);
+
+	return 1;
+}
+
+static void
+get_descr(struct disk_desc *dd)
+{
+	char diskpath[MAXPATHLEN];
+	int fd = -1;
+
+	fd = opendisk(dd->dd_name, O_RDONLY, diskpath, sizeof(diskpath), 0);
+	if (fd < 0)
+		goto done;
+
+	dd->dd_descr[0] = '\0';
+
+	/* try ATA */
+	if (get_descr_ata(dd, fd))
+		goto done;
+	/* try SCSI */
+	if (get_descr_scsi(dd, fd))
+		goto done;
+
+done:
+	if (fd >= 0)
+		close(fd);
+	if (strlen(dd->dd_descr) == 0)
+		strcpy(dd->dd_descr, dd->dd_name);
+}
 
 static int
 get_disks(struct disk_desc *dd)
@@ -122,6 +334,7 @@ get_disks(struct disk_desc *dd)
 			dd->dd_sec = l.d_nsectors;
 			dd->dd_secsize = l.d_secsize;
 			dd->dd_totsec = l.d_secperunit;
+			get_descr(dd);
 			dd++;
 			numdisks++;
 			if (numdisks >= MAX_DISKS)
@@ -168,12 +381,12 @@ find_disks(const char *doingwhat)
 
 	if (numdisks == 1) {
 		/* One disk found! */
-		msg_display(MSG_onedisk, disks[0].dd_name, doingwhat);
+		msg_display(MSG_onedisk, disks[0].dd_descr, doingwhat);
 		process_menu(MENU_ok, NULL);
 	} else {
 		/* Multiple disks found! */
 		for (i = 0; i < numdisks; i++) {
-			dsk_menu[i].opt_name = disks[i].dd_name;
+			dsk_menu[i].opt_name = disks[i].dd_descr;
 			dsk_menu[i].opt_menu = OPT_NOMENU;
 			dsk_menu[i].opt_flags = OPT_EXIT;
 			dsk_menu[i].opt_action = set_dsk_select;
@@ -203,6 +416,11 @@ find_disks(const char *doingwhat)
 	no_mbr = disk->dd_no_mbr;
 	if (dlsize == 0)
 		dlsize = disk->dd_cyl * disk->dd_head * disk->dd_sec;
+	if (dlsize > UINT32_MAX) {
+		msg_display(MSG_toobigdisklabel);
+		process_menu(MENU_ok, NULL);
+		return -1;
+	}
 	dlcylsize = dlhead * dlsec;
 
 	/* Get existing/default label */
@@ -218,7 +436,7 @@ find_disks(const char *doingwhat)
 void
 fmt_fspart(menudesc *m, int ptn, void *arg)
 {
-	int poffset, psize, pend;
+	unsigned int poffset, psize, pend;
 	const char *desc;
 	static const char *Yes, *No;
 	partinfo *p = bsdlabel + ptn;
@@ -296,11 +514,11 @@ ptn_sort(const void *a, const void *b)
 int
 make_filesystems(void)
 {
-	int i;
+	unsigned int i;
 	int ptn;
 	int ptn_order[nelem(bsdlabel)];
 	int error = 0;
-	int maxpart = getmaxpartitions();
+	unsigned int maxpart = getmaxpartitions();
 	char *newfs;
 	const char *mnt_opts;
 	const char *fsname;
@@ -348,7 +566,10 @@ make_filesystems(void)
 			    lbl->pi_flags & PIF_FFSv2 ? 2 : 1,
 			    lbl->pi_fsize * lbl->pi_frag, lbl->pi_fsize,
 			    lbl->pi_isize != 0 ? " -i " : "", lbl->pi_isize);
-			mnt_opts = "-tffs -o async";
+			if (lbl->pi_flags & PIF_LOG)
+				mnt_opts = "-tffs -o log";
+			else
+				mnt_opts = "-tffs -o async";
 			fsname = "ffs";
 			break;
 		case FS_BSDLFS:
@@ -358,6 +579,9 @@ make_filesystems(void)
 			fsname = "lfs";
 			break;
 		case FS_MSDOS:
+#ifdef USE_NEWFS_MSDOS
+			asprintf(&newfs, "/sbin/newfs_msdos");
+#endif
 			mnt_opts = "-tmsdos";
 			fsname = "msdos";
 			break;
@@ -368,8 +592,32 @@ make_filesystems(void)
 			fsname = "sysvbfs";
 			break;
 #endif
+#ifdef USE_EXT2FS
+		case FS_EX2FS:
+			asprintf(&newfs, "/sbin/newfs_ext2fs");
+			mnt_opts = "-text2fs";
+			fsname = "ext2fs";
+			break;
+#endif
 		}
 		if (lbl->pi_flags & PIF_NEWFS && newfs != NULL) {
+#ifdef USE_NEWFS_MSDOS
+			if (lbl->pi_fstype == FS_MSDOS) {
+			        /* newfs only if mount fails */
+			        if (run_program(RUN_SILENT | RUN_ERROR_OK,
+				    "mount -rt msdos /dev/%s%c /mnt2",
+				    diskdev, 'a' + ptn) != 0)
+					error = run_program(
+					    RUN_DISPLAY | RUN_PROGRESS,
+					    "%s /dev/r%s%c",
+					    newfs, diskdev, 'a' + ptn);
+				else {
+			        	run_program(RUN_SILENT | RUN_ERROR_OK,
+					    "umount /mnt2");
+					error = 0;
+				}
+			} else
+#endif
 			error = run_program(RUN_DISPLAY | RUN_PROGRESS,
 			    "%s /dev/r%s%c", newfs, diskdev, 'a' + ptn);
 		} else {
@@ -400,6 +648,7 @@ make_fstab(void)
 {
 	FILE *f;
 	int i, swap_dev = -1;
+	const char *dump_dev;
 
 	/* Create the fstab. */
 	make_target_dir("/etc");
@@ -446,7 +695,10 @@ make_fstab(void)
 			if (!check_lfs_progs())
 				s = "# ";
 			fstype = "lfs";
-			/* FALLTHROUGH */
+			/* XXX fsck_lfs considered harmfull */
+			fsck_pass = 0;
+			dump_freq = 1;
+			break;
 		case FS_BSDFFS:
 			fsck_pass = (strcmp(mp, "/") == 0) ? 1 : 2;
 			dump_freq = 1;
@@ -455,10 +707,14 @@ make_fstab(void)
 			fstype = "msdos";
 			break;
 		case FS_SWAP:
-			if (swap_dev == -1)
+			if (swap_dev == -1) {
 				swap_dev = i;
-			scripting_fprintf(f, "/dev/%s%c\t\tnone\tswap\tsw\t\t 0 0\n",
-				diskdev, 'a' + i);
+				dump_dev = ",dp";
+			} else {
+				dump_dev ="";
+			}
+			scripting_fprintf(f, "/dev/%s%c\t\tnone\tswap\tsw%s\t\t 0 0\n",
+				diskdev, 'a' + i, dump_dev);
 			continue;
 #ifdef USE_SYSVBFS
 		case FS_SYSVBFS:
@@ -475,8 +731,10 @@ make_fstab(void)
 		if (strcmp(mp, "/") == 0 && !(bsdlabel[i].pi_flags & PIF_MOUNT))
 			s = "# ";
 
- 		scripting_fprintf(f, "%s/dev/%s%c\t\t%s\t%s\trw%s%s%s%s%s%s%s%s\t\t %d %d\n",
+ 		scripting_fprintf(f,
+		  "%s/dev/%s%c\t\t%s\t%s\trw%s%s%s%s%s%s%s%s\t\t %d %d\n",
 		   s, diskdev, 'a' + i, mp, fstype,
+		   bsdlabel[i].pi_flags & PIF_LOG ? ",log" : "",
 		   bsdlabel[i].pi_flags & PIF_MOUNT ? "" : ",noauto",
 		   bsdlabel[i].pi_flags & PIF_ASYNC ? ",async" : "",
 		   bsdlabel[i].pi_flags & PIF_NOATIME ? ",noatime" : "",
@@ -484,26 +742,32 @@ make_fstab(void)
 		   bsdlabel[i].pi_flags & PIF_NODEVMTIME ? ",nodevmtime" : "",
 		   bsdlabel[i].pi_flags & PIF_NOEXEC ? ",noexec" : "",
 		   bsdlabel[i].pi_flags & PIF_NOSUID ? ",nosuid" : "",
-		   bsdlabel[i].pi_flags & PIF_SOFTDEP ? ",softdep" : "",
 		   dump_freq, fsck_pass);
 	}
 
-	if (tmp_mfs_size != 0) {
+	if (tmp_ramdisk_size != 0) {
+#ifdef HAVE_TMPFS
+		scripting_fprintf(f, "tmpfs\t\t/tmp\ttmpfs\trw,-m=1777,-s=%d\n",
+		    tmp_ramdisk_size * 512);
+#else
 		if (swap_dev != -1)
 			scripting_fprintf(f, "/dev/%s%c\t\t/tmp\tmfs\trw,-s=%d\n",
-				diskdev, 'a' + swap_dev, tmp_mfs_size);
+				diskdev, 'a' + swap_dev, tmp_ramdisk_size);
 		else
 			scripting_fprintf(f, "swap\t\t/tmp\tmfs\trw,-s=%d\n",
-				tmp_mfs_size);
+				tmp_ramdisk_size);
+#endif
 	}
 
 	/* Add /kern, /proc and /dev/pts to fstab and make mountpoint. */
 	scripting_fprintf(f, "kernfs\t\t/kern\tkernfs\trw\n");
 	scripting_fprintf(f, "ptyfs\t\t/dev/pts\tptyfs\trw\n");
-	scripting_fprintf(f, "procfs\t\t/proc\tprocfs\trw,noauto\n");
+	scripting_fprintf(f, "procfs\t\t/proc\tprocfs\trw\n");
+	scripting_fprintf(f, "/dev/" CD_NAME "\t\t/cdrom\tcd9660\tro,noauto\n");
 	make_target_dir("/kern");
 	make_target_dir("/proc");
 	make_target_dir("/dev/pts");
+	make_target_dir("/cdrom");
 
 	scripting_fprintf(NULL, "EOF\n");
 
@@ -564,7 +828,7 @@ fsck_preen(const char *disk, int ptn, const char *fsname)
 {
 	char *prog;
 	int error;
-	
+
 	ptn += 'a';
 	if (fsname == NULL)
 		return 0;
@@ -790,3 +1054,49 @@ check_swap(const char *disk, int remove_swap)
 	rval = -1;
 	goto done;
 }
+
+#ifdef HAVE_BOOTXX_xFS
+char *
+bootxx_name(void)
+{
+	int fstype;
+	const char *bootxxname;
+	char *bootxx;
+
+	/* check we have boot code for the root partition type */
+	fstype = bsdlabel[rootpart].pi_fstype;
+	switch (fstype) {
+#if defined(BOOTXX_FFSV1) || defined(BOOTXX_FFSV2)
+	case FS_BSDFFS:
+		if (bsdlabel[rootpart].pi_flags & PIF_FFSv2) {
+#ifdef BOOTXX_FFSV2
+			bootxxname = BOOTXX_FFSV2;
+#else
+			bootxxname = NULL;
+#endif
+		} else {
+#ifdef BOOTXX_FFSV1
+			bootxxname = BOOTXX_FFSV1;
+#else
+			bootxxname = NULL;
+#endif
+		}
+		break;
+#endif
+#ifdef BOOTXX_LFS
+	case FS_BSDLFS:
+		bootxxname = BOOTXX_LFS;
+		break;
+#endif
+	default:
+		bootxxname = NULL;
+		break;
+	}
+
+	if (bootxxname == NULL)
+		return NULL;
+
+	asprintf(&bootxx, "%s/%s", BOOTXXDIR, bootxxname);
+	return bootxx;
+}
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: siop_pci_common.h,v 1.7 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: siop_pci_common.h,v 1.9 2009/10/19 18:41:16 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,18 +28,18 @@
 
 /* structure describing each chip */
 struct siop_product_desc {
-	u_int32_t product;
+	uint32_t product;
 	int	revision;
 	const char *name;
 	int	features; /* features are defined in siopvar.h */
-	u_int8_t maxburst;
-	u_int8_t maxoff;  /* maximum supported offset */
-	u_int8_t clock_div; /* clock divider to use for async. logic */
-	u_int8_t clock_period; /* clock period (ns * 10) */
+	uint8_t maxburst;
+	uint8_t maxoff;  /* maximum supported offset */
+	uint8_t clock_div; /* clock divider to use for async. logic */
+	uint8_t clock_period; /* clock period (ns * 10) */
 	int 	ram_size; /* size of RAM, if appropriate */
 };
 
-const struct siop_product_desc * siop_lookup_product(u_int32_t, int);
+const struct siop_product_desc * siop_lookup_product(uint32_t, int);
 
 /* Driver internal state */
 struct siop_pci_common_softc {

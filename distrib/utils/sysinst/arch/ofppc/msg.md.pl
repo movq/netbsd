@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -39,6 +35,10 @@
 /* MD Message catalog -- Polish, ofppc version */
 
 message md_hello
+{
+}
+
+message md_may_remove_boot_medium
 {
 }
 
@@ -68,8 +68,21 @@ message nobootpart
 
 message boottoosmall
 {The boot partition is too small.  It needs to be at least 2MB in size,
-however a size of at least 100MB is reccomended.}
+however a size of at least 100MB is recommended.}
 
 message nobootpartdisklabel
-{There is no boot partition in the disklabel.  The boot partition should 
+{There is no boot partition in the disklabel.  The boot partition should
 match the boot partition you set up in the MBR partition table.}
+
+message preptoosmall
+{You need to have two PReP partitions to boot an IBM RS/6000.  One needs to
+be at least 1MB in size, and the other must be at least 1KB in size.}
+
+message bootnotright
+{In order to boot ofppc, you need either a FAT12 partition of at least 2MB
+in size, or a pair of PReP partitions.  The PReP partitions need to be at
+least 1KB, and 1MB in size.  IBM RS/6000 machines generally need the PReP
+partitions, however some can utilize the FAT12.  Most other machines require
+the FAT12 partition.  If you are not sure which to choose, accept the
+defaults, and install all three.  You do not currently have any partitions
+that meet the minimum requirements.}

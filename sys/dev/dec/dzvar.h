@@ -1,4 +1,4 @@
-/*	$NetBSD: dzvar.h,v 1.9 2007/03/04 06:01:45 christos Exp $	*/
+/*	$NetBSD: dzvar.h,v 1.11 2009/05/12 14:18:16 cegger Exp $	*/
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -82,7 +82,7 @@
 #define DZ_PORT(u)	((u)&07)	/* extract the port # */
 
 struct	dz_softc {
-	struct	device	sc_dev;		/* Autoconf blaha */
+	device_t	sc_dev;		/* Autoconf blaha */
 	struct	evcnt	sc_rintrcnt;	/* recevive interrupt counts */
 	struct	evcnt	sc_tintrcnt;	/* transmit interrupt counts */
 	struct	dz_regs	sc_dr;		/* reg pointers */
@@ -109,6 +109,6 @@ struct	dz_softc {
 void	dzattach(struct dz_softc *, struct evcnt *, int);
 void	dzrint(void *);
 void	dzxint(void *);
-void	dzreset(struct device *);
+void	dzreset(device_t);
 
 #endif /* _DEV_DEC_DZVAR_H_ */

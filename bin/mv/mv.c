@@ -1,4 +1,4 @@
-/* $NetBSD: mv.c,v 1.38 2007/02/15 09:57:16 rillig Exp $ */
+/* $NetBSD: mv.c,v 1.41 2008/07/20 00:52:40 lukem Exp $ */
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mv.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: mv.c,v 1.38 2007/02/15 09:57:16 rillig Exp $");
+__RCSID("$NetBSD: mv.c,v 1.41 2008/07/20 00:52:40 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -98,7 +98,6 @@ main(int argc, char *argv[])
 		case 'v':
 			vflg = 1;
 			break;
-		case '?':
 		default:
 			usage();
 		}
@@ -257,7 +256,7 @@ int
 fastcopy(char *from, char *to, struct stat *sbp)
 {
 	struct timeval tval[2];
-	static u_int blen;
+	static blksize_t blen;
 	static char *bp;
 	int nread, from_fd, to_fd;
 
@@ -273,6 +272,9 @@ fastcopy(char *from, char *to, struct stat *sbp)
 	}
 	if (!blen && !(bp = malloc(blen = sbp->st_blksize))) {
 		warn(NULL);
+		blen = 0;
+		(void)close(from_fd);
+		(void)close(to_fd);
 		return (1);
 	}
 	while ((nread = read(from_fd, bp, blen)) > 0)
@@ -333,7 +335,8 @@ err:		if (unlink(to))
 int
 copy(char *from, char *to)
 {
-	int pid, status;
+	pid_t pid;
+	int status;
 
 	if ((pid = vfork()) == 0) {
 		execl(_PATH_CP, "mv", vflg ? "-PRpv" : "-PRp", "--", from, to, NULL);

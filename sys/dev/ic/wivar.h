@@ -1,4 +1,4 @@
-/*	$NetBSD: wivar.h,v 1.61 2007/12/25 18:33:39 perry Exp $	*/
+/*	$NetBSD: wivar.h,v 1.64 2010/11/23 04:33:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -74,13 +74,12 @@ typedef SLIST_HEAD(,wi_rssdesc) wi_rssdescq_t;
  * Oslo IETF plenary meeting.
  */
 struct wi_softc	{
-	struct device		sc_dev;
+	device_t		sc_dev;
 	struct ethercom		sc_ec;
 	struct ieee80211com	sc_ic;
 	u_int32_t		sc_ic_flags;	/* backup of ic->ic_flags */
 	void			*sc_ih;		/* interrupt handler */
-	int			(*sc_enable)(struct wi_softc *);
-	void			(*sc_disable)(struct wi_softc *);
+	int			(*sc_enable)(device_t, int);
 	void			(*sc_reset)(struct wi_softc *);
 
 	int			(*sc_newstate)(struct ieee80211com *,
@@ -102,7 +101,7 @@ struct wi_softc	{
 	bus_space_tag_t		sc_iot;			/* bus cookie */
 	bus_space_handle_t	sc_ioh;			/* bus i/o handle */
 
-	void *			sc_drvbpf;
+	struct bpf_if *		sc_drvbpf;
 	int			sc_flags;
 	int			sc_bap_id;
 	int			sc_bap_off;
@@ -283,5 +282,5 @@ struct wi_card_ident {
 
 int	wi_attach(struct wi_softc *, const u_int8_t *);
 int	wi_detach(struct wi_softc *);
-int	wi_activate(struct device *, enum devact);
+int	wi_activate(device_t, enum devact);
 int	wi_intr(void *arg);

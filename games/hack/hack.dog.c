@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.dog.c,v 1.8 2006/03/30 01:31:13 jnemeth Exp $	*/
+/*	$NetBSD: hack.dog.c,v 1.11 2009/08/12 07:28:40 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.dog.c,v 1.8 2006/03/30 01:31:13 jnemeth Exp $");
+__RCSID("$NetBSD: hack.dog.c,v 1.11 2009/08/12 07:28:40 dholland Exp $");
 #endif				/* not lint */
 
 #include "hack.h"
@@ -79,9 +79,11 @@ const struct permonst dog =
 const struct permonst la_dog =
 {"large dog", 'd', 6, 15, 4, 2, 4, sizeof(struct edog)};
 
+static void initedog(struct monst *);
+static int dogfood(struct obj *);
 
 void
-makedog()
+makedog(void)
 {
 	struct monst   *mtmp = makemon(&li_dog, u.ux, u.uy);
 	if (!mtmp)
@@ -89,9 +91,8 @@ makedog()
 	initedog(mtmp);
 }
 
-void
-initedog(mtmp)
-	struct monst   *mtmp;
+static void
+initedog(struct monst *mtmp)
 {
 	mtmp->mtame = mtmp->mpeaceful = 1;
 	EDOG(mtmp)->hungrytime = 1000 + moves;
@@ -108,7 +109,7 @@ struct monst   *fallen_down = 0;/* monsters that fell through a trapdoor */
 /* they will appear on the next level @ goes to, even if he goes up! */
 
 void
-losedogs()
+losedogs(void)
 {
 	struct monst   *mtmp;
 	while ((mtmp = mydogs) != NULL) {
@@ -126,7 +127,7 @@ losedogs()
 }
 
 void
-keepdogs()
+keepdogs(void)
 {
 	struct monst   *mtmp;
 	for (mtmp = fmon; mtmp; mtmp = mtmp->nmon)
@@ -143,8 +144,7 @@ keepdogs()
 }
 
 void
-fall_down(mtmp)
-	struct monst   *mtmp;
+fall_down(struct monst *mtmp)
 {
 	relmon(mtmp);
 	mtmp->nmon = fallen_down;
@@ -161,9 +161,8 @@ fall_down(mtmp)
 #define	APPORT	4
 #define	POISON	5
 #define	UNDEF	6
-int
-dogfood(obj)
-	struct obj     *obj;
+static int
+dogfood(struct obj *obj)
 {
 	switch (obj->olet) {
 	case FOOD_SYM:
@@ -239,7 +238,7 @@ dog_move(struct monst *mtmp, int after)
 	/* Note: if apport == 1 then our behaviour is independent of udist */
 	if (mtmp->minvent) {
 		if (!rn2(udist) || !rn2((int) edog->apport))
-			if (rn2(10) < edog->apport) {
+			if ((unsigned) rn2(10) < edog->apport) {
 				relobj(mtmp, (int) mtmp->minvis);
 				if (edog->apport > 1)
 					edog->apport--;
@@ -255,7 +254,7 @@ dog_move(struct monst *mtmp, int after)
 					goto eatobj;
 				}
 				if (obj->owt < 10 * mtmp->data->mlevel)
-					if (rn2(20) < edog->apport + 3)
+					if ((unsigned) rn2(20) < edog->apport + 3)
 						if (rn2(udist) || !rn2((int) edog->apport)) {
 							freeobj(obj);
 							unpobj(obj);
@@ -291,7 +290,7 @@ dog_move(struct monst *mtmp, int after)
 			}
 		} else if (gtyp == UNDEF && dogroom >= 0 &&
 			   uroom == dogroom &&
-			   !mtmp->minvent && edog->apport > rn2(8)) {
+			   !mtmp->minvent && edog->apport > (unsigned)rn2(8)) {
 			gx = obj->ox;
 			gy = obj->oy;
 			gtyp = APPORT;
@@ -473,8 +472,7 @@ newdogpos:
 
 /* return roomnumber or -1 */
 int
-inroom(x, y)
-	xchar           x, y;
+inroom(xchar x, xchar y)
 {
 #ifndef QUEST
 	struct mkroom  *croom = &rooms[0];
@@ -489,9 +487,7 @@ inroom(x, y)
 }
 
 int
-tamedog(mtmp, obj)
-	struct monst   *mtmp;
-	struct obj     *obj;
+tamedog(struct monst *mtmp, struct obj *obj)
 {
 	struct monst   *mtmp2;
 

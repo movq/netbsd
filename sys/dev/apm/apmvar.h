@@ -1,4 +1,4 @@
-/*	$NetBSD: apmvar.h,v 1.5 2007/12/05 07:58:29 ad Exp $	*/
+/*	$NetBSD: apmvar.h,v 1.8 2009/04/05 08:33:04 cegger Exp $	*/
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,6 +32,7 @@
 
 #include <dev/apm/apmbios.h>
 #include <dev/apm/apmio.h>
+#include <sys/selinfo.h>	/* for struct selinfo */
 
 struct apm_accessops {
 	void	(*aa_disconnect)(void *);
@@ -54,7 +48,7 @@ struct apm_accessops {
 #define APM_NEVENTS 16
 
 struct apm_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct selinfo sc_rsel;
 	struct selinfo sc_xsel;
 	int	sc_flags;

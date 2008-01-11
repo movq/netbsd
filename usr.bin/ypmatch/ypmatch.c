@@ -1,4 +1,4 @@
-/*	$NetBSD: ypmatch.c,v 1.16 2004/01/05 23:23:37 jmmv Exp $	*/
+/*	$NetBSD: ypmatch.c,v 1.19 2009/06/21 14:59:53 wiz Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993 Theo de Raadt <deraadt@fsa.ca>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypmatch.c,v 1.16 2004/01/05 23:23:37 jmmv Exp $");
+__RCSID("$NetBSD: ypmatch.c,v 1.19 2009/06/21 14:59:53 wiz Exp $");
 #endif
 
 #include <sys/param.h>
@@ -46,44 +46,34 @@ __RCSID("$NetBSD: ypmatch.c,v 1.16 2004/01/05 23:23:37 jmmv Exp $");
 #include <rpcsvc/yp_prot.h>
 #include <rpcsvc/ypclnt.h>
 
-const struct ypalias {
-	char *alias, *name;
-} ypaliases[] = {
-	{ "passwd", "passwd.byname" },
-	{ "group", "group.byname" },
-	{ "networks", "networks.byaddr" },
-	{ "hosts", "hosts.byname" },
-	{ "protocols", "protocols.bynumber" },
-	{ "services", "services.byname" },
-	{ "aliases", "mail.aliases" },
-	{ "ethers", "ethers.byname" },
-};
+#include "ypalias_init.h"
 
-int	main __P((int, char *[]));
-void	usage __P((void));
+static void	usage(void) __attribute__((__noreturn__));
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	char *domainname;
-	char *inkey, *inmap, *outbuf;
+	char *inkey, *outbuf;
+	const char *inmap;
 	int outbuflen, key, null, notrans;
-	int c, r, i, len;
+	int c, r, len;
+	size_t i;
 	int rval;
+	const struct ypalias *ypaliases;
 
+	setprogname(*argv);
 	domainname = NULL;
 	notrans = key = null = 0;
+	ypaliases = ypalias_init();
 	while ((c = getopt(argc, argv, "xd:ktz")) != -1) {
 		switch (c) {
 		case 'x':
-			for(i = 0;
-			    i < sizeof(ypaliases)/sizeof(ypaliases[0]); i++)
+			for(i = 0; ypaliases[i].alias; i++)
 				printf("Use \"%s\" for \"%s\"\n",
 					ypaliases[i].alias,
 					ypaliases[i].name);
-			exit(0);
+			return 0;
 
 		case 'd':
 			domainname = optarg;
@@ -117,14 +107,14 @@ main(argc, argv)
 
 	inmap = argv[argc - 1];
 	if (notrans == 0) {
-		for (i = 0 ; i < sizeof(ypaliases)/sizeof(ypaliases[0]); i++)
+		for (i = 0; ypaliases[i].alias; i++)
 			if (strcmp(inmap, ypaliases[i].alias) == 0)
 				inmap = ypaliases[i].name;
 	}
 
 	rval = 0;
-	for(i = 0; i < (argc - 1); i++) {
-		inkey = argv[i];
+	for(c = 0; c < (argc - 1); c++) {
+		inkey = argv[c];
 
 		len = strlen(inkey);
 		if (null)
@@ -150,15 +140,15 @@ main(argc, argv)
 		}
 	}
 
-	exit(rval);
+	return rval;
 }
 
-void
-usage()
+static void
+usage(void)
 {
 
-	fprintf(stderr, "usage: %s [-d domain] [-tkz] key [key ...] "
+	(void)fprintf(stderr, "Usage: %s [-ktz] [-d domain] key ... "
 	    "mapname\n", getprogname());
-	fprintf(stderr, "       %s -x\n", getprogname());
+	(void)fprintf(stderr, "       %s -x\n", getprogname());
 	exit(1);
 }

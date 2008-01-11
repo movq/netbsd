@@ -1,4 +1,4 @@
-/*	$NetBSD: ffbvar.h,v 1.8 2006/09/14 16:05:18 martin Exp $	*/
+/*	$NetBSD: ffbvar.h,v 1.10 2011/04/09 19:31:15 jdc Exp $	*/
 /*	$OpenBSD: creatorvar.h,v 1.6 2002/07/30 19:48:15 jason Exp $	*/
 
 /*
@@ -34,17 +34,24 @@
  */
 
 #include <dev/wscons/wsdisplay_vconsvar.h>
+#include <dev/videomode/videomode.h>
+#include <dev/videomode/edidvar.h>
+#include <dev/videomode/edidreg.h>
+
+#include <dev/i2c/i2cvar.h>
+#include <dev/i2c/i2c_bitbang.h>
 
 #define FFB_CREATOR		0
 #define FFB_AFB			1
 
 #define	FFB_CFFLAG_NOACCEL	0x1
 
+#define EDID_DATA_LEN		128
+
 struct ffb_softc {
 	struct device sc_dv;
 	struct fbdevice sc_fb;
 	bus_space_tag_t sc_bt;
-	bus_space_handle_t sc_pixel_h;
 	bus_space_handle_t sc_dac_h;
 	bus_space_handle_t sc_fbc_h;
 	bus_addr_t sc_addrs[FFB_NREGS];
@@ -55,13 +62,18 @@ struct ffb_softc {
 	int sc_node;
 	int sc_type;
 	u_int sc_dacrev;
+	uint8_t sc_edid_data[EDID_DATA_LEN];
+	struct edid_info sc_edid_info;
 	u_int sc_locked;
 	int sc_mode;
 	int sc_accel, sc_needredraw;
-	int32_t sc_fifo_cache, sc_fg_cache;
+	int32_t sc_fifo_cache, sc_fg_cache, sc_bg_cache;
+	const char *sc_conf;
+	
+	/* I2C stuff */
+	struct i2c_controller sc_i2c;
 
 	/* virtual console stuff */
-	void (*putchar)(void *c, int row, int col, u_int uc, long attr);
 	struct vcons_data vd;
 };
 

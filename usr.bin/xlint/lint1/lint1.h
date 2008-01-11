@@ -1,4 +1,4 @@
-/* $NetBSD: lint1.h,v 1.19 2005/09/24 15:30:35 perry Exp $ */
+/* $NetBSD: lint1.h,v 1.24 2009/10/02 19:01:14 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -81,7 +81,7 @@ typedef	struct strg {
  * qualifiers (only for lex/yacc interface)
  */
 typedef enum {
-	CONST, VOLATILE
+	CONST, VOLATILE, RESTRICT
 } tqual_t;
 
 /*
@@ -143,6 +143,7 @@ struct type {
 	u_int	t_typedef : 1;	/* type defined with typedef */
 	u_int	t_isfield : 1;	/* type is bitfield */
 	u_int	t_isenum : 1;	/* type is (or was) enum (t_enum valid) */
+	u_int	t_ispacked : 1;	/* type is packed */
 	union {
 		int	_t_dim;		/* dimension */
 		str_t	*_t_str;	/* struct/union tag */
@@ -307,7 +308,8 @@ typedef	struct tnode {
  *
  */
 typedef	struct dinfo {
-	tspec_t	d_atyp;		/* VOID, CHAR, INT, FLOAT or DOUBLE */
+	tspec_t	d_atyp;		/* VOID, CHAR, INT, or COMPLEX */
+	tspec_t	d_cmod;		/* FLOAT, or DOUBLE */
 	tspec_t	d_smod;		/* SIGNED or UNSIGN */
 	tspec_t	d_lmod;		/* SHORT, LONG or QUAD */
 	scl_t	d_scl;		/* storage class */
@@ -327,6 +329,7 @@ typedef	struct dinfo {
 	u_int	d_proto : 1;	/* current funct. decl. is prototype */
 	u_int	d_notyp : 1;	/* set if no type specifier was present */
 	u_int	d_asm : 1;	/* set if d_ctx == AUTO and asm() present */
+	u_int	d_ispacked : 1;	/* packed */
 	type_t	*d_tagtyp;	/* tag during member declaration */
 	sym_t	*d_fargs;	/* list of arguments during function def. */
 	pos_t	d_fdpos;	/* position of function definition */
@@ -417,6 +420,6 @@ typedef	struct err_set {
     ((p)->errs_bits[(n)/__NERRBITS] & (1 << ((n) % __NERRBITS)))
 #define	ERR_ZERO(p)	(void)memset((p), 0, sizeof(*(p)))
 
-#define LERROR(a)	lerror(__FILE__, __LINE__, a)
+#define LERROR(fmt, args...)	lerror(__FILE__, __LINE__, fmt, ##args)
 
 extern err_set	msgset;

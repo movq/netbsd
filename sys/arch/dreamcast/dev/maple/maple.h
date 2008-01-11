@@ -1,4 +1,4 @@
-/*	$NetBSD: maple.h,v 1.10 2007/03/04 05:59:43 christos Exp $	*/
+/*	$NetBSD: maple.h,v 1.12 2010/10/17 14:13:44 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -135,19 +128,19 @@ struct maple_response {
 
 struct maple_unit;
 
-extern void	maple_set_callback(struct device *, struct maple_unit *, int,
-		    void (*)(void *, struct maple_response *, int, int),
-		    void *);
-extern void	maple_enable_unit_ping(struct device *, struct maple_unit *,
-		    int /*func*/, int /*enable*/);
-extern void	maple_enable_periodic(struct device *, struct maple_unit *,
-		    int /*func*/, int /*on*/);
-extern void	maple_command(struct device *, struct maple_unit *,
-		    int /*func*/, int /*command*/, int /*datalen*/,
-		    const void *, int /*flags*/);
-extern uint32_t	maple_get_function_data(struct maple_devinfo *, int);
-extern void	maple_run_polling(struct device *);
-extern int	maple_unit_ioctl(struct device *, struct maple_unit *,
-		    u_long, void *, int, struct lwp *);
+void	maple_set_callback(device_t, struct maple_unit *, int,
+	    void (*)(void *, struct maple_response *, int, int),
+	    void *);
+void	maple_enable_unit_ping(device_t, struct maple_unit *,
+	    int /*func*/, int /*enable*/);
+void	maple_enable_periodic(device_t, struct maple_unit *,
+	    int /*func*/, int /*on*/);
+void	maple_command(device_t, struct maple_unit *,
+	    int /*func*/, int /*command*/, int /*datalen*/,
+	    const void *, int /*flags*/);
+uint32_t	maple_get_function_data(struct maple_devinfo *, int);
+void	maple_run_polling(device_t);
+int	maple_unit_ioctl(device_t, struct maple_unit *,
+	    u_long, void *, int, struct lwp *);
 
 #endif /* _DREAMCAST_DEV_MAPLE_MAPLE_H_ */

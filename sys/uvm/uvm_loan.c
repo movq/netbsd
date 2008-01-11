@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_loan.c,v 1.70 2008/01/02 11:49:17 ad Exp $	*/
+/*	$NetBSD: uvm_loan.c,v 1.79 2011/04/23 18:14:12 rmind Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,13 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_loan.c,v 1.70 2008/01/02 11:49:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_loan.c,v 1.79 2011/04/23 18:14:12 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/proc.h>
-#include <sys/malloc.h>
 #include <sys/mman.h>
 
 #include <uvm/uvm.h>
@@ -403,7 +394,7 @@ uvm_loananon(struct uvm_faultinfo *ufi, void ***output, int flags,
 
 		/* "try again"?   sleep a bit and retry ... */
 		if (error == EAGAIN) {
-			tsleep(&lbolt, PVM, "loanagain", 0);
+			kpause("loanagain", false, hz/2, NULL);
 			return (0);
 		}
 
@@ -535,7 +526,7 @@ reget:
 		    pgoff + (ndone << PAGE_SHIFT), pgpp, &npages, 0,
 		    VM_PROT_READ, 0, PGO_SYNCIO);
 		if (error == EAGAIN) {
-			tsleep(&lbolt, PVM, "nfsread", 0);
+			kpause("loanuopg", false, hz/2, NULL);
 			continue;
 		}
 		if (error)
@@ -638,7 +629,10 @@ uvm_loanuobj(struct uvm_faultinfo *ufi, void ***output, int flags, vaddr_t va)
 	 * XXXCDC: duplicate code with uvm_fault().
 	 */
 
+	/* locked: maps(read), amap(if there) */
 	mutex_enter(&uobj->vmobjlock);
+	/* locked: maps(read), amap(if there), uobj */
+
 	if (uobj->pgops->pgo_get) {	/* try locked pgo_get */
 		npages = 1;
 		pg = NULL;
@@ -675,7 +669,7 @@ uvm_loanuobj(struct uvm_faultinfo *ufi, void ***output, int flags, vaddr_t va)
 
 		if (error) {
 			if (error == EAGAIN) {
-				tsleep(&lbolt, PVM, "fltagain2", 0);
+				kpause("fltagain2", false, hz/2, NULL);
 				return (0);
 			}
 			return (-1);
@@ -1068,7 +1062,7 @@ ulz_put(struct uvm_object *uobj, voff_t start, voff_t stop, int flags)
 
 	pg = TAILQ_FIRST(&uobj->memq);
 	KASSERT(pg != NULL);
-	KASSERT(TAILQ_NEXT(pg, listq) == NULL);
+	KASSERT(TAILQ_NEXT(pg, listq.queue) == NULL);
 
 	mutex_enter(&uvm_pageqlock);
 	if (pg->uanon)
@@ -1093,9 +1087,7 @@ void
 uvm_loan_init(void)
 {
 
-	mutex_init(&uvm_loanzero_object.vmobjlock, MUTEX_DEFAULT, IPL_NONE);
-	TAILQ_INIT(&uvm_loanzero_object.memq);
-	uvm_loanzero_object.pgops = &ulz_pager;
+	UVM_OBJ_INIT(&uvm_loanzero_object, &ulz_pager, 0);
 
 	UVMHIST_INIT(loanhist, 300);
 }
@@ -1183,4 +1175,63 @@ uvm_loanbreak(struct vm_page *uobjpage)
 	 */
 
 	return pg;
+}
+
+int
+uvm_loanbreak_anon(struct vm_anon *anon, struct uvm_object *uobj)
+{
+	struct vm_page *pg;
+
+	KASSERT(mutex_owned(&anon->an_lock));
+	KASSERT(uobj == NULL || mutex_owned(&uobj->vmobjlock));
+
+	/* get new un-owned replacement page */
+	pg = uvm_pagealloc(NULL, 0, NULL, 0);
+	if (pg == NULL) {
+		return ENOMEM;
+	}
+
+	/*
+	 * copy data, kill loan, and drop uobj lock (if any)
+	 */
+	/* copy old -> new */
+	uvm_pagecopy(anon->an_page, pg);
+
+	/* force reload */
+	pmap_page_protect(anon->an_page, VM_PROT_NONE);
+	mutex_enter(&uvm_pageqlock);	  /* KILL loan */
+
+	anon->an_page->uanon = NULL;
+	/* in case we owned */
+	anon->an_page->pqflags &= ~PQ_ANON;
+
+	if (uobj) {
+		/* if we were receiver of loan */
+		anon->an_page->loan_count--;
+	} else {
+		/*
+		 * we were the lender (A->K); need to remove the page from
+		 * pageq's.
+		 */
+		uvm_pagedequeue(anon->an_page);
+	}
+
+	if (uobj) {
+		mutex_exit(&uobj->vmobjlock);
+	}
+
+	/* install new page in anon */
+	anon->an_page = pg;
+	pg->uanon = anon;
+	pg->pqflags |= PQ_ANON;
+
+	uvm_pageactivate(pg);
+	mutex_exit(&uvm_pageqlock);
+
+	pg->flags &= ~(PG_BUSY|PG_FAKE);
+	UVM_PAGE_OWN(pg, NULL);
+
+	/* done! */
+
+	return 0;
 }

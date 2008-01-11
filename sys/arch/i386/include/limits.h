@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.20 2007/10/17 19:54:57 garbled Exp $	*/
+/*	$NetBSD: limits.h,v 1.22 2010/06/07 13:52:30 tnozaki Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -31,13 +31,12 @@
  *	@(#)limits.h	7.2 (Berkeley) 6/28/90
  */
 
-#ifndef	_MACHINE_LIMITS_H_
-#define	_MACHINE_LIMITS_H_
+#ifndef	_I386_LIMITS_H_
+#define	_I386_LIMITS_H_
 
 #include <sys/featuretest.h>
 
 #define	CHAR_BIT	8		/* number of bits in a char */
-#define	MB_LEN_MAX	32		/* max multibyte character length */
 
 #define	SCHAR_MAX	0x7f		/* max value for a signed char */
 #define SCHAR_MIN	(-0x7f-1)	/* min value for a signed char */
@@ -92,4 +91,4 @@
 #define FLT_MIN		1.17549435E-38F
 #endif
 
-#endif /* _MACHINE_LIMITS_H_ */
+#endif /* _I386_LIMITS_H_ */

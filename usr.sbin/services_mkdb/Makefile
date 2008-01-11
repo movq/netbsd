@@ -1,12 +1,11 @@
-#	$NetBSD: Makefile,v 1.4 2007/06/23 16:55:15 christos Exp $
+#	$NetBSD: Makefile,v 1.7 2010/04/25 00:54:46 joerg Exp $
 
-WARNS?=	4
 PROG=	services_mkdb
 MAN=	services_mkdb.8
-SRCS=	services_mkdb.c uniq.c
+SRCS=	services_mkdb.c output_cdb.c output_db.c uniq.c
 
 LDADD+=	-lutil
 DPADD+=	${LIBUTIL}
-COPTS+=-g
+#COPTS+=-g
 
 .include <bsd.prog.mk>

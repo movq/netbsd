@@ -1,4 +1,4 @@
-/*	$NetBSD: atactl.c,v 1.49 2007/12/15 16:03:29 perry Exp $	*/
+/*	$NetBSD: atactl.c,v 1.59 2011/01/19 07:55:12 nisimura Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: atactl.c,v 1.49 2007/12/15 16:03:29 perry Exp $");
+__RCSID("$NetBSD: atactl.c,v 1.59 2011/01/19 07:55:12 nisimura Exp $");
 #endif
 
 
@@ -225,7 +218,7 @@ struct bitinfo ata_cmd_ext[] = {
 	{ ATA_CMDE_TL, "Time-limited Read/Write" },
 	{ ATA_CMDE_URGW, "URG bit for WRITE STREAM DMA/PIO" },
 	{ ATA_CMDE_URGR, "URG bit for READ STREAM DMA/PIO" },
-	{ ATA_CMDE_WWN, "World Wide name" },
+	{ ATA_CMDE_WWN, "World Wide Name" },
 	{ ATA_CMDE_WQFE, "WRITE DMA QUEUED FUA EXT command" },
 	{ ATA_CMDE_WFE, "WRITE DMA/MULTIPLE FUA EXT commands" },
 	{ ATA_CMDE_GPL, "General Purpose Logging feature set" },
@@ -272,7 +265,11 @@ static const struct {
 	{  10,		"Spin retry count", NULL },
 	{  11,		"Calibration retry count", NULL },
 	{  12,		"Device power cycle count", NULL },
-	{ 191,		"Gsense error rate", NULL },
+	{  13,		"Soft read error rate", NULL },
+	{ 187,          "Reported uncorrect", NULL },
+	{ 189,          "High Fly Writes", NULL },
+	{ 190,          "Airflow Temperature",		device_smart_temp },
+	{ 191,		"G-sense error rate", NULL },
 	{ 192,		"Power-off retract count", NULL },
 	{ 193,		"Load cycle count", NULL },
 	{ 194,		"Temperature",			device_smart_temp},
@@ -478,7 +475,7 @@ device_smart_temp(struct ata_smart_attr *attr, uint64_t raw_value)
 {
 	printf("%" PRIu8, attr->raw[0]);
 	if (attr->raw[0] != raw_value)
-		printf(" Lifetime max/min %" PRIu8 "/%" PRIu8, 
+		printf(" Lifetime min/max %" PRIu8 "/%" PRIu8, 
 		    attr->raw[2], attr->raw[4]);
 }
 
@@ -556,8 +553,8 @@ print_smart_status(void *vbuf, void *tbuf)
 		else
 			printf("%" PRIu64, raw_value);
 		printf("\n");
-		}
 	}
+}
 
 struct {
 	int number;
@@ -687,7 +684,7 @@ void
 print_selftest_entry(int num, struct ata_smart_selftest *le)
 {
 	unsigned char *p;
-	int i;
+	size_t i;
 
 	/* check if all zero */
 	for (p = (void *)le, i = 0; i < sizeof(*le); i++)
@@ -766,7 +763,7 @@ getataparams()
 
 	req.flags = ATACMD_READ;
 	req.command = WDCC_IDENTIFY;
-	req.databuf = (caddr_t)&inbuf;
+	req.databuf = &inbuf;
 	req.datalen = sizeof(inbuf);
 	req.timeout = 1000;
 
@@ -813,7 +810,40 @@ is_smart(void)
 	}
 	return retval;
 }
-					
+
+/*
+ * extract_string: copy a block of bytes out of ataparams and make
+ * a proper string out of it, truncating trailing spaces and preserving
+ * strict typing. And also, not doing unaligned accesses.
+ */
+static void
+extract_string(char *buf, size_t bufmax,
+	       uint8_t *bytes, unsigned numbytes,
+	       int needswap)
+{
+	unsigned i;
+	size_t j;
+	unsigned char ch1, ch2;
+
+	for (i = 0, j = 0; i < numbytes; i += 2) {
+		ch1 = bytes[i];
+		ch2 = bytes[i+1];
+		if (needswap && j < bufmax-1) {
+			buf[j++] = ch2;
+		}
+		if (j < bufmax-1) {
+			buf[j++] = ch1;
+		}
+		if (!needswap && j < bufmax-1) {
+			buf[j++] = ch2;
+		}
+	}
+	while (j > 0 && buf[j-1] == ' ') {
+		j--;
+	}
+	buf[j] = '\0';
+}
+
 /*
  * DEVICE COMMANDS
  */
@@ -827,16 +857,31 @@ void
 device_identify(int argc, char *argv[])
 {
 	struct ataparams *inqbuf;
-#if BYTE_ORDER == LITTLE_ENDIAN
+	char model[sizeof(inqbuf->atap_model)+1];
+	char revision[sizeof(inqbuf->atap_revision)+1];
+	char serial[sizeof(inqbuf->atap_serial)+1];
+	char hnum[12];
+	uint64_t capacity;
+	uint64_t sectors;
+	uint32_t secsize;
+	int lb_per_pb;
+	int needswap = 0;
 	int i;
-	u_int16_t *p;
-#endif
+	uint8_t checksum;
 
 	/* No arguments. */
 	if (argc != 0)
 		usage();
 
 	inqbuf = getataparams();
+
+	if ((inqbuf->atap_integrity & WDC_INTEGRITY_MAGIC_MASK) ==
+	    WDC_INTEGRITY_MAGIC) {
+		for (i = checksum = 0; i < 512; i++)
+			checksum += ((uint8_t *)inqbuf)[i];
+		if (checksum != 0)
+			puts("IDENTIFY DEVICE data checksum invalid\n");
+	}
 
 #if BYTE_ORDER == LITTLE_ENDIAN
 	/*
@@ -850,63 +895,96 @@ device_identify(int argc, char *argv[])
 		  inqbuf->atap_model[1] == 'E') ||
 	       (inqbuf->atap_model[0] == 'F' &&
 		  inqbuf->atap_model[1] == 'X')))) {
-		for (i = 0 ; i < sizeof(inqbuf->atap_model); i += 2) {
-			p = (u_short *) (inqbuf->atap_model + i);
-			*p = ntohs(*p);
-		}
-		for (i = 0 ; i < sizeof(inqbuf->atap_serial); i += 2) {
-			p = (u_short *) (inqbuf->atap_serial + i);
-			*p = ntohs(*p);
-		}
-		for (i = 0 ; i < sizeof(inqbuf->atap_revision); i += 2) {
-			p = (u_short *) (inqbuf->atap_revision + i);
-			*p = ntohs(*p);
-		}
+		needswap = 1;
 	}
 #endif
 
 	/*
-	 * Strip blanks off of the info strings.  Yuck, I wish this was
-	 * cleaner.
+	 * Copy the info strings out, stripping off blanks.
 	 */
+	extract_string(model, sizeof(model),
+		inqbuf->atap_model, sizeof(inqbuf->atap_model),
+		needswap);
+	extract_string(revision, sizeof(revision),
+		inqbuf->atap_revision, sizeof(inqbuf->atap_revision),
+		needswap);
+	extract_string(serial, sizeof(serial),
+		inqbuf->atap_serial, sizeof(inqbuf->atap_serial),
+		needswap);
 
-	if (inqbuf->atap_model[sizeof(inqbuf->atap_model) - 1] == ' ') {
-		inqbuf->atap_model[sizeof(inqbuf->atap_model) - 1] = '\0';
-		while (inqbuf->atap_model[strlen(inqbuf->atap_model) - 1] == ' ')
-			inqbuf->atap_model[strlen(inqbuf->atap_model) - 1] = '\0';
-	}
+	printf("Model: %s, Rev: %s, Serial #: %s\n",
+		model, revision, serial);
 
-	if (inqbuf->atap_revision[sizeof(inqbuf->atap_revision) - 1] == ' ') {
-		inqbuf->atap_revision[sizeof(inqbuf->atap_revision) - 1] = '\0';
-		while (inqbuf->atap_revision[strlen(inqbuf->atap_revision) - 1] == ' ')
-			inqbuf->atap_revision[strlen(inqbuf->atap_revision) - 1] = '\0';
-	}
-
-	if (inqbuf->atap_serial[sizeof(inqbuf->atap_serial) - 1] == ' ') {
-		inqbuf->atap_serial[sizeof(inqbuf->atap_serial) - 1] = '\0';
-		while (inqbuf->atap_serial[strlen(inqbuf->atap_serial) - 1] == ' ')
-			inqbuf->atap_serial[strlen(inqbuf->atap_serial) - 1] = '\0';
-	}
-
-	printf("Model: %.*s, Rev: %.*s, Serial #: %.*s\n",
-	       (int) sizeof(inqbuf->atap_model), inqbuf->atap_model,
-	       (int) sizeof(inqbuf->atap_revision), inqbuf->atap_revision,
-	       (int) sizeof(inqbuf->atap_serial), inqbuf->atap_serial);
+	if (inqbuf->atap_cmd_ext != 0 && inqbuf->atap_cmd_ext != 0xffff &&
+	    inqbuf->atap_cmd_ext & ATA_CMDE_WWN)
+		printf("World Wide Name: %016" PRIX64 "\n",
+		    ((uint64_t)inqbuf->atap_wwn[0] << 48) |
+		    ((uint64_t)inqbuf->atap_wwn[1] << 32) |
+		    ((uint64_t)inqbuf->atap_wwn[2] << 16) |
+		    ((uint64_t)inqbuf->atap_wwn[3] <<  0));
 
 	printf("Device type: %s, %s\n", inqbuf->atap_config & WDC_CFG_ATAPI ?
 	       "ATAPI" : "ATA", inqbuf->atap_config & ATA_CFG_FIXED ? "fixed" :
 	       "removable");
 
-	if ((inqbuf->atap_config & WDC_CFG_ATAPI_MASK) == 0)
-		printf("Cylinders: %d, heads: %d, sec/track: %d, total "
-		       "sectors: %d\n", inqbuf->atap_cylinders,
-		       inqbuf->atap_heads, inqbuf->atap_sectors,
-		       (inqbuf->atap_capacity[1] << 16) |
-		       inqbuf->atap_capacity[0]);
+	if (inqbuf->atap_cmd2_en != 0 && inqbuf->atap_cmd2_en != 0xffff &&
+	    inqbuf->atap_cmd2_en & ATA_CMD2_LBA48) {
+		sectors =
+		    ((uint64_t)inqbuf->atap_max_lba[3] << 48) |
+		    ((uint64_t)inqbuf->atap_max_lba[2] << 32) |
+		    ((uint64_t)inqbuf->atap_max_lba[1] << 16) |
+		    ((uint64_t)inqbuf->atap_max_lba[0] <<  0);
+	} else if (inqbuf->atap_capabilities1 & WDC_CAP_LBA) {
+		sectors = (inqbuf->atap_capacity[1] << 16) |
+		    inqbuf->atap_capacity[0];
+	} else {
+		sectors = inqbuf->atap_cylinders *
+		    inqbuf->atap_heads * inqbuf->atap_sectors;
+	}
 
-	if (inqbuf->atap_queuedepth & WDC_QUEUE_DEPTH_MASK)
-		printf("Device supports command queue depth of %d\n",
-		       inqbuf->atap_queuedepth & WDC_QUEUE_DEPTH_MASK);
+	secsize = 512;
+
+	if ((inqbuf->atap_secsz & ATA_SECSZ_VALID_MASK) == ATA_SECSZ_VALID) {
+		if (inqbuf->atap_secsz & ATA_SECSZ_LLS) {
+			secsize = 2 *		/* words to bytes */
+			    (inqbuf->atap_lls_secsz[1] << 16 |
+			    inqbuf->atap_lls_secsz[0] <<  0);
+		}
+	}
+
+	capacity = sectors * secsize;
+
+	humanize_number(hnum, sizeof(hnum), capacity, "bytes",
+		HN_AUTOSCALE, HN_DIVISOR_1000);
+
+	printf("Capacity %s, %" PRIu64 " sectors, %" PRIu32 " bytes/sector\n", 
+		       hnum, sectors, secsize);
+
+	printf("Cylinders: %d, heads: %d, sec/track: %d\n",
+		inqbuf->atap_cylinders, inqbuf->atap_heads,
+		inqbuf->atap_sectors);
+	
+	lb_per_pb = 1;
+
+	if ((inqbuf->atap_secsz & ATA_SECSZ_VALID_MASK) == ATA_SECSZ_VALID) {
+		if (inqbuf->atap_secsz & ATA_SECSZ_LPS) {
+			lb_per_pb <<= inqbuf->atap_secsz & ATA_SECSZ_LPS_SZMSK;
+			printf("Physical sector size: %d bytes\n",
+			    lb_per_pb * secsize);
+			if ((inqbuf->atap_logical_align &
+			    ATA_LA_VALID_MASK) == ATA_LA_VALID) {
+				printf("First physically aligned sector: %d\n",
+				    lb_per_pb - (inqbuf->atap_logical_align &
+					ATA_LA_MASK));
+			}
+		}
+	}
+
+	if (((inqbuf->atap_sata_caps & SATA_NATIVE_CMDQ) ||
+	    (inqbuf->atap_cmd_set2 & ATA_CMD2_RWQ)) &&
+	    (inqbuf->atap_queuedepth & WDC_QUEUE_DEPTH_MASK))
+		printf("Command queue depth: %d\n",
+		    (inqbuf->atap_queuedepth & WDC_QUEUE_DEPTH_MASK) + 1);
 
 	printf("Device capabilities:\n");
 	print_bitinfo("\t", "\n", inqbuf->atap_capabilities1, ata_caps);
@@ -939,15 +1017,22 @@ device_identify(int argc, char *argv[])
 
 	if (inqbuf->atap_sata_caps != 0 && inqbuf->atap_sata_caps != 0xffff) {
 		printf("Serial ATA capabilities:\n");
-		print_bitinfo("\t", "\n", inqbuf->atap_sata_caps, ata_sata_caps);
+		print_bitinfo("\t", "\n",
+		    inqbuf->atap_sata_caps, ata_sata_caps);
+
 	}
 
-	if (inqbuf->atap_sata_features_supp != 0 && inqbuf->atap_sata_features_supp != 0xffff) {
+	if (inqbuf->atap_sata_features_supp != 0 &&
+	    inqbuf->atap_sata_features_supp != 0xffff) {
 		printf("Serial ATA features:\n");
-		if (inqbuf->atap_sata_features_en != 0 && inqbuf->atap_sata_features_en != 0xffff)
-			print_bitinfo2("\t", "\n", inqbuf->atap_sata_features_supp, inqbuf->atap_sata_features_en, ata_sata_feat);
+		if (inqbuf->atap_sata_features_en != 0 &&
+		    inqbuf->atap_sata_features_en != 0xffff)
+			print_bitinfo2("\t", "\n",
+			    inqbuf->atap_sata_features_supp,
+			    inqbuf->atap_sata_features_en, ata_sata_feat);
 		else
-			print_bitinfo("\t", "\n", inqbuf->atap_sata_features_supp, ata_sata_feat);
+			print_bitinfo("\t", "\n",
+			    inqbuf->atap_sata_features_supp, ata_sata_feat);
 	}
 
 	return;

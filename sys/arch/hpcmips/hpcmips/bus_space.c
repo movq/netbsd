@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.25 2005/12/11 12:17:33 christos Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.30 2011/02/26 12:07:45 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.25 2005/12/11 12:17:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.30 2011/02/26 12:07:45 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.25 2005/12/11 12:17:33 christos Exp 
 #include <uvm/uvm_extern.h>
 
 #include <mips/cache.h>
+#include <mips/locore.h>
 #include <mips/pte.h>
 #include <machine/bus.h>
 #include <machine/bus_space_hpcmips.h>
@@ -159,21 +153,21 @@ static struct bus_space_tag_hpcmips __sys_bus_space = {
 static bus_space_tag_t __sys_bus_space_tag = &__sys_bus_space.bst;
 
 bus_space_tag_t
-hpcmips_system_bus_space()
+hpcmips_system_bus_space(void)
 {
 
 	return (__sys_bus_space_tag);
 }
 
 struct bus_space_tag_hpcmips *
-hpcmips_system_bus_space_hpcmips()
+hpcmips_system_bus_space_hpcmips(void)
 {
 
 	return (&__sys_bus_space);
 }
 
 struct bus_space_tag_hpcmips *
-hpcmips_alloc_bus_space_tag()
+hpcmips_alloc_bus_space_tag(void)
 {
 
 	if (__bus_space_index >= MAX_BUSSPACE_TAG) {
@@ -216,7 +210,7 @@ hpcmips_init_bus_space(struct bus_space_tag_hpcmips *t,
 		t->base = va; /* kseg2 addr */
 				
 		for (; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-			pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
+			pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
 		}
 		pmap_update(pmap_kernel());
 	}
@@ -257,7 +251,7 @@ __hpcmips_cacheable(struct bus_space_tag_hpcmips *t, bus_addr_t bpa,
 			/*
 			 * Update the same virtual address entry.
 			 */
-			MachTLBUpdate(va, opte);
+			tlb_update(va, opte);
 		}
 		return (bpa);
 	}

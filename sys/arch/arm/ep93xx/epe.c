@@ -1,4 +1,4 @@
-/*	$NetBSD: epe.c,v 1.13 2007/10/17 19:53:40 garbled Exp $	*/
+/*	$NetBSD: epe.c,v 1.25 2010/04/05 07:19:29 joerg Exp $	*/
 
 /*
  * Copyright (c) 2004 Jesse Off
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.13 2007/10/17 19:53:40 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.25 2010/04/05 07:19:29 joerg Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -77,15 +70,8 @@ __KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.13 2007/10/17 19:53:40 garbled Exp $");
 #include <netns/ns_if.h>
 #endif
 
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
-
-#ifdef IPKDB_EP93XX
-#include <ipkdb/ipkdb.h>
-#endif
 
 #include <arm/ep93xx/ep93xxreg.h>
 #include <arm/ep93xx/epereg.h> 
@@ -118,7 +104,6 @@ static void	epe_init(struct epe_softc *);
 static int      epe_intr(void* arg);
 static int	epe_gctx(struct epe_softc *);
 static int	epe_mediachange(struct ifnet *);
-static void	epe_mediastatus(struct ifnet *, struct ifmediareq *);
 int		epe_mii_readreg (struct device *, int, int);
 void		epe_mii_writereg (struct device *, int, int, int);
 void		epe_statchg (struct device *);
@@ -158,7 +143,7 @@ epe_attach(struct device *parent, struct device *self, void *aux)
 		panic("%s: Cannot map registers", self->dv_xname);
 
 	/* Fetch the Ethernet address from property if set. */
-	enaddr = prop_dictionary_get(device_properties(self), "mac-addr");
+	enaddr = prop_dictionary_get(device_properties(self), "mac-address");
 	if (enaddr != NULL) {
 		KASSERT(prop_object_type(enaddr) == PROP_TYPE_DATA);
 		KASSERT(prop_data_size(enaddr) == ETHER_ADDR_LEN);
@@ -250,10 +235,7 @@ begin:
 				sc->rxq[bi].m->m_pkthdr.rcvif = ifp;
 				sc->rxq[bi].m->m_pkthdr.len = 
 					sc->rxq[bi].m->m_len = fl;
-#if NBPFILTER > 0
-				if (ifp->if_bpf) 
-					bpf_mtap(ifp->if_bpf, sc->rxq[bi].m);
-#endif /* NBPFILTER > 0 */
+				bpf_mtap(ifp, sc->rxq[bi].m);
                                 (*ifp->if_input)(ifp, sc->rxq[bi].m);
 				sc->rxq[bi].m = m;
 				bus_dmamap_load(sc->sc_dmat, 
@@ -355,7 +337,7 @@ epe_init(struct epe_softc *sc)
 		panic("%s: Cannot get DMA memory", sc->sc_dev.dv_xname);
 	}
 	sc->ctrlpage_dsaddr = sc->ctrlpage_dmamap->dm_segs[0].ds_addr;
-	bzero(sc->ctrlpage, PAGE_SIZE);
+	memset(sc->ctrlpage, 0, PAGE_SIZE);
 	
 	/* Set up pointers to start of each queue in kernel addr space.
 	 * Each descriptor queue or status queue entry uses 2 words
@@ -428,8 +410,9 @@ epe_init(struct epe_softc *sc)
 	sc->sc_mii.mii_readreg = epe_mii_readreg;
 	sc->sc_mii.mii_writereg = epe_mii_writereg;
 	sc->sc_mii.mii_statchg = epe_statchg;
+	sc->sc_ec.ec_mii = &sc->sc_mii;
 	ifmedia_init(&sc->sc_mii.mii_media, IFM_IMASK, epe_mediachange,
-		epe_mediastatus);
+		ether_mediastatus);
 	mii_attach((struct device *)sc, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 		MII_OFFSET_ANY, 0);
 	ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_AUTO);
@@ -466,31 +449,15 @@ epe_init(struct epe_softc *sc)
 }
 
 static int
-epe_mediachange(ifp)
-	struct ifnet *ifp;
+epe_mediachange(struct ifnet *ifp)
 {
 	if (ifp->if_flags & IFF_UP)
 		epe_ifinit(ifp);
 	return (0);
 }
 
-static void
-epe_mediastatus(ifp, ifmr)
-	struct ifnet *ifp;
-	struct ifmediareq *ifmr;
-{
-	struct epe_softc *sc = ifp->if_softc;
-
-	mii_pollstat(&sc->sc_mii);
-	ifmr->ifm_active = sc->sc_mii.mii_media_active;
-	ifmr->ifm_status = sc->sc_mii.mii_media_status;
-}
-
-
 int
-epe_mii_readreg(self, phy, reg)
-	struct device *self;
-	int phy, reg;
+epe_mii_readreg(struct device *self, int phy, int reg)
 {
 	u_int32_t d, v;
 	struct epe_softc *sc;
@@ -506,9 +473,7 @@ epe_mii_readreg(self, phy, reg)
 }
 
 void
-epe_mii_writereg(self, phy, reg, val)
-	struct device *self;
-	int phy, reg, val;
+epe_mii_writereg(struct device *self, int phy, int reg, int val)
 {
 	struct epe_softc *sc;
 	u_int32_t d;
@@ -524,8 +489,7 @@ epe_mii_writereg(self, phy, reg, val)
 
 	
 void
-epe_statchg(self)
-        struct device *self;
+epe_statchg(struct device *self)
 {
         struct epe_softc *sc = (struct epe_softc *)self;
         u_int32_t reg;
@@ -543,8 +507,7 @@ epe_statchg(self)
 }
 
 void
-epe_tick(arg)
-	void *arg;
+epe_tick(void *arg)
 {
 	struct epe_softc* sc = (struct epe_softc *)arg;
 	struct ifnet * ifp = &sc->sc_ec.ec_if;
@@ -569,36 +532,23 @@ epe_tick(arg)
 
 
 static int
-epe_ifioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	void *data;
+epe_ifioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
-	struct epe_softc *sc = ifp->if_softc;
-	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error;
 
 	s = splnet();
-	switch(cmd) {
-	case SIOCSIFMEDIA:
-	case SIOCGIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, cmd);
-		break;
-	default:
-		error = ether_ioctl(ifp, cmd, data);
-		if (error == ENETRESET) {
-			if (ifp->if_flags & IFF_RUNNING)
-				epe_setaddr(ifp);
-			error = 0;
-		}
+	error = ether_ioctl(ifp, cmd, data);
+	if (error == ENETRESET) {
+		if (ifp->if_flags & IFF_RUNNING)
+			epe_setaddr(ifp);
+		error = 0;
 	}
 	splx(s);
 	return error;
 }
 
 static void
-epe_ifstart(ifp)
-	struct ifnet *ifp;
+epe_ifstart(struct ifnet *ifp)
 {
 	struct epe_softc *sc = (struct epe_softc *)ifp->if_softc;
 	struct mbuf *m;
@@ -658,10 +608,7 @@ more:
 		IFQ_DEQUEUE(&ifp->if_snd, m);
 	}
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf) 
-		bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+	bpf_mtap(ifp, m);
 
 	nsegs = sc->txq[bi].m_dmamap->dm_nsegs;
 	segs = sc->txq[bi].m_dmamap->dm_segs;
@@ -712,8 +659,7 @@ stop:
 }
 
 static void
-epe_ifwatchdog(ifp)
-	struct ifnet *ifp;
+epe_ifwatchdog(struct ifnet *ifp)
 {
 	struct epe_softc *sc = (struct epe_softc *)ifp->if_softc;
 
@@ -724,27 +670,30 @@ epe_ifwatchdog(ifp)
 }
 
 static int
-epe_ifinit(ifp)
-	struct ifnet *ifp;
+epe_ifinit(struct ifnet *ifp)
 {
 	struct epe_softc *sc = ifp->if_softc;
-	int s = splnet();
+	int rc, s = splnet();
 
 	callout_stop(&sc->epe_tick_ch);
 	EPE_WRITE(RXCtl, RXCtl_IA0|RXCtl_BA|RXCtl_RCRCA|RXCtl_SRxON);
 	EPE_WRITE(TXCtl, TXCtl_STxON);
 	EPE_WRITE(GIIntMsk, GIIntMsk_INT); /* start interrupting */
-	mii_mediachg(&sc->sc_mii);
+
+	if ((rc = mii_mediachg(&sc->sc_mii)) == ENXIO)
+		rc = 0;
+	else if (rc != 0)
+		goto out;
+
 	callout_reset(&sc->epe_tick_ch, hz, epe_tick, sc);
         ifp->if_flags |= IFF_RUNNING;
+out:
 	splx(s);
 	return 0;
 }
 
 static void
-epe_ifstop(ifp, disable)
-	struct ifnet *ifp;
-	int disable;
+epe_ifstop(struct ifnet *ifp, int disable)
 {
 	struct epe_softc *sc = ifp->if_softc;
 
@@ -763,8 +712,7 @@ epe_ifstop(ifp, disable)
 }
 
 static void
-epe_setaddr(ifp)
-	struct ifnet *ifp;
+epe_setaddr(struct ifnet *ifp)
 {
 	struct epe_softc *sc = ifp->if_softc;
 	struct ethercom *ac = &sc->sc_ec;

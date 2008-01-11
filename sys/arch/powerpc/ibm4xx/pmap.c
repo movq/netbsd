@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.50 2007/10/17 19:56:39 garbled Exp $	*/
+/*	$NetBSD: pmap.c,v 1.66 2011/02/07 07:02:24 matt Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -67,12 +67,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.50 2007/10/17 19:56:39 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.66 2011/02/07 07:02:24 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/queue.h>
 #include <sys/systm.h>
 #include <sys/pool.h>
@@ -85,6 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.50 2007/10/17 19:56:39 garbled Exp $");
 #include <machine/powerpc.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/ibm4xx/spr.h>
 #include <machine/tlb.h>
 
 /*
@@ -126,10 +126,14 @@ struct evcnt tlbflush_ev = EVCNT_INITIALIZER(EVCNT_TYPE_TRAP,
 	NULL, "cpu", "tlbflush");
 struct evcnt tlbenter_ev = EVCNT_INITIALIZER(EVCNT_TYPE_TRAP,
 	NULL, "cpu", "tlbenter");
+EVCNT_ATTACH_STATIC(tlbmiss_ev);
+EVCNT_ATTACH_STATIC(tlbhit_ev);
+EVCNT_ATTACH_STATIC(tlbflush_ev);
+EVCNT_ATTACH_STATIC(tlbenter_ev);
 
 struct pmap kernel_pmap_;
+struct pmap *const kernel_pmap_ptr = &kernel_pmap_;
 
-int physmem;
 static int npgs;
 static u_int nextavail;
 #ifndef MSGBUFADDR
@@ -195,7 +199,7 @@ pa_to_pv(paddr_t pa)
 	bank = vm_physseg_find(atop(pa), &pg);
 	if (bank == -1)
 		return NULL;
-	return &vm_physmem[bank].pmseg.pvent[pg];
+	return &VM_PHYSMEM_PTR(bank)->pmseg.pvent[pg];
 }
 
 static inline char *
@@ -206,7 +210,7 @@ pa_to_attr(paddr_t pa)
 	bank = vm_physseg_find(atop(pa), &pg);
 	if (bank == -1)
 		return NULL;
-	return &vm_physmem[bank].pmseg.attrs[pg];
+	return &VM_PHYSMEM_PTR(bank)->pmseg.attrs[pg];
 }
 
 /*
@@ -412,11 +416,6 @@ pmap_bootstrap(u_int kernelstart, u_int kernelend)
 	pmap_kernel()->pm_ctx = KERNEL_PID;
 	nextavail = avail->start;
 
-	evcnt_attach_static(&tlbmiss_ev);
-	evcnt_attach_static(&tlbhit_ev);
-	evcnt_attach_static(&tlbflush_ev);
-	evcnt_attach_static(&tlbenter_ev);
-
 	pmap_bootstrap_done = 1;
 }
 
@@ -472,9 +471,9 @@ pmap_init(void)
 	pv = pv_table;
 	attr = pmap_attrib;
 	for (bank = 0; bank < vm_nphysseg; bank++) {
-		sz = vm_physmem[bank].end - vm_physmem[bank].start;
-		vm_physmem[bank].pmseg.pvent = pv;
-		vm_physmem[bank].pmseg.attrs = attr;
+		sz = VM_PHYSMEM_PTR(bank)->end - VM_PHYSMEM_PTR(bank)->start;
+		VM_PHYSMEM_PTR(bank)->pmseg.pvent = pv;
+		VM_PHYSMEM_PTR(bank)->pmseg.attrs = attr;
 		pv += sz;
 		attr += sz;
 	}
@@ -517,8 +516,8 @@ pmap_virtual_space(vaddr_t *start, vaddr_t *end)
  * This is not the most efficient technique but i don't
  * expect it to be called that often.
  */
-extern struct vm_page *vm_page_alloc1 __P((void));
-extern void vm_page_free1 __P((struct vm_page *));
+extern struct vm_page *vm_page_alloc1(void);
+extern void vm_page_free1(struct vm_page *);
 
 vaddr_t kbreak = VM_MIN_KERNEL_ADDRESS;
 
@@ -674,19 +673,6 @@ pmap_update(struct pmap *pmap)
 }
 
 /*
- * Garbage collects the physical map system for
- * pages which are no longer used.
- * Success need not be guaranteed -- that is, there
- * may well be pages which are not referenced, but
- * others may be collected.
- * Called by the pageout daemon when pages are scarce.
- */
-void
-pmap_collect(struct pmap *pm)
-{
-}
-
-/*
  * Fill the given physical page with zeroes.
  */
 void
@@ -808,11 +794,11 @@ pmap_remove_pv(struct pmap *pm, vaddr_t va, paddr_t pa)
  * Insert physical page at pa into the given pmap at virtual address va.
  */
 int
-pmap_enter(struct pmap *pm, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
+pmap_enter(struct pmap *pm, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 {
 	int s;
 	u_int tte;
-	int managed;
+	bool managed;
 
 	/*
 	 * Have to remove any existing mapping first.
@@ -822,9 +808,7 @@ pmap_enter(struct pmap *pm, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 	if (flags & PMAP_WIRED)
 		flags |= prot;
 
-	managed = 0;
-	if (vm_physseg_find(atop(pa), NULL) != -1)
-		managed = 1;
+	managed = uvm_pageismanaged(pa);
 
 	/*
 	 * Generate TTE.
@@ -929,7 +913,7 @@ pmap_unwire(struct pmap *pm, vaddr_t va)
 }
 
 void
-pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
+pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 {
 	int s;
 	u_int tte;
@@ -1141,11 +1125,11 @@ void
 pmap_activate(struct lwp *l)
 {
 #if 0
-	struct pcb *pcb = &l->l_proc->p_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 	pmap_t pmap = l->l_proc->p_vmspace->vm_map.pmap;
 
 	/*
-	 * XXX Normally performed in cpu_fork().
+	 * XXX Normally performed in cpu_lwp_fork().
 	 */
 	printf("pmap_activate(%p), pmap=%p\n",l,pmap);
 	pcb->pcb_pm = pmap;
@@ -1490,7 +1474,8 @@ pmap_tlbmiss(vaddr_t va, int ctx)
 	 * to not clobber 0 upto ${physmem} with device mappings in machdep
 	 * code.
 	 */
-	if (ctx != KERNEL_PID || va >= VM_MIN_KERNEL_ADDRESS) {
+	if (ctx != KERNEL_PID ||
+	    (va >= VM_MIN_KERNEL_ADDRESS && va < VM_MAX_KERNEL_ADDRESS)) {
 		pte = pte_find((struct pmap *)__UNVOLATILE(ctxbusy[ctx]), va);
 		if (pte == NULL) {
 			/* Map unmanaged addresses directly for kernel access */
@@ -1635,9 +1620,9 @@ ctx_free(struct pmap *pm)
 /*
  * Test ref/modify handling.
  */
-void pmap_testout __P((void));
+void pmap_testout(void);
 void
-pmap_testout()
+pmap_testout(void)
 {
 	vaddr_t va;
 	volatile int *loc;
@@ -1903,7 +1888,7 @@ pmap_testout()
 	       ref, mod);
 
 	pmap_remove(pmap_kernel(), va, va + PAGE_SIZE);
-	pmap_kenter_pa(va, pa, VM_PROT_ALL);
+	pmap_kenter_pa(va, pa, VM_PROT_ALL, 0);
 	uvm_km_free(kernel_map, (vaddr_t)va, PAGE_SIZE, UVM_KMF_WIRED);
 }
 #endif

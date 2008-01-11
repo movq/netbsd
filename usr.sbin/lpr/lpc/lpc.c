@@ -1,4 +1,4 @@
-/*	$NetBSD: lpc.c,v 1.23 2007/10/03 19:07:43 christos Exp $	*/
+/*	$NetBSD: lpc.c,v 1.25 2009/01/18 09:57:26 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -32,12 +32,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)lpc.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: lpc.c,v 1.23 2007/10/03 19:07:43 christos Exp $");
+__RCSID("$NetBSD: lpc.c,v 1.25 2009/01/18 09:57:26 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -240,7 +240,7 @@ makeargv(void)
 
 	s = strlen(cmdline) + 1;
 	margc = 0;
-	for (cp = cmdline; *cp && (cp - cmdline) < s && n < MAX_MARGV; n++) {
+	for (cp = cmdline; *cp && (size_t)(cp - cmdline) < s && n < MAX_MARGV; n++) {
 		while (isspace((unsigned char)*cp))
 			cp++;
 		if (*cp == '\0')

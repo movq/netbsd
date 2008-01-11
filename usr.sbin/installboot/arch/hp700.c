@@ -1,4 +1,4 @@
-/*	$NetBSD: hp700.c,v 1.2 2006/02/18 10:08:07 dsl Exp $	*/
+/*	$NetBSD: hp700.c,v 1.4 2008/04/28 20:24:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,9 +35,16 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: hp700.c,v 1.2 2006/02/18 10:08:07 dsl Exp $");
+__RCSID("$NetBSD: hp700.c,v 1.4 2008/04/28 20:24:16 martin Exp $");
 #endif	/* !__lint */
 
+/* We need the target disklabel.h, not the hosts one..... */
+#ifdef HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#include <nbinclude/sys/disklabel.h>
+#else                                                                          
+#include <sys/disklabel.h>
+#endif
 #include <sys/param.h>
 #include <sys/stat.h>
 
@@ -124,7 +124,13 @@ hp700_setboot(ib_params *params)
 {
 	struct stat	bootstrapsb;
 	char		bb[HP700_BOOT_BLOCK_SIZE];
-	char		label[HP700_BOOT_BLOCK_SIZE];
+	struct {
+		char	l_off[HP700_LABELOFFSET];
+		struct disklabel l;
+		char	l_pad[HP700_BOOT_BLOCK_SIZE
+			    - HP700_LABELOFFSET - sizeof(struct disklabel)];
+	} label;
+	unsigned int	secsize, npart;
 	int		retval;
 	ssize_t		rv;
 
@@ -137,11 +143,11 @@ hp700_setboot(ib_params *params)
 	retval = 0;
 
 	/* read disklabel on the target disk */
-	rv = pread(params->fsfd, label, sizeof label, 0);
+	rv = pread(params->fsfd, &label, HP700_BOOT_BLOCK_SIZE, 0);
 	if (rv == -1) {
 		warn("Reading `%s'", params->filesystem);
 		goto done;
-	} else if (rv != sizeof label) {
+	} else if (rv != HP700_BOOT_BLOCK_SIZE) {
 		warnx("Reading `%s': short read", params->filesystem);
 		goto done;
 	}
@@ -155,6 +161,28 @@ hp700_setboot(ib_params *params)
 		goto done;
 	}
 
+	/* check if valid disklabel exists */
+	secsize = be32toh(label.l.d_secsize);
+	npart = be16toh(label.l.d_npartitions);
+	if (label.l.d_magic != htobe32(DISKMAGIC) ||
+	    label.l.d_magic2 != htobe32(DISKMAGIC) ||
+	    secsize == 0 || secsize & (secsize - 1) ||
+	    npart > MAXMAXPARTITIONS) {
+		warnx("No disklabel in `%s'", params->filesystem);
+
+	/* then check if boot partition exists */
+	} else if (npart < 1 || label.l.d_partitions[0].p_size == 0) {
+		warnx("Partition `a' doesn't exist in %s", params->filesystem);
+
+	/* check if the boot partition is below 2GB */
+	} else if (be32toh(label.l.d_partitions[0].p_offset) +
+	    be32toh(label.l.d_partitions[0].p_size) >
+	    ((unsigned)2*1024*1024*1024) / secsize) {
+		warnx("WARNING: Partition `a' of `%s' exceeds 2GB boundary.",
+		    params->filesystem);
+		warnx("WARNING: It won't boot since hp700 PDC can handle only 2GB.");
+	}
+
 	/* read boot loader */
 	memset(&bb, 0, sizeof bb);
 	rv = read(params->s1fd, &bb, sizeof bb);
@@ -163,8 +191,7 @@ hp700_setboot(ib_params *params)
 		goto done;
 	}
 	/* then, overwrite disklabel */
-	memcpy(&bb[HP700_LABELOFFSET], &label[HP700_LABELOFFSET],
-	    HP700_LABELSIZE);
+	memcpy(&bb[HP700_LABELOFFSET], &label.l, HP700_LABELSIZE);
 
 	if (params->flags & IB_VERBOSE) {
 		printf("Bootstrap start sector: %#x\n", 0);

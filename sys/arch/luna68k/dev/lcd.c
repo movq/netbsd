@@ -1,4 +1,4 @@
-/* $NetBSD: lcd.c,v 1.2 2000/01/07 05:13:08 nisimura Exp $ */
+/* $NetBSD: lcd.c,v 1.6 2009/03/18 10:22:31 cegger Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>		/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: lcd.c,v 1.2 2000/01/07 05:13:08 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lcd.c,v 1.6 2009/03/18 10:22:31 cegger Exp $");
 
 /*
  * XXX
@@ -77,17 +70,17 @@ struct pio {
 	volatile u_int8_t cntrl;
 };
 
-void lcdbusywait __P((void));
-void lcdput __P((int));
-void lcdctrl __P((int));
-void lcdshow __P((char *));
-void greeting __P((void));
+void lcdbusywait(void);
+void lcdput(int);
+void lcdctrl(int);
+void lcdshow(char *);
+void greeting(void);
 			       /* "1234567890123456" */
 static char lcd_boot_message1[] = " NetBSD/luna68k ";
 static char lcd_boot_message2[] = "   SX-9100/DT   ";
 
 void
-lcdbusywait()
+lcdbusywait(void)
 {
 	struct pio *p1 = (struct pio *)0x4D000000;
 	int msb, s;
@@ -108,8 +101,7 @@ lcdbusywait()
 }	
 
 void
-lcdput(cc)
-	int cc;
+lcdput(int cc)
 {
 	struct pio *p1 = (struct pio *)0x4D000000;
 	int s;
@@ -126,8 +118,7 @@ lcdput(cc)
 }
 
 void
-lcdctrl(cc)
-	int cc;
+lcdctrl(int cc)
 {
 	struct pio *p1 = (struct pio *)0x4D000000;
 	int s;
@@ -144,8 +135,7 @@ lcdctrl(cc)
 }
 
 void
-lcdshow(s)
-	char *s;
+lcdshow(char *s)
 {
 	int cc;
 
@@ -154,7 +144,7 @@ lcdshow(s)
 }
 
 void
-greeting()
+greeting(void)
 {
 	lcdctrl(LCD_INIT);
 	lcdctrl(LCD_ENTRY);

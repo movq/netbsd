@@ -1,4 +1,4 @@
-/*	$NetBSD: fsort.h,v 1.12 2003/08/07 11:32:34 jdolecek Exp $	*/
+/*	$NetBSD: fsort.h,v 1.17 2009/09/26 21:16:55 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -83,27 +76,3 @@
  */
 #define DEFBUFSIZE	(1 << 20)	/* 1MB */
 #define MAXBUFSIZE	(8 << 20)	/* 10 MB */
-
-/*
- * Number of files merge() can merge in one pass.
- * This should be power of two so that it's possible to use this value
- * for rouding.
- */
-#define MERGE_FNUM	16
-
-extern u_char *buffer, *linebuf;
-extern size_t bufsize, linebuf_size;
-
-/* temp files in the stack have a file descriptor, a largest bin (maxb)
- * which becomes the last non-empty bin (lastb) when the actual largest
- * bin is smaller than max(half the total file, BUFSIZE)
- * Max_o is the offset of maxb so it can be sought after the other bins
- * are sorted.
-*/
-struct tempfile {
-	FILE *fp;
-	u_char maxb;
-	u_char lastb;
-	off_t max_o;
-};
-extern struct tempfile fstack[MAXFCT];

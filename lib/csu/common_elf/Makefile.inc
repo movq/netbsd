@@ -1,6 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.28 2007/12/01 11:06:36 yamt Exp $
-
-.include <bsd.own.mk>
+#	$NetBSD: Makefile.inc,v 1.32 2009/12/13 08:52:38 mrg Exp $
 
 .if !defined(ELFSIZE)
 ELFSIZE=32
@@ -16,9 +14,11 @@ CPPFLAGS+=	-DDWARF2_EH
 CPPFLAGS+=	-DJCR
 CPPFLAGS+=	-DDSO_HANDLE
 
-.if ${HAVE_GCC} > 3
+.if defined(HAVE_GCC) && ${HAVE_GCC} > 3
 CFLAGS+=	-fno-unit-at-a-time
 .endif
+
+.include <bsd.own.mk>
 
 .PATH:		${.CURDIR}/../common_elf
 
@@ -31,29 +31,41 @@ COPTS+=		-fPIC
 realall: ${OBJS}
 
 crt0.o: crt0.c
-	@echo "${COMPILE.c} -DCRT0 ${.IMPSRC} -o ${.TARGET}"
-	@${COMPILE.c} -DCRT0 ${.IMPSRC} -o ${.TARGET}.o
-	@${LD} -x -r -o ${.TARGET} ${.TARGET}.o
-	@rm -f ${.TARGET}.o
+	${_MKTARGET_COMPILE}
+	${COMPILE.c} -DCRT0 ${.IMPSRC} -o ${.TARGET}.o
+	${LD} -x -r -o ${.TARGET} ${.TARGET}.o
+	rm -f ${.TARGET}.o
+.if ${MKSTRIPIDENT} != "no"
+	${OBJCOPY} -R .ident ${.TARGET}
+.endif
 
 # dependant on crt0.o to pick up header dependencies
 gcrt0.o: ${.CURDIR}/crt0.c crt0.o
-	@echo "${COMPILE.c} -DMCRT0 ${.CURDIR}/crt0.c -o ${.TARGET}"
-	@${COMPILE.c} -DMCRT0 ${.CURDIR}/crt0.c -o ${.TARGET}.o
-	@${LD} -x -r -o ${.TARGET} ${.TARGET}.o
-	@rm -f ${.TARGET}.o
+	${_MKTARGET_COMPILE}
+	${COMPILE.c} -DMCRT0 ${.CURDIR}/crt0.c -o ${.TARGET}.o
+	${LD} -x -r -o ${.TARGET} ${.TARGET}.o
+	rm -f ${.TARGET}.o
+.if ${MKSTRIPIDENT} != "no"
+	${OBJCOPY} -R .ident ${.TARGET}
+.endif
 
 crti.o: crti.c
-	@echo "${COMPILE.c} ${.IMPSRC} -o ${.TARGET}"
-	@${COMPILE.c} ${.IMPSRC} -o ${.TARGET}.o
-	@${LD} -X -r -o ${.TARGET} ${.TARGET}.o
-	@rm -f ${.TARGET}.o
+	${_MKTARGET_COMPILE}
+	${COMPILE.c} ${.IMPSRC} -o ${.TARGET}.o
+	${LD} -X -r -o ${.TARGET} ${.TARGET}.o
+	rm -f ${.TARGET}.o
+.if ${MKSTRIPIDENT} != "no"
+	${OBJCOPY} -R .ident ${.TARGET}
+.endif
 
 crtn.o: crtn.c
-	@echo "${COMPILE.c} ${.IMPSRC} -o ${.TARGET}"
-	@${COMPILE.c} ${.IMPSRC} -o ${.TARGET}.o
-	@${LD} -X -r -o ${.TARGET} ${.TARGET}.o
-	@rm -f ${.TARGET}.o
+	${_MKTARGET_COMPILE}
+	${COMPILE.c} ${.IMPSRC} -o ${.TARGET}.o
+	${LD} -X -r -o ${.TARGET} ${.TARGET}.o
+	rm -f ${.TARGET}.o
+.if ${MKSTRIPIDENT} != "no"
+	${OBJCOPY} -R .ident ${.TARGET}
+.endif
 
 FILES=${OBJS}
 FILESDIR=${LIBDIR}

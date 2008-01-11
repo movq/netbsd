@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.16 2007/02/22 05:14:04 thorpej Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.22 2010/07/01 02:38:27 rmind Exp $	*/
 
 /* 
  * Copyright (c) 2000, 2001 Ben Harris
@@ -31,10 +31,9 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.16 2007/02/22 05:14:04 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.22 2010/07/01 02:38:27 rmind Exp $");
 
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <arm/armreg.h>
 #include <arm/cpufunc.h>
 #include <machine/db_machdep.h>
@@ -80,12 +79,9 @@ __KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.16 2007/02/22 05:14:04 thorpej Exp $"
 #define FR_RFP	(-3)
 
 void
-db_stack_trace_print(addr, have_addr, count, modif, pr)
-	db_expr_t       addr;
-	bool             have_addr;
-	db_expr_t       count;
-	const char      *modif;
-	void		(*pr) __P((const char *, ...));
+db_stack_trace_print(db_expr_t addr, bool have_addr,
+		db_expr_t count, const char *modif,
+		void (*pr)(const char *, ...))
 {
 	u_int32_t	*frame, *lastframe;
 	const char	*cp = modif;
@@ -111,7 +107,7 @@ db_stack_trace_print(addr, have_addr, count, modif, pr)
 	else {
 		if (trace_thread) {
 			struct proc *p;
-			struct user *u;
+			struct pcb *pcb;
 			struct lwp *l;
 			if (lwpaddr) {
 				l = (struct lwp *)addr;
@@ -119,23 +115,20 @@ db_stack_trace_print(addr, have_addr, count, modif, pr)
 				(*pr)("trace: pid %d ", p->p_pid);
 			} else {
 				(*pr)("trace: pid %d ", (int)addr);
-				p = p_find(addr, PFIND_LOCKED);
+				p = proc_find_raw(addr);
 				if (p == NULL) {
 					(*pr)("not found\n");
 					return;
 				}
-				l = proc_representative_lwp(p, NULL, 0);
+				l = LIST_FIRST(&p->p_lwps);
+				KASSERT(l != NULL);
 			}
 			(*pr)("lid %d ", l->l_lid);
-			if (!(l->l_flag & LW_INMEM)) {
-				(*pr)("swapped out\n");
-				return;
-			}
-			u = l->l_addr;
+			pcb = lwp_getpcb(l);
 #ifdef acorn26
-			frame = (u_int32_t *)(u->u_pcb.pcb_sf->sf_r11);
+			frame = (uint32_t *)(pcb->pcb_sf->sf_r11);
 #else
-			frame = (u_int32_t *)(u->u_pcb.pcb_un.un_32.pcb32_r11);
+			frame = (uint32_t *)(pcb->pcb_un.un_32.pcb32_r11);
 #endif
 			(*pr)("at %p\n", frame);
 		} else

@@ -1,4 +1,4 @@
-/*	$NetBSD: osk5912_machdep.c,v 1.1 2007/01/06 08:16:26 christos Exp $ */
+/*	$NetBSD: osk5912_machdep.c,v 1.9 2010/11/28 08:23:24 hannken Exp $ */
 
 /*
  * Machine dependent functions for kernel setup for TI OSK5912 board.
@@ -99,15 +99,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osk5912_machdep.c,v 1.1 2007/01/06 08:16:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osk5912_machdep.c,v 1.9 2010/11/28 08:23:24 hannken Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_ipkdb.h"
 #include "opt_md.h"
 #include "opt_com.h"
-#include "md.h"
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -163,11 +161,7 @@ u_int cpu_reset_address = 0;
 /* Define various stack sizes in pages */
 #define IRQ_STACK_SIZE	1
 #define ABT_STACK_SIZE	1
-#ifdef IPKDB
-#define UND_STACK_SIZE	2
-#else
 #define UND_STACK_SIZE	1
-#endif
 
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
@@ -178,19 +172,16 @@ paddr_t physical_start;
 /* Physical address of the first byte after the end of SDRAM. */
 paddr_t physical_end;
 /* Number of pages of memory. */
-int physmem = 0;
 
 /* Same things, but for the free (unused by the kernel) memory. */
 static paddr_t physical_freestart, physical_freeend;
 static u_int free_pages;
 
 /* Physical and virtual addresses for some global pages */
-pv_addr_t systempage;		/* exception vectors */
 pv_addr_t irqstack;
 pv_addr_t undstack;
 pv_addr_t abtstack;
 pv_addr_t kernelstack;	/* stack for SVC mode */
-static pv_addr_t kernel_l1pt;	/* First level page table. */
 
 /* Physical address of the message buffer. */
 paddr_t msgbufphys;
@@ -211,8 +202,6 @@ extern char _end[];
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
-
-extern struct user *proc0paddr;
 
 /*
  * Macros to translate between physical and virtual for a subset of the
@@ -263,6 +252,7 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -293,6 +283,8 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* Run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -428,8 +420,7 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init.
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -488,18 +479,10 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("pmap ");
 #endif
-	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("done.\n");
-#endif
-
-#ifdef IPKDB
-	/* Initialise ipkdb */
-	ipkdb_init();
-	if (boothowto & RB_KDB)
-		ipkdb_connect(0);
 #endif
 
 #ifdef KGDB
@@ -894,7 +877,7 @@ setup_real_page_tables(void)
 #endif
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(l1_pa);
+	cpu_setttb(l1_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 

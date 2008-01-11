@@ -1,4 +1,4 @@
-/*	$NetBSD: message.S,v 1.2 2003/04/24 17:40:32 dsl Exp $	*/
+/*	$NetBSD: message.S,v 1.4 2009/11/19 22:10:03 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,10 @@
 
 	.global	message, message_1
 
+#if defined(BOOT_MSG_COM0) && !defined(COM_PORT_VAL)
+#define COM_PORT_VAL $0x3f8		/* Value for COM1 */
+#endif
+
 /*
  * message: write the error message in %ds:%esi to the console
  */
@@ -56,9 +53,18 @@ message:
 message_1:			/* for dump_eax */
 	lodsb
 1:
+#ifdef COM_PORT_VAL
+	mov     COM_PORT_VAL, %dx
+	outb    %al, %dx
+	add     $5, %dl
+2:	inb     %dx
+	test    $0x40, %al
+	jz      2b
+#else
 	movb	$0x0e, %ah
 	movw	$0x0001, %bx
 	int	$0x10
+#endif
 	lodsb
 	testb	%al, %al
 	jnz	1b

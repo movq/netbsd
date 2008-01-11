@@ -1,4 +1,4 @@
-/*	$NetBSD: afsc.c,v 1.41 2007/10/17 19:53:15 garbled Exp $ */
+/*	$NetBSD: afsc.c,v 1.43 2010/12/20 00:25:25 matt Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -58,14 +58,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: afsc.c,v 1.41 2007/10/17 19:53:15 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: afsc.c,v 1.43 2010/12/20 00:25:25 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -223,10 +221,13 @@ void
 afsc_dump(void)
 {
 	extern struct cfdriver afsc_cd;
+	struct siop_softc *sc;
 	int i;
 
-	for (i = 0; i < afsc_cd.cd_ndevs; ++i)
-		if (afsc_cd.cd_devs[i])
-			siop_dump(afsc_cd.cd_devs[i]);
+	for (i = 0; i < afsc_cd.cd_ndevs; ++i) {
+		sc = device_lookup_private(&afsc_cd, i);
+		if (sc != NULL)
+			siop_dump(sc);
+	}
 }
 #endif

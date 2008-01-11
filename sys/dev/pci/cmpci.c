@@ -1,4 +1,4 @@
-/*	$NetBSD: cmpci.c,v 1.36 2007/10/19 12:00:41 ad Exp $	*/
+/*	$NetBSD: cmpci.c,v 1.42 2009/11/26 15:17:08 njoly Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cmpci.c,v 1.36 2007/10/19 12:00:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cmpci.c,v 1.42 2009/11/26 15:17:08 njoly Exp $");
 
 #if defined(AUDIO_DEBUG) || defined(DEBUG)
 #define DPRINTF(x) if (cmpcidebug) printf x
@@ -106,8 +106,8 @@ static int cmpci_set_in_ports(struct cmpci_softc *);
 /*
  * autoconf interface
  */
-static int cmpci_match(struct device *, struct cfdata *, void *);
-static void cmpci_attach(struct device *, struct device *, void *);
+static int cmpci_match(device_t, cfdata_t, void *);
+static void cmpci_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(cmpci, sizeof (struct cmpci_softc),
     cmpci_match, cmpci_attach, NULL, NULL);
@@ -359,8 +359,7 @@ cmpci_index_to_divider(int index)
  * interface to configure the device.
  */
 static int
-cmpci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+cmpci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -376,7 +375,7 @@ cmpci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-cmpci_attach(struct device *parent, struct device *self, void *aux)
+cmpci_attach(device_t parent, device_t self, void *aux)
 {
 	struct cmpci_softc *sc;
 	struct pci_attach_args *pa;
@@ -386,7 +385,7 @@ cmpci_attach(struct device *parent, struct device *self, void *aux)
 	char devinfo[256];
 	int i, v;
 
-	sc = (struct cmpci_softc *)self;
+	sc = device_private(self);
 	pa = (struct pci_attach_args *)aux;
 	aprint_naive(": Audio controller\n");
 
@@ -411,28 +410,25 @@ cmpci_attach(struct device *parent, struct device *self, void *aux)
 	/* map I/O space */
 	if (pci_mapreg_map(pa, CMPCI_PCI_IOBASEREG, PCI_MAPREG_TYPE_IO, 0,
 		&sc->sc_iot, &sc->sc_ioh, NULL, NULL)) {
-		aprint_error("%s: failed to map I/O space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "failed to map I/O space\n");
 		return;
 	}
 
 	/* interrupt */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: failed to map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "failed to map interrupt\n");
 		return;
 	}
 	strintr = pci_intr_string(pa->pa_pc, ih);
 	sc->sc_ih=pci_intr_establish(pa->pa_pc, ih, IPL_AUDIO, cmpci_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: failed to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "failed to establish interrupt");
 		if (strintr != NULL)
-			aprint_normal(" at %s", strintr);
-		aprint_normal("\n");
+			aprint_error(" at %s", strintr);
+		aprint_error("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, strintr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", strintr);
 
 	sc->sc_dmat = pa->pa_dmat;
 
@@ -524,10 +520,12 @@ cmpci_attach(struct device *parent, struct device *self, void *aux)
 static int
 cmpci_intr(void *handle)
 {
-	struct cmpci_softc *sc;
+	struct cmpci_softc *sc = handle;
+#if NMPU > 0
+	struct mpu_softc *sc_mpu = device_private(sc->sc_mpudev);
+#endif
 	uint32_t intrstat;
 
-	sc = handle;
 	intrstat = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
 	    CMPCI_REG_INTR_STATUS);
 
@@ -562,8 +560,8 @@ cmpci_intr(void *handle)
 		    CMPCI_REG_CH1_INTR_ENABLE);
 
 #if NMPU > 0
-	if (intrstat & CMPCI_REG_UART_INTR && sc->sc_mpudev != NULL)
-		mpu_intr(sc->sc_mpudev);
+	if (intrstat & CMPCI_REG_UART_INTR && sc_mpu != NULL)
+		mpu_intr(sc_mpu);
 #endif
 
 	return 1;
@@ -669,7 +667,7 @@ cmpci_set_params(void *handle, int setmode, int usemode,
 		md_divide = cmpci_index_to_divider(md_index);
 		p->sample_rate = cmpci_index_to_rate(md_index);
 		DPRINTF(("%s: sample:%u, divider=%d\n",
-			 sc->sc_dev.dv_xname, p->sample_rate, md_divide));
+			 device_xname(&sc->sc_dev), p->sample_rate, md_divide));
 
 		ind = auconv_set_converter(cmpci_formats, CMPCI_NFORMATS,
 					   mode, p, FALSE, fil);

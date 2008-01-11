@@ -1,7 +1,7 @@
-/*	$NetBSD: unistd.h,v 1.114 2007/12/24 17:26:09 perry Exp $	*/
+/*	$NetBSD: unistd.h,v 1.125 2011/01/19 19:21:29 christos Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -77,6 +70,9 @@
 #include <sys/types.h>
 #include <sys/unistd.h>
 
+#if _FORTIFY_SOURCE > 0
+#include <ssp/unistd.h>
+#endif
 
 /*
  * IEEE Std 1003.1-90
@@ -114,12 +110,15 @@ int	 execve(const char *, char * const *, char * const *);
 int	 execvp(const char *, char * const *);
 pid_t	 fork(void);
 long	 fpathconf(int, int);
+#if __SSP_FORTIFY_LEVEL == 0
 char	*getcwd(char *, size_t);
+#endif
 gid_t	 getegid(void);
 uid_t	 geteuid(void);
 gid_t	 getgid(void);
 int	 getgroups(int, gid_t []);
 __aconst char *getlogin(void);
+int	 getlogin_r(char *, size_t);
 pid_t	 getpgrp(void);
 pid_t	 getpid(void);
 pid_t	 getppid(void);
@@ -129,7 +128,9 @@ int	 link(const char *, const char *);
 long	 pathconf(const char *, int);
 int	 pause(void);
 int	 pipe(int *);
+#if __SSP_FORTIFY_LEVEL == 0
 ssize_t	 read(int, void *, size_t);
+#endif
 int	 rmdir(const char *);
 int	 setgid(gid_t);
 int	 setpgid(pid_t, pid_t);
@@ -147,7 +148,7 @@ ssize_t	 write(int, const void *, size_t);
 /*
  * IEEE Std 1003.2-92, adopted in X/Open Portability Guide Issue 4 and later
  */
-#if (_POSIX_C_SOURCE - 0) >= 2 || (_XOPEN_SOURCE - 0) >= 4 || \
+#if (_POSIX_C_SOURCE - 0) >= 2 || defined(_XOPEN_SOURCE) || \
     defined(_NETBSD_SOURCE)
 int	 getopt(int, char * const [], const char *);
 
@@ -202,6 +203,7 @@ int	 fsync(int);
 #if (_POSIX_C_SOURCE - 0) >= 199506L || (_XOPEN_SOURCE - 0) >= 500 || \
     defined(_REENTRANT) || defined(_NETBSD_SOURCE)
 int	 ttyname_r(int, char *, size_t);
+int	 pthread_atfork(void (*)(void), void (*)(void), void (*)(void));
 #endif
 
 /*
@@ -214,17 +216,9 @@ int	 nice(int);
 
 
 /*
- * X/Open Portability Guide <= Issue 3
- */
-#if defined(_XOPEN_SOURCE) && (_XOPEN_SOURCE - 0) <= 3
-int	 rename(const char *, const char *) __RENAME(__posix_rename);
-#endif
-
-
-/*
  * X/Open Portability Guide >= Issue 4
  */
-#if (_XOPEN_SOURCE - 0) >= 4 || defined(_NETBSD_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 __aconst char *crypt(const char *, const char *);
 int	 encrypt(char *, int);
 char	*getpass(const char *);
@@ -266,13 +260,15 @@ int	 lchown(const char *, uid_t, gid_t) __RENAME(__posix_lchown);
 int	 lchown(const char *, uid_t, gid_t);
 #endif
 int	 lockf(int, int, off_t);
+#if __SSP_FORTIFY_LEVEL == 0
 ssize_t	 readlink(const char * __restrict, char * __restrict, size_t);
+#endif
 void	*sbrk(intptr_t);
 /* XXX prototype wrong! */
 int	 setpgrp(pid_t, pid_t);			/* obsoleted by setpgid() */
 int	 setregid(gid_t, gid_t);
 int	 setreuid(uid_t, uid_t);
-void	 swab(const void *, void *, size_t);
+void	 swab(const void * __restrict, void * __restrict, ssize_t);
 int	 symlink(const char *, const char *);
 void	 sync(void);
 useconds_t ualarm(useconds_t, useconds_t);
@@ -323,7 +319,7 @@ int	 profil(char *, size_t, u_long, u_int);
 #ifndef __PSIGNAL_DECLARED
 #define __PSIGNAL_DECLARED
 /* also in signal.h */
-void	psignal(unsigned int, const char *);
+void	psignal(int, const char *);
 #endif /* __PSIGNAL_DECLARED */
 int	 rcmd(char **, int, const char *, const char *, const char *, int *);
 int	 reboot(int, char *);
@@ -340,7 +336,11 @@ int	 setrgid(gid_t);
 int	 setruid(uid_t);
 void	 setusershell(void);
 void	 strmode(mode_t, char *);
+#ifndef __STRSIGNAL_DECLARED
+#define __STRSIGNAL_DECLARED
+/* backwards-compatibility; also in string.h */
 __aconst char *strsignal(int);
+#endif /* __STRSIGNAL_DECLARED */
 int	 swapctl(int, void *, int);
 int	 swapon(const char *);			/* obsoleted by swapctl() */
 int	 syscall(int, ...);
@@ -364,8 +364,4 @@ extern	 char *suboptarg;	/* getsubopt(3) external variable */
 #endif
 
 __END_DECLS
-
-#if _FORTIFY_SOURCE > 0
-#include <ssp/unistd.h>
-#endif
 #endif /* !_UNISTD_H_ */

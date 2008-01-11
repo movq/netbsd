@@ -1,4 +1,4 @@
-/*	$NetBSD: ciss_pci.c,v 1.4 2007/10/19 12:00:41 ad Exp $	*/
+/*	$NetBSD: ciss_pci.c,v 1.9 2009/11/26 15:17:08 njoly Exp $	*/
 /*	$OpenBSD: ciss_pci.c,v 1.9 2005/12/13 15:56:01 brad Exp $	*/
 
 /*
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ciss_pci.c,v 1.4 2007/10/19 12:00:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ciss_pci.c,v 1.9 2009/11/26 15:17:08 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,8 +41,8 @@ __KERNEL_RCSID(0, "$NetBSD: ciss_pci.c,v 1.4 2007/10/19 12:00:41 ad Exp $");
 
 #define	CISS_BAR	0x10
 
-int	ciss_pci_match(struct device *, struct cfdata *, void *);
-void	ciss_pci_attach(struct device *, struct device *, void *);
+int	ciss_pci_match(device_t, cfdata_t, void *);
+void	ciss_pci_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(ciss_pci, sizeof(struct ciss_softc),
 	ciss_pci_match, ciss_pci_attach, NULL, NULL);
@@ -225,8 +225,7 @@ const struct {
 };
 
 int
-ciss_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ciss_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	pcireg_t reg = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_SUBSYS_ID_REG);
@@ -245,9 +244,9 @@ ciss_pci_match(struct device *parent, struct cfdata *match,
 }
 
 void
-ciss_pci_attach(struct device *parent, struct device *self, void *aux)
+ciss_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct ciss_softc *sc = (struct ciss_softc *)self;
+	struct ciss_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	bus_size_t size, cfgsz;
 	pci_intr_handle_t ih;
@@ -325,17 +324,17 @@ ciss_pci_attach(struct device *parent, struct device *self, void *aux)
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 	sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO, ciss_intr, sc);
 	if (!sc->sc_ih) {
-		printf("%s: can't establish interrupt", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't establish interrupt");
 		if (intrstr)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, size);
 		if (cfg_bar != CISS_BAR)
 			bus_space_unmap(sc->sc_iot, sc->cfg_ioh, cfgsz);
 	}
 
-	printf("%s: interrupting at %s\n%s", sc->sc_dev.dv_xname, intrstr,
-	       sc->sc_dev.dv_xname);
+	printf("%s: interrupting at %s\n%s", device_xname(&sc->sc_dev), intrstr,
+	       device_xname(&sc->sc_dev));
 
 	if (ciss_attach(sc)) {
 		pci_intr_disestablish(pa->pa_pc, sc->sc_ih);

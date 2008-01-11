@@ -1,4 +1,4 @@
-/*	$NetBSD: i82586.c,v 1.60 2007/10/19 11:59:52 ad Exp $	*/
+/*	$NetBSD: i82586.c,v 1.68 2010/04/05 07:19:34 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -144,9 +137,8 @@ Mode of operation:
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82586.c,v 1.60 2007/10/19 11:59:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82586.c,v 1.68 2010/04/05 07:19:34 joerg Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -163,10 +155,8 @@ __KERNEL_RCSID(0, "$NetBSD: i82586.c,v 1.60 2007/10/19 11:59:52 ad Exp $");
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <sys/bus.h>
 
@@ -241,16 +231,12 @@ static char* padbuf = NULL;
  *
  */
 void
-i82586_attach(sc, name, etheraddr, media, nmedia, defmedia)
-	struct ie_softc *sc;
-	const char *name;
-	u_int8_t *etheraddr;
-        int *media, nmedia, defmedia;
+i82586_attach(struct ie_softc *sc, const char *name, u_int8_t *etheraddr, int *media, int nmedia, int defmedia)
 {
 	int i;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = i82586_start;
 	ifp->if_ioctl = i82586_ioctl;
@@ -276,8 +262,7 @@ i82586_attach(sc, name, etheraddr, media, nmedia, defmedia)
 		padbuf = malloc(ETHER_MIN_LEN - ETHER_CRC_LEN, M_DEVBUF,
 		    M_ZERO | M_NOWAIT);
 		if (padbuf == NULL) {
-			 printf("%s: can't allocate pad buffer\n",
-			     sc->sc_dev.dv_xname);
+			 aprint_error_dev(&sc->sc_dev, "can't allocate pad buffer\n");
 			 return;
 		}
 	}
@@ -296,20 +281,18 @@ i82586_attach(sc, name, etheraddr, media, nmedia, defmedia)
  * transmit has been started on it.
  */
 void
-i82586_watchdog(ifp)
-	struct ifnet *ifp;
+i82586_watchdog(struct ifnet *ifp)
 {
 	struct ie_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device timeout\n", device_xname(&sc->sc_dev));
 	++ifp->if_oerrors;
 
 	i82586_reset(sc, 1);
 }
 
 static int
-i82586_cmd_wait(sc)
-	struct ie_softc *sc;
+i82586_cmd_wait(struct ie_softc *sc)
 {
 	/* spin on i82586 command acknowledge; wait at most 0.9 (!) seconds */
 	int i, off;
@@ -344,12 +327,7 @@ i82586_cmd_wait(sc)
  * We may have to wait for the command's acceptance later though.
  */
 static int
-i82586_start_cmd(sc, cmd, iecmdbuf, mask, async)
-	struct ie_softc *sc;
-	int cmd;
-	int iecmdbuf;
-	int mask;
-	int async;
+i82586_start_cmd(struct ie_softc *sc, int cmd, int iecmdbuf, int mask, int async)
 {
 	int i;
 	int off;
@@ -407,9 +385,8 @@ i82586_start_cmd(sc, cmd, iecmdbuf, mask, async)
  * Interrupt Acknowledge.
  */
 static inline void
-ie_ack(sc, mask)
-	struct ie_softc *sc;
-	u_int mask;	/* in native byte-order */
+ie_ack(struct ie_softc *sc, u_int mask)
+	/* mask:	 in native byte-order */
 {
 	u_int status;
 
@@ -424,8 +401,7 @@ ie_ack(sc, mask)
  * Transfer accumulated chip error counters to IF.
  */
 static inline void
-i82586_count_errors(sc)
-	struct ie_softc *sc;
+i82586_count_errors(struct ie_softc *sc)
 {
 	int scb = sc->scb;
 
@@ -443,23 +419,20 @@ i82586_count_errors(sc)
 }
 
 static void
-i82586_rx_errors(sc, fn, status)
-	struct ie_softc *sc;
-	int fn;
-	int status;
+i82586_rx_errors(struct ie_softc *sc, int fn, int status)
 {
 	char bits[128];
-
-	log(LOG_ERR, "%s: rx error (frame# %d): %s\n", sc->sc_dev.dv_xname, fn,
-	    bitmask_snprintf(status, IE_FD_STATUSBITS, bits, sizeof(bits)));
+	snprintb(bits, sizeof(bits), IE_FD_STATUSBITS, status);
+	log(LOG_ERR, "%s: rx error (frame# %d): %s\n",
+	    device_xname(&sc->sc_dev), fn, bits);
+	    
 }
 
 /*
  * i82586 interrupt entry point.
  */
 int
-i82586_intr(v)
-	void *v;
+i82586_intr(void *v)
 {
 	struct ie_softc *sc = v;
 	u_int status;
@@ -499,7 +472,7 @@ loop:
 
 #if I82586_DEBUG
 	if ((status & IE_ST_CNA) && (sc->sc_debug & IED_CNA))
-		printf("%s: cna; status=0x%x\n", sc->sc_dev.dv_xname, status);
+		printf("%s: cna; status=0x%x\n", device_xname(&sc->sc_dev), status);
 #endif
 	if (sc->intrhook)
 		(sc->intrhook)(sc, INTR_LOOP);
@@ -535,9 +508,7 @@ reset:
  * Process a received-frame interrupt.
  */
 int
-i82586_rint(sc, scbstatus)
-	struct	ie_softc *sc;
-	int	scbstatus;
+i82586_rint(struct ie_softc *sc, int scbstatus)
 {
 static	int timesthru = 1024;
 	int i, status, off;
@@ -545,7 +516,7 @@ static	int timesthru = 1024;
 #if I82586_DEBUG
 	if (sc->sc_debug & IED_RINT)
 		printf("%s: rint: status 0x%x\n",
-			sc->sc_dev.dv_xname, scbstatus);
+			device_xname(&sc->sc_dev), scbstatus);
 #endif
 
 	for (;;) {
@@ -559,12 +530,12 @@ static	int timesthru = 1024;
 #if I82586_DEBUG
 		if (sc->sc_debug & IED_RINT)
 			printf("%s: rint: frame(%d) status 0x%x\n",
-				sc->sc_dev.dv_xname, i, status);
+				device_xname(&sc->sc_dev), i, status);
 #endif
 		if ((status & IE_FD_COMPLETE) == 0) {
 			if ((status & IE_FD_OK) != 0) {
 				printf("%s: rint: weird: ",
-					sc->sc_dev.dv_xname);
+					device_xname(&sc->sc_dev));
 				i82586_rx_errors(sc, i, status);
 				break;
 			}
@@ -587,7 +558,7 @@ static	int timesthru = 1024;
 #if I82586_DEBUG
 		if ((status & IE_FD_BUSY) != 0)
 			printf("%s: rint: frame(%d) busy; status=0x%x\n",
-				sc->sc_dev.dv_xname, i, status);
+				device_xname(&sc->sc_dev), i, status);
 #endif
 
 
@@ -645,8 +616,7 @@ static	int timesthru = 1024;
 				scbstatus);
 			if (i82586_start_cmd(sc, IE_RUC_RESUME, 0, 0, 0) == 0)
 				return (0);
-			printf("%s: RU RESUME command timed out\n",
-				sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "RU RESUME command timed out\n");
 			return (1);	/* Ask for a reset */
 		}
 
@@ -675,7 +645,7 @@ static	int timesthru = 1024;
 			return (0);
 		} else
 			printf("%s: receiver not ready; scbstatus=0x%x\n",
-				sc->sc_dev.dv_xname, scbstatus);
+				device_xname(&sc->sc_dev), scbstatus);
 
 		sc->sc_ethercom.ec_if.if_ierrors++;
 		return (1);	/* Ask for a reset */
@@ -690,9 +660,7 @@ static	int timesthru = 1024;
  * of the real work is done by i82586_start().
  */
 int
-i82586_tint(sc, scbstatus)
-	struct ie_softc *sc;
-	int	scbstatus;
+i82586_tint(struct ie_softc *sc, int scbstatus)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int status;
@@ -714,7 +682,7 @@ i82586_tint(sc, scbstatus)
 #if I82586_DEBUG
 	if (sc->sc_debug & IED_TINT)
 		printf("%s: tint: SCB status 0x%x; xmit status 0x%x\n",
-			sc->sc_dev.dv_xname, scbstatus, status);
+			device_xname(&sc->sc_dev), scbstatus, status);
 #endif
 
 	if ((status & IE_STAT_COMPL) == 0 || (status & IE_STAT_BUSY)) {
@@ -733,16 +701,15 @@ i82586_tint(sc, scbstatus)
 		 * What if more than one bit is set?
 		 */
 		if (status & IE_STAT_ABORT)
-			printf("%s: send aborted\n", sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "send aborted\n");
 		else if (status & IE_XS_NOCARRIER)
-			printf("%s: no carrier\n", sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "no carrier\n");
 		else if (status & IE_XS_LOSTCTS)
-			printf("%s: lost CTS\n", sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "lost CTS\n");
 		else if (status & IE_XS_UNDERRUN)
-			printf("%s: DMA underrun\n", sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "DMA underrun\n");
 		else if (status & IE_XS_EXCMAX) {
-			printf("%s: too many collisions\n",
-				sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "too many collisions\n");
 			sc->sc_ethercom.ec_if.if_collisions += 16;
 		}
 	}
@@ -773,11 +740,7 @@ i82586_tint(sc, scbstatus)
  * Get a range of receive buffer descriptors that represent one packet.
  */
 static int
-i82586_get_rbd_list(sc, start, end, pktlen)
-	struct ie_softc *sc;
-	u_int16_t	*start;
-	u_int16_t	*end;
-	int		*pktlen;
+i82586_get_rbd_list(struct ie_softc *sc, u_int16_t *start, u_int16_t *end, int *pktlen)
 {
 	int	off, rbbase = sc->rbds;
 	int	rbindex, count = 0;
@@ -800,7 +763,7 @@ i82586_get_rbd_list(sc, start, end, pktlen)
 #endif
 			log(LOG_ERR,
 			    "%s: receive descriptors out of sync at %d\n",
-			    sc->sc_dev.dv_xname, rbindex);
+			    device_xname(&sc->sc_dev), rbindex);
 			return (0);
 		}
 		plen += (rbdstatus & IE_RBD_CNTMASK);
@@ -820,10 +783,7 @@ i82586_get_rbd_list(sc, start, end, pktlen)
  * Release a range of receive buffer descriptors after we've copied the packet.
  */
 static void
-i82586_release_rbd_list(sc, start, end)
-	struct ie_softc *sc;
-	u_int16_t	start;
-	u_int16_t	end;
+i82586_release_rbd_list(struct ie_softc *sc, u_int16_t start, u_int16_t end)
 {
 	int	off, rbbase = sc->rbds;
 	int	rbindex = start;
@@ -858,8 +818,7 @@ i82586_release_rbd_list(sc, start, end)
  * and 0 otherwise.
  */
 static int
-i82586_drop_frames(sc)
-	struct ie_softc *sc;
+i82586_drop_frames(struct ie_softc *sc)
 {
 	u_int16_t bstart, bend;
 	int pktlen;
@@ -880,8 +839,7 @@ i82586_drop_frames(sc)
  * The Receive Unit is expected to be NOT RUNNING.
  */
 static int
-i82586_chk_rx_ring(sc)
-	struct ie_softc *sc;
+i82586_chk_rx_ring(struct ie_softc *sc)
 {
 	int n, off, val;
 
@@ -892,7 +850,7 @@ i82586_chk_rx_ring(sc)
 			/* `rbtail' and EOL flag out of sync */
 			log(LOG_ERR,
 			    "%s: rx buffer descriptors out of sync at %d\n",
-			    sc->sc_dev.dv_xname, n);
+			    device_xname(&sc->sc_dev), n);
 			return (1);
 		}
 
@@ -906,7 +864,7 @@ i82586_chk_rx_ring(sc)
 			/* `rftail' and EOL flag out of sync */
 			log(LOG_ERR,
 			    "%s: rx frame list out of sync at %d\n",
-			    sc->sc_dev.dv_xname, n);
+			    device_xname(&sc->sc_dev), n);
 			return (1);
 		}
 	}
@@ -925,10 +883,7 @@ i82586_chk_rx_ring(sc)
  * operation considerably.  (Provided that it works, of course.)
  */
 static inline struct mbuf *
-ieget(sc, head, totlen)
-	struct ie_softc *sc;
-	int head;
-	int totlen;
+ieget(struct ie_softc *sc, int head, int totlen)
 {
 	struct mbuf *m, *m0, *newm;
 	int len, resid;
@@ -1071,19 +1026,15 @@ ie_readframe(
 		struct ether_header *eh = mtod(m, struct ether_header *);
 
 		printf("%s: frame from ether %s type 0x%x len %d\n",
-			sc->sc_dev.dv_xname,
+			device_xname(&sc->sc_dev),
 			ether_sprintf(eh->ether_shost),
 			(u_int)ntohs(eh->ether_type),
 			pktlen);
 	}
 #endif
 
-#if NBPFILTER > 0
-	/* Check for a BPF filter; if so, hand it up. */
-	if (sc->sc_ethercom.ec_if.if_bpf != 0)
-		/* Pass it up. */
-		bpf_mtap(sc->sc_ethercom.ec_if.if_bpf, m);
-#endif /* NBPFILTER > 0 */
+	/* Pass it up. */
+	bpf_mtap(&sc->sc_ethercom.ec_if, m);
 
 	/*
 	 * Finally pass this packet up to higher layers.
@@ -1099,8 +1050,7 @@ ie_readframe(
  * command to the chip to be executed.
  */
 static inline void
-iexmit(sc)
-	struct ie_softc *sc;
+iexmit(struct ie_softc *sc)
 {
 	int off;
 	int cur, prev;
@@ -1109,7 +1059,7 @@ iexmit(sc)
 
 #if I82586_DEBUG
 	if (sc->sc_debug & IED_XMIT)
-		printf("%s: xmit buffer %d\n", sc->sc_dev.dv_xname, cur);
+		printf("%s: xmit buffer %d\n", device_xname(&sc->sc_dev), cur);
 #endif
 
 	/*
@@ -1162,8 +1112,7 @@ iexmit(sc)
 		IE_BUS_BARRIER(sc, off, 2, BUS_SPACE_BARRIER_READ);
 
 		if (i82586_start_cmd(sc, IE_CUC_START, 0, 0, 1))
-			printf("%s: iexmit: start xmit command timed out\n",
-				sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "iexmit: start xmit command timed out\n");
 	}
 
 	sc->sc_ethercom.ec_if.if_timer = 5;
@@ -1174,8 +1123,7 @@ iexmit(sc)
  * Start transmission on an interface.
  */
 void
-i82586_start(ifp)
-	struct ifnet *ifp;
+i82586_start(struct ifnet *ifp)
 {
 	struct ie_softc *sc = ifp->if_softc;
 	struct mbuf *m0, *m;
@@ -1203,20 +1151,17 @@ i82586_start(ifp)
 		if ((m0->m_flags & M_PKTHDR) == 0)
 			panic("i82586_start: no header mbuf");
 
-#if NBPFILTER > 0
 		/* Tap off here if there is a BPF listener. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 
 #if I82586_DEBUG
 		if (sc->sc_debug & IED_ENQ)
-			printf("%s: fill buffer %d\n", sc->sc_dev.dv_xname,
+			printf("%s: fill buffer %d\n", device_xname(&sc->sc_dev),
 				sc->xchead);
 #endif
 
 		if (m0->m_pkthdr.len > IE_TBUF_SIZE)
-			printf("%s: tbuf overflow\n", sc->sc_dev.dv_xname);
+			printf("%s: tbuf overflow\n", device_xname(&sc->sc_dev));
 
 		buffer = IE_XBUF_ADDR(sc, head);
 		for (m = m0; m != 0; m = m->m_next) {
@@ -1261,8 +1206,7 @@ i82586_start(ifp)
  * Use only if SCP and ISCP represent offsets into shared ram space.
  */
 int
-i82586_proberam(sc)
-	struct ie_softc *sc;
+i82586_proberam(struct ie_softc *sc)
 {
 	int result, off;
 
@@ -1295,14 +1239,12 @@ i82586_proberam(sc)
 }
 
 void
-i82586_reset(sc, hard)
-	struct ie_softc *sc;
-	int hard;
+i82586_reset(struct ie_softc *sc, int hard)
 {
 	int s = splnet();
 
 	if (hard)
-		printf("%s: reset\n", sc->sc_dev.dv_xname);
+		printf("%s: reset\n", device_xname(&sc->sc_dev));
 
 	/* Clear OACTIVE in case we're called from watchdog (frozen xmit). */
 	sc->sc_ethercom.ec_if.if_timer = 0;
@@ -1312,7 +1254,7 @@ i82586_reset(sc, hard)
 	 * Stop i82586 dead in its tracks.
 	 */
 	if (i82586_start_cmd(sc, IE_RUC_ABORT | IE_CUC_ABORT, 0, 0, 0))
-		printf("%s: abort commands timed out\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "abort commands timed out\n");
 
 	/*
 	 * This can really slow down the i82586_reset() on some cards, but it's
@@ -1337,10 +1279,7 @@ i82586_reset(sc, hard)
 
 
 static void
-setup_simple_command(sc, cmd, cmdbuf)
-	struct ie_softc *sc;
-	int cmd;
-	int cmdbuf;
+setup_simple_command(struct ie_softc *sc, int cmd, int cmdbuf)
 {
 	/* Setup a simple command */
 	sc->ie_bus_write16(sc, IE_CMD_COMMON_STATUS(cmdbuf), 0);
@@ -1355,9 +1294,7 @@ setup_simple_command(sc, cmd, cmdbuf)
  * Run the time-domain reflectometer.
  */
 static void
-ie_run_tdr(sc, cmd)
-	struct ie_softc *sc;
-	int cmd;
+ie_run_tdr(struct ie_softc *sc, int cmd)
 {
 	int result;
 
@@ -1377,18 +1314,18 @@ ie_run_tdr(sc, cmd)
 		return;
 
 	if (result & 0x10000)
-		printf("%s: TDR command failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "TDR command failed\n");
 	else if (result & IE_TDR_XCVR)
-		printf("%s: transceiver problem\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "transceiver problem\n");
 	else if (result & IE_TDR_OPEN)
-		printf("%s: TDR detected incorrect termination %d clocks away\n",
-			sc->sc_dev.dv_xname, result & IE_TDR_TIME);
+		aprint_error_dev(&sc->sc_dev, "TDR detected incorrect termination %d clocks away\n",
+			result & IE_TDR_TIME);
 	else if (result & IE_TDR_SHORT)
-		printf("%s: TDR detected a short circuit %d clocks away\n",
-			sc->sc_dev.dv_xname, result & IE_TDR_TIME);
+		aprint_error_dev(&sc->sc_dev, "TDR detected a short circuit %d clocks away\n",
+			result & IE_TDR_TIME);
 	else
-		printf("%s: TDR returned unknown status 0x%x\n",
-			sc->sc_dev.dv_xname, result);
+		aprint_error_dev(&sc->sc_dev, "TDR returned unknown status 0x%x\n",
+			result);
 }
 
 
@@ -1404,8 +1341,7 @@ ie_run_tdr(sc, cmd)
  *
  */
 static void
-i82586_setup_bufs(sc)
-	struct ie_softc *sc;
+i82586_setup_bufs(struct ie_softc *sc)
 {
 	int	ptr = sc->buf_area;	/* memory pool */
 	int     n, r;
@@ -1465,7 +1401,7 @@ i82586_setup_bufs(sc)
 	ptr += sc->nrxbuf * IE_RBUF_SIZE;
 
 #if I82586_DEBUG
-	printf("%s: %d frames %d bufs\n", sc->sc_dev.dv_xname, sc->nframes,
+	printf("%s: %d frames %d bufs\n", device_xname(&sc->sc_dev), sc->nframes,
 		sc->nrxbuf);
 #endif
 
@@ -1553,15 +1489,12 @@ i82586_setup_bufs(sc)
 /* link in recv frames * and buffer into the scb. */
 #if I82586_DEBUG
 	printf("%s: reserved %d bytes\n",
-		sc->sc_dev.dv_xname, ptr - sc->buf_area);
+		device_xname(&sc->sc_dev), ptr - sc->buf_area);
 #endif
 }
 
 static int
-ie_cfg_setup(sc, cmd, promiscuous, manchester)
-	struct ie_softc *sc;
-	int cmd;
-	int promiscuous, manchester;
+ie_cfg_setup(struct ie_softc *sc, int cmd, int promiscuous, int manchester)
 {
 	int cmdresult, status;
 	u_int8_t buf[IE_CMD_CFG_SZ]; /* XXX malloc? */
@@ -1585,13 +1518,11 @@ ie_cfg_setup(sc, cmd, promiscuous, manchester)
 	cmdresult = i82586_start_cmd(sc, IE_CUC_START, cmd, IE_STAT_COMPL, 0);
 	status = sc->ie_bus_read16(sc, IE_CMD_COMMON_STATUS(cmd));
 	if (cmdresult != 0) {
-		printf("%s: configure command timed out; status %x\n",
-			sc->sc_dev.dv_xname, status);
+		aprint_error_dev(&sc->sc_dev, "configure command timed out; status %x\n", status);
 		return (0);
 	}
 	if ((status & IE_STAT_OK) == 0) {
-		printf("%s: configure command failed; status %x\n",
-			sc->sc_dev.dv_xname, status);
+		aprint_error_dev(&sc->sc_dev, "configure command failed; status %x\n", status);
 		return (0);
 	}
 
@@ -1601,9 +1532,7 @@ ie_cfg_setup(sc, cmd, promiscuous, manchester)
 }
 
 static int
-ie_ia_setup(sc, cmdbuf)
-	struct ie_softc *sc;
-	int cmdbuf;
+ie_ia_setup(struct ie_softc *sc, int cmdbuf)
 {
 	int cmdresult, status;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -1616,13 +1545,11 @@ ie_ia_setup(sc, cmdbuf)
 	cmdresult = i82586_start_cmd(sc, IE_CUC_START, cmdbuf, IE_STAT_COMPL, 0);
 	status = sc->ie_bus_read16(sc, IE_CMD_COMMON_STATUS(cmdbuf));
 	if (cmdresult != 0) {
-		printf("%s: individual address command timed out; status %x\n",
-			sc->sc_dev.dv_xname, status);
+		aprint_error_dev(&sc->sc_dev, "individual address command timed out; status %x\n", status);
 		return (0);
 	}
 	if ((status & IE_STAT_OK) == 0) {
-		printf("%s: individual address command failed; status %x\n",
-			sc->sc_dev.dv_xname, status);
+		aprint_error_dev(&sc->sc_dev, "individual address command failed; status %x\n", status);
 		return (0);
 	}
 
@@ -1636,9 +1563,7 @@ ie_ia_setup(sc, cmdbuf)
  * Called at splnet().
  */
 static int
-ie_mc_setup(sc, cmdbuf)
-	struct ie_softc *sc;
-	int cmdbuf;
+ie_mc_setup(struct ie_softc *sc, int cmdbuf)
 {
 	int cmdresult, status;
 
@@ -1658,13 +1583,12 @@ ie_mc_setup(sc, cmdbuf)
 	cmdresult = i82586_start_cmd(sc, IE_CUC_START, cmdbuf, IE_STAT_COMPL, 0);
 	status = sc->ie_bus_read16(sc, IE_CMD_COMMON_STATUS(cmdbuf));
 	if (cmdresult != 0) {
-		printf("%s: multicast setup command timed out; status %x\n",
-			sc->sc_dev.dv_xname, status);
+		aprint_error_dev(&sc->sc_dev, "multicast setup command timed out; status %x\n", status);
 		return (0);
 	}
 	if ((status & IE_STAT_OK) == 0) {
-		printf("%s: multicast setup command failed; status %x\n",
-			sc->sc_dev.dv_xname, status);
+		aprint_error_dev(&sc->sc_dev, "multicast setup command failed; status %x\n",
+			status);
 		return (0);
 	}
 
@@ -1682,8 +1606,7 @@ ie_mc_setup(sc, cmdbuf)
  * THIS ROUTINE MUST BE CALLED AT splnet() OR HIGHER.
  */
 int
-i82586_init(ifp)
-	struct ifnet *ifp;
+i82586_init(struct ifnet *ifp)
 {
 	struct ie_softc *sc = ifp->if_softc;
 	int cmd;
@@ -1742,8 +1665,7 @@ i82586_init(ifp)
  * Start the RU and possibly the CU unit
  */
 static void
-i82586_start_transceiver(sc)
-	struct ie_softc *sc;
+i82586_start_transceiver(struct ie_softc *sc)
 {
 
 	/*
@@ -1758,8 +1680,7 @@ i82586_start_transceiver(sc)
 	if (sc->do_xmitnopchain) {
 		/* Stop transmit command chain */
 		if (i82586_start_cmd(sc, IE_CUC_SUSPEND|IE_RUC_SUSPEND, 0, 0, 0))
-			printf("%s: CU/RU stop command timed out\n",
-				sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "CU/RU stop command timed out\n");
 
 		/* Start the receiver & transmitter chain */
 		/* sc->scb->ie_command_list =
@@ -1770,12 +1691,10 @@ i82586_start_transceiver(sc)
 					(sc->xctail + NTXBUF - 1) % NTXBUF));
 
 		if (i82586_start_cmd(sc, IE_CUC_START|IE_RUC_START, 0, 0, 0))
-			printf("%s: CU/RU command timed out\n",
-				sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "CU/RU command timed out\n");
 	} else {
 		if (i82586_start_cmd(sc, IE_RUC_START, 0, 0, 0))
-			printf("%s: RU command timed out\n",
-				sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "RU command timed out\n");
 	}
 }
 
@@ -1787,15 +1706,11 @@ i82586_stop(
 	struct ie_softc *sc = ifp->if_softc;
 
 	if (i82586_start_cmd(sc, IE_RUC_SUSPEND | IE_CUC_SUSPEND, 0, 0, 0))
-		printf("%s: iestop: disable commands timed out\n",
-			sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "iestop: disable commands timed out\n");
 }
 
 int
-i82586_ioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	void *data;
+i82586_ioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 {
 	struct ie_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *)data;
@@ -1829,8 +1744,7 @@ i82586_ioctl(ifp, cmd, data)
 }
 
 static void
-ie_mc_reset(sc)
-	struct ie_softc *sc;
+ie_mc_reset(struct ie_softc *sc)
 {
 	struct ether_multi *enm;
 	struct ether_multistep step;
@@ -1849,7 +1763,7 @@ again:
 		    memcmp(enm->enm_addrlo, enm->enm_addrhi, 6) != 0) {
 			sc->sc_ethercom.ec_if.if_flags |= IFF_ALLMULTI;
 			i82586_ioctl(&sc->sc_ethercom.ec_if,
-				     SIOCSIFFLAGS, (void *)0);
+				     SIOCSIFFLAGS, NULL);
 			return;
 		}
 		ETHER_NEXT_MULTI(step, enm);
@@ -1883,8 +1797,7 @@ again:
  * Media change callback.
  */
 int
-i82586_mediachange(ifp)
-        struct ifnet *ifp;
+i82586_mediachange(struct ifnet *ifp)
 {
         struct ie_softc *sc = ifp->if_softc;
 
@@ -1897,9 +1810,7 @@ i82586_mediachange(ifp)
  * Media status callback.
  */
 void
-i82586_mediastatus(ifp, ifmr)
-        struct ifnet *ifp;
-        struct ifmediareq *ifmr;
+i82586_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 {
         struct ie_softc *sc = ifp->if_softc;
 
@@ -1909,9 +1820,7 @@ i82586_mediastatus(ifp, ifmr)
 
 #if I82586_DEBUG
 void
-print_rbd(sc, n)
-	struct ie_softc *sc;
-	int n;
+print_rbd(struct ie_softc *sc, int n)
 {
 
 	printf("RBD at %08x:\n  status %04x, next %04x, buffer %lx\n"

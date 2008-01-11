@@ -1,8 +1,8 @@
-/*	$NetBSD: locore.S,v 1.26 2007/11/12 12:58:10 skrll Exp $	*/
-/*	$OpenBSD: locore.S,v 1.46 2001/09/20 18:33:03 mickey Exp $	*/
+/*	$NetBSD: locore.S,v 1.55 2011/02/07 12:19:35 skrll Exp $	*/
+/*	$OpenBSD: locore.S,v 1.158 2008/07/28 19:08:46 miod Exp $	*/
 
 /*
- * Copyright (c) 1998-2001 Michael Shalayeff
+ * Copyright (c) 1998-2004 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -13,11 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Michael Shalayeff.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -62,12 +57,14 @@
  *  suitability of this software for any purpose.
  */
 
+#include "opt_multiprocessor.h"
+#include "opt_cputype.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_lockdebug.h"
 
 #include <sys/errno.h>
 #include <machine/param.h>
+#include <machine/cpu.h>
 #include <machine/asm.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
@@ -76,6 +73,7 @@
 #include <machine/intr.h>
 #include <machine/frame.h>
 #include <machine/reg.h>
+
 #include "assym.h"
 
 /* Some aliases for the macros in assym.h. */
@@ -83,31 +81,34 @@
 
 #define	ccr	cr10
 #define	rctr	cr0
-#define	vtop	cr25
-#define	hptmask cr24
 
 /*
  * Very crude debugging macros that write to com1.
  */
+
+#if 1
+#define	COM1_TX_REG	(0xffd00000 + 0x5000 + 0x800)
+#else
 #define	COM1_TX_REG	(0xf0823000 + 0x800)
+#endif
 #define _DEBUG_PUTCHAR(reg1, reg2)		! \
 	ldil	L%COM1_TX_REG, %reg1		! \
 	stb	%reg2, R%COM1_TX_REG(%sr1, %reg1) ! \
-	ldil	L%60000000, %reg1		! \
+	ldil	L%10000000, %reg1		! \
 	ldi	1, %reg2			! \
 	comb,<>,n	%reg1, %r0, -8		! \
 	sub	%reg1, %reg2, %reg1
 #define DEBUG_PUTCHAR(reg1, reg2, ch)		! \
 	ldi	ch, %reg2			! \
-	_DEBUG_PUTCHAR(%reg1, %reg2)
+	_DEBUG_PUTCHAR(reg1,reg2)
 #define _DEBUG_DUMPN(reg1, reg2, reg3, p)	! \
 	extru	%reg3, p, 4, %reg2		! \
 	comib,>>,n	10, %reg2, 0		! \
 	addi	39, %reg2, %reg2		! \
 	addi	48, %reg2, %reg2		! \
-	_DEBUG_PUTCHAR(reg1, reg2)
+	_DEBUG_PUTCHAR(reg1,reg2)
 #define DEBUG_DUMP32(reg1, reg2, reg3)		! \
-	DEBUG_PUTCHAR(reg1, reg2, 58)		! \
+	DEBUG_PUTCHAR(reg1,reg2,58)		! \
 	_DEBUG_DUMPN(reg1, reg2, reg3, 3)	! \
 	_DEBUG_DUMPN(reg1, reg2, reg3, 7)	! \
 	_DEBUG_DUMPN(reg1, reg2, reg3, 11)	! \
@@ -117,54 +118,59 @@
 	_DEBUG_DUMPN(reg1, reg2, reg3, 27)	! \
 	_DEBUG_DUMPN(reg1, reg2, reg3, 31)
 
+#ifdef XXXNH
 /*
  * hv-specific instructions
  */
-#define	DR_PAGE0	diag (0x70 << 5)
-#define	DR_PAGE1	diag (0x72 << 5)
-#define	MTCPU_T(x,t)	diag ((t) << 21) | ((x) << 16) | (0xc0 << 5)
-#define	MTCPU_C(x,t)	diag ((t) << 21) | ((x) << 16) | (0x12 << 5)
+#define	DR_PAGE0	diag (0x70 << 5)				/* XXXNH Different */
+#define	DR_PAGE1	diag (0x72 << 5)				/* XXXNH Different */
+#define	MTCPU_T(x,t)	diag ((t) << 21) | ((x) << 16) | (0xc0 << 5)	/* XXXNH Different */
 #define	MFCPU_T(r,x)	diag ((r) << 21) | (0xa0 << 5) | (x)
+#define	MTCPU_C(x,t)	diag ((t) << 21) | ((x) << 16) | (0x12 << 5)
 #define	MFCPU_C(r,x)	diag ((r) << 21) | ((x) << 16) | (0x30 << 5)
+#define	MFCPU_U(r,x)	.word	0x140008a0 | ((r) << 21) | ((x))
+#define	MTCPU_U(x,r)	.word	0x14001840 | ((r) << 21) | ((x) << 16)
+
+#else
+
+#define	DR_PAGE0	.word	0x14001200
+#define	DR_PAGE1	.word	0x14001240
+#define	MTCPU_T(x,t)	.word	0x14001400 | ((t) << 21) | ((x) << 16)
+#define	MFCPU_T(r,x)	.word	0x14001400 | ((r) << 21) | (x)
+#define	MTCPU_C(x,t)	.word	0x14000240 | ((t) << 21) | ((x) << 16)
+#define	MFCPU_C(r,x)	.word	0x14000600 | ((r) << 21) | ((x) << 16)
+#define	MFCPU_U(r,x)	.word	0x140008a0 | ((r) << 21) | ((x))
+#define	MTCPU_U(x,r)	.word	0x14001840 | ((r) << 21) | ((x) << 16)
+#endif
 
 	.import	$global$, data
 	.import pdc, data
 	.import	boothowto, data
 	.import	bootdev, data
 	.import	esym, data
-	.import	curlwp, data
 	.import virtual_avail, data
 	.import	lwp0, data
-	.import	proc0paddr, data
-	.import	kpsw, data
 	.import	panic, code
 	.import fpu_csw, data
-	.import fpu_cur_uspace, data
-	.import hp700_int_regs, data
+	.import hp700_interrupt_registers, data
 
-	.section .bss
-	.export	pdc_stack, data
-pdc_stack:
-	.block	4*NBPG
-kernelmapped:			/* set when kernel is mapped */
-	.block	4
-/*
-        .section .bss
-        .export pdc_stack, data
-pdc_stack:
-        .comm   4*(1 << 12)
-kernelmapped:
-        .comm   4
-*/
+	BSS(pdc_stack, 4)	/* temp stack for PDC call */
+	BSS(kernelmapped, 4)	/* set when kernel is mapped */
+	BSS(hppa_vtop, 4)	/* a vtop translation table addr (pa=va) */
 
 	.text
+	.import kernel_setup, entry
 
 /*
  * This is the starting location for the kernel
  */
 ENTRY_NOPROFILE(start,0)
 /*
- *	start(pdc, boothowto, bootdev, esym, bootapiver, argv, argc)
+ *	bootapiver <= 2
+ *		start(pdc, boothowto, bootdev, esym, bootapiver, argv, argc)
+ *
+ *	bootapiver == 3
+ *		start(pdc, boothowto, bootdev, esym, bootapiver, bootinfo)
  *
  *	pdc - PDC entry point
  *	boothowto - boot flags (see "reboot.h")
@@ -173,6 +179,7 @@ ENTRY_NOPROFILE(start,0)
  *	bootapiver - /boot API version
  *	argv - options block passed from /boot
  *	argc - the length of the block
+ *	bootinfo - pointer to a struct bootinfo.
  */
 
 	/*
@@ -187,105 +194,167 @@ ENTRY_NOPROFILE(start,0)
 	ldil	L%esym,%r1
 	stw	%arg3,R%esym(%r1)
 
-	/* Align arg3, which is the start of available memory */
-	ldo	NBPG-1(%arg3), %arg3
-	dep	%r0, 31, PGSHIFT, %arg3
-
 	/*
-	 * disable interrupts and turn off all bits in the psw so that
-	 * we start in a known state.
+	 * Put page aligned %arg3 into %t3. It is the start of available
+	 * memory.
 	 */
-	rsm	RESET_PSW, %r0
+	ldo	NBPG-1(%arg3), %t3
+	dep	%r0, 31, PGSHIFT, %t3
 
-	/*
-	 * to keep the spl() routines consistent we need to put the correct
-	 * spl level into eiem, and reset any pending interrupts
-	 */
-	ldi	-1, %r1
-	mtctl	%r0, %eiem	/* IPL_NONE */
-	mtctl	%r1, %eirr
+	/* bootinfo struct address for hppa_init, if bootapiver is > 2 */
+	ldw	HPPA_FRAME_ARG(4)(%sp), %t1
+	ldw	HPPA_FRAME_ARG(5)(%sp), %r5
+	comiclr,< 2, %t1, %r0
+	copy	%r0, %r5
 
-	/*
-	 * set up the dp pointer so that we can do quick references off of it
-	 */
-	ldil	L%$global$,%dp
-	ldo	R%$global$(%dp),%dp
+	/* assuming size being page-aligned */
+#define STACK_ALLOC(n,s)		\
+	ldil	L%(n), %t1		! \
+	ldil	L%(s), %t2		! \
+	stw	%t3, R%(n)(%t1)		! \
+	add	%t3, %t2, %t3
+
+	STACK_ALLOC(pdc_stack, PDC_STACKSIZE)
 
 	/* zero fake trapframe and lwp0 u-area */
 	/* XXX - we should create a real trapframe for lwp0 */
-	copy	%arg3, %t2
+	copy	%t3, %t2
 	ldi	NBPG+TRAPFRAME_SIZEOF, %t1
-$start_zero_tf:
+L$start_zero_tf:
 	stws,ma %r0, 4(%t2)
-	addib,>= -8, %t1, $start_zero_tf
+	addib,>= -8, %t1, L$start_zero_tf
 	stws,ma %r0, 4(%t2)	/* XXX could use ,bc here, but gas is broken */
 
 	/*
-	 * kernel stack lives here (arg3 is page-aligned esym)
-	 * initialize the pcb
-	 * arg0 will be available space for hppa_init()
+	 * kernel stack starts a page and a trapframe above uarea address.
 	 */
-	ldo	NBPG+TRAPFRAME_SIZEOF(%arg3), %sp
-	mtctl	%arg3, %cr30
-	stw	%r0, U_PCB+PCB_ONFAULT(%arg3)
-	stw	%r0, U_PCB+PCB_SPACE(%arg3)	/* XXX HPPA_SID_KERNEL == 0 */
-	stw	%arg3, U_PCB+PCB_UVA(%arg3)
-	ldil	L%USPACE, %arg0
-	add	%arg3, %arg0, %arg0
-	ldil	L%proc0paddr, %t1
-	stw	%arg3, R%proc0paddr(%t1)
+	ldo	NBPG+TRAPFRAME_SIZEOF(%t3), %sp
+	mtctl	%t3, CR_FPPADDR
+
+	/* initialize the pcb */
+	stw	%r0, PCB_ONFAULT(%t3)
+	stw	%r0, PCB_SPACE(%t3)	/* XXX HPPA_SID_KERNEL == 0 */
+
+	/*
+	 * Setup various pointers.
+	 *
+	 * First free memory is %t3 plus normal U space. The last page of
+	 * USPACE is the redzone if DIAGNOSTIC (see param.h).
+	 */
+	ldil	L%USPACE, %r4
+	add	%t3, %r4, %r4
+
 	ldil	L%lwp0, %t2
-	stw	%arg3, R%lwp0+L_ADDR(%t2)
-	ldo	NBPG(%arg3), %t1
+	stw	%t3, R%lwp0+L_PCB(%t2)		/* XXXuvm_lwp_getuarea */
+	ldo	NBPG(%t3), %t1
 	stw	%t1, R%lwp0+L_MD_REGS(%t2)
 
 	ldil	L%TFF_LAST, %t1
 	stw	%t1, TF_FLAGS-TRAPFRAME_SIZEOF(%sp)
-	stw	%arg3, TF_CR30-TRAPFRAME_SIZEOF(%sp)
-
-	/*
-	 * We need to set the Q bit so that we can take TLB misses after we
-	 * turn on virtual memory.
-	 */
-	mtctl	%r0, %pcsq
-	mtctl	%r0, %pcsq
-	ldil	L%$qisnowon, %t1
-	ldo	R%$qisnowon(%t1), %t1
-	mtctl	%t1, %pcoq
-	ldo	4(%t1),%t1
-	mtctl	%t1, %pcoq
-	ldi	PSW_Q|PSW_I, %t1
-	mtctl	%t1, %ipsw
-	rfi
-	nop
-
-$qisnowon:
-	/*
-	 * load address of interrupt vector table
-	 */
-	ldil	L%$ivaaddr,%t2
-	ldo	R%$ivaaddr(%t2),%t2
-	mtctl	%t2,%iva
-
-	/*
-	 * Create a stack frame for us to call C with. Clear out the previous
-	 * sp marker to mark that this is the first frame on the stack.
-	 */
-	copy	%sp, %t1
-	stwm	%r0, HPPA_FRAME_SIZE(%sp)
-	copy	%sp, %r3
-	stwm	%t1, HPPA_FRAME_SIZE(%sp)
+	stw	%t3, TF_CR30-TRAPFRAME_SIZEOF(%sp)
 
 	/*
 	 * disable all coprocessors
 	 */
 	mtctl	%r0, %ccr
 
+#ifdef MULTIPROCESSOR
+
+#define	PZ_MEM_RENDEZ		0x10
+#define	PZ_MEM_RENDEZ_HI	0x28
+
+	/* Setup SMP rendezvous address. */
+	ldil	L%hw_cpu_spinup_trampoline, %r1
+	ldo	R%hw_cpu_spinup_trampoline(%r1), %r1
+	stw	%r1, PZ_MEM_RENDEZ(%r0)
+	stw	%r0, PZ_MEM_RENDEZ_HI(%r0)
+#endif
+
+	/*
+	 * We need to set the Q bit so that we can take TLB misses after we
+	 * turn on virtual memory.
+	 */
+	copy	%sp, %arg0
+	ldil	L%qisnowon, %rp
+	ldo	R%qisnowon(%rp), %rp
+
+	b	kernel_setup
+	ldi	PSW_Q|PSW_I, %arg1
+
+qisnowon:
+	copy	%r4, %arg0
+	copy	%r5, %arg1
 	/*
 	 * call C routine hppa_init() to initialize VM
 	 */
 	.import hppa_init, code
 	CALL(hppa_init, %r1)
+
+	/*
+	 * Cannot change the queues or IPSW with the Q-bit on
+	 */
+	rsm	RESET_PSW, %r0
+	nop ! nop ! nop ! nop ! nop ! nop ! nop
+
+	/*
+	 * We need to do an rfi to get the C bit set
+	 */
+	mtctl	%r0, %pcsq
+	mtctl	%r0, %pcsq
+	ldil	L%virtual_mode, %t1
+	ldo	R%virtual_mode(%t1), %t1
+	mtctl	%t1, %pcoq
+	ldo	4(%t1), %t1
+	mtctl	%t1, %pcoq
+	GET_CURCPU(%t1)
+	ldw	CI_PSW(%t1), %t2
+	mtctl	%t2, %ipsw
+	rfi
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+
+virtual_mode:
+
+	ldil	L%kernelmapped, %t1
+	stw	%t1, R%kernelmapped(%t1)
+
+#ifdef DDB
+	.import	Debugger, code
+	/* have to call debugger from here, from virtual mode */
+	ldil	L%boothowto, %r1
+	ldw	R%boothowto(%r1), %r1
+	bb,>=	%r1, 25, L$noddb
+	nop
+
+	break	HPPA_BREAK_KERNEL, HPPA_BREAK_KGDB
+	nop
+L$noddb:
+#endif
+
+	.import main,code
+	CALL(main, %r1)
+	/* should never return... */
+	bv	(%rp)
+	nop
+EXIT(start)
+
+
+/*
+ * void kernel_setup(register_t sp, register_t psw)
+ */
+LEAF_ENTRY_NOPROFILE(kernel_setup)
+
+	/*
+	 * disable interrupts and turn off all bits in the psw so that
+	 * we start in a known state.
+	 */
+	rsm	RESET_PSW, %r0
+	nop ! nop ! nop ! nop ! nop ! nop
 
 	/*
 	 * go to virtual mode...
@@ -308,50 +377,174 @@ $qisnowon:
 	mtsp	%r0, %sr7
 
 	/*
-	 * Cannot change the queues or IPSW with the Q-bit on
+	 * to keep the spl() routines consistent we need to put the correct
+	 * spl level into eiem, and reset any pending interrupts
 	 */
-	rsm	RESET_PSW, %r0
+	ldi	-1, %r1
+	mtctl	%r0, %eiem		/* disable interrupts */
+	mtctl	%r1, %eirr
 
 	/*
-	 * We need to do an rfi to get the C bit set
+	 * load address of interrupt vector table
 	 */
+	ldil	L%ivaaddr, %t2
+	ldo	R%ivaaddr(%t2), %t2
+	mtctl	%t2, %iva
+
+	/*
+	 * set up the dp pointer so that we can do quick references off of it
+	 */
+	ldil	L%$global$,%dp
+	ldo	R%$global$(%dp), %dp
+
+	/*
+	 * Create a stack frame for us to call C with. Clear out the previous
+	 * sp marker to mark that this is the first frame on the stack.
+	 */
+	copy	%arg0, %sp
+	ldo	0(%arg0), %r3
+	stw,ma	%r0, HPPA_FRAME_SIZE(%sp)
+	stw	%r0, HPPA_FRAME_CRP(%sp)
+	stw	%r0, HPPA_FRAME_PSP(%sp)
+
+	/*
+	 * We need to set the Q bit so that we can take TLB misses after we
+	 * turn on virtual memory.
+	 */
+
 	mtctl	%r0, %pcsq
 	mtctl	%r0, %pcsq
-	ldil	L%$virtual_mode, %t1
-	ldo	R%$virtual_mode(%t1), %t1
+	mtctl	%rp, %pcoq
+	ldo	4(%rp), %rp
+	mtctl	%rp, %pcoq
+	mtctl	%arg1, %ipsw
+	rfi
+	nop
+	nop
+EXIT(kernel_setup)
+
+
+#ifdef MULTIPROCESSOR
+/*
+ * Trampoline to spin up secondary processors.
+ */
+LEAF_ENTRY_NOPROFILE(hw_cpu_spinup_trampoline)
+
+	/*
+	 * disable interrupts and turn off all bits in the psw so that
+	 * we start in a known state.
+	 */
+	rsm	RESET_PSW, %r0
+	nop ! nop ! nop ! nop ! nop ! nop
+
+	/* go to virtual mode...
+	/* get things ready for the kernel to run in virtual mode */
+	ldi	HPPA_PID_KERNEL, %r1
+	mtctl	%r1, %pidr1
+	mtctl	%r1, %pidr2
+#if pbably_not_worth_it
+	mtctl	%r0, %pidr3
+	mtctl	%r0, %pidr4
+#endif
+	mtsp	%r0, %sr0
+	mtsp	%r0, %sr1
+	mtsp	%r0, %sr2
+	mtsp	%r0, %sr3
+	mtsp	%r0, %sr4
+	mtsp	%r0, %sr5
+	mtsp	%r0, %sr6
+	mtsp	%r0, %sr7
+
+	/*
+	 * disable all coprocessors
+	 */
+	mtctl   %r0, %ccr
+
+	/*
+	 * to keep the spl() routines consistent we need to put the correct
+	 * spl level into eiem, and reset any pending interrupts
+	 */
+	ldi	-1, %r1
+	mtctl	%r0, %eiem		/* disable interrupts */
+	mtctl	%r1, %eirr
+
+	/*
+	 * load address of interrupt vector table
+	 */
+	ldil	L%ivaaddr, %t2
+	ldo	R%ivaaddr(%t2), %t2
+	mtctl	%t2, %iva
+
+	/*
+	 * set up the dp pointer so that we can do quick references off of it
+	 */
+	ldil	L%$global$, %dp
+	ldo	R%$global$(%dp), %dp
+
+	/*
+	 * Store address of cpu_info in CR_CURCPU.
+	 */
+	ldil	L%cpu_hatch_info, %r3
+	ldw	R%cpu_hatch_info(%r3), %r3
+	mtctl	%r3, CR_CURCPU
+
+	/*
+	 * Setup the stack frame for us to call C with and mark this as the
+	 * first frame on the stack.
+	 */
+	ldw	CI_STACK(%r3), %sp
+	stw,ma	%r0, HPPA_FRAME_SIZE(%sp)
+	stw	%r0, HPPA_FRAME_CRP(%sp)
+	stw	%r0, HPPA_FRAME_PSP(%sp)
+
+	/* Provide CPU with page tables. */
+	ldil	L%hppa_vtop, %t1
+	ldw	R%hppa_vtop(%t1), %t1
+	mtctl	%t1, CR_VTOP
+
+	/* Turn on the Q bit so that we can handle TLB traps. */
+	ldil	L%qenabled, %t1
+	ldo	R%qenabled(%t1), %t1
+	mtctl	%r0, %pcsq
+	mtctl	%r0, %pcsq
 	mtctl	%t1, %pcoq
 	ldo	4(%t1), %t1
 	mtctl	%t1, %pcoq
-	ldil	L%kpsw, %t1
-	ldw	R%kpsw(%t1), %t2
+	ldi	PSW_Q|PSW_I, %t2
 	mtctl	%t2, %ipsw
 	rfi
 	nop
 
-$virtual_mode:
-	ldil	L%kernelmapped, %t1
-	stw	%t1, R%kernelmapped(%t1)
+qenabled:
+	/* Call C routine to setup CPU. */
+	.import cpu_hw_init, code
+	CALL(cpu_hw_init, %r1)
 
-#ifdef DDB
-	.import	Debugger, code
-	/* have to call debugger from here, from virtual mode */
-	ldil	L%boothowto, %r1
-	ldw	R%boothowto(%r1), %r1
-	bb,>=	%r1, 25, $noddb
+	/* Switch CPU mode. */
+	ldil	L%cpu_spinup_vm, %t1
+	ldo	R%cpu_spinup_vm(%t1), %t1
+	mtctl	%r0, %pcsq
+	mtctl	%r0, %pcsq
+	mtctl	%t1, %pcoq
+	ldo	4(%t1), %t1
+	mtctl	%t1, %pcoq
+	mfctl	CR_CURCPU, %t2
+	ldw	CI_PSW(%t2), %t2
+	mtctl	%t2, %ipsw
+	rfi
 	nop
 
-	break	HPPA_BREAK_KERNEL, HPPA_BREAK_KGDB
+cpu_spinup_vm:
+
+	/*
+	 * Okay, time to return to the land of C.
+	 */
+	b	cpu_hatch
 	nop
-$noddb:
+
+EXIT(hw_cpu_spinup_trampoline)
 #endif
 
-	.import main,code
-	CALL(main, %r1)
-
-	/* should never return... */
-	bv	(%rp)
-	nop
-EXIT(start)
 
 /*
  * int pdc_call(iodcio_t func,int pdc_flag, ...)
@@ -359,7 +552,7 @@ EXIT(start)
 ENTRY(pdc_call,160)
 
 	mfctl	%eiem, %t1
-	mtctl	%r0, %eiem
+	mtctl	%r0, %eiem		/* disable interrupts */
 	stw	%rp, HPPA_FRAME_CRP(%sp)
 	copy	%arg0, %r31
 	copy	%sp, %ret1
@@ -368,8 +561,9 @@ ENTRY(pdc_call,160)
 	ldw	R%kernelmapped(%ret0), %ret0
 	comb,=	%r0, %ret0, pdc_call_unmapped1
 	nop
+
 	ldil	L%pdc_stack, %ret1
-	ldo	R%pdc_stack(%ret1), %ret1
+	ldw	R%pdc_stack(%ret1), %ret1
 
 pdc_call_unmapped1:
 	copy	%sp, %r1
@@ -470,19 +664,30 @@ pdc_call_unmapped3:
 	ldw	HPPA_FRAME_PSP(%sp), %sp
 	ldw	HPPA_FRAME_CRP(%sp), %rp
 	bv	%r0(%rp)
-	mtctl	%t2, %eiem
+	 mtctl	%t2, %eiem		/* enable interrupts */
 EXIT(pdc_call)
 
 /*
+ * int splraise(int ncpl);
+ */
+LEAF_ENTRY(splraise)
+	GET_CURCPU(%t1)
+	ldw	CI_CPL(%t1), %ret0
+	or	%ret0, %arg0, %arg0
+	bv	%r0(%rp)
+	stw	%arg0, CI_CPL(%t1)
+EXIT(splraise)
+	
+/*
  * int spllower(int ncpl);
  */
-ENTRY(spllower,64)
-	ldil	L%ipending, %r1
-	ldw	R%ipending(%r1), %r1	; load ipending
-	ldil	L%cpl, %t1
+ENTRY(spllower,HPPA_FRAME_SIZE)
+	GET_CURCPU(%t1)
+
+	ldw	CI_IPENDING(%t1), %r1	; load ipending
 	andcm,<> %r1, %arg0, %r1	; and with complement of new cpl
 	bv	%r0(%rp)
-	stw	%arg0, R%cpl(%t1)	; store new cpl
+	stw	%arg0, CI_CPL(%t1)	; store new cpl
 
 	/*
 	 * Dispatch interrupts.  There's a chance
@@ -495,8 +700,7 @@ ENTRY(spllower,64)
 	mfctl	%eiem, %arg1
 	mtctl	%r0, %eiem		; disable interrupts
 
-	ldil	L%ipending, %r1
-	ldw	R%ipending(%r1), %r1	; load ipending
+	ldw	CI_IPENDING(%t1), %r1	; load ipending
 	andcm,<> %r1, %arg0, %r1	; and with complement of new cpl
 	b,n	spllower_out		; branch if we got beaten
 	
@@ -530,9 +734,9 @@ spllower_dispatch:
 spllower_out:
 	/*
 	 * Now return, storing %eiem in the delay slot.
-	 * (hp700_intr_dispatch leaves it zero).  I think 
-	 * doing this in the delay slot is important to 
-	 * prevent recursion, but I might be being too 
+	 * (hp700_intr_dispatch leaves it zero).  I think
+	 * doing this in the delay slot is important to
+	 * prevent recursion, but I might be being too
 	 * paranoid.
 	 */
 	bv	%r0(%rp)
@@ -543,14 +747,13 @@ EXIT(spllower)
  * void hp700_intr_schedule(int mask);
  */
 ENTRY(hp700_intr_schedule,0)
-	ldil	L%ipending, %t1
-	ldil	L%cpl, %t2
+	GET_CURCPU(%t2)
 	mfctl	%eiem, %arg1
 	mtctl	%r0, %eiem			; disable interrupts
-	ldw	R%ipending(%t1), %r1		; load ipending
+	ldw	CI_IPENDING(%t2), %r1		; load ipending
 	or	%r1, %arg0, %r1			; or in mask
-	stw	%r1, R%ipending(%t1)		; store ipending
-	ldw	R%cpl(%t2), %arg0		; load cpl
+	stw	%r1, CI_IPENDING(%t2)		; store ipending
+	ldw	CI_CPL(%t2), %arg0		; load cpl
 	andcm,= %r1, %arg0, %r1			; and ipending with ~cpl
 	b,n	spllower_dispatch		; dispatch if we can
 	bv	%r0(%rp)
@@ -577,38 +780,38 @@ ENTRY(hp700_intr_ipending_new,HPPA_FRAME_SIZE)
 	 * and start with the least significant bit and with
 	 * a zero ipending_new value.
 	 */
-	ldo	INT_REG_BITS_MAP(%arg0), %arg0
+	ldo	IR_BITS_MAP(%arg0), %arg0
 	ldi	31, %arg2
 	copy	%r0, %ret0
 
 	/*
-	 * The top of this loop finds the next set bit in 
-	 * the request register.  Note that if the bvb does 
-	 * not branch, the addib is nullified, and control 
-	 * falls out of the loop.  If the bvb does branch, 
-	 * the addib runs with the mtsar in its delay slot.  
+	 * The top of this loop finds the next set bit in
+	 * the request register.  Note that if the bvb does
+	 * not branch, the addib is nullified, and control
+	 * falls out of the loop.  If the bvb does branch,
+	 * the addib runs with the mtsar in its delay slot.
 	 * If the addib branches, the mtsar is nullified.
 	 */
-$hp700_inew_loop:
+L$hp700_inew_loop:
 	mtsar	%arg2
-	bvb,>=,n %arg1, $hp700_inew_loop
-	addib,<,n -1, %arg2, $hp700_inew_done
+	bvb,>=,n %arg1, L$hp700_inew_loop
+	addib,<,n -1, %arg2, L$hp700_inew_done
 
 	/*
-	 * If the map entry for this bit has INT_REG_BIT_REG 
-	 * set, branch to descend into the next interrupt 
+	 * If the map entry for this bit has IR_BIT_REG
+	 * set, branch to descend into the next interrupt
 	 * register.  Otherwise, set the bits in our ipending_new
 	 * value and loop.
 	 */
 	ldwx,s  %arg2(%arg0), %t1
-	ldil	L%INT_REG_BIT_REG, %t2
-	ldo	R%INT_REG_BIT_REG(%t2), %t2
+	ldil	L%IR_BIT_REG, %t2
+	ldo	R%IR_BIT_REG(%t2), %t2
 	and	%t1, %t2, %t3
-	combt,=,n	%t2, %t3, $hp700_inew_descend
-	addib,>= -1, %arg2, $hp700_inew_loop
+	combt,=,n	%t2, %t3, L$hp700_inew_descend
+	addib,>= -1, %arg2, L$hp700_inew_loop
 	or	%t1, %ret0, %ret0
 
-$hp700_inew_done:
+L$hp700_inew_done:
 
 	/* End stack calling convention. */
 	ldw	HPPA_FRAME_CRP(%r3), %rp
@@ -616,7 +819,7 @@ $hp700_inew_done:
 	bv	%r0(%rp)
 	ldw,mb	-HPPA_FRAME_SIZE(%sp), %r3
 
-$hp700_inew_descend:
+L$hp700_inew_descend:
 
 	/*
 	 * If the next interrupt register index is zero,
@@ -625,7 +828,7 @@ $hp700_inew_descend:
 	 * never descend into since it's the root.)
 	 */
 	andcm,<> %t1, %t2, %t1
-	b,n	$hp700_inew_unused
+	b,n	L$hp700_inew_unused
 
 	/* Save our state. */
 	stw	%arg0, HPPA_FRAME_ARG(0)(%r3)
@@ -634,17 +837,17 @@ $hp700_inew_descend:
 	stw	%ret0, HPPA_FRAME_ARG(3)(%r3)
 
 	/* Get our new interrupt register. */
-	ldil	L%hp700_int_regs, %arg0
-	ldo	R%hp700_int_regs(%arg0), %arg0
+	ldil	L%hp700_interrupt_registers, %arg0
+	ldo	R%hp700_interrupt_registers(%arg0), %arg0
 	sh2add	%t1, %arg0, %arg0
 	ldw	0(%arg0), %arg0
 
 	/*
 	 * Read the interrupt request register and make
-	 * our recursive call.  The read also serves to 
+	 * our recursive call.  The read also serves to
 	 * acknowledge the interrupt to the I/O subsystem.
 	 */
-	ldw	INT_REG_REQ(%arg0), %arg1
+	ldw	IR_REQ(%arg0), %arg1
 	bl	hp700_intr_ipending_new, %rp
 	ldw	0(%arg1), %arg1
 
@@ -655,10 +858,10 @@ $hp700_inew_descend:
 	ldw	HPPA_FRAME_ARG(3)(%r3), %ret1
 	or	%ret1, %ret0, %ret0
 
-$hp700_inew_unused:
-	addib,>= -1, %arg2, $hp700_inew_loop
+L$hp700_inew_unused:
+	addib,>= -1, %arg2, L$hp700_inew_loop
 	nop
-	b,n	$hp700_inew_done
+	b,n	L$hp700_inew_done
 EXIT(hp700_intr_ipending_new)
 
 /*
@@ -689,13 +892,13 @@ EXIT(cpu_die)
 
 /*
  * struct lwp *
- * cpu_switchto(struct lwp *curl, struct lwp *newl)
+ * cpu_switchto(struct lwp *oldl, struct lwp *newl, bool returning)
  */
 	.align	32
 ENTRY(cpu_switchto,128)
 	/* start stack calling convention */
 	stw	%rp, HPPA_FRAME_CRP(%sp)
-	copy	%r3, %r1 
+	copy	%r3, %r1
 	copy	%sp, %r3
 	stwm	%r1, HPPA_FRAME_SIZE+16*4(%sp)
 					/* Frame marker and callee saves */
@@ -726,11 +929,11 @@ switch_diag:
 	comb,=,n %arg0, %arg1, kstack_ok
 
 	/*
-	 * cpu_lwp_fork sets the initial stack to a page above l_addr.
-	 * Check that this is the case for curl.
+	 * cpu_lwp_fork sets the initial stack to a page above uarea address.
+	 * Check that the stack is above this value for oldl.
 	 */
-	ldw	L_ADDR(%arg1), %arg2
-	ldw	U_PCB+PCB_KSP(%arg2), %t1	/* t1 for switch_error */
+	ldw	L_PCB(%arg1), %arg2
+	ldw	PCB_KSP(%arg2), %t1		/* t1 for switch_error */
 	ldo	NBPG(%arg2), %arg2
 	comb,>>,n %arg2, %t1, switch_error
 	nop
@@ -744,22 +947,22 @@ switch_diag:
 kstack_ok:
 #endif
 
-	/* If old LWP exited, don't bother. */
+	/* If old LWP exited, don't bother saving anything. */
 	comb,=,n %r0, %arg0, switch_exited
 
 	/*
 	 * save old LWP context
 	 *
-	 * arg0: old LWP (curl)
+	 * arg0: old LWP (oldl)
 	 * arg1: new LWP (newl)
 	 */
 
-	ldw	L_ADDR(%arg0), %t3	/* curl pcb */
-	stw	%sp, U_PCB+PCB_KSP(%t3)
-	fdc	%r0(%t3)		/* flush curl pcb */
+	ldw	L_PCB(%arg0), %t3	/* oldl pcb */
+	stw	%sp, PCB_KSP(%t3)
+	fdc	%r0(%t3)		/* flush oldl pcb  - surely fdc PCB_KSP(%t3) */
 
 	/*
-	 * Save the callee-save registers. We don't need to do 
+	 * Save the callee-save registers. We don't need to do
 	 * r3 here as it was done during stack calling convention.
 	 */
 	stw	%r4,   1*4(%r3)
@@ -781,23 +984,24 @@ kstack_ok:
 	/*
 	 * restore new LWP context
 	 *
-	 * arg0: old LWP (curl)
+	 * arg0: old LWP (oldl)
 	 * arg1: new LWP (newl)
 	 */
 switch_exited:
-	ldw	L_MD(%arg1), %t1		/* M_TF??? */
-	ldw	L_ADDR(%arg1), %t3
-	ldw	U_PCB+PCB_KSP(%t3), %sp		/* restore stack of newl */
+	ldw	L_MD(%arg1), %t1
+	ldw	L_PCB(%arg1), %t3
+	ldw	PCB_KSP(%t3), %sp		/* restore stack of newl */
 
 	fdc	%r0(%t3)			/* Flush newl PCB - why? */
 
-	ldw	TF_CR30(%t1), %t2		/* pmap_activate? */
+#if 0
 	ldw	TF_CR9(%t1), %t3		/* pmap_activate? */
 	mtctl	%t3, %pidr2			/* pmap_activate? */
-	mtctl	%t2, %cr30			/* pmap_activate? */
+#endif
+	ldw	TF_CR30(%t1), %t2		/* pmap_activate? */
+	mtctl	%t2, CR_FPPADDR			/* pmap_activate? */
 
-	ldil	L%curlwp, %t1
-	stw	%arg1, R%curlwp(%t1)
+	SET_CURLWP(%arg1, %t2)
 
 	ldo	-(HPPA_FRAME_SIZE+16*4)(%sp), %r3
 
@@ -827,12 +1031,12 @@ switch_exited:
 	/*
 	 * Save some caller-saves we want to preserve.
 	 *
-	 * We save curl (%arg0) and newl (%arg1) for the benefit of
+	 * We save oldl (%arg0) and newl (%arg1) for the benefit of
 	 * lwp_trampoline() for when it calls lwp_startup().
 	 *
-	 * curl (%arg0) is saved as it's the return value
+	 * oldl (%arg0) is saved as it's the return value
 	 */
-	stw	%arg0, HPPA_FRAME_ARG(0)(%r3)		/* curl */
+	stw	%arg0, HPPA_FRAME_ARG(0)(%r3)		/* oldl */
 	stw	%arg1, HPPA_FRAME_ARG(1)(%r3)		/* newl */
 
 	copy	%arg1, %arg0
@@ -854,17 +1058,17 @@ ALTENTRY(hppa_fpu_nop1)
 	b,n	switch_return
 
 	/*
-	 * We do have a hardware FPU.  If the LWP 
+	 * We do have a hardware FPU.  If the LWP
 	 * that we just switched to has its state in the
-	 * FPU, enable the FPU, else disable it, so if 
-	 * the LWP does try to use the coprocessor 
-	 * we'll get an assist emulation trap to swap 
+	 * FPU, enable the FPU, else disable it, so if
+	 * the LWP does try to use the coprocessor
+	 * we'll get an assist emulation trap to swap
 	 * states.
 	 */
-	ldil	L%fpu_cur_uspace, %t1
+	GET_CURCPU(%t1)
 	mfctl	%ccr, %r1
-	mfctl	%cr30, %t2
-	ldw	R%fpu_cur_uspace(%t1), %t1
+	mfctl	CR_FPPADDR, %t2
+	ldw	CI_FPU_STATE(%t1), %t1
 	depi	0, 25, 2, %r1		; disables the FPU
 	comb,<>,n %t1, %t2, 0		; nullify if LWPs different
 	depi	3, 25, 2, %r1		; enables the FPU
@@ -887,7 +1091,7 @@ EXIT(cpu_switchto)
  * the first kernel function to call, and its argument.
  *
  * cpu_switchto() also makes sure that %arg0 and %arg1 are (still)
- * curl and newl respectively.
+ * oldl and newl respectively.
  */
 ENTRY_NOPROFILE(lwp_trampoline,HPPA_FRAME_SIZE)
 	/* no return point */
@@ -912,10 +1116,9 @@ ENTRY_NOPROFILE(lwp_trampoline,HPPA_FRAME_SIZE)
 	 * this LWP was created by the fork()
 	 * syscall, which we now return from.
 	 */
-	ldil	L%curlwp, %t1
-	ldw	R%curlwp(%t1), %t2
+	GET_CURLWP(%t2)
 	.call
-	b	$syscall_return
+	b	syscall_return
 	ldw	L_MD(%t2), %t3
 EXIT(lwp_trampoline)
 

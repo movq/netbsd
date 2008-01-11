@@ -1,0 +1,38 @@
+#	$NetBSD: Makefile,v 1.3 2011/05/12 14:56:24 joerg Exp $
+
+LIB=	clangFrontend
+
+.include <bsd.init.mk>
+
+.PATH: ${CLANG_SRCDIR}/lib/Frontend
+
+SRCS+=	ASTConsumers.cpp \
+	ASTMerge.cpp \
+	ASTUnit.cpp \
+	BoostConAction.cpp \
+	CacheTokens.cpp \
+	CompilerInstance.cpp \
+	CompilerInvocation.cpp \
+	CreateInvocationFromCommandLine.cpp \
+	DependencyFile.cpp \
+	DiagChecker.cpp \
+	FrontendAction.cpp \
+	FrontendActions.cpp \
+	FrontendOptions.cpp \
+	HeaderIncludeGen.cpp \
+	InitHeaderSearch.cpp \
+	InitPreprocessor.cpp \
+	LangStandards.cpp \
+	LogDiagnosticPrinter.cpp \
+	MultiplexConsumer.cpp \
+	PrintPreprocessedOutput.cpp \
+	TextDiagnosticBuffer.cpp \
+	TextDiagnosticPrinter.cpp \
+	VerifyDiagnosticsClient.cpp \
+	Warnings.cpp
+
+.if defined(HOSTLIB)
+.include <bsd.hostlib.mk>
+.else
+.include <bsd.lib.mk>
+.endif

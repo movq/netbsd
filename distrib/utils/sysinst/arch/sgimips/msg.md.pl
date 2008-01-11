@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.pl,v 1.7 2004/11/13 10:26:39 sekiya Exp $	*/
+/*	$NetBSD: msg.md.pl,v 1.10 2011/04/04 08:30:42 mbalmer Exp $	*/
 /* Based on english version: */
 /*	NetBSD: msg.md.en,v 1.1 2001/11/20 15:53:24 soren Exp */
 
@@ -17,11 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -43,14 +39,11 @@
 
 
 message md_hello
-{Jesli uruchomiles komputer z dyskietki, mozesz ja teraz wyciagnac.
-
+{
 }
 
-message fullpart
-{Zainstalujemy teraz NetBSD na dysku %s. Mozesz wybrac czy chcesz
-zainstalowac NetBSD na calym dysku, czy tylko na jego czesci.
-Ktora instalacje chcesz zrobic?
+message md_may_remove_boot_medium
+{Jesli uruchomiles komputer z dyskietki, mozesz ja teraz wyciagnac.
 }
 
 message dobootblks

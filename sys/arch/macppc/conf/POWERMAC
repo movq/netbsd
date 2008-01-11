@@ -1,4 +1,4 @@
-#	$NetBSD: POWERMAC,v 1.58 2007/10/17 19:55:17 garbled Exp $
+#	$NetBSD: POWERMAC,v 1.61 2010/05/08 22:16:28 mrg Exp $
 #
 # POWERMAC config file
 #
@@ -31,7 +31,8 @@ options 	COMPAT_14	# NetBSD 1.4,
 options 	COMPAT_15	# NetBSD 1.5,
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_30	# NetBSD 3.0,
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
@@ -53,6 +54,8 @@ options 	APPLE_UFS	# Apple UFS support in FFS
 options 	INET		# IP + ICMP + TCP + UDP
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
+#options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 
 # These options enable verbose messages for several subsystems.
 options 	SCSIVERBOSE	# Verbose SCSI errors
@@ -127,7 +130,7 @@ pseudo-device	ipfilter		# IP filter (firewall) and NAT
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 pseudo-device	ccd		4	# concatenated/striped disk devices
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	openfirm		# /dev/openfirm
 pseudo-device	clockctl		# user control of clock subsystem

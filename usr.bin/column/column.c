@@ -1,4 +1,4 @@
-/*	$NetBSD: column.c,v 1.17 2007/12/15 19:44:49 perry Exp $	*/
+/*	$NetBSD: column.c,v 1.21 2008/07/21 14:19:21 lukem Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)column.c	8.4 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: column.c,v 1.17 2007/12/15 19:44:49 perry Exp $");
+__RCSID("$NetBSD: column.c,v 1.21 2008/07/21 14:19:21 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -217,26 +217,27 @@ maketbl(void)
 	TBL *tbl;
 	char **cols, **ncols;
 
-	t = tbl = ecalloc(entries, sizeof(TBL));
-	cols = ecalloc((maxcols = DEFCOLS), sizeof(char *));
-	lens = ecalloc(maxcols, sizeof(int));
+	t = tbl = ecalloc(entries, sizeof(*t));
+	cols = ecalloc((maxcols = DEFCOLS), sizeof(*cols));
+	lens = ecalloc(maxcols, sizeof(*lens));
 	for (cnt = 0, lp = list; cnt < entries; ++cnt, ++lp, ++t) {
 		for (coloff = 0, p = *lp;
-		    (cols[coloff] = strtok(p, separator)) != NULL;
-		    p = NULL)
+		    (cols[coloff] = strtok(p, separator)) != NULL; p = NULL)
 			if (++coloff == maxcols) {
-				ncols = erealloc(cols, maxcols +
-				    DEFCOLS * sizeof(char *));
-				nlens = erealloc(lens, maxcols +
-				    DEFCOLS * sizeof(int));
+				ncols = erealloc(cols, (maxcols +
+				    DEFCOLS) * sizeof(*ncols));
+				nlens = erealloc(lens, (maxcols +
+				    DEFCOLS) * sizeof(*nlens));
 				cols = ncols;
 				lens = nlens;
+				(void)memset(cols + maxcols, 0,
+				    DEFCOLS * sizeof(*cols));
 				(void)memset(lens + maxcols, 0,
-				    DEFCOLS * sizeof(int));
+				    DEFCOLS * sizeof(*lens));
 				maxcols += DEFCOLS;
 			}
-		t->list = ecalloc(coloff, sizeof(char *));
-		t->len = ecalloc(coloff, sizeof(int));
+		t->list = ecalloc(coloff, sizeof(*(t->list)));
+		t->len = ecalloc(coloff, sizeof(*(t->len)));
 		for (t->cols = coloff; --coloff >= 0;) {
 			t->list[coloff] = cols[coloff];
 			t->len[coloff] = strlen(cols[coloff]);
@@ -256,25 +257,29 @@ maketbl(void)
 }
 
 #define	DEFNUM		1000
-#define	MAXLINELEN	(LINE_MAX + 1)
 
 static void
 input(FILE *fp)
 {
 	static int maxentry;
 	int len;
-	char *p, buf[MAXLINELEN];
+	size_t blen;
+	char *p, *buf;
 	char **n;
 
 	if (!list)
-		list = ecalloc((maxentry = DEFNUM), sizeof(char *));
-	while (fgets(buf, MAXLINELEN, fp)) {
+		list = ecalloc((maxentry = DEFNUM), sizeof(*list));
+	while ((buf = fgetln(fp, &blen)) != NULL) {
+		buf = estrndup(buf, blen);
 		for (p = buf; *p && isspace((unsigned char)*p); ++p);
-		if (!*p)
+		if (!*p) {
+			free(buf);
 			continue;
+		}
 		if (!(p = strchr(p, '\n'))) {
 			warnx("line too long");
 			eval = 1;
+			free(buf);
 			continue;
 		}
 		*p = '\0';
@@ -282,11 +287,12 @@ input(FILE *fp)
 		if (maxlength < len)
 			maxlength = len;
 		if (entries == maxentry) {
+			n = erealloc(list, (maxentry + DEFNUM) * sizeof(*n));
+			(void)memset(n + maxentry, 0, sizeof(*n) * DEFNUM);
 			maxentry += DEFNUM;
-			n = erealloc(list, maxentry * sizeof(char *));
 			list = n;
 		}
-		list[entries++] = estrdup(buf);
+		list[entries++] = buf;
 	}
 }
 

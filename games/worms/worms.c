@@ -1,4 +1,4 @@
-/*	$NetBSD: worms.c,v 1.17 2007/12/15 19:44:45 perry Exp $	*/
+/*	$NetBSD: worms.c,v 1.20 2009/08/12 08:57:30 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)worms.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: worms.c,v 1.17 2007/12/15 19:44:45 perry Exp $");
+__RCSID("$NetBSD: worms.c,v 1.20 2009/08/12 08:57:30 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -177,11 +177,11 @@ static struct	worm {
 	short *xpos, *ypos;
 } *worm;
 
-volatile sig_atomic_t sig_caught = 0;
+static volatile sig_atomic_t sig_caught = 0;
 
 int	 main(int, char **);
-void	 nomem(void) __dead;
-void	 onsig(int);
+static void nomem(void) __dead;
+static void onsig(int);
 
 int
 main(argc, argv)
@@ -237,7 +237,8 @@ main(argc, argv)
 	if (!(worm = malloc((size_t)number *
 	    sizeof(struct worm))) || !(mp = malloc((size_t)1024)))
 		nomem();
-	initscr();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");
 	curs_set(0);
 	CO = COLS;
 	LI = LINES;
@@ -338,14 +339,14 @@ main(argc, argv)
 	}
 }
 
-void
+static void
 onsig(signo)
 	int signo __unused;
 {
 	sig_caught = 1;
 }
 
-void
+static void
 nomem()
 {
 	errx(1, "not enough memory.");

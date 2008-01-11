@@ -1,4 +1,4 @@
-/*	$NetBSD: prompt.c,v 1.12 2006/10/26 01:33:08 mrg Exp $	*/
+/*	$NetBSD: prompt.c,v 1.14 2011/05/24 12:31:56 joerg Exp $	*/
 
 /*
  * Copyright (C) 1984-2004  Mark Nudelman
@@ -55,7 +55,7 @@ static constant char h_proto[] =
 static constant char w_proto[] =
   "Waiting for data";
 
-public char *prproto[3];
+public char constant *prproto[3];
 public char constant *eqproto = e_proto;
 public char constant *hproto = h_proto;
 public char constant *wproto = w_proto;
@@ -71,8 +71,8 @@ static void ap_quest __P((void));
 static POSITION curr_byte __P((int));
 static int cond __P((int, int));
 static void protochar __P((int, int, int));
-static char *skipcond __P((char *));
-static char *wherechar __P((char *, int *));
+static const char *skipcond __P((const char *));
+static const char *wherechar __P((const char *, int *));
 
 /*
  * Initialize the prompt prototype strings.
@@ -401,9 +401,9 @@ protochar(c, where, iseditproto)
  * where to resume parsing the string.
  * We must keep track of nested IFs and skip them properly.
  */
-	static char *
+	static const char *
 skipcond(p)
-	register char *p;
+	register const char *p;
 {
 	register int iflevel;
 
@@ -459,9 +459,9 @@ skipcond(p)
 /*
  * Decode a char that represents a position on the screen.
  */
-	static char *
+	static const char *
 wherechar(p, wp)
-	char *p;
+	const char *p;
 	int *wp;
 {
 	switch (*p)
@@ -485,10 +485,10 @@ wherechar(p, wp)
  */
 	public char *
 pr_expand(proto, maxwidth)
-	char *proto;
+	const char *proto;
 	int maxwidth;
 {
-	register char *p;
+	register const char *p;
 	register int c;
 	int where;
 

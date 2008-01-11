@@ -1,4 +1,4 @@
-/*	$NetBSD: bugsyscalls.S,v 1.1 2002/02/27 21:02:27 scw Exp $	*/
+/*	$NetBSD: bugsyscalls.S,v 1.3 2011/01/19 09:03:15 he Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <machine/asm.h>
 
-#define	BSYS(num)	addi r10,0,num ; sc
+#define	BSYS(num)	addi %r10,0,num ; sc
 
 
 /*
@@ -67,8 +60,8 @@ ENTRY(bugsys_outchr)
  */
 ENTRY(bugsys_instat)
 	BSYS(0x0002)
-	li	r4,0x8
-	and	r3,r3,r4
+	li	%r4,0x8
+	and	%r3,%r3,%r4
 	blr
 
 /*
@@ -81,8 +74,8 @@ ENTRY(bugsys_instat)
  */
 ENTRY(bugsys_dskrd)
 	BSYS(0x0010)
-	li	r4,0x8
-	and	r3,r3,r4
+	li	%r4,0x8
+	and	%r3,%r3,%r4
 	blr
 
 /*
@@ -95,8 +88,8 @@ ENTRY(bugsys_dskrd)
  */
 ENTRY(bugsys_dskwr)
 	BSYS(0x0011)
-	li	r4,0x8
-	and	r3,r3,r4
+	li	%r4,0x8
+	and	%r3,%r3,%r4
 	blr
 
 /*
@@ -109,8 +102,8 @@ ENTRY(bugsys_dskwr)
  */
 ENTRY(bugsys_netio)
 	BSYS(0x001d)
-	li	r4,0x8
-	and	r3,r3,r4
+	li	%r4,0x8
+	and	%r3,%r3,%r4
 	blr
 
 /*

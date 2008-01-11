@@ -1,7 +1,7 @@
-#	$NetBSD: genassym.cf,v 1.23 2008/01/05 21:47:19 yamt Exp $
+#	$NetBSD: genassym.cf,v 1.46 2010/12/20 00:25:24 matt Exp $
 
 #
-# Copyright (c) 1998, 2006, 2007 The NetBSD Foundation, Inc.
+# Copyright (c) 1998, 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,11 +44,7 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by the University of
-#	California, Berkeley and its contributors.
-# 4. Neither the name of the University nor the names of its contributors
+# 3. Neither the name of the University nor the names of its contributors
 #    may be used to endorse or promote products derived from this software
 #    without specific prior written permission.
 #
@@ -77,7 +66,6 @@
 if defined(_KERNEL_OPT)
 include "opt_compat_netbsd32.h"
 include "opt_compat_linux32.h"
-include "opt_multiprocessor.h"
 include "opt_xen.h"
 endif
 
@@ -88,12 +76,12 @@ include <sys/param.h>
 include <sys/proc.h>
 include <sys/resourcevar.h>
 include <sys/device.h>
-include <sys/user.h>
 include <sys/mbuf.h>
 include <sys/mutex.h>
 include <sys/rwlock.h>
 include <sys/cpu_data.h>
 include <sys/evcnt.h>
+include <sys/cpu.h>
 
 include <netinet/in.h>
 include <netinet/in_systm.h>
@@ -117,16 +105,12 @@ if defined(COMPAT_LINUX32)
 include <machine/linux32_machdep.h>
 endif
 
-if defined(_KERNEL) && !defined(_LKM)
+if defined(_KERNEL) && defined(_KERNEL_OPT)
 include "isa.h"
 include "ioapic.h"
 endif
 if NISA > 0
 include <machine/isa_machdep.h>
-endif
-
-ifdef MULTIPROCESSOR
-include <machine/cpu.h>
 endif
 
 if NIOAPIC > 0
@@ -138,7 +122,7 @@ ifdef XEN
 include <xen/xen3-public/xen.h>
 endif  
 
-include <x86/busdefs.h>
+include <x86/bus.h>
 
 define	LSRUN			LSRUN
 define	LSONPROC		LSONPROC
@@ -163,12 +147,15 @@ define	PDIR_SLOT_PTE		PDIR_SLOT_PTE
 
 define	VM_MAXUSER_ADDRESS	(unsigned long long)VM_MAXUSER_ADDRESS
 
-define	UVM_PAGE_IDLE_ZERO	offsetof(struct uvm, page_idle_zero)
-
-define	L_ADDR			offsetof(struct lwp, l_addr)
+define	L_PCB			offsetof(struct lwp, l_addr)
 define	L_FLAG			offsetof(struct lwp, l_flag)
 define	L_PROC			offsetof(struct lwp, l_proc)
 define	L_CTXSWTCH		offsetof(struct lwp, l_ctxswtch)
+define	L_NCSW			offsetof(struct lwp, l_ncsw)
+define	L_NOPREEMPT		offsetof(struct lwp, l_nopreempt)
+define	L_DOPREEMPT		offsetof(struct lwp, l_dopreempt)
+define	L_CPU			offsetof(struct lwp, l_cpu)
+define	L_KPRIORITY		offsetof(struct lwp, l_kpriority)
 define	L_MD_REGS		offsetof(struct lwp, l_md.md_regs)
 define	L_MD_FLAGS		offsetof(struct lwp, l_md.md_flags)
 define	L_MD_ASTPENDING		offsetof(struct lwp, l_md.md_astpending)
@@ -190,9 +177,6 @@ define	M_NEXT			offsetof(struct mbuf, m_next)
 define	IP_SRC			offsetof(struct ip, ip_src)
 define	IP_DST			offsetof(struct ip, ip_dst)
 
-define	V_TRAP			offsetof(struct uvmexp, traps)
-define	V_INTR			offsetof(struct uvmexp, intrs)
-
 define	PCB_CR3			offsetof(struct pcb, pcb_cr3)
 define	PCB_RBP			offsetof(struct pcb, pcb_rbp)
 define	PCB_RSP			offsetof(struct pcb, pcb_rsp)
@@ -201,6 +185,10 @@ define	PCB_RSP0		offsetof(struct pcb, pcb_rsp0)
 define	PCB_CR0			offsetof(struct pcb, pcb_cr0)
 define	PCB_ONFAULT		offsetof(struct pcb, pcb_onfault)
 define	PCB_FPCPU		offsetof(struct pcb, pcb_fpcpu)
+define	PCB_FLAGS		offsetof(struct pcb, pcb_flags)
+define	PCB_COMPAT32		PCB_COMPAT32
+define	PCB_FS			offsetof(struct pcb, pcb_fs)
+define	PCB_GS			offsetof(struct pcb, pcb_gs)
 
 define	TF_RDI			offsetof(struct trapframe, tf_rdi)
 define	TF_RSI			offsetof(struct trapframe, tf_rsi)
@@ -245,10 +233,16 @@ define	TLBSTATE_LAZY		TLBSTATE_LAZY
 define	TLBSTATE_STALE		TLBSTATE_STALE
 define	CPU_INFO_TLB_EVCNT	offsetof(struct cpu_info, ci_tlb_evcnt)
 define	CPU_INFO_CURLWP		offsetof(struct cpu_info, ci_curlwp)
+define	CPU_INFO_CURLDT		offsetof(struct cpu_info, ci_curldt)
 define	CPU_INFO_IDLELWP	offsetof(struct cpu_info, ci_data.cpu_idlelwp)
 define	CPU_INFO_PMAP		offsetof(struct cpu_info, ci_pmap)
 define	CPU_INFO_CPUMASK	offsetof(struct cpu_info, ci_cpumask)
 define	CPU_INFO_RSP0		offsetof(struct cpu_info, ci_tss.tss_rsp0)
+define	CPU_INFO_NSYSCALL	offsetof(struct cpu_info, ci_data.cpu_nsyscall)
+define	CPU_INFO_NTRAP		offsetof(struct cpu_info, ci_data.cpu_ntrap)
+define	CPU_INFO_NINTR		offsetof(struct cpu_info, ci_data.cpu_nintr)
+define	CPU_INFO_CURPRIORITY	offsetof(struct cpu_info, ci_schedstate.spc_curpriority)
+define	CPU_INFO_FPCURLWP	offsetof(struct cpu_info, ci_fpcurlwp)
 
 define	CPU_INFO_GDT		offsetof(struct cpu_info, ci_gdt)
 define	CPU_INFO_IPENDING	offsetof(struct cpu_info, ci_ipending)
@@ -261,33 +255,25 @@ define	CPU_INFO_MTX_COUNT	offsetof(struct cpu_info, ci_mtx_count)
 define	CPU_INFO_MTX_OLDSPL	offsetof(struct cpu_info, ci_mtx_oldspl)
 define  CPU_INFO_CPUID		offsetof(struct cpu_info, ci_cpuid)
 define	CPU_INFO_ISTATE		offsetof(struct cpu_info, ci_istate)
+define	CPU_INFO_CC_SKEW	offsetof(struct cpu_info, ci_data.cpu_cc_skew)
 
-define	ACPI_SUSPEND_GDT		offsetof(struct cpu_info, ci_suspend_gdt)
-define	ACPI_SUSPEND_IDT		offsetof(struct cpu_info, ci_suspend_idt)
-define	ACPI_SUSPEND_TR			offsetof(struct cpu_info, ci_suspend_tr)
-define	ACPI_SUSPEND_LDT		offsetof(struct cpu_info, ci_suspend_ldt)
-define	ACPI_SUSPEND_FS_BASE_L		offsetof(struct cpu_info, ci_suspend_fs_base_l)
-define	ACPI_SUSPEND_FS_BASE_H		offsetof(struct cpu_info, ci_suspend_fs_base_h)
-define	ACPI_SUSPEND_GS_BASE_L		offsetof(struct cpu_info, ci_suspend_gs_base_l)
-define	ACPI_SUSPEND_GS_BASE_H		offsetof(struct cpu_info, ci_suspend_gs_base_h)
-define	ACPI_SUSPEND_GS_KERNELBASE_L	offsetof(struct cpu_info, ci_suspend_gs_kernelbase_l)
-define	ACPI_SUSPEND_GS_KERNELBASE_H	offsetof(struct cpu_info, ci_suspend_gs_kernelbase_h)
-define	ACPI_SUSPEND_MSR_EFER		offsetof(struct cpu_info, ci_suspend_msr_efer)
-define	ACPI_SUSPEND_RBX		offsetof(struct cpu_info, ci_suspend_rbx)
-define	ACPI_SUSPEND_RBP		offsetof(struct cpu_info, ci_suspend_rbp)
-define	ACPI_SUSPEND_RSP		offsetof(struct cpu_info, ci_suspend_rsp)
-define	ACPI_SUSPEND_R12		offsetof(struct cpu_info, ci_suspend_r12)
-define	ACPI_SUSPEND_R13		offsetof(struct cpu_info, ci_suspend_r13)
-define	ACPI_SUSPEND_R14		offsetof(struct cpu_info, ci_suspend_r14)
-define	ACPI_SUSPEND_R15		offsetof(struct cpu_info, ci_suspend_r15)
-define	ACPI_SUSPEND_RFL		offsetof(struct cpu_info, ci_suspend_rfl)
-define	ACPI_SUSPEND_CR0		offsetof(struct cpu_info, ci_suspend_cr0)
-define	ACPI_SUSPEND_CR2		offsetof(struct cpu_info, ci_suspend_cr2)
-define	ACPI_SUSPEND_CR3		offsetof(struct cpu_info, ci_suspend_cr3)
-define	ACPI_SUSPEND_CR4		offsetof(struct cpu_info, ci_suspend_cr4)
-define	ACPI_SUSPEND_CR8		offsetof(struct cpu_info, ci_suspend_cr8)
+define	ACPI_SUSPEND_GDT	offsetof(struct cpu_info, ci_suspend_gdt)
+define	ACPI_SUSPEND_IDT	offsetof(struct cpu_info, ci_suspend_idt)
+define	ACPI_SUSPEND_TR		offsetof(struct cpu_info, ci_suspend_tr)
+define	ACPI_SUSPEND_LDT	offsetof(struct cpu_info, ci_suspend_ldt)
+define	ACPI_SUSPEND_FS		offsetof(struct cpu_info, ci_suspend_fs)
+define	ACPI_SUSPEND_GS		offsetof(struct cpu_info, ci_suspend_gs)
+define	ACPI_SUSPEND_KGS	offsetof(struct cpu_info, ci_suspend_kgs)
+define	ACPI_SUSPEND_EFER	offsetof(struct cpu_info, ci_suspend_efer)
+define	ACPI_SUSPEND_REG	offsetof(struct cpu_info, ci_suspend_reg)
+define	ACPI_SUSPEND_CR0	offsetof(struct cpu_info, ci_suspend_cr0)
+define	ACPI_SUSPEND_CR2	offsetof(struct cpu_info, ci_suspend_cr2)
+define	ACPI_SUSPEND_CR3	offsetof(struct cpu_info, ci_suspend_cr3)
+define	ACPI_SUSPEND_CR4	offsetof(struct cpu_info, ci_suspend_cr4)
+define	ACPI_SUSPEND_CR8	offsetof(struct cpu_info, ci_suspend_cr8)
 
 if NIOAPIC > 0
+define		PIC_IOAPIC		offsetof(struct pic, pic_ioapic)
 define		IOAPIC_SC_REG		offsetof(struct ioapic_softc, sc_reg)
 define		IOAPIC_SC_DATA		offsetof(struct ioapic_softc, sc_data)
 define		PIC_LOCK		offsetof(struct pic, pic_lock)
@@ -314,7 +300,7 @@ define  LINUX32_RT_SF_HANDLER	offsetof(struct linux32_rt_sigframe, sf_handler)
 define  LINUX32_RT_SF_UC	offsetof(struct linux32_rt_sigframe, sf_uc)
 define  LINUX32_SYS_rt_sigreturn	LINUX32_SYS_rt_sigreturn
 define  LINUX32_SYS_sigreturn		LINUX32_SYS_sigreturn
-define  LINUX32_SYS_exit		LINUX32_SYS_netbsd32_exit
+define  LINUX32_SYS_exit		LINUX32_SYS_exit
 endif
 
 ifdef XEN
@@ -337,9 +323,9 @@ define	IS_LWP			offsetof(struct intrsource, is_lwp)
 endif
 
 define	IPL_NONE		IPL_NONE
+define	IPL_PREEMPT		IPL_PREEMPT
 define	IPL_CLOCK		IPL_CLOCK
 define	IPL_HIGH		IPL_HIGH
-define	IPL_IPI			IPL_IPI
 
 define	LIR_IPI			LIR_IPI
 define	LIR_TIMER		LIR_TIMER
@@ -380,7 +366,10 @@ define	OPTERON_MSR_PASSCODE	OPTERON_MSR_PASSCODE
 
 define	X86_BUS_SPACE_IO	X86_BUS_SPACE_IO
 
+define	BST_TYPE		offsetof(struct bus_space_tag, bst_type)
+
 ifdef XEN
+define CPU_INFO_VCPU		offsetof(struct cpu_info, ci_vcpu)
 define EVTCHN_UPCALL_MASK	offsetof(struct vcpu_info, evtchn_upcall_mask)
 define XEN_PT_BASE		offsetof(struct start_info, pt_base)    
 define XEN_NR_PT_FRAMES		offsetof(struct start_info, nr_pt_frames)
@@ -395,3 +384,5 @@ define	PGOFSET			PGOFSET
 define	PGSHIFT			PGSHIFT
 
 define	VM_MIN_KERNEL_ADDRESS_HIGH32	(VM_MIN_KERNEL_ADDRESS >> 32)
+
+define	RESCHED_KPREEMPT	RESCHED_KPREEMPT

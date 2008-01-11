@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_vfsops.c,v 1.62 2007/12/08 19:29:37 pooka Exp $	*/
+/*	$NetBSD: coda_vfsops.c,v 1.69 2009/06/29 05:08:15 dholland Exp $	*/
 
 /*
  *
@@ -45,9 +45,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.62 2007/12/08 19:29:37 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.69 2009/06/29 05:08:15 dholland Exp $");
 
-#ifdef	_LKM
+#ifndef _KERNEL_OPT
 #define	NVCODA 4
 #else
 #include <vcoda.h>
@@ -64,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.62 2007/12/08 19:29:37 pooka Exp $
 #include <sys/proc.h>
 #include <sys/select.h>
 #include <sys/kauth.h>
+#include <sys/module.h>
 
 #include <coda/coda.h>
 #include <coda/cnode.h>
@@ -73,6 +74,9 @@ __KERNEL_RCSID(0, "$NetBSD: coda_vfsops.c,v 1.62 2007/12/08 19:29:37 pooka Exp $
 #include <coda/coda_opstats.h>
 /* for VN_RDEV */
 #include <miscfs/specfs/specdev.h>
+#include <miscfs/genfs/genfs.h>
+ 
+MODULE(MODULE_CLASS_VFS, coda, NULL);
 
 MALLOC_DEFINE(M_CODA, "coda", "Coda file system structures and tables");
 
@@ -121,12 +125,27 @@ struct vfsops coda_vfsops = {
     (int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
     vfs_stdextattrctl,
     (void *)eopnotsupp,	/* vfs_suspendctl */
+    genfs_renamelock_enter,
+    genfs_renamelock_exit,
+	(void *)eopnotsupp,
     coda_vnodeopv_descs,
     0,			/* vfs_refcount */
     { NULL, NULL },	/* vfs_list */
 };
 
-VFS_ATTACH(coda_vfsops);
+static int
+coda_modcmd(modcmd_t cmd, void *arg)
+{
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		return vfs_attach(&coda_vfsops);
+	case MODULE_CMD_FINI:
+		return vfs_detach(&coda_vfsops);
+	default:
+		return ENOTTY;
+	}
+}
 
 int
 coda_vfsopstats_init(void)
@@ -156,7 +175,6 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
     size_t *data_len)
 {
     struct lwp *l = curlwp;
-    struct nameidata nd;
     struct vnode *dvp;
     struct cnode *cp;
     dev_t dev;
@@ -190,9 +208,8 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
      */
     /* Ensure that namei() doesn't run off the filename buffer */
     ((char *)data)[*data_len - 1] = 0;
-    NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, data);
-    error = namei(&nd);
-    dvp = nd.ni_vp;
+    error = namei_simple_kernel((char *)data, NSM_FOLLOW_NOEMULROOT,
+		&dvp);
 
     if (error) {
 	MARK_INT_FAIL(CODA_MOUNT_STATS);
@@ -203,7 +220,7 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
 	vrele(dvp);
 	return(ENXIO);
     }
-    dev = dvp->v_specinfo->si_rdev;
+    dev = dvp->v_rdev;
     vrele(dvp);
     cdev = cdevsw_lookup(dev);
     if (cdev == NULL) {
@@ -220,7 +237,7 @@ coda_mount(struct mount *vfsp,	/* Allocated and initialized by mount(2) */
 	return(ENXIO);
     }
 
-    if (minor(dev) >= NVCODA || minor(dev) < 0) {
+    if (minor(dev) >= NVCODA) {
 	MARK_INT_FAIL(CODA_MOUNT_STATS);
 	return(ENXIO);
     }

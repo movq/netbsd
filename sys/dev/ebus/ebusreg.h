@@ -1,4 +1,4 @@
-/*	$NetBSD: ebusreg.h,v 1.7 2005/12/11 12:21:20 christos Exp $	*/
+/*	$NetBSD: ebusreg.h,v 1.9 2011/03/16 02:34:10 mrg Exp $	*/
 
 /*
  * Copyright (c) 1999 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -88,6 +86,14 @@ struct ebus_ranges {
 	uint32_t	phys_mid;	/* parent mid phys addr */
 	uint32_t	phys_lo;	/* parent low phys addr */
 	uint32_t	size;
+};
+
+struct ebus_mainbus_ranges {
+	u_int32_t	child_hi;
+	u_int32_t	child_lo;
+	u_int32_t	phys_hi;
+	u_int32_t	phys_lo;
+	u_int32_t	size;
 };
 
 

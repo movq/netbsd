@@ -1,7 +1,6 @@
-/*      $NetBSD: if_atmsubr.c,v 1.40 2007/10/19 12:16:44 ad Exp $       */
+/*      $NetBSD: if_atmsubr.c,v 1.49 2011/02/01 19:46:28 chuck Exp $       */
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *	Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,13 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.40 2007/10/19 12:16:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.49 2011/02/01 19:46:28 chuck Exp $");
 
 #include "opt_inet.h"
 #include "opt_gateway.h"
 #include "opt_natm.h"
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,9 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.40 2007/10/19 12:16:44 ad Exp $");
 #include <net/if_atm.h>
 #include <net/ethertypes.h> /* XXX: for ETHERTYPE_* */
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <netinet/in.h>
 #include <netinet/if_atm.h>
@@ -101,13 +91,13 @@ int
 atm_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
     struct rtentry *rt0)
 {
-	u_int16_t etype = 0;			/* if using LLC/SNAP */
+	uint16_t etype = 0;			/* if using LLC/SNAP */
 	int error = 0, sz;
 	struct atm_pseudohdr atmdst, *ad;
 	struct mbuf *m = m0;
 	struct rtentry *rt;
 	struct atmllc *atmllc;
-	u_int32_t atm_flags;
+	uint32_t atm_flags;
 	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
@@ -187,7 +177,7 @@ atm_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 			 * assuming dst contains 12 bytes (atm pseudo
 			 * header (4) + LLC/SNAP (8))
 			 */
-			bcopy(dst->sa_data, &atmdst, sizeof(atmdst));
+			memcpy(&atmdst, dst->sa_data, sizeof(atmdst));
 			break;
 
 		default:
@@ -214,7 +204,7 @@ atm_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 		*ad = atmdst;
 		if (atm_flags & ATM_PH_LLCSNAP) {
 			atmllc = (struct atmllc *)(ad + 1);
-			bcopy(ATMLLC_HDR, atmllc->llchdr,
+			memcpy(atmllc->llchdr, ATMLLC_HDR,
 						sizeof(atmllc->llchdr));
 			ATM_LLC_SETTYPE(atmllc, etype);
 		}
@@ -237,7 +227,7 @@ atm_input(struct ifnet *ifp, struct atm_pseudohdr *ah, struct mbuf *m,
     void *rxhand)
 {
 	struct ifqueue *inq;
-	u_int16_t etype = ETHERTYPE_IP; /* default */
+	uint16_t etype = ETHERTYPE_IP; /* default */
 	int s;
 
 	if ((ifp->if_flags & IFF_UP) == 0) {
@@ -269,7 +259,7 @@ atm_input(struct ifnet *ifp, struct atm_pseudohdr *ah, struct mbuf *m,
 	    if (m->m_len < sizeof(*alc) && (m = m_pullup(m, sizeof(*alc))) == 0)
 		  return; /* failed */
 	    alc = mtod(m, struct atmllc *);
-	    if (bcmp(alc, ATMLLC_HDR, 6)) {
+	    if (memcmp(alc, ATMLLC_HDR, 6)) {
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 	      printf("%s: recv'd invalid LLC/SNAP frame [vp=%d,vc=%d]\n",
 		  ifp->if_xname, ATM_PH_VPI(ah), ATM_PH_VCI(ah));
@@ -340,9 +330,7 @@ atm_ifattach(struct ifnet *ifp)
 	if_alloc_sadl(ifp);
 	/* XXX Store LLADDR for ATMARP. */
 
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_ATM_RFC1483, sizeof(struct atmllc));
-#endif
+	bpf_attach(ifp, DLT_ATM_RFC1483, sizeof(struct atmllc));
 }
 
 #ifdef ATM_PVCEXT
@@ -357,11 +345,10 @@ pvcsif_alloc(void)
 
 	if (pvc_number >= pvc_max_number)
 		return (NULL);
-	MALLOC(pvcsif, struct pvcsif *, sizeof(struct pvcsif),
-	       M_DEVBUF, M_WAITOK);
+	pvcsif = malloc(sizeof(struct pvcsif),
+	       M_DEVBUF, M_WAITOK|M_ZERO);
 	if (pvcsif == NULL)
 		return (NULL);
-	memset(pvcsif, 0, sizeof(struct pvcsif));
 
 #ifdef __NetBSD__
 	snprintf(pvcsif->sif_if.if_xname, sizeof(pvcsif->sif_if.if_xname),

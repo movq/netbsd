@@ -833,7 +833,7 @@ MISSING="${CONFIG_SHELL-/bin/sh} $srcdir/../missing"
 # that we can use it.
 gcc_AC_CHECK_PROG_VER(MAKEINFO, makeinfo, --version,
   [GNU texinfo.* \([0-9][0-9.]*\)],
-  [4.[2-9]*])
+  [4.[2-9]*|4.[1-9][0-9]*|[5-9]*|[1-9][0-9]*])
 if test $gcc_cv_prog_makeinfo_modern = no; then
   MAKEINFO="$MISSING makeinfo"
   AC_MSG_WARN([
@@ -1981,6 +1981,22 @@ gcc_GAS_CHECK_FEATURE([.hidden], gcc_cv_as_hidden,
 [	.hidden foobar
 foobar:])
 
+  ld_ver=`$gcc_cv_ld --version 2>/dev/null | sed 1q`
+  if echo "$ld_ver" | grep GNU > /dev/null; then
+changequote(,)dnl
+    ld_vers=`echo $ld_ver | sed -n \
+	-e 's,^.*[	 ]\([0-9][0-9]*\.[0-9][0-9]*.*\)$,\1,p' \
+	-e 's,^.*[	 ]\([0-9][0-9]*\.[0-9][0-9]*\)[	 ].*$,\1,p' \
+	-e 's,^.*[	 ]\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)[	 ].*$,\1,p' \
+	-e 's,^.*[ 	 ]\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)[ 	].*$,\1,p' \
+	-e 's,^.*[	 ]\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)[	 -].*$,\1,p'`
+    ld_date=`echo $ld_ver | sed -n 's,^.*\([2-9][0-9][0-9][0-9]\)[-]*\([01][0-9]\)[-]*\([0-3][0-9]\).*$,\1\2\3,p'`
+    ld_vers_major=`expr "$ld_vers" : '\([0-9]*\)'`
+    ld_vers_minor=`expr "$ld_vers" : '[0-9]*\.\([0-9]*\)'`
+    ld_vers_patch=`expr "$ld_vers" : '[0-9]*\.[0-9]*\.\([0-9]*\)'`
+changequote([,])dnl
+  fi
+
 AC_CACHE_CHECK(linker for .hidden support, gcc_cv_ld_hidden,
 [if test $in_tree_ld = yes ; then
   gcc_cv_ld_hidden=no
@@ -1990,21 +2006,8 @@ AC_CACHE_CHECK(linker for .hidden support, gcc_cv_ld_hidden,
   fi
 else
   gcc_cv_ld_hidden=yes
-  ld_ver=`$gcc_cv_ld --version 2>/dev/null | sed 1q`
-  if echo "$ld_ver" | grep GNU > /dev/null; then
 changequote(,)dnl
-    ld_vers=`echo $ld_ver | sed -n \
-	-e 's,^.*[	 ]\([0-9][0-9]*\.[0-9][0-9]*\)$,\1,p' \
-	-e 's,^.*[	 ]\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$,\1,p' \
-	-e 's,^.*[	 ]\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$,\1,p' \
-	-e 's,^.*[	 ]\([0-9][0-9]*\.[0-9][0-9]*\)[	 ].*$,\1,p' \
-	-e 's,^.*[	 ]\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)[	 ].*$,\1,p' \
-	-e 's,^.*[ 	 ]\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)[ 	].*$,\1,p' \
-	-e 's,^.*[	 ]\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)[	 -].*$,\1,p'`
-    ld_date=`echo $ld_ver | sed -n 's,^.*\([2-9][0-9][0-9][0-9]\)[-]*\([01][0-9]\)[-]*\([0-3][0-9]\).*$,\1\2\3,p'`
-    ld_vers_major=`expr "$ld_vers" : '\([0-9]*\)'`
-    ld_vers_minor=`expr "$ld_vers" : '[0-9]*\.\([0-9]*\)'`
-    ld_vers_patch=`expr "$ld_vers" : '[0-9]*\.[0-9]*\.\([0-9]*\)'`
+  if echo "$ld_ver" | grep GNU > /dev/null; then
     if test 0"$ld_date" -lt 20020404; then
       if test -n "$ld_date"; then
 	# If there was date string, but was earlier than 2002-04-04, fail
@@ -2226,7 +2229,7 @@ x:      .long   25
 	tls_first_major=2
 	tls_first_minor=14
 	;;
-  hppa*-*-linux*)
+  hppa*-*-linux* | hppa*-*-netbsd*)
     conftest_s='
 t1:	.reg	%r20
 t2:	.reg	%r21
@@ -3092,11 +3095,11 @@ if test x$with_sysroot = x && test x$host = x$target \
 fi
 
 # Test for stack protector support in target C library.
-case "$target" in
-  *-*-linux*)
-    AC_CACHE_CHECK(__stack_chk_fail in target GNU C library,
-      gcc_cv_libc_provides_ssp,
-      [gcc_cv_libc_provides_ssp=no
+AC_CACHE_CHECK(__stack_chk_fail in target C library,
+  gcc_cv_libc_provides_ssp,
+  [case "$target" in
+    *-*-linux*)
+      gcc_cv_libc_provides_ssp=no
       if test x$host != x$target || test "x$TARGET_SYSTEM_ROOT" != x; then
 	if test "x$with_sysroot" = x; then
 	  glibc_header_dir="${exec_prefix}/${target_noncanonical}/sys-include"
@@ -3122,18 +3125,12 @@ case "$target" in
 	     $glibc_header_dir/features.h > /dev/null; then
 	  gcc_cv_libc_provides_ssp=yes
 	fi
-      fi]) ;;
-  *-*-netbsd*)
-    AC_CACHE_CHECK(__stack_chk_guard in C library,
-      gcc_cv_libc_provides_ssp,
-      [if $gcc_cv_nm $($CC -print-file-name=libc.a) | \
-	grep 'B __stack_chk_guard' > /dev/null; then
-	gcc_cv_libc_provides_ssp=yes
-      else
-	gcc_cv_libc_provides_ssp=no
-      fi]) ;;
-  *) gcc_cv_libc_provides_ssp=no ;;
-esac
+      fi ;;
+    *-*-netbsd*)
+      AC_CHECK_FUNCS(__stack_chk_guard,[gcc_cv_libc_provides_ssp=yes],
+        [gcc_cv_libc_provides_ssp=no]) ;;
+    *) gcc_cv_libc_provides_ssp=no ;;
+  esac])
 if test x$gcc_cv_libc_provides_ssp = xyes; then
   AC_DEFINE(TARGET_LIBC_PROVIDES_SSP, 1,
 	    [Define if your target C library provides stack protector support])

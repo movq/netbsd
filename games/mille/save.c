@@ -1,4 +1,4 @@
-/*	$NetBSD: save.c,v 1.11 2003/08/07 09:37:26 agc Exp $	*/
+/*	$NetBSD: save.c,v 1.15 2010/04/04 00:08:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)save.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: save.c,v 1.11 2003/08/07 09:37:26 agc Exp $");
+__RCSID("$NetBSD: save.c,v 1.15 2010/04/04 00:08:49 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,10 +57,10 @@ typedef	struct stat	STAT;
  *	Returns FALSE if it couldn't be done.
  */
 bool
-save()
+save(void)
 {
 	char	*sp;
-	int	outf;
+	int	outfd;
 	time_t	*tp;
 	char	buf[80];
 	time_t	tme;
@@ -112,19 +112,23 @@ over:
 	    && getyn(OVERWRITEFILEPROMPT) == FALSE))
 		return FALSE;
 
-	if ((outf = creat(buf, 0644)) < 0) {
+	if ((outfd = creat(buf, 0644)) < 0) {
 		error(strerror(errno));
 		return FALSE;
 	}
 	mvwaddstr(Score, ERR_Y, ERR_X, buf);
 	wrefresh(Score);
 	time(tp);			/* get current time		*/
-	rv = varpush(outf, writev);
-	close(outf);
+	rv = varpush(outfd, writev);
+	close(outfd);
 	if (rv == FALSE) {
 		unlink(buf);
 	} else {
-		strcpy(buf, ctime(tp));
+		char *p;
+		if ((p = ctime(tp)) == NULL)
+			strcpy(buf, "?");
+		else
+			strcpy(buf, p);
 		for (sp = buf; *sp != '\n'; sp++)
 			continue;
 		*sp = '\0';
@@ -141,11 +145,10 @@ over:
  * be cleaned up before the game starts.
  */
 bool
-rest_f(file)
-	const char	*file;
+rest_f(const char *file)
 {
 
-	char	*sp;
+	char	*sp, *p;
 	int	inf;
 	char	buf[80];
 	STAT	sbuf;
@@ -160,14 +163,17 @@ rest_f(file)
 	}
 	varpush(inf, readv);
 	close(inf);
-	strcpy(buf, ctime(&sbuf.st_mtime));
+	if ((p = ctime(&sbuf.st_mtime)) == NULL)
+		strcpy(buf, "?");
+	else
+		strcpy(buf, p);
 	for (sp = buf; *sp != '\n'; sp++)
 		continue;
 	*sp = '\0';
 	/*
 	 * initialize some necessary values
 	 */
-	(void)sprintf(Initstr, "%s [%s]\n", file, buf);
+	(void)snprintf(Initstr, INITSTR_SIZE, "%s [%s]\n", file, buf);
 	Fromfile = file;
 	return !On_exit;
 }

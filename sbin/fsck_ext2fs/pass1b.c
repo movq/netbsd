@@ -1,4 +1,4 @@
-/*	$NetBSD: pass1b.c,v 1.6 2005/01/19 19:31:28 xtraeme Exp $	*/
+/*	$NetBSD: pass1b.c,v 1.8 2009/10/19 18:41:08 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,11 +40,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -63,7 +58,7 @@
 #if 0
 static char sccsid[] = "@(#)pass1b.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: pass1b.c,v 1.6 2005/01/19 19:31:28 xtraeme Exp $");
+__RCSID("$NetBSD: pass1b.c,v 1.8 2009/10/19 18:41:08 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,7 +77,8 @@ static struct	dups *duphead;
 void
 pass1b(void)
 {
-	int c, i;
+	int c;
+	uint32_t i;
 	struct ext2fs_dinode *dp;
 	struct inodesc idesc;
 	ino_t inumber;

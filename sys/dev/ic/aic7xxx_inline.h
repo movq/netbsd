@@ -1,4 +1,4 @@
-/*	$NetBSD: aic7xxx_inline.h,v 1.12 2006/11/16 01:32:51 christos Exp $	*/
+/*	$NetBSD: aic7xxx_inline.h,v 1.14 2009/03/15 15:52:12 cegger Exp $	*/
 
 /*
  * Inline routines shareable across OS platforms.
@@ -226,9 +226,9 @@ ahc_targetcmd_offset(struct ahc_softc *ahc, u_int index)
 }
 
 /******************************** Debugging ***********************************/
-static __inline char *ahc_name(struct ahc_softc *ahc);
+static inline const char *ahc_name(struct ahc_softc *ahc);
 
-static __inline char *
+static inline const char *
 ahc_name(struct ahc_softc *ahc)
 {
 	return (ahc->name);
@@ -506,8 +506,7 @@ static __inline int	ahc_intr(void *arg);
 static __inline void	ahc_minphys(struct buf *bp);
 
 static __inline void
-ahc_minphys(bp)
-	struct buf *bp;
+ahc_minphys(struct buf *bp)
 {
 /*
  * Even though the card can transfer up to 16megs per command

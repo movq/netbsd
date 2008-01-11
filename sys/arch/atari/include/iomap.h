@@ -1,4 +1,4 @@
-/*	$NetBSD: iomap.h,v 1.12 2003/04/02 07:35:55 thorpej Exp $	*/
+/*	$NetBSD: iomap.h,v 1.14 2009/10/20 19:10:11 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -81,9 +76,9 @@ vaddr_t	pci_mem_uncached;	/* KVA base of an uncached PCI mem-page	*/
 /*
  * Pre-allocated PCI-memory regions (atari_init.c). We need those in the
  * boot-stages.
- * XXX: Can probably be reduced to only PCI_CONF_SIZE (Leo).
+ * XXX: Can probably be reduced to only PCI_CONFIG_SIZE (Leo).
  */
-#define PCI_CONF_SIZE	(4 * PAGE_SIZE)
+#define PCI_CONFIG_SIZE	(4 * PAGE_SIZE)
 #define PCI_IO_SIZE	(PAGE_SIZE)
 #define PCI_MEM_SIZE	(PAGE_SIZE)
 

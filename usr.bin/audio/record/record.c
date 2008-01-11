@@ -1,7 +1,7 @@
-/*	$NetBSD: record.c,v 1.45 2007/12/15 19:44:49 perry Exp $	*/
+/*	$NetBSD: record.c,v 1.50 2010/12/29 18:49:41 wiz Exp $	*/
 
 /*
- * Copyright (c) 1999, 2002 Matthew R. Green
+ * Copyright (c) 1999, 2002, 2003, 2005, 2010 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,11 +32,11 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: record.c,v 1.45 2007/12/15 19:44:49 perry Exp $");
+__RCSID("$NetBSD: record.c,v 1.50 2010/12/29 18:49:41 wiz Exp $");
 #endif
 
 
-#include <sys/types.h>
+#include <sys/param.h>
 #include <sys/audioio.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
@@ -95,11 +93,11 @@ main(argc, argv)
 	char *argv[];
 {
 	u_char	*buffer;
-	size_t	len, bufsize;
+	size_t	len, bufsize = 0;
 	int	ch, no_time_limit = 1;
 	const char *defdevice = _PATH_SOUND;
 
-	while ((ch = getopt(argc, argv, "ab:C:F:c:d:e:fhi:m:P:p:qt:s:Vv:")) != -1) {
+	while ((ch = getopt(argc, argv, "ab:B:C:F:c:d:e:fhi:m:P:p:qt:s:Vv:")) != -1) {
 		switch (ch) {
 		case 'a':
 			aflag++;
@@ -108,6 +106,10 @@ main(argc, argv)
 			decode_int(optarg, &balance);
 			if (balance < 0 || balance > 63)
 				errx(1, "balance must be between 0 and 63");
+			break;
+		case 'B':
+			bufsize = strsuftoll("read buffer size", optarg,
+					     1, UINT_MAX);
 			break;
 		case 'C':
 			/* Ignore, compatibility */
@@ -201,10 +203,6 @@ main(argc, argv)
 		if (encoding == -1)
 			errx(1, "unknown encoding, bailing...");
 	}
-#if 0
-	else
-		encoding = AUDIO_ENCODING_ULAW;
-#endif
 
 	/*
 	 * open the output file
@@ -248,9 +246,11 @@ main(argc, argv)
 	 */
 	if (ioctl(audiofd, AUDIO_GETINFO, &oinfo) < 0)
 		err(1, "failed to get audio info");
-	bufsize = oinfo.record.buffer_size;
-	if (bufsize < 32 * 1024)
-		bufsize = 32 * 1024;
+	if (bufsize == 0) {
+		bufsize = oinfo.record.buffer_size;
+		if (bufsize < 32 * 1024)
+			bufsize = 32 * 1024;
+	}
 	omonitor_gain = oinfo.monitor_gain;
 
 	buffer = malloc(bufsize);
@@ -336,11 +336,11 @@ main(argc, argv)
 
 	(void)gettimeofday(&start_time, NULL);
 	while (no_time_limit || timeleft(&start_time, &record_time)) {
-		if (read(audiofd, buffer, bufsize) != bufsize)
+		if ((size_t)read(audiofd, buffer, bufsize) != bufsize)
 			err(1, "read failed");
 		if (conv_func)
 			(*conv_func)(buffer, bufsize);
-		if (write(outfd, buffer, bufsize) != bufsize)
+		if ((size_t)write(outfd, buffer, bufsize) != bufsize)
 			err(1, "write failed");
 		total_size += bufsize;
 	}
@@ -779,6 +779,7 @@ usage()
 	fprintf(stderr, "Usage: %s [-afhqV] [options] {files ...|-}\n",
 	    getprogname());
 	fprintf(stderr, "Options:\n\t"
+	    "-B buffer size\n\t"
 	    "-b balance (0-63)\n\t"
 	    "-c channels\n\t"
 	    "-d audio device\n\t"

@@ -1,4 +1,4 @@
-#	$NetBSD: RAMDISK,v 1.47 2007/10/17 19:57:45 garbled Exp $
+#	$NetBSD: RAMDISK,v 1.52 2010/11/23 11:14:07 hannken Exp $
 
 # RAMDISK: Root/swap on ramdisk
 # This kernel is used to:
@@ -9,6 +9,8 @@
 include "arch/sun3/conf/std.sun3"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
+
+makeoptions	COPTS="-Os"		# bootloader has size limit (~2MB)
 
 # Machines to be supported by this kernel
 # options 	FPU_EMULATE		# No FP code here!
@@ -41,7 +43,8 @@ options 	INET		# IP protocol stack support
 options 	MEMORY_DISK_HOOKS
 options 	MEMORY_DISK_IS_ROOT	# force root on memory disk
 options 	MEMORY_DISK_SERVER=0	# no userspace memory disk support
-options 	MEMORY_DISK_ROOT_SIZE=1000	# size of memory disk, in blocks
+options 	MEMORY_DISK_ROOT_SIZE=1200	# size of memory disk, in blocks
+options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 
 options 	USERCONF	# userconf(4) support
 options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -135,9 +138,9 @@ cd* at scsibus? target ? lun ?		# SCSI CD-ROMs
 #uk* at scsibus? target ? lun ?		# unknown SCSI devices
 
 # Memory-disk drivers (root for install tape)
-pseudo-device	md		2
+pseudo-device	md		
 
 # Misc.
 pseudo-device	loop		1	# network loopback
 pseudo-device	sl			# CSLIP
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device

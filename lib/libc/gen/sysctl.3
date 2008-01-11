@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysctl.3,v 1.193 2006/12/18 00:09:59 wiz Exp $
+.\"	$NetBSD: sysctl.3,v 1.200 2010/03/22 19:30:54 joerg Exp $
 .\"
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)sysctl.3	8.4 (Berkeley) 5/9/95
 .\"
-.Dd December 4, 2006
+.Dd September 26, 2009
 .Dt SYSCTL 3
 .Os
 .Sh NAME
@@ -48,7 +48,7 @@
 "const void *newp" "size_t newlen"
 .Ft int
 .Fn sysctlbyname "const char *sname" "void *oldp" "size_t *oldlenp" \
-"void *newp" "size_t newlen"
+"const void *newp" "size_t newlen"
 .Ft int
 .Fn sysctlgetmibinfo "const char *sname" "int *name" "u_int *namelenp" \
 "char *cname" "size_t *csz" "struct sysctlnode **rnode" "int v"
@@ -219,7 +219,7 @@ The numeric and text names of sysctl variables are described in
 .Xr sysctl 7 .
 The numeric names are defined as preprocessor macros.
 The top level names are defined with a CTL_ prefix in
-.Aq Pa sys/sysctl.h .
+.In sys/sysctl.h .
 The next and subsequent levels down have different prefixes for each
 subtree.
 .Pp
@@ -268,7 +268,7 @@ tree.
 .Pp
 The core interface to all of these meta-functions is the structure
 that the kernel uses to describe the tree internally, as defined in
-.Aq Pa sys/sysctl.h
+.In sys/sysctl.h
 as:
 .Pp
 .Bd -literal
@@ -596,8 +596,6 @@ Valid flags are:
 .Bl -column CTLFLAGXPERMANENTXXX
 .It Sy Name	Description
 .It CTLFLAG\_READONLY	Node is read-only
-.It CTLFLAG\_READONLY1	Node becomes read-only at securelevel 1
-.It CTLFLAG\_READONLY2	Node becomes read-only at securelevel 2
 .It CTLFLAG\_READWRITE	Node is writable by the superuser
 .It CTLFLAG\_ANYWRITE	Node is writable by anyone
 .It CTLFLAG\_PRIVATE	Node is readable only by the superuser
@@ -621,7 +619,7 @@ by processes)
 .Sh RETURN VALUES
 If the call to
 .Nm
-is successful, the number of bytes copied out is returned.
+is successful, 0 is returned.
 Otherwise \-1 is returned and
 .Va errno
 is set appropriately.
@@ -716,7 +714,8 @@ level is made.
 .El
 .Sh SEE ALSO
 .Xr sysctl 7 ,
-.Xr sysctl 8
+.Xr sysctl 8 ,
+.Xr secmodel_securelevel 9
 .\" .Xr sysctl 9
 .Sh HISTORY
 The

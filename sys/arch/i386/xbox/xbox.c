@@ -1,4 +1,4 @@
-/* $NetBSD: xbox.c,v 1.3 2007/02/04 15:26:27 jmcneill Exp $ */
+/* $NetBSD: xbox.c,v 1.5 2010/04/28 19:17:04 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xbox.c,v 1.3 2007/02/04 15:26:27 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xbox.c,v 1.5 2010/04/28 19:17:04 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,11 +75,11 @@ xbox_startup(void)
 	 * nfe(4) attach correctly. As the NIC always resides at
 	 * 0xfef00000-0xfef003ff on an XBOX, we simply hardcode this address.
 	 */
-	rv = bus_space_map(X86_BUS_SPACE_MEM, XBOX_NFORCE_NIC,
+	rv = bus_space_map(x86_bus_space_mem, XBOX_NFORCE_NIC,
 	    0x400, 0, &h);
 	if (!rv) {
-		bus_space_write_4(X86_BUS_SPACE_MEM, h, 0x188, 0);
-		bus_space_unmap(X86_BUS_SPACE_MEM, h, 0x400);
+		bus_space_write_4(x86_bus_space_mem, h, 0x188, 0);
+		bus_space_unmap(x86_bus_space_mem, h, 0x400);
 	}
 
 	

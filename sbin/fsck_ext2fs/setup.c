@@ -1,4 +1,4 @@
-/*	$NetBSD: setup.c,v 1.24 2007/12/22 01:19:52 tsutsui Exp $	*/
+/*	$NetBSD: setup.c,v 1.27 2009/10/19 18:41:08 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -40,11 +40,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *	notice, this list of conditions and the following disclaimer in the
  *	documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *	must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -63,7 +58,7 @@
 #if 0
 static char sccsid[] = "@(#)setup.c	8.5 (Berkeley) 11/23/94";
 #else
-__RCSID("$NetBSD: setup.c,v 1.24 2007/12/22 01:19:52 tsutsui Exp $");
+__RCSID("$NetBSD: setup.c,v 1.27 2009/10/19 18:41:08 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -86,6 +81,7 @@ __RCSID("$NetBSD: setup.c,v 1.24 2007/12/22 01:19:52 tsutsui Exp $");
 #include "fsck.h"
 #include "extern.h"
 #include "fsutil.h"
+#include "exitvalues.h"
 
 void badsb(int, const char *);
 int calcsb(const char *, int, struct m_ext2fs *);
@@ -137,7 +133,7 @@ setup(const char *dev)
 	sblk.b_un.b_buf = malloc(SBSIZE);
 	asblk.b_un.b_buf = malloc(SBSIZE);
 	if (sblk.b_un.b_buf == NULL || asblk.b_un.b_buf == NULL)
-		errexit("cannot allocate space for superblock\n");
+		errexit("cannot allocate space for superblock");
 	if ((lp = getdisklabel((char *)NULL, fsreadfd)) != NULL)
 		dev_bsize = secsize = lp->d_secsize;
 	else
@@ -218,7 +214,7 @@ setup(const char *dev)
 
 	sblock.e2fs_gd = malloc(sblock.e2fs_ngdb * sblock.e2fs_bsize);
 	if (sblock.e2fs_gd == NULL)
-		errexit("out of memory\n");
+		errexit("out of memory");
 	asked = 0;
 	for (i = 0; i < sblock.e2fs_ngdb; i++) {
 		if (bread(fsreadfd,
@@ -229,7 +225,7 @@ setup(const char *dev)
 		    sblock.e2fs_bsize) != 0 && !asked) {
 			pfatal("BAD SUMMARY INFORMATION");
 			if (reply("CONTINUE") == 0)
-				errexit("%s\n", "");
+				exit(FSCK_EXIT_CHECK_FAILED);
 			asked++;
 		}
 	}
@@ -308,6 +304,14 @@ readsb(int listerr)
 		badsb(listerr, "BAD LOG_BSIZE");
 		return 0;
 	}
+	if (sblock.e2fs.e2fs_rev > E2FS_REV0 &&
+	    (!powerof2(sblock.e2fs.e2fs_inode_size) ||
+	     sblock.e2fs.e2fs_inode_size < sizeof(struct ext2fs_dinode) ||
+	     sblock.e2fs.e2fs_inode_size >
+	      (1024 << sblock.e2fs.e2fs_log_bsize))) {
+		badsb(listerr, "BAD INODE_SIZE");
+		return 0;
+	}
 
 	/* compute the dynamic fields of the in-memory sb */
 	/* compute dynamic sb infos */
@@ -322,7 +326,7 @@ readsb(int listerr)
 	sblock.e2fs_bmask = ~sblock.e2fs_qbmask;
 	sblock.e2fs_ngdb = howmany(sblock.e2fs_ncg,
 	    sblock.e2fs_bsize / sizeof(struct ext2_gd));
-	sblock.e2fs_ipb = sblock.e2fs_bsize / sizeof(struct ext2fs_dinode);
+	sblock.e2fs_ipb = sblock.e2fs_bsize / EXT2_DINODE_SIZE(&sblock);
 	sblock.e2fs_itpg = howmany(sblock.e2fs.e2fs_ipg, sblock.e2fs_ipb);
 
 	/*
@@ -514,7 +518,7 @@ getdisklabel(const char *s, int fd)
 		if (s == NULL)
 			return NULL;
 		pwarn("ioctl (GCINFO): %s\n", strerror(errno));
-		errexit("%s: can't read disk label\n", s);
+		errexit("%s: can't read disk label", s);
 	}
 	return &lab;
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: siovar.h,v 1.2 2007/03/04 06:00:04 christos Exp $ */
+/* $NetBSD: siovar.h,v 1.4 2009/03/14 14:46:00 dsl Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 struct sio_softc {
 	struct device scp_dev;
 	void *scp_ctl;
-	void (*scp_intr[2]) __P((int));
+	void (*scp_intr[2])(int);
 };
 
 struct sio_attach_args {
@@ -55,5 +48,5 @@ struct sioreg {
 #define sio_stat sio_cmd
 };
 
-int  getsiocsr __P((struct sioreg *));
-void setsioreg __P((struct sioreg *, int, int));
+int  getsiocsr(struct sioreg *);
+void setsioreg(struct sioreg *, int, int);

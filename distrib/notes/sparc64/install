@@ -1,4 +1,4 @@
-.\"	$NetBSD: install,v 1.28 2007/12/12 00:09:43 jnemeth Exp $
+.\"	$NetBSD: install,v 1.31 2009/01/26 00:14:42 snj Exp $
 .\"
 .\" Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,8 +33,8 @@ this document in hand it shouldn't be too much trouble.
 There are several ways to install
 .Nx
 onto a disk.
-The easiest way in terms of preliminary setup is to install from CDROM.
-If you don't have access to a CDROM or CDROM burner, you
+The easiest way in terms of preliminary setup is to install from CD-ROM.
+If you don't have access to a CD-ROM or CD-ROM burner, you
 can use a miniroot image that can be booted off your local disk's swap
 partition.
 Alternatively, if your UltraSPARC is hooked up in a network
@@ -58,12 +51,9 @@ onto the same disk as
 see the section below on
 .Sx "Manual Installation of NetBSD using Solaris"
 .
-.Ss2 Installing NetBSD from CDROM
+.Ss2 Installing NetBSD from CD-ROM
 .
-Installing from CDROM, whether it has the full distribution or just
-a kernel and
-.Ic sysinst
-is the least painful way to install
+Installing from CD-ROM is the least painful way to install
 .Nx .
 Simply insert the CD-ROM in the drive, power up the computer, and type:
 .(disp
@@ -191,9 +181,9 @@ installation kernel.
 .(disp
 Rebooting with command: boot disk:a /ofwboot -a
 Boot device: /pci@1f,4000/scsi@3/disk@0,0:a  File and args: /ofwboot -a
-.No Enter filename [/ofwboot]: Ic "\*<return\*>
-\*>\*> NetBSD/sparc64 OpenFirmware Boot, Revision 1.7
-\*>\*> (autobuild@tgm.netbsd.org, Thu May 20 16:29:20 UTC 2004)
+.No Enter filename [/ofwboot]: Ic "\*[Lt]return\*[Gt]
+\*[Gt]\*[Gt] NetBSD/sparc64 OpenFirmware Boot, Revision 1.7
+\*[Gt]\*[Gt] (autobuild@tgm.netbsd.org, Thu May 20 16:29:20 UTC 2004)
 .No Boot: Ic netbsd-INSTALL.gz
 .disp)
 After the initial probe messages you'll be
@@ -225,7 +215,7 @@ Skip down to the section on
 .
 .Ss2 Manual Installation of NetBSD using Solaris
 .
-(Adapted from Murray Stokely's \*<murray@osd.bsdi.com\*> instructions)
+(Adapted from Murray Stokely's \*[Lt]murray@osd.bsdi.com\*[Gt] instructions)
 .Pp
 You can use 
 .Tn Solaris 
@@ -273,16 +263,16 @@ done
 c0t1d0: configured with capacity of 16.95GB
 
 AVAILABLE DISK SELECTIONS:
-       0. c0t0d0 \*<SUN4.2G cyl 3880 alt 2 hd 16 sec 135\*>
+       0. c0t0d0 \*[Lt]SUN4.2G cyl 3880 alt 2 hd 16 sec 135\*[Gt]
           /pci@1f,4000/scsi@3/sd@0,0
-       1. c0t1d0 \*<IBM-DXHS18Y-0430 cyl 8152 alt 2 hd 20 sec 218\*>
+       1. c0t1d0 \*[Lt]IBM-DXHS18Y-0430 cyl 8152 alt 2 hd 20 sec 218\*[Gt]
           /pci@1f,4000/scsi@3/sd@1,0
 .No "Specify disk (enter its number):" Ic 1
 selecting c0t1d0
 [disk formatted]
 .No "Disk not labeled.  Label it now?" Ic y
 
-.No "format\*>" Ic format
+.No "format\*[Gt]" Ic format
 Ready to format.  Formatting cannot be interrupted
 and takes 114 minutes (estimated). Continue? y
 Beginning format. The current time is Sat May 29 22:15:13 2004
@@ -296,8 +286,8 @@ Verifying media...
    8151/19/208  
 
 Total of 0 defective blocks repaired.
-.No "format\*>" Ic partition
-.No "partition\*>" Ic print
+.No "format\*[Gt]" Ic partition
+.No "partition\*[Gt]" Ic print
 Current partition table (original):
 Total disk cylinders available: 8152 + 2 (reserved cylinders)
 
@@ -311,10 +301,10 @@ Part      Tag    Flag     Cylinders        Size            Blocks
   6        usr    wm     122 - 8151       16.69GB    (8030/0/0) 35010800
   7 unassigned    wm       0               0         (0/0/0)           0
 
-.No "partition\*>" Ic label
+.No "partition\*[Gt]" Ic label
 .No "Ready to label disk, continue?" Ic y
-.No "partition\*>" Ic quit
-.No "format\*>" Ic quit
+.No "partition\*[Gt]" Ic quit
+.No "format\*[Gt]" Ic quit
 .disp)
 .Pp
 After your disk has been labeled you need to create file systems on
@@ -410,8 +400,8 @@ for the first time.
 You will boot from your disk using similar syntax as described above in
 .Sx "Setting up Open Firmware" 
 and
-.Sx "Determining how to boot from an SBUS or PCI card"
-That is, boot from your first disk:
+.Sx "Determining how to boot from an SBUS or PCI card" .
+To boot from your first disk, type:
 .(disp
 .No ok Ic "boot disk"
 .disp)

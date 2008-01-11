@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_lookup.c,v 1.14 2007/11/26 19:01:42 pooka Exp $	*/
+/*	$NetBSD: cd9660_lookup.c,v 1.18 2010/06/24 13:03:09 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.14 2007/11/26 19:01:42 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.18 2010/06/24 13:03:09 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/namei.h>
@@ -92,8 +92,7 @@ struct	nchstats iso_nchstats;
  *	  nor deleting, add name to cache
  */
 int
-cd9660_lookup(v)
-	void *v;
+cd9660_lookup(void *v)
 {
 	struct vop_lookup_args /* {
 		struct vnode *a_dvp;
@@ -382,7 +381,7 @@ found:
 	 */
 	brelse(bp, 0);
 	if (flags & ISDOTDOT) {
-		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
+		VOP_UNLOCK(pdp);	/* race to get the inode */
 		error = cd9660_vget_internal(vdp->v_mount, dp->i_ino, &tdp,
 					     dp->i_ino != ino, ep);
 		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
@@ -390,7 +389,7 @@ found:
 			return error;
 		*vpp = tdp;
 	} else if (dp->i_number == dp->i_ino) {
-		VREF(vdp);	/* we want ourself, ie "." */
+		vref(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
 		error = cd9660_vget_internal(vdp->v_mount, dp->i_ino, &tdp,
@@ -427,7 +426,7 @@ cd9660_blkatoff(struct vnode *vp, off_t offset, char **res, struct buf **bpp)
 	lbn = lblkno(imp, offset);
 	bsize = blksize(imp, ip, lbn);
 
-	if ((error = bread(vp, lbn, bsize, NOCRED, &bp)) != 0) {
+	if ((error = bread(vp, lbn, bsize, NOCRED, 0, &bp)) != 0) {
 		brelse(bp, 0);
 		*bpp = NULL;
 		return (error);

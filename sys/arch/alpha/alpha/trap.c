@@ -1,4 +1,4 @@
-/* $NetBSD: trap.c,v 1.117 2008/01/02 11:48:21 ad Exp $ */
+/* $NetBSD: trap.c,v 1.125 2011/04/15 20:52:36 martin Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -100,19 +93,22 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.117 2008/01/02 11:48:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.125 2011/04/15 20:52:36 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 #include <sys/buf.h>
 #include <sys/kauth.h>
+#include <sys/kmem.h>
+#include <sys/cpu.h>
+#include <sys/atomic.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/cpu.h>
 #include <machine/reg.h>
 #include <machine/alpha.h>
 #include <machine/fpu.h>
@@ -153,17 +149,6 @@ trap_init(void)
 	 */
 	alpha_pal_wrmces(alpha_pal_rdmces() &
 	    ~(ALPHA_MCES_DSC|ALPHA_MCES_DPC));
-
-	/*
-	 * If this is the primary processor, initialize some trap
-	 * event counters.
-	 */
-	if (cpu_number() == hwrpb->rpb_primary_cpu_id) {
-		evcnt_attach_dynamic(&fpevent_use, EVCNT_TYPE_MISC, NULL,
-		    "FP", "proc use");
-		evcnt_attach_dynamic(&fpevent_reuse, EVCNT_TYPE_MISC, NULL,
-		    "FP", "proc re-use");
-	}
 }
 
 static void
@@ -233,6 +218,8 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 {
 	struct lwp *l;
 	struct proc *p;
+	struct pcb *pcb;
+	vaddr_t onfault;
 	ksiginfo_t ksi;
 	vm_prot_t ftype;
 	u_int64_t ucode;
@@ -241,7 +228,7 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 	int call_debugger = 1;
 #endif
 
-	uvmexp.traps++;
+	curcpu()->ci_data.cpu_ntrap++;
 
 	l = curlwp;
 
@@ -384,6 +371,9 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 		break;
 
 	case ALPHA_KENTRY_MM:
+		pcb = lwp_getpcb(l);
+		onfault = pcb->pcb_onfault;
+
 		switch (a1) {
 		case ALPHA_MMCSR_FOR:
 		case ALPHA_MMCSR_FOE:
@@ -421,7 +411,12 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 #endif
 			}
 
-			if (!user) {
+			if (user) {
+				if (l->l_flag & LW_SA) {
+					l->l_savp->savp_faultaddr = (vaddr_t)a0;
+					l->l_pflag |= LP_SA_PAGEFAULT;
+				}
+			} else {
 				struct cpu_info *ci = curcpu();
 
 				if (l == NULL) {
@@ -441,12 +436,11 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 				 * [fs]uswintr, in case another fault happens
 				 * when they are running.
 				 */
-				if (l->l_addr->u_pcb.pcb_onfault ==
-					(unsigned long)fswintrberr &&
-				    l->l_addr->u_pcb.pcb_accessaddr == a0) {
-					framep->tf_regs[FRAME_PC] =
-					    l->l_addr->u_pcb.pcb_onfault;
-					l->l_addr->u_pcb.pcb_onfault = 0;
+
+				if (onfault == (vaddr_t)fswintrberr &&
+				    pcb->pcb_accessaddr == a0) {
+					framep->tf_regs[FRAME_PC] = onfault;
+					pcb->pcb_onfault = 0;
 					goto out;
 				}
 
@@ -467,8 +461,9 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 			 * argument space is lazy-allocated.
 			 */
 do_fault:
+			pcb = lwp_getpcb(l);
 			if (user == 0 && (a0 >= VM_MIN_KERNEL_ADDRESS ||
-			    l->l_addr->u_pcb.pcb_onfault == 0))
+					  onfault == 0))
 				map = kernel_map;
 			else {
 				vm = l->l_proc->p_vmspace;
@@ -476,7 +471,9 @@ do_fault:
 			}
 
 			va = trunc_page((vaddr_t)a0);
+			pcb->pcb_onfault = 0;
 			rv = uvm_fault(map, va, ftype);
+			pcb->pcb_onfault = onfault;
 
 			/*
 			 * If this was a stack access we keep track of the
@@ -495,17 +492,16 @@ do_fault:
 					rv = EFAULT;
 			}
 			if (rv == 0) {
+				if (user)
+					l->l_pflag &= ~LP_SA_PAGEFAULT;
 				goto out;
 			}
 
 			if (user == 0) {
 				/* Check for copyin/copyout fault */
-				if (l != NULL &&
-				    l->l_addr->u_pcb.pcb_onfault != 0) {
-					framep->tf_regs[FRAME_PC] =
-					    l->l_addr->u_pcb.pcb_onfault;
+				if (onfault != 0) {
+					framep->tf_regs[FRAME_PC] = onfault;
 					framep->tf_regs[FRAME_V0] = rv;
-					l->l_addr->u_pcb.pcb_onfault = 0;
 					goto out;
 				}
 				goto dopanic;
@@ -526,6 +522,7 @@ do_fault:
 				ksi.ksi_code = SEGV_ACCERR;
 			else
 				ksi.ksi_code = SEGV_MAPERR;
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
 			break;
 		    }
 
@@ -577,6 +574,7 @@ alpha_enable_fp(struct lwp *l, int check)
 	int s;
 #endif
 	struct cpu_info *ci = curcpu();
+	struct pcb *pcb;
 
 	if (check && ci->ci_fpcurlwp == l) {
 		alpha_pal_wrfen(1);
@@ -590,22 +588,23 @@ alpha_enable_fp(struct lwp *l, int check)
 
 	KDASSERT(ci->ci_fpcurlwp == NULL);
 
+	pcb = lwp_getpcb(l);
 #if defined(MULTIPROCESSOR)
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
+	if (pcb->pcb_fpcpu != NULL)
 		fpusave_proc(l, 1);
 #else
-	KDASSERT(l->l_addr->u_pcb.pcb_fpcpu == NULL);
+	KDASSERT(pcb->pcb_fpcpu == NULL);
 #endif
 
 #if defined(MULTIPROCESSOR)
 	s = splhigh();		/* block IPIs */
 #endif
-	FPCPU_LOCK(&l->l_addr->u_pcb);
+	FPCPU_LOCK(pcb);
 
-	l->l_addr->u_pcb.pcb_fpcpu = ci;
+	pcb->pcb_fpcpu = ci;
 	ci->ci_fpcurlwp = l;
 
-	FPCPU_UNLOCK(&l->l_addr->u_pcb);
+	FPCPU_UNLOCK(pcb);
 #if defined(MULTIPROCESSOR)
 	splx(s);
 #endif
@@ -619,13 +618,13 @@ alpha_enable_fp(struct lwp *l, int check)
 	 * a trap to use it again" event.
 	 */
 	if ((l->l_md.md_flags & MDP_FPUSED) == 0) {
-		atomic_add_ulong(&fpevent_use.ev_count, 1);
+		atomic_inc_ulong(&fpevent_use.ev_count);
 		l->l_md.md_flags |= MDP_FPUSED;
 	} else
-		atomic_add_ulong(&fpevent_reuse.ev_count, 1);
+		atomic_inc_ulong(&fpevent_reuse.ev_count);
 
 	alpha_pal_wrfen(1);
-	restorefpstate(&l->l_addr->u_pcb.pcb_fp);
+	restorefpstate(&pcb->pcb_fp);
 }
 
 /*
@@ -648,7 +647,7 @@ ast(struct trapframe *framep)
 	if (l == NULL)
 		return;
 
-	uvmexp.softs++;
+	//curcpu()->ci_data.cpu_nast++;
 	l->l_md.md_tf = framep;
 
 	if (l->l_pflag & LP_OWEUPC) {
@@ -686,10 +685,10 @@ static const int reg_to_framereg[32] = {
 	    &(l)->l_md.md_tf->tf_regs[reg_to_framereg[(reg)]])
 
 #define	frp(l, reg)							\
-	(&(l)->l_addr->u_pcb.pcb_fp.fpr_regs[(reg)])
+	(&pcb->pcb_fp.fpr_regs[(reg)])
 
-#define	dump_fp_regs()							\
-	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)				\
+#define	dump_fp_regs(pcb)						\
+	if (pcb->pcb_fpcpu != NULL)					\
 		fpusave_proc(l, 1)
 
 #define	unaligned_load(storage, ptrf, mod)				\
@@ -714,13 +713,17 @@ static const int reg_to_framereg[32] = {
 #define	unaligned_store_integer(storage)				\
 	unaligned_store(storage, irp, )
 
-#define	unaligned_load_floating(storage, mod)				\
-	dump_fp_regs();							\
-	unaligned_load(storage, frp, mod)
+#define	unaligned_load_floating(storage, mod) do {			\
+	struct pcb *pcb = lwp_getpcb(l);				\
+	dump_fp_regs(pcb);						\
+	unaligned_load(storage, frp, mod)				\
+} while (/*CONSTCOND*/0)
 
-#define	unaligned_store_floating(storage, mod)				\
-	dump_fp_regs();							\
-	unaligned_store(storage, frp, mod)
+#define	unaligned_store_floating(storage, mod) do {			\
+	struct pcb *pcb = lwp_getpcb(l);				\
+	dump_fp_regs(pcb);						\
+	unaligned_store(storage, frp, mod)				\
+} while (/*CONSTCOND*/0)
 
 static unsigned long
 Sfloat_to_reg(u_int s)
@@ -1205,17 +1208,24 @@ alpha_ucode_to_ksiginfo(u_long ucode)
 void
 startlwp(void *arg)
 {
-	int err;
 	ucontext_t *uc = arg;
-	struct lwp *l = curlwp;
+	lwp_t *l = curlwp;
+	int error;
 
-	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-#if DIAGNOSTIC
-	if (err) {
-		printf("Error %d from cpu_setmcontext.", err);
-	}
-#endif
-	pool_put(&lwp_uc_pool, uc);
+	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+	KASSERT(error == 0);
+
+	kmem_free(uc, sizeof(ucontext_t));
+	userret(l);
+}
+
+/*
+ * XXX This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
+	KERNEL_UNLOCK_LAST(l);
 
 	userret(l);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.21 2007/12/15 19:44:39 perry Exp $	*/
+/*	$NetBSD: io.c,v 1.26 2011/05/23 22:48:52 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: io.c,v 1.21 2007/12/15 19:44:39 perry Exp $");
+__RCSID("$NetBSD: io.c,v 1.26 2011/05/23 22:48:52 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,29 +58,35 @@ __RCSID("$NetBSD: io.c,v 1.21 2007/12/15 19:44:39 perry Exp $");
 #endif
 #define	CTRL(X)			(X - 'A' + 1)
 
-char    linebuf[LINESIZE];
+static int msgcrd(CARD, BOOLEAN, const char *, BOOLEAN);
+static void printcard(WINDOW *, int, CARD, BOOLEAN);
+static int incard(CARD *);
+static void wait_for(int);
+static int readchar(void);
 
-const char   *const rankname[RANKS] = {
+static char linebuf[LINESIZE];
+
+static const char *const rankname[RANKS] = {
 	"ACE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN",
 	"EIGHT", "NINE", "TEN", "JACK", "QUEEN", "KING"
 };
 
-const char   *const rankchar[RANKS] = {
+static const char *const rankchar[RANKS] = {
 	"A", "2", "3", "4", "5", "6", "7", "8", "9", "T", "J", "Q", "K"
 };
 
-const char *const suitname[SUITS] = {"SPADES", "HEARTS", "DIAMONDS", "CLUBS"};
+static const char *const suitname[SUITS] = {
+	"SPADES", "HEARTS", "DIAMONDS", "CLUBS"
+};
 
-const char   *const suitchar[SUITS] = {"S", "H", "D", "C"};
+static const char *const suitchar[SUITS] = {"S", "H", "D", "C"};
 
 /*
  * msgcard:
  *	Call msgcrd in one of two forms
  */
 int
-msgcard(c, brief)
-	CARD c;
-	BOOLEAN brief;
+msgcard(CARD c, BOOLEAN brief)
 {
 	if (brief)
 		return (msgcrd(c, TRUE, NULL, TRUE));
@@ -92,7 +98,7 @@ msgcard(c, brief)
  * msgcrd:
  *	Print the value of a card in ascii
  */
-int
+static int
 msgcrd(CARD c, BOOLEAN brfrank, const char *mid, BOOLEAN brfsuit)
 {
 	if (c.rank == EMPTY || c.suit == EMPTY)
@@ -100,13 +106,13 @@ msgcrd(CARD c, BOOLEAN brfrank, const char *mid, BOOLEAN brfsuit)
 	if (brfrank)
 		addmsg("%1.1s", rankchar[c.rank]);
 	else
-		addmsg(rankname[c.rank]);
+		addmsg("%s", rankname[c.rank]);
 	if (mid != NULL)
-		addmsg(mid);
+		addmsg("%s", mid);
 	if (brfsuit)
 		addmsg("%1.1s", suitchar[c.suit]);
 	else
-		addmsg(suitname[c.suit]);
+		addmsg("%s", suitname[c.suit]);
 	return (TRUE);
 }
 
@@ -114,7 +120,7 @@ msgcrd(CARD c, BOOLEAN brfrank, const char *mid, BOOLEAN brfsuit)
  * printcard:
  *	Print out a card.
  */
-void
+static void
 printcard(WINDOW *win, int cardno, CARD c, BOOLEAN blank)
 {
 	prcard(win, cardno * 2, cardno, c, blank);
@@ -174,7 +180,7 @@ infrom(const CARD hand[], int n, const char *prompt)
 		exit(74);
 	}
 	for (;;) {
-		msg(prompt);
+		msg("%s", prompt);
 		if (incard(&crd)) {	/* if card is full card */
 			if (!is_one(crd, hand, n))
 				msg("That's not in your hand");
@@ -216,7 +222,7 @@ infrom(const CARD hand[], int n, const char *prompt)
  *	Inputs a card in any format.  It reads a line ending with a CR
  *	and then parses it.
  */
-int
+static int
 incard(CARD *crd)
 {
 	int i;
@@ -226,7 +232,7 @@ incard(CARD *crd)
 
 	retval = FALSE;
 	rnk = sut = EMPTY;
-	if (!(line = getline()))
+	if (!(line = get_line()))
 		goto gotit;
 	p = p1 = line;
 	while (*p1 != ' ' && *p1 != '\0')
@@ -324,8 +330,8 @@ number(int lo, int hi, const char *prompt)
 	int sum;
 
 	for (sum = 0;;) {
-		msg(prompt);
-		if (!(p = getline()) || *p == '\0') {
+		msg("%s", prompt);
+		if (!(p = get_line()) || *p == '\0') {
 			msg(quiet ? "Not a number" :
 			    "That doesn't look like a number");
 			continue;
@@ -357,8 +363,8 @@ number(int lo, int hi, const char *prompt)
  * msg:
  *	Display a message at the top of the screen.
  */
-char    Msgbuf[BUFSIZ] = {'\0'};
-int     Mpos = 0;
+static char Msgbuf[BUFSIZ] = {'\0'};
+static int Mpos = 0;
 static int Newpos = 0;
 
 void
@@ -367,7 +373,7 @@ msg(const char *fmt, ...)
 	va_list ap;
 
 	va_start(ap, fmt);
-	(void)vsprintf(&Msgbuf[Newpos], fmt, ap);
+	(void)vsnprintf(&Msgbuf[Newpos], sizeof(Msgbuf)-Newpos, fmt, ap);
 	Newpos = strlen(Msgbuf);
 	va_end(ap);
 	endmsg();
@@ -383,7 +389,7 @@ addmsg(const char *fmt, ...)
 	va_list ap;
 
 	va_start(ap, fmt);
-	(void)vsprintf(&Msgbuf[Newpos], fmt, ap);
+	(void)vsnprintf(&Msgbuf[Newpos], sizeof(Msgbuf)-Newpos, fmt, ap);
 	Newpos = strlen(Msgbuf);
 	va_end(ap);
 }
@@ -392,7 +398,7 @@ addmsg(const char *fmt, ...)
  * endmsg:
  *	Display a new msg.
  */
-int     Lineno = 0;
+static int Lineno = 0;
 
 void
 endmsg(void)
@@ -465,7 +471,7 @@ do_wait(void)
  * wait_for
  *	Sit around until the guy types the right key
  */
-void
+static void
 wait_for(int ch)
 {
 	int c;
@@ -482,7 +488,7 @@ wait_for(int ch)
  * readchar:
  *	Reads and returns a character, checking for gross input errors
  */
-int
+static int
 readchar(void)
 {
 	int cnt;
@@ -506,12 +512,12 @@ over:
 }
 
 /*
- * getline:
+ * get_line:
  *      Reads the next line up to '\n' or EOF.  Multiple spaces are
  *	compressed to one space; a space is inserted before a ','
  */
 char *
-getline(void)
+get_line(void)
 {
 	char *sp;
 	int c, oy, ox;

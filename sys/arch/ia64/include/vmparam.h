@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.2 2006/07/03 17:01:45 cherry Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.7 2010/11/14 13:33:22 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -76,7 +76,7 @@
 /*
  * Manipulating region bits of an address.
  */
-#define IA64_RR_BASE(n)         (((u_int64_t) (n)) << 61)
+#define IA64_RR_BASE(n)         (((uint64_t) (n)) << 61)
 #define IA64_RR_MASK(x)         ((x) & ((1L << 61) - 1))
 
 #define IA64_PHYS_TO_RR6(x)     ((x) | IA64_RR_BASE(6))
@@ -102,31 +102,11 @@
 
 #define VM_PHYSSEG_MAX		16		/* XXX: */
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BSEARCH
-#define	VM_PHYSSEG_NOADD			/* no more after vm_mem_init */
 
 #define	VM_NFREELIST		1 /* XXX: */
 #define	VM_FREELIST_DEFAULT	0 /* XXX: */
 
 /* virtual sizes (bytes) for various kernel submaps */
 #define VM_PHYS_SIZE		(USRIOSIZE*PAGE_SIZE)
-
-#ifndef _LOCORE
-/*
- * pmap-specific data store in the vm_page structure.
- */
-#define	__HAVE_VM_PAGE_MD
-struct vm_page_md {
-	TAILQ_HEAD(,pv_entry) pv_list;		/* pv_entry list */
-	int pv_list_count;
-	struct simplelock pv_slock;		/* lock on this head */
-	int pvh_attrs;				/* page attributes */
-};
-
-#define	VM_MDPAGE_INIT(pg)						\
-do {									\
-	TAILQ_INIT(&(pg)->mdpage.pv_list);				\
-	simple_lock_init(&(pg)->mdpage.pv_slock);			\
-} while (/*CONSTCOND*/0)
-#endif /*_LOCORE*/
 
 #endif /* _VMPARAM_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: segments.h,v 1.47 2008/01/04 15:55:33 yamt Exp $	*/
+/*	$NetBSD: segments.h,v 1.54 2011/04/26 15:51:23 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -80,18 +80,32 @@
 
 #ifndef _I386_SEGMENTS_H_
 #define _I386_SEGMENTS_H_
+#ifdef _KERNEL_OPT
+#include "opt_xen.h"
+#endif
 
 /*
  * Selectors
  */
 
 #define	ISPL(s)		((s) & SEL_RPL)	/* what is the priority level of a selector */
+#ifndef XEN
 #define	SEL_KPL		0		/* kernel privilege level */
+#else
+#define	SEL_XEN		0		/* Xen privilege level */
+#define	SEL_KPL		1		/* kernel privilege level */
+#endif /* XEN */
 #define	SEL_UPL		3		/* user privilege level */
 #define	SEL_RPL		3		/* requester's privilege level mask */
+#ifdef XEN
+#define	CHK_UPL		2		/* user privilege level mask */
+#else
+#define CHK_UPL		SEL_RPL
+#endif /* XEN */
 #define	ISLDT(s)	((s) & SEL_LDT)	/* is it local or global */
 #define	SEL_LDT		4		/* local descriptor table */
 #define	IDXSEL(s)	(((s) >> 3) & 0x1fff)		/* index of selector */
+#define	IDXSELN(s)	(((s) >> 3))			/* index of selector */
 #define	GSEL(s,r)	(((s) << 3) | r)		/* a global selector */
 #define	LSEL(s,r)	(((s) << 3) | r | SEL_LDT)	/* a local selector */
 #define	GSYSSEL(s,r)	GSEL(s,r)	/* compat with amd64 */
@@ -144,12 +158,20 @@ struct gate_descriptor {
 	unsigned gd_hioffset:16;	/* gate offset (msb) */
 } __packed;
 
+struct ldt_descriptor {
+	vaddr_t ld_base;
+	uint32_t ld_entries;
+} __packed;
+
 /*
  * Generic descriptor
  */
 union descriptor {
 	struct segment_descriptor sd;
 	struct gate_descriptor gd;
+	struct ldt_descriptor ld;
+	uint32_t raw[2];
+	uint64_t raw64;
 } __packed;
 
 /*
@@ -175,12 +197,15 @@ void setsegment(struct segment_descriptor *, const void *, size_t, int, int,
 void setgdt(int, const void *, size_t, int, int, int, int);
 void unsetgate(struct gate_descriptor *);
 void cpu_init_idt(void);
+void update_descriptor(union descriptor *, union descriptor *);
 
+#if !defined(XEN)
 void idt_init(void);
 void idt_vec_reserve(int);
 int idt_vec_alloc(int, int);
 void idt_vec_set(int, void (*)(void));
 void idt_vec_free(int);
+#endif
 
 #endif /* _KERNEL */
 
@@ -222,17 +247,18 @@ void idt_vec_free(int);
 #define	SDT_MEMERC	30	/* memory execute read conforming */
 #define	SDT_MEMERAC	31	/* memory execute read accessed conforming */
 
+#define SDTYPE(p)	(((const struct segment_descriptor *)(p))->sd_type)
 /* is memory segment descriptor pointer ? */
-#define ISMEMSDP(s)	((s->d_type) >= SDT_MEMRO && \
-			 (s->d_type) <= SDT_MEMERAC)
+#define ISMEMSDP(s)	(SDTYPE(s) >= SDT_MEMRO && \
+			 SDTYPE(s) <= SDT_MEMERAC)
 
 /* is 286 gate descriptor pointer ? */
-#define IS286GDP(s)	((s->d_type) >= SDT_SYS286CGT && \
-			 (s->d_type) < SDT_SYS286TGT)
+#define IS286GDP(s)	(SDTYPE(s) >= SDT_SYS286CGT && \
+			 SDTYPE(s) < SDT_SYS286TGT)
 
 /* is 386 gate descriptor pointer ? */
-#define IS386GDP(s)	((s->d_type) >= SDT_SYS386CGT && \
-			 (s->d_type) < SDT_SYS386TGT)
+#define IS386GDP(s)	(SDTYPE(s) >= SDT_SYS386CGT && \
+			 SDTYPE(s) < SDT_SYS386TGT)
 
 /* is gate descriptor pointer ? */
 #define ISGDP(s)	(IS286GDP(s) || IS386GDP(s))
@@ -281,7 +307,6 @@ void idt_vec_free(int);
 #define	GUDATA_SEL	4	/* User data descriptor */
 #define	GLDT_SEL	5	/* Default LDT descriptor */
 #define GCPU_SEL	6	/* per-CPU segment */
-#define	GMACHCALLS_SEL	7	/* Darwin (mach trap) system call gate */
 #define	GEXTBIOSDATA_SEL 8	/* magic to catch BIOS refs to EBDA */
 #define	GAPM32CODE_SEL	9	/* 3 APM segments must be consecutive */
 #define	GAPM16CODE_SEL	10	/* and in the specified order: code32 */
@@ -295,12 +320,13 @@ void idt_vec_free(int);
 #define GTRAPTSS_SEL	18
 #define GIPITSS_SEL	19
 #define GUCODEBIG_SEL	20	/* User code with executable stack */
-#define	GUFS_SEL	21
-#define	GUGS_SEL	22
+#define	GUFS_SEL	21	/* Per-thread %fs */
+#define	GUGS_SEL	22	/* Per-thread %gs */
 #define	NGDT		23
 
 /*
- * Entries in the Local Descriptor Table (LDT)
+ * Entries in the Local Descriptor Table (LDT).
+ * DO NOT ADD KERNEL DATA/CODE SEGMENTS TO THIS TABLE.
  */
 #define	LSYS5CALLS_SEL	0	/* iBCS system call gate */
 #define	LSYS5SIGR_SEL	1	/* iBCS sigreturn gate */

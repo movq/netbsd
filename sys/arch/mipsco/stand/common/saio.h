@@ -1,4 +1,4 @@
-/*	$NetBSD: saio.h,v 1.1 2000/09/18 11:40:48 wdk Exp $	*/
+/*	$NetBSD: saio.h,v 1.4 2009/03/17 00:35:08 he Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-int saioopen __P((struct open_file*, ...));
-int saioclose __P((struct open_file*));
-int saioioctl __P((struct open_file*, u_long, void*));
-int saiostrategy __P((void*, int, daddr_t, size_t, void*, size_t*));
+int saioopen(struct open_file*, ...);
+#if !defined(LIBSA_NO_DEV_CLOSE)
+int saioclose(struct open_file*);
+#endif
+#if !defined(LIBSA_NO_DEV_IOCTL)
+int saioioctl(struct open_file*, u_long, void*);
+#endif
+int saiostrategy(void*, int, daddr_t, size_t, void*, size_t*);

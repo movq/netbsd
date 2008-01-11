@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_machdep.c,v 1.49 2007/12/20 23:02:40 dsl Exp $	*/
+/*	$NetBSD: freebsd_machdep.c,v 1.55 2009/12/10 14:13:50 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_machdep.c,v 1.49 2007/12/20 23:02:40 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: freebsd_machdep.c,v 1.55 2009/12/10 14:13:50 matt Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
@@ -48,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: freebsd_machdep.c,v 1.49 2007/12/20 23:02:40 dsl Exp
 #include <sys/signalvar.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
-#include <sys/user.h>
 #include <sys/mount.h>
 
 #include <compat/sys/signal.h>
@@ -67,12 +59,9 @@ __KERNEL_RCSID(0, "$NetBSD: freebsd_machdep.c,v 1.49 2007/12/20 23:02:40 dsl Exp
 #include <compat/freebsd/freebsd_ptrace.h>
 
 void
-freebsd_setregs(l, epp, stack)
-	struct lwp *l;
-	struct exec_package *epp;
-	u_long stack;
+freebsd_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 
 	setregs(l, epp, stack);
 	if (i386_use_fxsave)
@@ -156,9 +145,9 @@ freebsd_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	sendsig_reset(l, sig);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -235,7 +224,8 @@ freebsd_sys_sigreturn(struct lwp *l, const struct freebsd_sys_sigreturn_args *ua
 		tf->tf_fs = context.sc_fs;
 		tf->tf_es = context.sc_es;
 		tf->tf_ds = context.sc_ds;
-		tf->tf_eflags = context.sc_efl;
+		tf->tf_eflags &= ~PSL_USER;
+		tf->tf_eflags |= context.sc_efl & PSL_USER;
 	}
 	tf->tf_edi = context.sc_edi;
 	tf->tf_esi = context.sc_esi;
@@ -250,7 +240,7 @@ freebsd_sys_sigreturn(struct lwp *l, const struct freebsd_sys_sigreturn_args *ua
 	tf->tf_esp = context.sc_esp;
 	tf->tf_ss = context.sc_ss;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	/* Restore signal stack. */
 	if (context.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
@@ -260,7 +250,7 @@ freebsd_sys_sigreturn(struct lwp *l, const struct freebsd_sys_sigreturn_args *ua
 	/* XXX freebsd_osigcontext compat? */
 	mask = context.sc_mask;
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }
@@ -271,10 +261,7 @@ freebsd_sys_sigreturn(struct lwp *l, const struct freebsd_sys_sigreturn_args *ua
  */
 
 void
-netbsd_to_freebsd_ptrace_regs(nregs, nfpregs, fregs)
-	struct reg *nregs;
-	struct fpreg *nfpregs;
-	struct freebsd_ptrace_reg *fregs;
+netbsd_to_freebsd_ptrace_regs(struct reg *nregs, struct fpreg *nfpregs, struct freebsd_ptrace_reg *fregs)
 {
 	struct save87 *nframe = (struct save87 *)nfpregs;
 
@@ -328,10 +315,7 @@ netbsd_to_freebsd_ptrace_regs(nregs, nfpregs, fregs)
 }
 
 void
-freebsd_to_netbsd_ptrace_regs(fregs, nregs, nfpregs)
-	struct freebsd_ptrace_reg *fregs;
-	struct reg *nregs;
-	struct fpreg *nfpregs;
+freebsd_to_netbsd_ptrace_regs(struct freebsd_ptrace_reg *fregs, struct reg *nregs, struct fpreg *nfpregs)
 {
 	struct save87 *nframe = (struct save87 *)nfpregs;
 
@@ -373,10 +357,7 @@ freebsd_to_netbsd_ptrace_regs(fregs, nregs, nfpregs)
 #define	FREEBSD_REGS_OFFSET 0x2000
 
 int
-freebsd_ptrace_getregs(fregs, addr, datap)
-	struct freebsd_ptrace_reg *fregs;
-	void *addr;
-	register_t *datap;
+freebsd_ptrace_getregs(struct freebsd_ptrace_reg *fregs, void *addr, register_t *datap)
 {
 	vaddr_t offset = (vaddr_t)addr;
 
@@ -403,10 +384,7 @@ freebsd_ptrace_getregs(fregs, addr, datap)
 }
 
 int
-freebsd_ptrace_setregs(fregs, addr, data)
-	struct freebsd_ptrace_reg *fregs;
-	void *addr;
-	int data;
+freebsd_ptrace_setregs(struct freebsd_ptrace_reg *fregs, void *addr, int data)
 {
 	vaddr_t offset = (vaddr_t)addr;
 

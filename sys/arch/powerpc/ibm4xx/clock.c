@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.21 2008/01/09 06:50:36 simonb Exp $	*/
+/*	$NetBSD: clock.c,v 1.24 2011/01/18 01:02:53 matt Exp $	*/
 /*      $OpenBSD: clock.c,v 1.3 1997/10/13 13:42:53 pefo Exp $  */
 
 /*
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.21 2008/01/09 06:50:36 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.24 2011/01/18 01:02:53 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -47,6 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.21 2008/01/09 06:50:36 simonb Exp $");
 #include <machine/cpu.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/ibm4xx/spr.h>
 
 /*
  * Initially we assume a processor with a bus frequency of 12.5 MHz.
@@ -89,19 +90,21 @@ void stat_intr(struct clockframe *);	/* called from trap_subr.S */
 void
 stat_intr(struct clockframe *frame)
 {
+	struct cpu_info * const ci = curcpu();
 
 	mtspr(SPR_TSR, TSR_FIS);	/* Clear TSR[FIS] */
-	uvmexp.intrs++;
-	curcpu()->ci_ev_statclock.ev_count++;
+	ci->ci_data.cpu_nintr++;
+	ci->ci_ev_statclock.ev_count++;
 
 	/* Nobody can interrupt us, but see if we're allowed to run. */
-	if (! (curcpu()->ci_cpl & mask_statclock))
+	if (! (ci->ci_cpl & mask_statclock))
   		statclock(frame);
 }
 
 void
 decr_intr(struct clockframe *frame)
 {
+	struct cpu_info * const ci = curcpu();
 	int pri;
 	long tbtick, xticks;
 	int nticks;
@@ -120,8 +123,8 @@ decr_intr(struct clockframe *frame)
 		xticks -= ticks_per_intr;
 	lasttb2 = tbtick - xticks;
 
-	uvmexp.intrs++;
-	curcpu()->ci_ev_clock.ev_count++;
+	ci->ci_data.cpu_nintr++;
+	ci->ci_ev_clock.ev_count++;
 	pri = splclock();
 	if (pri & mask_clock) {
 		tickspending += nticks;
@@ -145,10 +148,8 @@ decr_intr(struct clockframe *frame)
 		 * Do standard timer interrupt stuff.
 		 * Do softclock stuff only on the last iteration.
 		 */
-		frame->pri = pri | mask_clock;
 		while (--nticks > 0)
 			hardclock(frame);
-		frame->pri = pri;
 		hardclock(frame);
 	}
 	splx(pri);
@@ -157,9 +158,11 @@ decr_intr(struct clockframe *frame)
 void
 cpu_initclocks(void)
 {
+	struct cpu_info * const ci = curcpu();
+
 	/* Initialized in powerpc/ibm4xx/cpu.c */
-	evcnt_attach_static(&curcpu()->ci_ev_clock);
-	evcnt_attach_static(&curcpu()->ci_ev_statclock);
+	evcnt_attach_static(&ci->ci_ev_clock);
+	evcnt_attach_static(&ci->ci_ev_statclock);
 
 	ticks_per_intr = ticks_per_sec / hz;
 	stathz = profhz = ticks_per_sec / (1 << PERIOD_POWER);

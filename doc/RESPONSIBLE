@@ -1,4 +1,4 @@
-#	$NetBSD: RESPONSIBLE,v 1.85 2007/12/31 14:09:53 ad Exp $
+#	$NetBSD: RESPONSIBLE,v 1.95 2011/02/26 18:07:15 ahoka Exp $
 
 List of sections of the system, and who is responsible for them (or at
 least considered an expert on them).
@@ -23,22 +23,24 @@ dhcp		mellon
 etcupdate	martti
 expr		jdolecek
 file		christos, pooka
+gpioctl		mbalmer
 grep		simonb, wiz
 groff		wiz
 gzip		mrg, atatat
+ifconfig	dyoung
 hostapd		none
 installboot(mi)	core
 kerberos	lha, joda
 less/more	mrg
-make		christos, sjg
+make		christos, sjg, dholland
 named(bind)	christos
 ntp		simonb, jonathan
 openssh		christos
 pax/tar		christos
 pcc		ragge
 ping		christos
-ping6		itojun
-postfix		heas
+ping6		core
+postfix		tron
 postinstall	core
 ppp(async)	christos
 ppp(sync)	martin?
@@ -48,24 +50,24 @@ sendmail	atatat
 sh		christos, dsl
 sort		jdolecek
 sysctl		atatat
-tcpdump		itojun
+tcpdump		core
 texinfo		wiz
 toolchain	thorpej, mrg
 top		simonb
 user		agc
 vi		aymeric
-wpa_supplicant	scw, dyoung
-
+wake		mbalmer
+wpa_supplicant	scw
 
 Userland Libraries:
 
 atf		jmmv
-citrus		itojun
+citrus		core
 curses		blymn, jdc
 edit		christos, jdolecek
 kerberos	lha, joda
 openssl		thorpej, christos
-pcap		itojun
+pcap		core
 pthread		nathanw
 resolver(bind)	christos
 softfloat	bjh21
@@ -101,11 +103,14 @@ acpi		thorpej, kochi, jmcneill, joerg
 audio		augustss, jmcneill
 cgd		elric
 firewire	jmc
-gpio		jmcneill
+flash		ahoka
+gpio		mbalmer
 ide/atapi	bouyer
 irda		augustss, kenh
 isdn		martin
+keylock		mbalmer
 mca		jdolecek
+nand		ahoka
 net80211	dyoung
 onewire		riz
 podulebus	bjh21
@@ -123,7 +128,6 @@ auich		kent
 dbri		macallan
 eap		pooka
 esa		jmcneill
-esl		jmcneill
 
 console device drivers:
 
@@ -131,7 +135,6 @@ cgsix		macallan
 machfb		macallan
 ofb		macallan
 pnozz		macallan
-vesafb		jmcneill
 
 network device drivers:
 
@@ -156,12 +159,18 @@ siop		bouyer
 spc		tsutsui
 trm		tsutsui
 
+system controller device drivers:
+
+elansc		dyoung
+elanpar		dyoung
+elanpex		dyoung
+
 file systems:
 
 coda		gdt
 efs		rumble
 hfs		dillo
-lfs		perseant
+lfs		dholland
 msdosfs		jdolecek
 nfs		fvdl
 ntfs		jdolecek
@@ -181,6 +190,7 @@ ntp		simonb, jonathan
 pipes		jdolecek
 splash		jmcneill
 uvm		chuck, chs, mrg, atatat
+vfs		pooka, dholland
 
 kern/compat:
 
@@ -199,8 +209,8 @@ networking:
 
 general net	thorpej, matt
 ipf		darrenr, martti
-kame/ipv6	itojun
-pf		itojun, peter, yamt
+kame/ipv6	core
+pf		peter, yamt
 ppp(async)	christos
 ppp(sync)	martin
 
@@ -221,7 +231,7 @@ cobalt		soren
 evbarm		thorpej
 evbmips		simonb
 evbppc		simonb, eeh
-evbsh3		itojun
+evbsh3		core
 hp300		tsutsui
 hp700		fredette
 hpcarm		ichiro, toshii
@@ -233,7 +243,7 @@ luna68k		nisimura
 mac68k		scottr
 macppc		tsubai
 mipsco		wdk
-mmeye		itojun
+mmeye		core
 mvme68k		scw
 mvmeppc		scw
 news68k		tsutsui
@@ -241,7 +251,6 @@ newsmips	tsubai
 next68k		core
 ofppc		ws
 pc532		phil
-playstation2	uch
 pmax		simonb, jonathan
 pmppc		augustss
 prep		nonaka

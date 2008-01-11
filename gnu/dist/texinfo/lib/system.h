@@ -1,7 +1,7 @@
-/*	$NetBSD: system.h,v 1.7 2004/07/12 23:41:53 wiz Exp $	*/
+/*	$NetBSD: system.h,v 1.11 2009/03/06 17:03:48 apb Exp $	*/
 
 /* system.h: system-dependent declarations; include this first.
-   Id: system.h,v 1.7 2004/03/26 18:22:16 karl Exp
+   Id: system.h,v 1.12 2004/04/26 13:56:57 karl Exp
 
    Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Free Software
    Foundation, Inc.
@@ -269,6 +269,10 @@ extern int strcoll ();
 /* Some systems don't declare this function in pwd.h. */
 struct passwd *getpwnam (const char *name);
 
+#ifdef HAVE_STDINT_H
+#include <stdint.h>
+#endif
+
 /* Our library routines not included in any system library.  */
 extern void *xmalloc (size_t), *xrealloc (void *, size_t);
 extern char *xstrdup (const char *);
@@ -276,6 +280,8 @@ extern void xexit (int);
 
 /* For convenience.  */
 #define STREQ(s1,s2) (strcmp (s1, s2) == 0)
+#define STRCASEEQ(s1,s2) (strcasecmp (s1, s2) == 0)
+#define STRNCASEEQ(s1,s2,n) (strncasecmp (s1, s2, n) == 0)
 
 /* We don't need anything fancy.  If we did need something fancy, gnulib
    has it.  */

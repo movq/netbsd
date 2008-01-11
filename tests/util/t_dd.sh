@@ -1,4 +1,4 @@
-# $NetBSD: t_dd.sh,v 1.1 2007/11/12 15:14:00 jmmv Exp $
+# $NetBSD: t_dd.sh,v 1.4 2010/12/06 16:43:26 pooka Exp $
 #
 # Copyright (c) 2007 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -11,13 +11,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -108,8 +101,30 @@ io_body() {
 	           "$allvisbits" "$ebcdicvisbits"
 }
 
+atf_test_case seek
+seek_head() {
+	atf_set "descr" "Tests output file seeking"
+}
+
+seek_body() {
+	echo TEST1234 > testfile
+	atf_check -s exit:0 -e ignore \
+	    dd if=/dev/zero of=testfile seek=1 bs=8k count=1
+	atf_check -s exit:0 -e ignore -o match:'^TEST1234$' dd if=testfile
+	eval $(stat -s testfile)
+	atf_check_equal $st_size $((2*8192))
+
+	echo -n TEST1234 > tf2
+	atf_check -s exit:0 -e ignore -x \
+	    'dd bs=4 if=/dev/zero count=1 | tr \\0 \\n | dd of=tf2 bs=4 seek=1'
+	atf_check -s exit:0 -e ignore -o match:'^TEST$' dd if=tf2
+	eval $(stat -s tf2)
+	atf_check_equal $st_size 8
+}
+
 atf_init_test_cases()
 {
 	atf_add_test_case length
 	atf_add_test_case io
+	atf_add_test_case seek
 }

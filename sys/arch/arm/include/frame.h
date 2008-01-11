@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.9 2007/02/09 21:55:02 ad Exp $	*/
+/*	$NetBSD: frame.h,v 1.12 2009/11/21 20:32:27 rmind Exp $	*/
 
 /*
  * Copyright (c) 1994-1997 Mark Brinicombe.
@@ -44,6 +44,7 @@
 #ifndef _LOCORE
 
 #include <sys/signal.h>
+#include <sys/sa.h>
 #include <sys/ucontext.h>
 
 /*
@@ -73,6 +74,7 @@ typedef struct trapframe {
 } trapframe_t;
 
 /* Register numbers */
+#define tf_ip tf_r12
 #define tf_r13 tf_usr_sp
 #define tf_r14 tf_usr_lr
 #define tf_r15 tf_pc
@@ -92,12 +94,27 @@ struct sigframe_siginfo {
 	ucontext_t	sf_uc;		/* actual saved ucontext */
 };
 
+/*
+ * Scheduler activations upcall frame.  Pushed onto user stack before
+ * calling an SA upcall.
+ */
+
+struct saframe {
+#if 0 /* in registers on entry to upcall */
+	int		sa_type;
+	struct sa_t **	sa_sas;
+	int		sa_events;
+	int		sa_interrupted;
+#endif
+	void *		sa_arg;
+};
+
 #ifdef _KERNEL
 __BEGIN_DECLS
 void sendsig_sigcontext(const ksiginfo_t *, const sigset_t *);
 void *getframe(struct lwp *, int, int *);
 __END_DECLS
-#define process_frame(l) ((l)->l_addr->u_pcb.pcb_tf)
+#define process_frame(l) (((struct pcb *)lwp_getpcb(l))->pcb_tf)
 #endif
 
 #endif /* _LOCORE */

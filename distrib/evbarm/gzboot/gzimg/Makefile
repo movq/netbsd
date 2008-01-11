@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.18 2006/11/09 00:35:32 scw Exp $
+#	$NetBSD: Makefile,v 1.21 2009/04/03 22:36:35 perry Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -23,6 +23,9 @@ TARGETS=	ADI_BRH		ADI_BRH		ADI_BRH_sd0	\
 								\
 		CP3100		IQ80321		CP3100_wd0	\
 		0xf0080000	netbsd-wd0			\
+								\
+		GEMINI		GEMINI		GEMINI		\
+		0x01600000	netbsd				\
 								\
 		IQ80310		IQ80310		IQ80310_sd0	\
 		0x00080000	netbsd-sd0			\
@@ -62,12 +65,12 @@ GZIMGS+=	gzimg_${I}_flash_${R}.gz
 gzimg_${I}_flash_${R}: .NOTMAIN ${GZB${G}} ${KERNOBJDIR}/${K}/${W}.bin
 	@echo "Populating ${.TARGET}"
 	-rm -f ${.TARGET}.kern.gz
-	gzip -9c ${KERNOBJDIR}/${K}/${W}.bin > ${.TARGET}.kern.gz
+	gzip -9nc ${KERNOBJDIR}/${K}/${W}.bin > ${.TARGET}.kern.gz
 	${TOOL_CAT} ${GZB${G}} ${.TARGET}.kern.gz > ${.TARGET}
 
 gzimg_${I}_flash_${R}.gz: .NOTMAIN gzimg_${I}_flash_${R}
 	-rm -f ${.TARGET}
-	gzip -9c ${.ALLSRC} > ${.TARGET}
+	gzip -9nc ${.ALLSRC} > ${.TARGET}
 
 CLEANFILES+=	gzimg_${I}_flash_${R}.kern gzimg_${I}_flash_${R}.kern.gz \
 		gzimg_${I}_flash_${R}
@@ -81,7 +84,7 @@ realall: ${GZIMGS}
 
 release: check_RELEASEDIR .WAIT ${GZIMGS}
 .for img in ${GZIMGS}
-	${RELEASE_INSTALL} ${img} ${RELEASEDIR}/${MACHINE}/binary/gzimg
+	${RELEASE_INSTALL} ${img} ${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/gzimg
 .endfor
 
 .include <bsd.prog.mk>

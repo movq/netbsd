@@ -1,4 +1,4 @@
-/*	$NetBSD: ipf_y.y,v 1.21 2007/04/14 20:34:34 martin Exp $	*/
+/*	$NetBSD: ipf_y.y,v 1.24 2010/04/17 21:00:09 darrenr Exp $	*/
 
 /*
  * Copyright (C) 2001-2006 by Darren Reed.
@@ -348,7 +348,7 @@ toslist:
 	| YY_HEX	{ DOREM(fr->fr_tos = $1; fr->fr_mtos = 0xff;) }
 	| toslist lmore YY_NUMBER
 			{ DOREM(fr->fr_tos = $3; fr->fr_mtos = 0xff;) }
-	| toslist lmore YY_HEX	
+	| toslist lmore YY_HEX
 			{ DOREM(fr->fr_tos = $3; fr->fr_mtos = 0xff;) }
 	;
 
@@ -533,10 +533,12 @@ vianame:
 
 dup:	IPFY_DUPTO name
 	{ strncpy(fr->fr_dif.fd_ifname, $2, sizeof(fr->fr_dif.fd_ifname));
+	  fr->fr_flags |= FR_DUP;
 	  free($2);
 	}
 	| IPFY_DUPTO name duptoseparator hostname
 	{ strncpy(fr->fr_dif.fd_ifname, $2, sizeof(fr->fr_dif.fd_ifname));
+	  fr->fr_flags |= FR_DUP;
 	  fr->fr_dif.fd_ip = $4;
 	  yyexpectaddr = 0;
 	  free($2);
@@ -544,6 +546,7 @@ dup:	IPFY_DUPTO name
 	| IPFY_DUPTO name duptoseparator YY_IPV6
 	{ strncpy(fr->fr_dif.fd_ifname, $2, sizeof(fr->fr_dif.fd_ifname));
 	  bcopy(&$4, &fr->fr_dif.fd_ip6, sizeof(fr->fr_dif.fd_ip6));
+	  fr->fr_flags |= FR_DUP;
 	  yyexpectaddr = 0;
 	  free($2);
 	}
@@ -680,7 +683,7 @@ andwith:
 	| IPFY_AND			{ nowith = 0; setipftype(); }
 	;
 
-flags:	| startflags flagset	
+flags:	| startflags flagset
 		{ DOALL(fr->fr_tcpf = $2; fr->fr_tcpfm = FR_TCPFMAX;) }
 	| startflags flagset '/' flagset
 		{ DOALL(fr->fr_tcpf = $2; fr->fr_tcpfm = $4;) }
@@ -772,8 +775,20 @@ fromport:
 
 srcportlist:
 	portnum		{ DOREM(fr->fr_scmp = FR_EQUAL; fr->fr_sport = $1;) }
+	| portnum ':' portnum
+			{ DOREM(fr->fr_scmp = FR_INCRANGE; fr->fr_sport = $1; \
+				fr->fr_stop = $3;) }
+	| portnum YY_RANGE_IN portnum
+			{ DOREM(fr->fr_scmp = FR_INRANGE; fr->fr_sport = $1; \
+				fr->fr_stop = $3;) }
 	| srcportlist lmore portnum
 			{ DOREM(fr->fr_scmp = FR_EQUAL; fr->fr_sport = $3;) }
+	| srcportlist lmore portnum ':' portnum
+			{ DOREM(fr->fr_scmp = FR_INCRANGE; fr->fr_sport = $3; \
+				fr->fr_stop = $5;) }
+	| srcportlist lmore portnum YY_RANGE_IN portnum
+			{ DOREM(fr->fr_scmp = FR_INRANGE; fr->fr_sport = $3; \
+				fr->fr_stop = $5;) }
 	;
 
 dstobject:
@@ -838,8 +853,20 @@ toport:
 
 dstportlist:
 	portnum		{ DOREM(fr->fr_dcmp = FR_EQUAL; fr->fr_dport = $1;) }
+	| portnum ':' portnum
+			{ DOREM(fr->fr_dcmp = FR_INCRANGE; fr->fr_dport = $1; \
+				fr->fr_dtop = $3;) }
+	| portnum YY_RANGE_IN portnum
+			{ DOREM(fr->fr_dcmp = FR_INRANGE; fr->fr_dport = $1; \
+				fr->fr_dtop = $3;) }
 	| dstportlist lmore portnum
 			{ DOREM(fr->fr_dcmp = FR_EQUAL; fr->fr_dport = $3;) }
+	| dstportlist lmore portnum ':' portnum
+			{ DOREM(fr->fr_dcmp = FR_INCRANGE; fr->fr_dport = $3; \
+				fr->fr_dtop = $5;) }
+	| dstportlist lmore portnum YY_RANGE_IN portnum
+			{ DOREM(fr->fr_dcmp = FR_INRANGE; fr->fr_dport = $3; \
+				fr->fr_dtop = $5;) }
 	;
 
 addr:	pool '/' YY_NUMBER		{ pooled = 1;
@@ -860,7 +887,7 @@ addr:	pool '/' YY_NUMBER		{ pooled = 1;
 					  $$.a.iplookuptype = IPLT_HASH;
 					  $$.a.iplookupsubtype = 0;
 					  $$.a.iplookupnum = $3; }
-	| hash '/' YY_STR		{ pooled = 1;
+	| hash '/' YY_STR		{ hashed = 1;
 					  $$.a.iplookuptype = IPLT_HASH;
 					  $$.a.iplookupsubtype = 1;
 					  strncpy($$.a.iplookupname, $3,
@@ -895,6 +922,10 @@ ipaddr:	IPFY_ANY			{ bzero(&($$), sizeof($$));
 					  bcopy(&$1, &$$.a, sizeof($$.a)); }
 		maskspace		{ yysetdict(maskwords); }
 		ipv6mask		{ bcopy(&$5, &$$.m, sizeof($$.m));
+					  $$.a.i6[0] &= $$.m.i6[0];
+					  $$.a.i6[1] &= $$.m.i6[1];
+					  $$.a.i6[2] &= $$.m.i6[2];
+					  $$.a.i6[3] &= $$.m.i6[3];
 					  yyresetdict();
 					  yyexpectaddr = 0; }
 	;
@@ -1908,7 +1939,14 @@ char *phrase;
 
 #ifdef IPFILTER_BPF
 		bzero((char *)&bpf, sizeof(bpf));
+# ifdef DLT_IPv4
+		if (v == 4)
+			p = pcap_open_dead(DLT_IPv4, 1);
+		else if (v == 6)
+			p = pcap_open_dead(DLT_IPv6, 1);
+# else
 		p = pcap_open_dead(DLT_RAW, 1);
+# endif
 		if (!p) {
 			fprintf(stderr, "pcap_open_dead failed\n");
 			return;
@@ -1977,7 +2015,7 @@ alist_t *list;
 	top = calloc(1, sizeof(*top));
 	if (top == NULL)
 		return 0;
-	
+
 	for (n = top, a = list; (n != NULL) && (a != NULL); a = a->al_next) {
 		n->ipn_addr.adf_addr.in4.s_addr = a->al_1;
 		n->ipn_mask.adf_addr.in4.s_addr = a->al_2;
@@ -2014,7 +2052,7 @@ alist_t *list;
 	top = calloc(1, sizeof(*top));
 	if (top == NULL)
 		return 0;
-	
+
 	for (n = top, a = list; (n != NULL) && (a != NULL); a = a->al_next) {
 		n->ipe_addr.in4_addr = a->al_1;
 		n->ipe_mask.in4_addr = a->al_2;

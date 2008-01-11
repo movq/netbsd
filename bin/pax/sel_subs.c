@@ -1,4 +1,4 @@
-/*	$NetBSD: sel_subs.c,v 1.21 2007/04/29 20:23:34 msaitoh Exp $	*/
+/*	$NetBSD: sel_subs.c,v 1.23 2009/12/21 12:44:48 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)sel_subs.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: sel_subs.c,v 1.21 2007/04/29 20:23:34 msaitoh Exp $");
+__RCSID("$NetBSD: sel_subs.c,v 1.23 2009/12/21 12:44:48 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -378,7 +378,7 @@ trng_add(char *str)
 	/*
 	 * allocate space for the time range and store the limits
 	 */
-	if ((pt = (TIME_RNG *)malloc(sizeof(TIME_RNG))) == NULL) {
+	if ((pt = malloc(sizeof(TIME_RNG))) == NULL) {
 		tty_warn(1, "Unable to allocate memory for time range");
 		return -1;
 	}
@@ -404,6 +404,7 @@ trng_add(char *str)
 			default:
 				tty_warn(1, "Bad option %c with time range %s",
 				    *flgpt, str);
+				free(pt);
 				goto out;
 			}
 			++flgpt;
@@ -420,7 +421,7 @@ trng_add(char *str)
 		 */
 		if (str_sec(str, &(pt->low_time)) < 0) {
 			tty_warn(1, "Illegal lower time range %s", str);
-			(void)free((char *)pt);
+			free(pt);
 			goto out;
 		}
 		pt->flgs |= HASLOW;
@@ -432,7 +433,7 @@ trng_add(char *str)
 		 */
 		if (str_sec(up_pt, &(pt->high_time)) < 0) {
 			tty_warn(1, "Illegal upper time range %s", up_pt);
-			(void)free((char *)pt);
+			free(pt);
 			goto out;
 		}
 		pt->flgs |= HASHIGH;
@@ -445,7 +446,7 @@ trng_add(char *str)
 				tty_warn(1,
 				    "Upper %s and lower %s time overlap",
 				    up_pt, str);
-				(void)free((char *)pt);
+				free(pt);
 				return -1;
 			}
 		}

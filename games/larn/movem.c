@@ -1,4 +1,4 @@
-/*	$NetBSD: movem.c,v 1.5 1997/10/18 20:03:34 christos Exp $	*/
+/*	$NetBSD: movem.c,v 1.7 2009/08/12 08:04:05 dholland Exp $	*/
 
 /*
  * movem.c (move monster)		Larn is copyrighted 1986 by Noah Morgan.
@@ -12,11 +12,15 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: movem.c,v 1.5 1997/10/18 20:03:34 christos Exp $");
+__RCSID("$NetBSD: movem.c,v 1.7 2009/08/12 08:04:05 dholland Exp $");
 #endif				/* not lint */
 
 #include "header.h"
 #include "extern.h"
+
+static void movemt(int, int);
+static void mmove(int, int, int, int);
+static void movsphere(void);
 
 /*
  * movemonst()		Routine to move the monsters toward the player
@@ -127,7 +131,7 @@ movemonst()
  * Returns no value.
  */
 static int      tmpitem, xl, xh, yl, yh;
-void
+static void
 movemt(i, j)
 	int             i, j;
 {
@@ -269,12 +273,13 @@ out:		if (tmp < distance)	/* did find connectivity */
  * Enter with the from coordinates in (x,y) and the destination coordinates
  * in (xd,yd).
  */
-void
+static void
 mmove(aa, bb, cc, dd)
 	int             aa, bb, cc, dd;
 {
 	int    tmp, i, flag;
-	char           *who = NULL, *p;
+	const char *who = NULL, *p;
+
 	flag = 0;		/* set to 1 if monster hit by arrow trap */
 	if ((cc == playerx) && (dd == playery)) {
 		hitplayer(aa, bb);
@@ -401,7 +406,7 @@ mmove(aa, bb, cc, dd)
  */
 #define SPHMAX 20		/* maximum number of spheres movsphere can
 				 * handle */
-void
+static void
 movsphere()
 {
 	int    x, y, dir, len;

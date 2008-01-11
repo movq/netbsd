@@ -1,4 +1,4 @@
-/*	$NetBSD: supfilesrv.c,v 1.41 2007/12/20 20:17:52 christos Exp $	*/
+/*	$NetBSD: supfilesrv.c,v 1.46 2011/03/17 19:43:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -363,7 +363,7 @@ TREE *linkcheck(TREE *, int, int);
 char *uconvert(int);
 char *gconvert(int);
 char *changeuid(char *, char *, int, int);
-void goaway(char *, ...);
+void goaway(const char *, ...);
 char *fmttime(time_t);
 int local_file(int, struct stat *);
 int stat_info_ok(struct stat *, struct stat *);
@@ -387,7 +387,7 @@ main(int argc, char **argv)
 
 	/* initialize global variables */
 	pgmversion = PGMVERSION;/* export version number */
-	server = TRUE;		/* export that we're not a server */
+	isserver = TRUE;	/* export that we're not a server */
 	collname = NULL;	/* no current collection yet */
 	maxchildren = MAXCHILDREN;	/* defined in sup.h */
 
@@ -443,6 +443,14 @@ main(int argc, char **argv)
 			(void) servicekill();
 			continue;
 		}
+		/*
+		 * If we are being bombarded, don't even spend time forking
+		 * or conversing
+		 */
+		if (nchildren >= maxchildren + 5) {
+			(void) servicekill();
+			continue;
+		}
 		sigemptyset(&nset);
 		sigaddset(&nset, SIGCHLD);
 		sigprocmask(SIG_BLOCK, &nset, &oset);
@@ -481,10 +489,25 @@ void
 chldsig(int snum __unused)
 {
 	int w;
+	pid_t pid;
 
-	while (wait3((int *) &w, WNOHANG, (struct rusage *) 0) > 0) {
-		if (nchildren)
-			nchildren--;
+	while ((pid = waitpid(-1, &w, WNOHANG)) > 0) {
+		if (kill(pid, 0) == -1)
+			switch (errno) {
+			case ESRCH:
+				if (nchildren == 0) {
+					logerr("no children but pid %jd\n",
+					    (intmax_t)pid);
+					break;
+				}
+				nchildren--;
+				break;
+			default:
+				logerr("killing pid %jd: (%s)\n", (intmax_t)
+				    pid, strerror(errno));
+				break;
+			}
+
 	}
 }
 /*****************************************
@@ -593,14 +616,14 @@ init(int argc, char **argv)
 			uidH[i] = gidH[i] = inodeH[i] = NULL;
 		return;
 	}
-	server = FALSE;
+	isserver = FALSE;
 	if (argc < 1)
 		usage();
 	f = fopen(cryptkey, "r");
 	if (f == NULL)
 		quit(1, "Unable to open cryptfile %s\n", cryptkey);
 	if ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-		if ((q = index(p, '\n')) != NULL)
+		if ((q = strchr(p, '\n')) != NULL)
 			*q = '\0';
 		if (*p == '\0')
 			quit(1, "No cryptkey found in %s\n", cryptkey);
@@ -783,7 +806,7 @@ srvsetup(void)
 {
 	int x;
 	char *p, *q;
-	char buf[STRINGLENGTH];
+	char buf[STRINGLENGTH], filename[MAXPATHLEN];
 	FILE *f;
 	struct stat sbuf;
 	TREELIST *tl;
@@ -829,10 +852,10 @@ srvsetup(void)
 				struct stat fsbuf;
 
 				while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-					q = index(p, '\n');
+					q = strchr(p, '\n');
 					if (q)
 						*q = 0;
-					if (index("#;:", *p))
+					if (strchr("#;:", *p))
 						continue;
 					q = nxtarg(&p, " \t");
 					if (*p == '\0')
@@ -882,14 +905,14 @@ srvsetup(void)
 		release = estrdup(DEFRELEASE);
 	if (basedir == NULL || *basedir == '\0') {
 		basedir = NULL;
-		(void) sprintf(buf, FILEDIRS, DEFDIR);
-		f = fopen(buf, "r");
+		(void) sprintf(filename, FILEDIRS, DEFDIR);
+		f = fopen(filename, "r");
 		if (f) {
 			while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-				q = index(p, '\n');
+				q = strchr(p, '\n');
 				if (q)
 					*q = 0;
-				if (index("#;:", *p))
+				if (strchr("#;:", *p))
 					continue;
 				q = nxtarg(&p, " \t=");
 				if (strcmp(q, collname) == 0) {
@@ -906,20 +929,22 @@ srvsetup(void)
 		}
 	}
 	if (chdir(basedir) < 0)
-		goaway("Can't chdir to base directory %s", basedir);
-	(void) sprintf(buf, FILEPREFIX, collname);
-	f = fopen(buf, "r");
+		goaway("Can't chdir to base directory %s (%s)", basedir,
+		    strerror(errno));
+	(void) sprintf(filename, FILEPREFIX, collname);
+	f = fopen(filename, "r");
 	if (f) {
 		while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
-			q = index(p, '\n');
+			q = strchr(p, '\n');
 			if (q)
 				*q = 0;
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			prefix = estrdup(p);
 			if (chdir(prefix) < 0)
-				goaway("Can't chdir to %s from base directory %s",
-				    prefix, basedir);
+				goaway("%s: Can't chdir to %s from base "
+				    "directory %s (%s)", filename, prefix,
+				    basedir, strerror(errno));
 			break;
 		}
 		(void) fclose(f);
@@ -928,7 +953,8 @@ srvsetup(void)
 	if (prefix)
 		(void) chdir(basedir);
 	if (x < 0)
-		goaway("Can't stat base/prefix directory");
+		goaway("Can't stat base/prefix directory (%s)",
+		    strerror(errno));
 	if (nchildren >= maxchildren) {
 		setupack = FSETUPBUSY;
 		(void) msgsetupack();
@@ -963,10 +989,10 @@ srvsetup(void)
 			int hostok = FALSE;
 			while ((p = fgets(buf, STRINGLENGTH, f)) != NULL) {
 				int not;
-				q = index(p, '\n');
+				q = strchr(p, '\n');
 				if (q)
 					*q = 0;
-				if (index("#;:", *p))
+				if (strchr("#;:", *p))
 					continue;
 				q = nxtarg(&p, " \t");
 				if ((not = (*q == '!')) && *++q == '\0')
@@ -1039,7 +1065,7 @@ docrypt(void)
 
 				if (cryptkey == NULL &&
 				    (p = fgets(buf, STRINGLENGTH, f))) {
-					if ((q = index(p, '\n')) != NULL)
+					if ((q = strchr(p, '\n')) != NULL)
 						*q = '\0';
 					if (*p)
 						cryptkey = estrdup(buf);
@@ -1468,15 +1494,15 @@ srvfinishup(time_t starttime)
 	if (donereason == NULL)
 		donereason = estrdup("No reason");
 	if (doneack == FDONESRVERROR || doneack == FDONEUSRERROR)
-		logerr("%s", donereason);
+		logerr("%s: %s", remotehost(), donereason);
 	else if (doneack == FDONEGOAWAY)
-		logerr("GOAWAY: %s", donereason);
+		logerr("GOAWAY: %s: %s", remotehost(), donereason);
 	else if (doneack != FDONESUCCESS)
-		logerr("Reason %d:  %s", doneack, donereason);
+		logerr("%s: Reason %d: %s", remotehost(), doneack, donereason);
 	goawayreason = donereason;
 	cdprefix((char *) NULL);
 	if (collname == NULL) {
-		logerr("NULL collection in svrfinishup");
+		logerr("%s: NULL collection in svrfinishup", remotehost());
 		return;
 	}
 	(void) sprintf(lognam, FILELOGFILE, collname);
@@ -1633,10 +1659,10 @@ changeuid(char *namep, char *passwordp, int fileuid, int filegid)
 		pswdp = NULL;
 	} else {
 		(void) strcpy(nbuf, namep);
-		account = group = index(nbuf, ',');
+		account = group = strchr(nbuf, ',');
 		if (group != NULL) {
 			*group++ = '\0';
-			account = index(group, ',');
+			account = strchr(group, ',');
 			if (account != NULL) {
 				*account++ = '\0';
 				if (*account == '\0')
@@ -1777,7 +1803,7 @@ changeuid(char *namep, char *passwordp, int fileuid, int filegid)
 }
 
 void
-goaway(char *fmt, ...)
+goaway(const char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
@@ -1789,7 +1815,7 @@ goaway(char *fmt, ...)
 	va_end(ap);
 	goawayreason = estrdup(buf);
 	(void) msggoaway();
-	logerr("%s", buf);
+	logerr("%s: %s", remotehost(), buf);
 	longjmp(sjbuf, TRUE);
 }
 

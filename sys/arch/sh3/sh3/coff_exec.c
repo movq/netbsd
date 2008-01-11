@@ -1,4 +1,4 @@
-/*	$NetBSD: coff_exec.c,v 1.29 2007/12/08 19:29:36 pooka Exp $	*/
+/*	$NetBSD: coff_exec.c,v 1.33 2009/06/29 05:08:15 dholland Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Scott Bartram
@@ -35,7 +35,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coff_exec.c,v 1.29 2007/12/08 19:29:36 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coff_exec.c,v 1.33 2009/06/29 05:08:15 dholland Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_coredump.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,12 +49,52 @@ __KERNEL_RCSID(0, "$NetBSD: coff_exec.c,v 1.29 2007/12/08 19:29:36 pooka Exp $")
 #include <sys/vnode.h>
 #include <sys/resourcevar.h>
 #include <sys/namei.h>
+#include <sys/exec_coff.h>
+#include <sys/module.h>
+
 #include <uvm/uvm_extern.h>
 
-#include <sys/exec_coff.h>
+#ifdef COREDUMP
+#define	DEP	"coredump"
+#else
+#define	DEP	NULL
+#endif
+
+MODULE(MODULE_CLASS_MISC, exec_coff, DEP);
 
 static int coff_find_section(struct lwp *, struct vnode *,
     struct coff_filehdr *, struct coff_scnhdr *, int);
+
+static struct execsw exec_coff_execsw[] = {
+	{ COFF_HDR_SIZE,
+	  exec_coff_makecmds,
+	  { NULL },
+	  &emul_netbsd,
+	  EXECSW_PRIO_ANY,
+	  0,
+	  copyargs,
+	  NULL,
+	  coredump_netbsd,
+	  exec_setup_stack },
+};
+
+static int
+exec_coff_modcmd(modcmd_t cmd, void *arg)
+{
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		return exec_add(exec_coff_execsw,
+		    __arraycount(exec_coff_execsw));
+
+	case MODULE_CMD_FINI:
+		return exec_remove(exec_coff_execsw,
+		    __arraycount(exec_coff_execsw));
+
+	default:
+		return ENOTTY;
+        }
+}
 
 /*
  * exec_coff_makecmds(): Check if it's an coff-format executable.
@@ -148,11 +192,7 @@ exec_coff_prep_omagic(struct lwp *l, struct exec_package *epp,
  */
 
 int
-exec_coff_prep_nmagic(l, epp, fp, ap)
-	struct lwp *l;
-	struct exec_package *epp;
-	struct coff_filehdr *fp;
-	struct coff_aouthdr *ap;
+exec_coff_prep_nmagic(struct lwp *l, struct exec_package *epp, struct coff_filehdr *fp, struct coff_aouthdr *ap)
 {
 	epp->ep_taddr = COFF_SEGMENT_ALIGN(fp, ap, ap->a_tstart);
 	epp->ep_tsize = ap->a_tsize;
@@ -191,7 +231,8 @@ static int
 coff_find_section(struct lwp *l, struct vnode *vp, struct coff_filehdr *fp,
     struct coff_scnhdr *sh, int s_type)
 {
-	int i, pos, resid, siz, error;
+	int i, pos, error;
+	size_t siz, resid;
 
 	pos = COFF_HDR_SIZE;
 	for (i = 0; i < fp->f_nscns; i++, pos += sizeof(struct coff_scnhdr)) {
@@ -205,7 +246,7 @@ coff_find_section(struct lwp *l, struct vnode *vp, struct coff_filehdr *fp,
 		}
 		siz -= resid;
 		if (siz != sizeof(struct coff_scnhdr)) {
-			DPRINTF(("incomplete read: hdr %d ask=%d, rem=%d got %d\n",
+			DPRINTF(("incomplete read: hdr %d ask=%d, rem=%zu got %zu\n",
 			    s_type, sizeof(struct coff_scnhdr),
 			    resid, siz));
 			return ENOEXEC;
@@ -324,7 +365,7 @@ exec_coff_prep_zmagic(struct lwp *l, struct exec_package *epp,
 	/* load any shared libraries */
 	error = coff_find_section(l, epp->ep_vp, fp, &sh, COFF_STYP_SHLIB);
 	if (!error) {
-		int resid;
+		size_t resid;
 		struct coff_slhdr *slhdr;
 		char buf[128], *bufp;	/* FIXME */
 		int len = sh.s_size, path_index, entry_len;
@@ -373,9 +414,10 @@ exec_coff_prep_zmagic(struct lwp *l, struct exec_package *epp,
 int
 coff_load_shlib(struct lwp *l, char *path, struct exec_package *epp)
 {
-	int error, siz, resid;
+	int error;
+	size_t siz, resid;
 	int taddr, tsize, daddr, dsize, offset;
-	struct nameidata nd;
+	struct vnode *vp;
 	struct coff_filehdr fh, *fhp = &fh;
 	struct coff_scnhdr sh, *shp = &sh;
 
@@ -384,34 +426,34 @@ coff_load_shlib(struct lwp *l, char *path, struct exec_package *epp)
 	 * 2. read filehdr
 	 * 3. map text, data, and bss out of it using VM_*
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_SYSSPACE, path);
 	/* first get the vnode */
-	if ((error = namei(&nd)) != 0) {
+	error = namei_simple_kernel(path, NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0) {
 		DPRINTF(("coff_load_shlib: can't find library %s\n", path));
 		return error;
 	}
 
 	siz = sizeof(struct coff_filehdr);
-	error = vn_rdwr(UIO_READ, nd.ni_vp, (void *) fhp, siz, 0,
+	error = vn_rdwr(UIO_READ, vp, (void *) fhp, siz, 0,
 	    UIO_SYSSPACE, IO_NODELOCKED, l->l_cred, &resid, NULL);
 	if (error) {
 		DPRINTF(("filehdr read error %d\n", error));
-		vrele(nd.ni_vp);
+		vrele(vp);
 		return error;
 	}
 	siz -= resid;
 	if (siz != sizeof(struct coff_filehdr)) {
-		DPRINTF(("coff_load_shlib: incomplete read: ask=%d, rem=%d got %d\n",
+		DPRINTF(("coff_load_shlib: incomplete read: ask=%d, rem=%zu got %zu\n",
 		    sizeof(struct coff_filehdr), resid, siz));
-		vrele(nd.ni_vp);
+		vrele(vp);
 		return ENOEXEC;
 	}
 
 	/* load text */
-	error = coff_find_section(l, nd.ni_vp, fhp, shp, COFF_STYP_TEXT);
+	error = coff_find_section(l, vp, fhp, shp, COFF_STYP_TEXT);
 	if (error) {
 		DPRINTF(("can't find shlib text section\n"));
-		vrele(nd.ni_vp);
+		vrele(vp);
 		return error;
 	}
 	DPRINTF(("COFF text addr %x size %d offset %d\n", sh.s_vaddr,
@@ -421,14 +463,14 @@ coff_load_shlib(struct lwp *l, char *path, struct exec_package *epp)
 	tsize = shp->s_size + (shp->s_vaddr - taddr);
 	DPRINTF(("VMCMD: addr %x size %x offset %x\n", taddr, tsize, offset));
 	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn, tsize, taddr,
-	    nd.ni_vp, offset,
+	    vp, offset,
 	    VM_PROT_READ|VM_PROT_EXECUTE);
 
 	/* load data */
-	error = coff_find_section(l, nd.ni_vp, fhp, shp, COFF_STYP_DATA);
+	error = coff_find_section(l, vp, fhp, shp, COFF_STYP_DATA);
 	if (error) {
 		DPRINTF(("can't find shlib data section\n"));
-		vrele(nd.ni_vp);
+		vrele(vp);
 		return error;
 	}
 	DPRINTF(("COFF data addr %x size %d offset %d\n", shp->s_vaddr,
@@ -440,11 +482,11 @@ coff_load_shlib(struct lwp *l, char *path, struct exec_package *epp)
 
 	DPRINTF(("VMCMD: addr %x size %x offset %x\n", daddr, dsize, offset));
 	NEW_VMCMD(&epp->ep_vmcmds, vmcmd_map_readvn,
-	    dsize, daddr, nd.ni_vp, offset,
+	    dsize, daddr, vp, offset,
 	    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 
 	/* load bss */
-	error = coff_find_section(l, nd.ni_vp, fhp, shp, COFF_STYP_BSS);
+	error = coff_find_section(l, vp, fhp, shp, COFF_STYP_BSS);
 	if (!error) {
 		int baddr = round_page(daddr + dsize);
 		int bsize = daddr + dsize + shp->s_size - baddr;
@@ -456,7 +498,7 @@ coff_load_shlib(struct lwp *l, char *path, struct exec_package *epp)
 			    VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE);
 		}
 	}
-	vrele(nd.ni_vp);
+	vrele(vp);
 
 	return 0;
 }

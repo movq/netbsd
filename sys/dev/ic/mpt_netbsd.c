@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt_netbsd.c,v 1.13 2007/08/04 22:01:06 tron Exp $	*/
+/*	$NetBSD: mpt_netbsd.c,v 1.15 2010/04/28 22:45:27 chs Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpt_netbsd.c,v 1.13 2007/08/04 22:01:06 tron Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpt_netbsd.c,v 1.15 2010/04/28 22:45:27 chs Exp $");
 
 #include <dev/ic/mpt.h>			/* pulls in all headers */
 
@@ -151,8 +151,7 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
 	len = sizeof(request_t) * MPT_MAX_REQUESTS(mpt);
 	mpt->request_pool = malloc(len, M_DEVBUF, M_WAITOK | M_ZERO);
 	if (mpt->request_pool == NULL) {
-		aprint_error("%s: unable to allocate request pool\n",
-		    mpt->sc_dev.dv_xname);
+		aprint_error_dev(&mpt->sc_dev, "unable to allocate request pool\n");
 		return (ENOMEM);
 	}
 
@@ -162,32 +161,32 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
 	error = bus_dmamem_alloc(mpt->sc_dmat, PAGE_SIZE, PAGE_SIZE, 0,
 	    &reply_seg, 1, &reply_rseg, 0);
 	if (error) {
-		aprint_error("%s: unable to allocate reply area, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to allocate reply area, error = %d\n",
+		    error);
 		goto fail_0;
 	}
 
 	error = bus_dmamem_map(mpt->sc_dmat, &reply_seg, reply_rseg, PAGE_SIZE,
 	    (void **) &mpt->reply, BUS_DMA_COHERENT/*XXX*/);
 	if (error) {
-		aprint_error("%s: unable to map reply area, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to map reply area, error = %d\n",
+		    error);
 		goto fail_1;
 	}
 
 	error = bus_dmamap_create(mpt->sc_dmat, PAGE_SIZE, 1, PAGE_SIZE,
 	    0, 0, &mpt->reply_dmap);
 	if (error) {
-		aprint_error("%s: unable to create reply DMA map, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to create reply DMA map, error = %d\n",
+		    error);
 		goto fail_2;
 	}
 
 	error = bus_dmamap_load(mpt->sc_dmat, mpt->reply_dmap, mpt->reply,
 	    PAGE_SIZE, NULL, 0);
 	if (error) {
-		aprint_error("%s: unable to load reply DMA map, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to load reply DMA map, error = %d\n",
+		    error);
 		goto fail_3;
 	}
 	mpt->reply_phys = mpt->reply_dmap->dm_segs[0].ds_addr;
@@ -198,32 +197,32 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
 	error = bus_dmamem_alloc(mpt->sc_dmat, MPT_REQ_MEM_SIZE(mpt),
 	    PAGE_SIZE, 0, &request_seg, 1, &request_rseg, 0);
 	if (error) {
-		aprint_error("%s: unable to allocate request area, "
-		    "error = %d\n", mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to allocate request area, "
+		    "error = %d\n", error);
 		goto fail_4;
 	}
 
 	error = bus_dmamem_map(mpt->sc_dmat, &request_seg, request_rseg,
 	    MPT_REQ_MEM_SIZE(mpt), (void **) &mpt->request, 0);
 	if (error) {
-		aprint_error("%s: unable to map request area, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to map request area, error = %d\n",
+		    error);
 		goto fail_5;
 	}
 
 	error = bus_dmamap_create(mpt->sc_dmat, MPT_REQ_MEM_SIZE(mpt), 1,
 	    MPT_REQ_MEM_SIZE(mpt), 0, 0, &mpt->request_dmap);
 	if (error) {
-		aprint_error("%s: unable to create request DMA map, "
-		    "error = %d\n", mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to create request DMA map, "
+		    "error = %d\n", error);
 		goto fail_6;
 	}
 
 	error = bus_dmamap_load(mpt->sc_dmat, mpt->request_dmap, mpt->request,
 	    MPT_REQ_MEM_SIZE(mpt), NULL, 0);
 	if (error) {
-		aprint_error("%s: unable to load request DMA map, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to load request DMA map, error = %d\n",
+		    error);
 		goto fail_7;
 	}
 	mpt->request_phys = mpt->request_dmap->dm_segs[0].ds_addr;
@@ -249,8 +248,8 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
 		error = bus_dmamap_create(mpt->sc_dmat, MAXPHYS,
 		    MPT_SGL_MAX, MAXPHYS, 0, 0, &req->dmap);
 		if (error) {
-			aprint_error("%s: unable to create req %d DMA map, "
-			    "error = %d\n", mpt->sc_dev.dv_xname, i, error);
+			aprint_error_dev(&mpt->sc_dev, "unable to create req %d DMA map, "
+			    "error = %d\n", i, error);
 			goto fail_8;
 		}
 	}
@@ -321,7 +320,7 @@ mpt_prt(mpt_softc_t *mpt, const char *fmt, ...)
 {
 	va_list ap;
 
-	printf("%s: ", mpt->sc_dev.dv_xname);
+	printf("%s: ", device_xname(&mpt->sc_dev));
 	va_start(ap, fmt);
 	vprintf(fmt, ap);
 	va_end(ap);
@@ -413,7 +412,7 @@ mpt_done(mpt_softc_t *mpt, uint32_t reply)
 			uint32_t *pReply = (uint32_t *) mpt_reply;
 
 			mpt_prt(mpt, "Address Reply (index %u):",
-			    mpt_reply->MsgContext & 0xffff);
+			    le32toh(mpt_reply->MsgContext) & 0xffff);
 			mpt_prt(mpt, "%08x %08x %08x %08x",
 			    pReply[0], pReply[1], pReply[2], pReply[3]);
 			mpt_prt(mpt, "%08x %08x %08x %08x",
@@ -421,7 +420,7 @@ mpt_done(mpt_softc_t *mpt, uint32_t reply)
 			mpt_prt(mpt, "%08x %08x %08x %08x",
 			    pReply[8], pReply[9], pReply[10], pReply[11]);
 		}
-		index = mpt_reply->MsgContext;
+		index = le32toh(mpt_reply->MsgContext);
 	}
 
 	/*
@@ -534,7 +533,7 @@ mpt_done(mpt_softc_t *mpt, uint32_t reply)
 	}
 
 	xs->status = mpt_reply->SCSIStatus;
-	switch (mpt_reply->IOCStatus) {
+	switch (le16toh(mpt_reply->IOCStatus)) {
 	case MPI_IOCSTATUS_SCSI_DATA_OVERRUN:
 		xs->error = XS_DRIVER_STUFFUP;
 		break;
@@ -547,7 +546,7 @@ mpt_done(mpt_softc_t *mpt, uint32_t reply)
 		 * that returns status should probably be a status
 		 * error as well.
 		 */
-		xs->resid = xs->datalen - mpt_reply->TransferCount;
+		xs->resid = xs->datalen - le32toh(mpt_reply->TransferCount);
 		if (mpt_reply->SCSIState &
 		    MPI_SCSI_STATE_NO_SCSI_STATUS) {
 			xs->error = XS_DRIVER_STUFFUP;
@@ -684,7 +683,7 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 	 * We use the message context to find the request structure when
 	 * we get the command completion interrupt from the IOC.
 	 */
-	mpt_req->MsgContext = req->index;
+	mpt_req->MsgContext = htole32(req->index);
 
 	/* Which physical device to do the I/O on. */
 	mpt_req->TargetID = periph->periph_target;
@@ -736,12 +735,14 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 			     (1 << periph->periph_target)) == 0))
 		mpt_req->Control |= MPI_SCSIIO_CONTROL_NO_DISCONNECT;
 
+	mpt_req->Control = htole32(mpt_req->Control);
+
 	/* Copy the SCSI command block into place. */
 	memcpy(mpt_req->CDB, xs->cmd, xs->cmdlen);
 
 	mpt_req->CDBLength = xs->cmdlen;
-	mpt_req->DataLength = xs->datalen;
-	mpt_req->SenseBufferLowAddr = req->sense_pbuf;
+	mpt_req->DataLength = htole32(xs->datalen);
+	mpt_req->SenseBufferLowAddr = htole32(req->sense_pbuf);
 
 	/*
 	 * Map the DMA transfer.
@@ -782,8 +783,6 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 			SGE_CHAIN32 *ce;
 
 			seg = 0;
-
-			mpt_req->DataLength = xs->datalen;
 			flags = MPI_SGE_FLAGS_SIMPLE_ELEMENT;
 			if (xs->xs_control & XS_CTL_DATA_OUT)
 				flags |= MPI_SGE_FLAGS_HOST_TO_IOC;
@@ -794,13 +793,15 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 				uint32_t tf;
 
 				memset(se, 0, sizeof(*se));
-				se->Address = req->dmap->dm_segs[seg].ds_addr;
+				se->Address =
+				    htole32(req->dmap->dm_segs[seg].ds_addr);
 				MPI_pSGE_SET_LENGTH(se,
 				    req->dmap->dm_segs[seg].ds_len);
 				tf = flags;
 				if (i == MPT_NSGL_FIRST(mpt) - 2)
 					tf |= MPI_SGE_FLAGS_LAST_ELEMENT;
 				MPI_pSGE_SET_FLAGS(se, tf);
+				se->FlagsLength = htole32(se->FlagsLength);
 				nleft--;
 			}
 
@@ -825,23 +826,23 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 					ntodo = MPT_NSGL(mpt) - 1;
 					ce->NextChainOffset = (MPT_RQSL(mpt) -
 					    sizeof(SGE_SIMPLE32)) >> 2;
-					ce->Length = MPT_NSGL(mpt)
-						* sizeof(SGE_SIMPLE32);
+					ce->Length = htole16(MPT_NSGL(mpt)
+						* sizeof(SGE_SIMPLE32));
 				} else {
 					ntodo = nleft;
 					ce->NextChainOffset = 0;
-					ce->Length = ntodo
-						* sizeof(SGE_SIMPLE32);
+					ce->Length = htole16(ntodo
+						* sizeof(SGE_SIMPLE32));
 				}
-				ce->Address = req->req_pbuf +
-				    ((char *)se - (char *)mpt_req);
+				ce->Address = htole32(req->req_pbuf +
+				    ((char *)se - (char *)mpt_req));
 				ce->Flags = MPI_SGE_FLAGS_CHAIN_ELEMENT;
 				for (i = 0; i < ntodo; i++, se++, seg++) {
 					uint32_t tf;
 
 					memset(se, 0, sizeof(*se));
-					se->Address =
-					    req->dmap->dm_segs[seg].ds_addr;
+					se->Address = htole32(
+					    req->dmap->dm_segs[seg].ds_addr);
 					MPI_pSGE_SET_LENGTH(se,
 					    req->dmap->dm_segs[seg].ds_len);
 					tf = flags;
@@ -855,6 +856,8 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 						}
 					}
 					MPI_pSGE_SET_FLAGS(se, tf);
+					se->FlagsLength =
+					    htole32(se->FlagsLength);
 					nleft--;
 				}
 			}
@@ -867,7 +870,6 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 			int i;
 			uint32_t flags;
 
-			mpt_req->DataLength = xs->datalen;
 			flags = MPI_SGE_FLAGS_SIMPLE_ELEMENT;
 			if (xs->xs_control & XS_CTL_DATA_OUT)
 				flags |= MPI_SGE_FLAGS_HOST_TO_IOC;
@@ -879,7 +881,8 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 				uint32_t tf;
 
 				memset(se, 0, sizeof(*se));
-				se->Address = req->dmap->dm_segs[i].ds_addr;
+				se->Address =
+				    htole32(req->dmap->dm_segs[i].ds_addr);
 				MPI_pSGE_SET_LENGTH(se,
 				    req->dmap->dm_segs[i].ds_len);
 				tf = flags;
@@ -890,6 +893,7 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 					    MPI_SGE_FLAGS_END_OF_LIST;
 				}
 				MPI_pSGE_SET_FLAGS(se, tf);
+				se->FlagsLength = htole32(se->FlagsLength);
 			}
 			bus_dmamap_sync(mpt->sc_dmat, req->dmap, 0,
 			    req->dmap->dm_mapsize,
@@ -907,6 +911,7 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 		MPI_pSGE_SET_FLAGS(se,
 		    (MPI_SGE_FLAGS_LAST_ELEMENT | MPI_SGE_FLAGS_END_OF_BUFFER |
 		     MPI_SGE_FLAGS_SIMPLE_ELEMENT | MPI_SGE_FLAGS_END_OF_LIST));
+		se->FlagsLength = htole32(se->FlagsLength);
 	}
 
 	if (mpt->verbose > 1)
@@ -992,6 +997,7 @@ mpt_set_xfer_mode(mpt_softc_t *mpt, struct scsipi_xfer_mode *xm)
 		tmp.RequestedParameters |= np;
 	}
 
+	host2mpt_config_page_scsi_device_1(&tmp);
 	if (mpt_write_cfg_page(mpt, xm->xm_target, &tmp.Header)) {
 		mpt_prt(mpt, "unable to write Device Page 1");
 		return;
@@ -1002,6 +1008,7 @@ mpt_set_xfer_mode(mpt_softc_t *mpt, struct scsipi_xfer_mode *xm)
 		return;
 	}
 
+	mpt2host_config_page_scsi_device_1(&tmp);
 	mpt->mpt_dev_page1[xm->xm_target] = tmp;
 	if (mpt->verbose > 1) {
 		mpt_prt(mpt,
@@ -1027,10 +1034,12 @@ mpt_get_xfer_mode(mpt_softc_t *mpt, struct scsipi_periph *periph)
 	int period, offset;
 
 	tmp = mpt->mpt_dev_page0[periph->periph_target];
+	host2mpt_config_page_scsi_device_0(&tmp);
 	if (mpt_read_cfg_page(mpt, periph->periph_target, &tmp.Header)) {
 		mpt_prt(mpt, "unable to read Device Page 0");
 		return;
 	}
+	mpt2host_config_page_scsi_device_0(&tmp);
 
 	if (mpt->verbose > 1) {
 		mpt_prt(mpt,
@@ -1086,7 +1095,7 @@ mpt_ctlop(mpt_softc_t *mpt, void *vmsg, uint32_t reply)
 	case MPI_FUNCTION_PORT_ENABLE:
 	    {
 		MSG_PORT_ENABLE_REPLY *msg = vmsg;
-		int index = msg->MsgContext & ~0x80000000;
+		int index = le32toh(msg->MsgContext) & ~0x80000000;
 		if (mpt->verbose > 1)
 			mpt_prt(mpt, "enable port reply index %d", index);
 		if (index >= 0 && index < MPT_MAX_REQUESTS(mpt)) {
@@ -1100,7 +1109,7 @@ mpt_ctlop(mpt_softc_t *mpt, void *vmsg, uint32_t reply)
 	case MPI_FUNCTION_CONFIG:
 	    {
 		MSG_CONFIG_REPLY *msg = vmsg;
-		int index = msg->MsgContext & ~0x80000000;
+		int index = le32toh(msg->MsgContext) & ~0x80000000;
 		if (index >= 0 && index < MPT_MAX_REQUESTS(mpt)) {
 			request_t *req = &mpt->request_pool[index];
 			req->debug = REQ_DONE;
@@ -1119,7 +1128,7 @@ static void
 mpt_event_notify_reply(mpt_softc_t *mpt, MSG_EVENT_NOTIFY_REPLY *msg)
 {
 
-	switch (msg->Event) {
+	switch (le32toh(msg->Event)) {
 	case MPI_EVENT_LOG_DATA:
 	    {
 		int i;
@@ -1129,7 +1138,7 @@ mpt_event_notify_reply(mpt_softc_t *mpt, MSG_EVENT_NOTIFY_REPLY *msg)
 		mpt_prt(mpt, "EvtLogData: Event Data:");
 		for (i = 0; i < msg->EventDataLength; i++) {
 			if ((i % 4) == 0)
-				printf("%s:\t", mpt->sc_dev.dv_xname);
+				printf("%s:\t", device_xname(&mpt->sc_dev));
 			printf("0x%08x%c", msg->Data[i],
 			    ((i % 4) == 3) ? '\n' : ' ');
 		}
@@ -1309,7 +1318,7 @@ mpt_event_notify_reply(mpt_softc_t *mpt, MSG_EVENT_NOTIFY_REPLY *msg)
 		ackp->Function = MPI_FUNCTION_EVENT_ACK;
 		ackp->Event = msg->Event;
 		ackp->EventContext = msg->EventContext;
-		ackp->MsgContext = req->index | 0x80000000;
+		ackp->MsgContext = htole32(req->index | 0x80000000);
 		mpt_check_doorbell(mpt);
 		mpt_send_cmd(mpt, req);
 	}

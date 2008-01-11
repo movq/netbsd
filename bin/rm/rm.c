@@ -1,4 +1,4 @@
-/* $NetBSD: rm.c,v 1.46 2007/06/24 17:59:31 christos Exp $ */
+/* $NetBSD: rm.c,v 1.49 2009/02/14 08:05:04 lukem Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993, 1994, 2003
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rm.c	8.8 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: rm.c,v 1.46 2007/06/24 17:59:31 christos Exp $");
+__RCSID("$NetBSD: rm.c,v 1.49 2009/02/14 08:05:04 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -126,8 +126,11 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-	if (argc < 1)
+	if (argc < 1) {
+		if (fflag)
+			return 0;
 		usage();
+	}
 
 	checkdot(argv);
 
@@ -168,9 +171,8 @@ rm_tree(char **argv)
 		flags |= FTS_NOSTAT;
 	if (Wflag)
 		flags |= FTS_WHITEOUT;
-	if (!(fts = fts_open(argv, flags,
-	    (int (*)(const FTSENT **, const FTSENT **))NULL)))
-		err(1, NULL);
+	if ((fts = fts_open(argv, flags, NULL)) == NULL)
+		err(1, "fts_open failed");
 	while ((p = fts_read(fts)) != NULL) {
 	
 		switch (p->fts_info) {
@@ -394,7 +396,7 @@ rm_overwrite(char *file, struct stat *sbp)
 
 #define	WRITE_PASS(mode, byte) do {					\
 	off_t len;							\
-	int wlen, i;							\
+	size_t wlen, i;							\
 	char buf[8 * 1024];						\
 									\
 	if (fsync(fd) || lseek(fd, (off_t)0, SEEK_SET))			\
@@ -408,8 +410,8 @@ rm_overwrite(char *file, struct stat *sbp)
 			    i+= sizeof(u_int32_t))			\
 				*(int *)(buf + i) = arc4random();	\
 		}							\
-		wlen = len < sizeof(buf) ? len : sizeof(buf);		\
-		if (write(fd, buf, wlen) != wlen)			\
+		wlen = len < (off_t)sizeof(buf) ? (size_t)len : sizeof(buf); \
+		if ((size_t)write(fd, buf, wlen) != wlen)		\
 			goto err;					\
 	}								\
 	sync();		/* another poke at hidden caches */		\
@@ -417,7 +419,7 @@ rm_overwrite(char *file, struct stat *sbp)
 
 #define READ_PASS(byte) do {						\
 	off_t len;							\
-	int rlen;							\
+	size_t rlen;							\
 	char pattern[8 * 1024];						\
 	char buf[8 * 1024];						\
 									\
@@ -426,8 +428,8 @@ rm_overwrite(char *file, struct stat *sbp)
 									\
 	memset(pattern, byte, sizeof(pattern));				\
 	for(len = sbp->st_size; len > 0; len -= rlen) {			\
-		rlen = len < sizeof(buf) ? len : sizeof(buf);		\
-		if(read(fd, buf, rlen) != rlen)				\
+		rlen = len < (off_t)sizeof(buf) ? (size_t)len : sizeof(buf); \
+		if((size_t)read(fd, buf, rlen) != rlen)			\
 			goto err;					\
 		if(memcmp(buf, pattern, rlen))				\
 			goto err;					\

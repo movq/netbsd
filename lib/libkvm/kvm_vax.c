@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_vax.c,v 1.16 2003/08/07 16:44:40 agc Exp $ */
+/*	$NetBSD: kvm_vax.c,v 1.18 2010/09/20 23:23:16 jym Exp $ */
 
 /*-
  * Copyright (c) 1992, 1993
@@ -44,6 +44,8 @@
 #include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+
 #include <unistd.h>
 #include <nlist.h>
 #include <stdlib.h>
@@ -64,16 +66,14 @@ struct vmstate {
 };
 
 void
-_kvm_freevtop(kd)
-	kvm_t *kd;
+_kvm_freevtop(kvm_t *kd)
 {
 	if (kd->vmst != 0)
 		free(kd->vmst);
 }
 
 int
-_kvm_initvtop(kd)
-	kvm_t *kd;
+_kvm_initvtop(kvm_t *kd)
 {
 	struct vmstate *vm;
 	struct stat st;
@@ -109,21 +109,20 @@ _kvm_initvtop(kd)
  * physical address.  This routine is used only for crash dumps.
  */
 int
-_kvm_kvatop(kd, va, pa)
-	kvm_t *kd;
-	u_long va;
-	u_long *pa;
+_kvm_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 {
 	u_long end;
 
 	if (va < (u_long) KERNBASE) {
-		_kvm_err(kd, 0, "invalid address (%lx<%lx)", va, (u_long) KERNBASE);
+		_kvm_err(kd, 0, "invalid address (%#"PRIxVADDR"<%lx)", va,
+		    (u_long)KERNBASE);
 		return (0);
 	}
 
 	end = kd->vmst->end;
 	if (va >= end) {
-		_kvm_err(kd, 0, "invalid address (%lx>=%lx)", va, end);
+		_kvm_err(kd, 0, "invalid address (%#"PRIxVADDR"<%lx)", va,
+		    end);
 		return (0);
 	}
 
@@ -136,9 +135,7 @@ _kvm_kvatop(kd, va, pa)
  * XXX - crash dump doesn't work anyway.
  */
 off_t
-_kvm_pa2off(kd, pa)
-	kvm_t   *kd;
-	u_long  pa;
+_kvm_pa2off(kvm_t *kd, paddr_t pa)
 {
 	return(kd->dump_off + pa);
 }
@@ -150,8 +147,7 @@ _kvm_pa2off(kd, pa)
  * have to deal with these NOT being constants!  (i.e. m68k)
  */
 int
-_kvm_mdopen(kd)
-	kvm_t	*kd;
+_kvm_mdopen(kvm_t *kd)
 {
 
 	kd->usrstack = USRSTACK;

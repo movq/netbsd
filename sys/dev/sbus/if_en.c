@@ -1,7 +1,6 @@
-/*	$NetBSD: if_en.c,v 1.22 2007/10/19 12:01:11 ad Exp $	*/
+/*	$NetBSD: if_en.c,v 1.28 2011/02/01 19:50:04 chuck Exp $	*/
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *	Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_en.c,v 1.22 2007/10/19 12:01:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_en.c,v 1.28 2011/02/01 19:50:04 chuck Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,18 +62,17 @@ __KERNEL_RCSID(0, "$NetBSD: if_en.c,v 1.22 2007/10/19 12:01:11 ad Exp $");
  */
 struct en_sbus_softc {
 	/* bus independent stuff */
-	struct en_softc	esc;		/* includes "device" structure */
+	struct en_softc	sc_en;		/* includes "device" structure */
 
 	/* sbus glue */
-	struct sbusdev	sc_sd;		/* sbus device */
 };
 
 
 /*
  * prototypes
  */
-static	int en_sbus_match(struct device *, struct cfdata *, void *);
-static	void en_sbus_attach(struct device *, struct device *, void *);
+static	int en_sbus_match(device_t, cfdata_t, void *);
+static	void en_sbus_attach(device_t, device_t, void *);
 
 /*
  * SBus autoconfig attachments
@@ -96,11 +88,7 @@ CFATTACH_DECL(en_sbus, sizeof(struct en_sbus_softc),
  */
 
 static int
-en_sbus_match(parent, cf, aux)
-	struct device *parent;
-        struct cfdata *cf;
-	void *aux;
-
+en_sbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -120,14 +108,11 @@ en_sbus_match(parent, cf, aux)
 
 
 static void
-en_sbus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
-
+en_sbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
-	struct en_softc *sc = (void *)self;
-	struct en_sbus_softc *scs = (void *)self;
+	struct en_sbus_softc *ssc = device_private(self);
+	struct en_softc *sc = &ssc->sc_en;
 
 	printf("\n");
 
@@ -136,7 +121,7 @@ en_sbus_attach(parent, self, aux)
 			 sa->sa_offset,
 			 4*1024*1024,
 			 0, &sc->en_base) != 0) {
-		printf("%s: cannot map registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map registers\n");
 		return;
 	}
 
@@ -146,8 +131,6 @@ en_sbus_attach(parent, self, aux)
 					 IPL_NET, en_intr, sc);
 
 	sc->ipl = sa->sa_pri;	/* appropriate? */
-
-	sbus_establish(&scs->sc_sd, &sc->sc_dev);
 
 	/*
 	 * done SBUS specific stuff

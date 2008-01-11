@@ -1,4 +1,4 @@
-/*	$NetBSD: mdreloc.c,v 1.41 2007/02/23 01:17:11 matt Exp $	*/
+/*	$NetBSD: mdreloc.c,v 1.52 2011/03/30 08:37:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 Eduardo Horvath.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.41 2007/02/23 01:17:11 matt Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.52 2011/03/30 08:37:52 martin Exp $");
 #endif /* not lint */
 
 #include <errno.h>
@@ -47,7 +40,6 @@ __RCSID("$NetBSD: mdreloc.c,v 1.41 2007/02/23 01:17:11 matt Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/stat.h>
 
 #include "rtldenv.h"
 #include "debug.h"
@@ -75,7 +67,7 @@ __RCSID("$NetBSD: mdreloc.c,v 1.41 2007/02/23 01:17:11 matt Exp $");
 #define _RF_U		0x04000000		/* Unaligned */
 #define _RF_SZ(s)	(((s) & 0xff) << 8)	/* memory target size */
 #define _RF_RS(s)	( (s) & 0xff)		/* right shift */
-static const int reloc_target_flags[] = {
+static const int reloc_target_flags[R_TYPE(TLS_TPOFF64)+1] = {
 	0,							/* NONE */
 	_RF_S|_RF_A|		_RF_SZ(8)  | _RF_RS(0),		/* RELOC_8 */
 	_RF_S|_RF_A|		_RF_SZ(16) | _RF_RS(0),		/* RELOC_16 */
@@ -133,6 +125,7 @@ static const int reloc_target_flags[] = {
 	_RF_S|_RF_A|		_RF_SZ(64) | _RF_RS(0),		/* REGISTER */
 	_RF_S|_RF_A|	_RF_U|	_RF_SZ(64) | _RF_RS(0),		/* UA64 */
 	_RF_S|_RF_A|	_RF_U|	_RF_SZ(16) | _RF_RS(0),		/* UA16 */
+/* TLS relocs not represented here! */
 };
 
 #ifdef RTLD_DEBUG_RELOC
@@ -147,7 +140,13 @@ static const char *reloc_names[] = {
 	"HM10", "LM22", "PC_HH22", "PC_HM10", "PC_LM22", 
 	"WDISP16", "WDISP19", "GLOB_JMP", "7", "5", "6",
 	"DISP64", "PLT64", "HIX22", "LOX10", "H44", "M44", 
-	"L44", "REGISTER", "UA64", "UA16"
+	"L44", "REGISTER", "UA64", "UA16",
+	"TLS_GD_HI22", "TLS_GD_LO10", "TLS_GD_ADD", "TLS_GD_CALL",
+	"TLS_LDM_HI22", "TLS_LDM_LO10", "TLS_LDM_ADD", "TLS_LDM_CALL",
+	"TLS_LDO_HIX22", "TLS_LDO_LOX10", "TLS_LDO_ADD", "TLS_IE_HI22", 
+	"TLS_IE_LO10", "TLS_IE_LD", "TLS_IE_LDX", "TLS_IE_ADD", "TLS_LE_HIX22", 
+	"TLS_LE_LOX10", "TLS_DTPMOD32", "TLS_DTPMOD64", "TLS_DTPOFF32", 
+	"TLS_DTPOFF64", "TLS_TPOFF32", "TLS_TPOFF64",
 };
 #endif
 
@@ -158,6 +157,7 @@ static const char *reloc_names[] = {
 #define RELOC_USE_ADDEND(t)		((reloc_target_flags[t] & _RF_A) != 0)
 #define RELOC_TARGET_SIZE(t)		((reloc_target_flags[t] >> 8) & 0xff)
 #define RELOC_VALUE_RIGHTSHIFT(t)	(reloc_target_flags[t] & 0xff)
+#define RELOC_TLS(t)			(t >= R_TYPE(TLS_GD_HI22))
 
 static const long reloc_target_bitmask[] = {
 #define _BM(x)	(~(-(1ULL << (x))))
@@ -296,7 +296,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 			break;
 		}
 	}
-	relalim = (const Elf_Rela *)((caddr_t)rela + relasz);
+	relalim = (const Elf_Rela *)((const uint8_t *)rela + relasz);
 	for (; rela < relalim; rela++) {
 		where = (Elf_Addr *)(relocbase + rela->r_offset);
 		*where = (Elf_Addr)(relocbase + rela->r_addend);
@@ -304,7 +304,7 @@ _rtld_relocate_nonplt_self(Elf_Dyn *dynp, Elf_Addr relocbase)
 }
 
 int
-_rtld_relocate_nonplt_objects(const Obj_Entry *obj)
+_rtld_relocate_nonplt_objects(Obj_Entry *obj)
 {
 	const Elf_Rela *rela;
 	const Elf_Sym *def = NULL;
@@ -333,12 +333,72 @@ _rtld_relocate_nonplt_objects(const Obj_Entry *obj)
 
 		/*
 		 * We use the fact that relocation types are an `enum'
-		 * Note: R_SPARC_UA16 is currently numerically largest.
+		 * Note: R_SPARC_TLS_TPOFF64 is currently numerically largest.
 		 */
-		if (type > R_TYPE(UA16))
+		if (type > R_TYPE(TLS_TPOFF64))
 			return (-1);
 
 		value = rela->r_addend;
+
+		/*
+		 * Handle TLS relocations here, they are different.
+		 */
+		if (RELOC_TLS(type)) {
+			switch (type) {
+				case R_TYPE(TLS_DTPMOD64):
+					def = _rtld_find_symdef(symnum, obj,
+					    &defobj, false);
+					if (def == NULL)
+						return -1;
+
+					*where = (Elf64_Addr)defobj->tlsindex;
+
+					rdbg(("TLS_DTPMOD64 %s in %s --> %p",
+					    obj->strtab +
+					    obj->symtab[symnum].st_name,
+					    obj->path, (void *)*where));
+
+					break;
+
+				case R_TYPE(TLS_DTPOFF64):
+					def = _rtld_find_symdef(symnum, obj,
+					    &defobj, false);
+					if (def == NULL)
+						return -1;
+
+					*where = (Elf64_Addr)(def->st_value
+					    + rela->r_addend);
+
+					rdbg(("DTPOFF64 %s in %s --> %p",
+					    obj->strtab +
+					        obj->symtab[symnum].st_name,
+					    obj->path, (void *)*where));
+
+					break;
+
+				case R_TYPE(TLS_TPOFF64):
+					def = _rtld_find_symdef(symnum, obj,
+					    &defobj, false);
+					if (def == NULL)
+						return -1;
+
+					if (!defobj->tls_done &&
+						_rtld_tls_offset_allocate(obj))
+						     return -1;
+
+					*where = (Elf64_Addr)(def->st_value -
+			                            defobj->tlsoffset +
+						    rela->r_addend);
+
+		                        rdbg(("TLS_TPOFF64 %s in %s --> %p",
+		                            obj->strtab +
+					    obj->symtab[symnum].st_name,
+		                            obj->path, (void *)*where));
+
+	                		break;
+			}
+			continue;
+		}
 
 		/*
 		 * Handle relative relocs here, as an optimization.
@@ -479,9 +539,11 @@ _rtld_bind(const Obj_Entry *obj, Elf_Word reloff)
 		rela -= 4;
 	}
 
+	_rtld_shared_enter();
 	err = _rtld_relocate_plt_object(obj, rela, &result);
 	if (err)
 		_rtld_die();
+	_rtld_shared_exit();
 
 	return (caddr_t)result;
 }
@@ -512,29 +574,30 @@ _rtld_relocate_plt_objects(const Obj_Entry *obj)
  * _rtld_bind
  */
 static inline int
-_rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *tp)
+_rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela,
+    Elf_Addr *tp)
 {
 	Elf_Word *where = (Elf_Word *)(obj->relocbase + rela->r_offset);
 	const Elf_Sym *def;
 	const Obj_Entry *defobj;
 	Elf_Addr value, offset;
+	unsigned long info = rela->r_info;
 
-	/* Fully resolve procedure addresses now */
+	assert(ELF_R_TYPE(info) == R_TYPE(JMP_SLOT));
 
-	assert(ELF_R_TYPE(rela->r_info) == R_TYPE(JMP_SLOT));
-
-	def = _rtld_find_symdef(ELF_R_SYM(rela->r_info), obj, &defobj, true);
-	if (def == NULL)
+	def = _rtld_find_plt_symdef(ELF_R_SYM(info), obj, &defobj, tp != NULL);
+	if (__predict_false(def == NULL))
 		return -1;
+	if (__predict_false(def == &_rtld_sym_zero))
+		return 0;
 
 	value = (Elf_Addr)(defobj->relocbase + def->st_value);
 	rdbg(("bind now/fixup in %s --> new=%p", 
 	    defobj->strtab + def->st_name, (void *)value));
 
 	/*
-	 * At the PLT entry pointed at by `where', we now construct
-	 * a direct transfer to the now fully resolved function
-	 * address.
+	 * At the PLT entry pointed at by `where', we now construct a direct
+	 * transfer to the now fully resolved function address.
 	 *
 	 * A PLT entry is supposed to start by looking like this:
 	 *
@@ -547,27 +610,26 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *
 	 *	nop
 	 *	nop
 	 *
-	 * When we replace these entries we start from the second
-	 * entry and do it in reverse order so the last thing we
-	 * do is replace the branch.  That allows us to change this
-	 * atomically.
+	 * When we replace these entries we start from the last instruction
+	 * and do it in reverse order so the last thing we do is replace the
+	 * branch.  That allows us to change this atomically.
 	 *
-	 * We now need to find out how far we need to jump.  We
-	 * have a choice of several different relocation techniques
-	 * which are increasingly expensive.
+	 * We now need to find out how far we need to jump.  We have a choice
+	 * of several different relocation techniques which are increasingly
+	 * expensive.
 	 */
 
 	offset = ((Elf_Addr)where) - value;
 	if (rela->r_addend) {
 		Elf_Addr *ptr = (Elf_Addr *)where;
 		/*
-		 * This entry is >=32768.  The relocations points to a
+		 * This entry is >= 32768.  The relocations points to a
 		 * PC-relative pointer to the bind_0 stub at the top of the
 		 * PLT section.  Update it to point to the target function.
 		 */
 		ptr[0] += value - (Elf_Addr)obj->pltgot;
 
-	} else if (offset <= (1L<<20) && offset >= -(1L<<20)) {
+	} else if (offset <= (1L<<20) && (Elf_SOff)offset >= -(1L<<20)) {
 		/* 
 		 * We're within 1MB -- we can use a direct branch insn.
 		 *
@@ -583,9 +645,9 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *
 		 *	nop
 		 *
 		 */
-		where[1] = BAA | ((offset >> 2) &0x3fffff);
+		where[1] = BAA | ((offset >> 2) & 0x3fffff);
 		__asm volatile("iflush %0+4" : : "r" (where));
-	} else if (value >= 0 && value < (1L<<32)) {
+	} else if (value < (1L<<32)) {
 		/* 
 		 * We're within 32-bits of address zero.
 		 *
@@ -606,7 +668,7 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *
 		__asm volatile("iflush %0+8" : : "r" (where));
 		__asm volatile("iflush %0+4" : : "r" (where));
 
-	} else if (value <= 0 && value > -(1L<<32)) {
+	} else if ((Elf_SOff)value <= 0 && (Elf_SOff)value > -(1L<<32)) {
 		/* 
 		 * We're within 32-bits of address -1.
 		 *
@@ -629,7 +691,7 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *
 		__asm volatile("iflush %0+8" : : "r" (where));
 		__asm volatile("iflush %0+4" : : "r" (where));
 
-	} else if (offset <= (1L<<32) && offset >= -((1L<<32) - 4)) {
+	} else if (offset <= (1L<<32) && (Elf_SOff)offset >= -((1L<<32) - 4)) {
 		/* 
 		 * We're within 32-bits -- we can use a direct call insn 
 		 *
@@ -652,7 +714,7 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *
 		__asm volatile("iflush %0+8" : : "r" (where));
 		__asm volatile("iflush %0+4" : : "r" (where));
 
-	} else if (offset >= 0 && offset < (1L<<44)) {
+	} else if (offset < (1L<<44)) {
 		/* 
 		 * We're within 44 bits.  We can generate this pattern:
 		 *
@@ -677,7 +739,7 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela, Elf_Addr *
 		__asm volatile("iflush %0+8" : : "r" (where));
 		__asm volatile("iflush %0+4" : : "r" (where));
 
-	} else if (offset < 0 && offset > -(1L<<44)) {
+	} else if ((Elf_SOff)offset < 0 && (Elf_SOff)offset > -(1L<<44)) {
 		/* 
 		 * We're within 44 bits.  We can generate this pattern:
 		 *

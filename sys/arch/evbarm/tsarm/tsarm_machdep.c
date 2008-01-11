@@ -1,4 +1,4 @@
-/*	$NetBSD: tsarm_machdep.c,v 1.5 2006/11/24 22:04:22 wiz Exp $	*/
+/*	$NetBSD: tsarm_machdep.c,v 1.14 2009/12/26 16:01:25 uebayasi Exp $ */
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsarm_machdep.c,v 1.5 2006/11/24 22:04:22 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsarm_machdep.c,v 1.14 2009/12/26 16:01:25 uebayasi Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -127,7 +127,6 @@ __KERNEL_RCSID(0, "$NetBSD: tsarm_machdep.c,v 1.5 2006/11/24 22:04:22 wiz Exp $"
 
 #include <evbarm/tsarm/tsarmreg.h>
 
-#include "opt_ipkdb.h"
 #include "ksyms.h"
 
 /* Kernel text starts 2MB in from the bottom of the kernel address space. */
@@ -151,11 +150,7 @@ u_int cpu_reset_address = 0x00000000;
 /* Define various stack sizes in pages */
 #define IRQ_STACK_SIZE	8
 #define ABT_STACK_SIZE	8
-#ifdef IPKDB
-#define UND_STACK_SIZE	16
-#else
 #define UND_STACK_SIZE	8
-#endif
 
 struct bootconfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
@@ -167,10 +162,8 @@ vm_offset_t physical_freeend;
 vm_offset_t physical_freeend_low;
 vm_offset_t physical_end;
 u_int free_pages;
-int physmem = 0;
 
 /* Physical and virtual addresses for some global pages */
-pv_addr_t systempage;
 pv_addr_t irqstack;
 pv_addr_t undstack;
 pv_addr_t abtstack;
@@ -203,8 +196,6 @@ extern int pmap_debug_level;
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
-
-struct user *proc0paddr;
 
 /* Prototypes */
 
@@ -263,6 +254,7 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("\r\n");
 		printf("The operating system has halted.\r\n");
 		printf("Please press any key to reboot.\r\n");
@@ -292,6 +284,8 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -402,7 +396,6 @@ initarm(void *arg)
 	int loop;
 	int loop1;
 	u_int l1pagetable;
-	pv_addr_t kernel_l1pt;
 	paddr_t memstart;
 	psize_t memsize;
 
@@ -531,8 +524,6 @@ initarm(void *arg)
 	memset((char *)(var), 0, ((np) * PAGE_SIZE));
 
 	loop1 = 0;
-	kernel_l1pt.pv_pa = 0;
-	kernel_l1pt.pv_va = 0;
 	for (loop = 0; loop <= NUM_KERNEL_PTS; ++loop) {
 		/* Are we 16KB aligned for an L1 ? */
 		if (((physical_freeend - L1_TABLE_SIZE) & (L1_TABLE_SIZE - 1)) == 0
@@ -687,7 +678,7 @@ initarm(void *arg)
 	printf("switching to new L1 page table  @%#lx...", kernel_l1pt.pv_pa);
 #endif
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -695,8 +686,7 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("done!\n");
@@ -782,8 +772,7 @@ initarm(void *arg)
 #ifdef VERBOSE_INIT_ARM
 	printf("pmap ");
 #endif
-	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 
 	/* Setup the IRQ system */
 #ifdef VERBOSE_INIT_ARM
@@ -806,18 +795,6 @@ initarm(void *arg)
 
 #ifdef BOOTHOWTO
 	boothowto = BOOTHOWTO;
-#endif
-
-#ifdef IPKDB
-	/* Initialise ipkdb */
-	ipkdb_init();
-	if (boothowto & RB_KDB)
-		ipkdb_connect(0);
-#endif
-
-#if NKSYMS || defined(DDB) || defined(LKM)
-	/* Firmware doesn't load symbols. */
-	ksyms_init(0, NULL, NULL);
 #endif
 
 #ifdef DDB

@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_32_stat.c,v 1.33 2008/01/08 22:13:07 elad Exp $	 */
+/*	$NetBSD: svr4_32_stat.c,v 1.36 2009/01/11 13:14:15 nakayama Exp $	 */
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_stat.c,v 1.33 2008/01/08 22:13:07 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_stat.c,v 1.36 2009/01/11 13:14:15 nakayama Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -179,7 +172,7 @@ svr4_32_sys_stat(struct lwp *l, const struct svr4_32_sys_stat_args *uap, registe
 	struct svr4_32_stat	svr4_st;
 	int			error;
 
-	error = do_sys_stat(l, SCARG(&cup, path), FOLLOW, &st);
+	error = do_sys_stat(SCARG(&cup, path), FOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -209,7 +202,7 @@ svr4_32_sys_lstat(struct lwp *l, const struct svr4_32_sys_lstat_args *uap, regis
 	struct svr4_32_stat	svr4_st;
 	int			error;
 
-	error = do_sys_stat(l, SCARG(&cup, path), NOFOLLOW, &st);
+	error = do_sys_stat(SCARG(&cup, path), NOFOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -239,7 +232,7 @@ svr4_32_sys_fstat(struct lwp *l, const struct svr4_32_sys_fstat_args *uap, regis
 	struct svr4_32_stat	svr4_st;
 	int			error;
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &st);
+	error = do_sys_fstat(SCARG(uap, fd), &st);
 	if (error != 0)
 		return error;
 
@@ -259,7 +252,7 @@ svr4_32_sys_xstat(struct lwp *l, const struct svr4_32_sys_xstat_args *uap, regis
 	int			error;
 	const char *path = SCARG_P32(uap, path);
 
-	error = do_sys_stat(l, path, FOLLOW, &st);
+	error = do_sys_stat(path, FOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -281,7 +274,7 @@ svr4_32_sys_lxstat(struct lwp *l, const struct svr4_32_sys_lxstat_args *uap, reg
 	int			error;
 	const char *path = SCARG_P32(uap, path);
 
-	error = do_sys_stat(l, path, NOFOLLOW, &st);
+	error = do_sys_stat(path, NOFOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -302,7 +295,7 @@ svr4_32_sys_fxstat(struct lwp *l, const struct svr4_32_sys_fxstat_args *uap, reg
 	struct svr4_32_xstat	svr4_st;
 	int			error;
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &st);
+	error = do_sys_fstat(SCARG(uap, fd), &st);
 	if (error != 0)
 		return error;
 
@@ -321,7 +314,7 @@ svr4_32_sys_stat64(struct lwp *l, const struct svr4_32_sys_stat64_args *uap, reg
 	int			error;
 	const char *path = SCARG_P32(uap, path);
 
-	error = do_sys_stat(l, path, FOLLOW, &st);
+	error = do_sys_stat(path, FOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -343,7 +336,7 @@ svr4_32_sys_lstat64(struct lwp *l, const struct svr4_32_sys_lstat64_args *uap, r
 	int			error;
 	const char *path = SCARG_P32(uap, path);
 
-	error = do_sys_stat(l, path, NOFOLLOW, &st);
+	error = do_sys_stat(path, NOFOLLOW, &st);
 	if (error != 0)
 		return error;
 
@@ -364,7 +357,7 @@ svr4_32_sys_fstat64(struct lwp *l, const struct svr4_32_sys_fstat64_args *uap, r
 	struct svr4_32_stat64	svr4_st;
 	int			error;
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &st);
+	error = do_sys_fstat(SCARG(uap, fd), &st);
 	if (error != 0)
 		return error;
 
@@ -620,11 +613,11 @@ svr4_32_sys_utime(struct lwp *l, const struct svr4_32_sys_utime_args *uap, regis
 int
 svr4_32_sys_utimes(struct lwp *l, const struct svr4_32_sys_utimes_args *uap, register_t *retval)
 {
-	struct sys_utimes_args ua;
+	struct compat_50_sys_utimes_args ua;
 	SCARG(&ua, path) = SCARG_P32(uap, path);
 	SCARG(&ua, tptr) = SCARG_P32(uap, tptr);
 
-	return sys_utimes(l, &ua, retval);
+	return compat_50_sys_utimes(l, &ua, retval);
 }
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: write.c,v 1.4 2005/12/11 12:17:00 christos Exp $	*/
+/*	$NetBSD: write.c,v 1.6 2009/03/14 21:04:06 dsl Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,10 +49,7 @@
  */
 
 int
-ahdi_writelabel (ptable, diskname, flags)
-	struct ahdi_ptable	*ptable;
-	char			*diskname;
-	int			 flags;
+ahdi_writelabel (struct ahdi_ptable *ptable, char *diskname, int flags)
 {
 	int			 fd, i, j, k, firstxgm, keep, cksum_ok;
 	struct ahdi_root	*root;
@@ -295,8 +285,7 @@ ahdi_writelabel (ptable, diskname, flags)
  * Write a bad sector list (empty).
  */
 int
-write_bsl (fd)
-	int	fd;
+write_bsl (int fd)
 {
 	u_int8_t	*bsl;
 
@@ -321,9 +310,7 @@ write_bsl (fd)
  * Otherwise this make take precedence when we next open the disk.
  */
 int
-invalidate_netbsd_label (fd, nbdsec)
-	int		 fd;
-	u_int32_t	nbdsec;
+invalidate_netbsd_label (int fd, u_int32_t nbdsec)
 {
 	struct bootblock	*bb;
 	u_int			 nsec;

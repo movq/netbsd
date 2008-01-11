@@ -1,4 +1,4 @@
-/*	$NetBSD: osf1_mount.c,v 1.39 2007/12/20 23:03:03 dsl Exp $	*/
+/*	$NetBSD: osf1_mount.c,v 1.47 2010/03/02 21:09:21 pooka Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,11 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_mount.c,v 1.39 2007/12/20 23:03:03 dsl Exp $");
-
-#if defined(_KERNEL_OPT)
-#include "fs_nfs.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: osf1_mount.c,v 1.47 2010/03/02 21:09:21 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -111,15 +107,14 @@ static int	osf1_mount_nfs(struct lwp *, const struct osf1_sys_mount_args *);
 int
 osf1_sys_fstatfs(struct lwp *l, const struct osf1_sys_fstatfs_args *uap, register_t *retval)
 {
-	struct proc *p = l->l_proc;
-	struct file *fp;
+	file_t *fp;
 	struct mount *mp;
 	struct statvfs *sp;
 	struct osf1_statfs osfs;
 	int error;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)))
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)))
 		return (error);
 	mp = ((struct vnode *)fp->f_data)->v_mount;
 	sp = &mp->mnt_stat;
@@ -130,7 +125,7 @@ osf1_sys_fstatfs(struct lwp *l, const struct osf1_sys_fstatfs_args *uap, registe
 	error = copyout(&osfs, SCARG(uap, buf), min(sizeof osfs,
 	    SCARG(uap, len)));
  out:
-	FILE_UNUSE(fp, l);
+ 	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -148,9 +143,12 @@ osf1_sys_getfsstat(struct lwp *l, const struct osf1_sys_getfsstat_args *uap, reg
 
 	maxcount = SCARG(uap, bufsize) / sizeof(struct osf1_statfs);
 	osf_sfsp = (void *)SCARG(uap, buf);
+	mutex_enter(&mountlist_lock);
 	for (count = 0, mp = mountlist.cqh_first; mp != (void *)&mountlist;
 	    mp = nmp) {
-		nmp = mp->mnt_list.cqe_next;
+		if (vfs_busy(mp, &nmp)) {
+			continue;
+		}
 		if (osf_sfsp && count < maxcount) {
 			sp = &mp->mnt_stat;
 			/*
@@ -160,17 +158,21 @@ osf1_sys_getfsstat(struct lwp *l, const struct osf1_sys_getfsstat_args *uap, reg
 			 */
 			if (((SCARG(uap, flags) & OSF1_MNT_NOWAIT) == 0 ||
 			    (SCARG(uap, flags) & OSF1_MNT_WAIT)) &&
-			    (error = VFS_STATVFS(mp, sp)))
-				continue;
-			sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
-			osf1_cvt_statfs_from_native(sp, &osfs);
-			if ((error = copyout(&osfs, osf_sfsp,
-			    sizeof (struct osf1_statfs))))
-				return (error);
-			osf_sfsp += sizeof (struct osf1_statfs);
+			    (error = VFS_STATVFS(mp, sp)) == 0) {
+				sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;
+				osf1_cvt_statfs_from_native(sp, &osfs);
+				if ((error = copyout(&osfs, osf_sfsp,
+				    sizeof (struct osf1_statfs)))) {
+				    	vfs_unbusy(mp, false, NULL);
+					return (error);
+				}
+				osf_sfsp += sizeof (struct osf1_statfs);
+			}
 		}
 		count++;
+		vfs_unbusy(mp, false, &nmp);
 	}
+	mutex_exit(&mountlist_lock);
 	if (osf_sfsp && count > maxcount)
 		*retval = maxcount;
 	else
@@ -207,15 +209,15 @@ osf1_sys_statfs(struct lwp *l, const struct osf1_sys_statfs_args *uap, register_
 	struct statvfs *sp;
 	struct osf1_statfs osfs;
 	int error;
-	struct nameidata nd;
+	struct vnode *vp;
 
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG(uap, path));
-	if ((error = namei(&nd)))
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_TRYEMULROOT, &vp);
+	if (error != 0)
 		return (error);
-	mp = nd.ni_vp->v_mount;
+	mp = vp->v_mount;
 	sp = &mp->mnt_stat;
-	vrele(nd.ni_vp);
+	vrele(vp);
 	if ((error = VFS_STATVFS(mp, sp)))
 		return (error);
 	sp->f_flag = mp->mnt_flag & MNT_VISFLAGMASK;

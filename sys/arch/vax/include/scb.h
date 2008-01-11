@@ -1,4 +1,4 @@
-/*	$NetBSD: scb.h,v 1.11 2000/07/10 09:14:34 ragge Exp $	*/
+/*	$NetBSD: scb.h,v 1.13 2010/12/14 23:29:33 matt Exp $	*/
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -29,8 +29,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 #ifndef _VAX_SCB_H
 #define	_VAX_SCB_H
+
+#include <sys/evcnt.h>
 
 /*
  * Definition of the System Control Block. More about it can be
@@ -131,10 +134,10 @@ extern	struct scb *scb;
 extern	struct ivec_dsp *scb_vec;
 extern	struct evcnt devipl_intrcnts[4];	/* IPL 2[0123] */
 
-extern	paddr_t scb_init (paddr_t);
-extern	int scb_vecref (int *, int *);
-extern	void scb_fake (int, int);
-extern	void scb_vecalloc (int, void(*)(void *), void *, int, struct evcnt *);
+paddr_t scb_init (paddr_t);
+int scb_vecref (int *, int *);
+void scb_fake (int, int);
+void scb_vecalloc (int, void(*)(void *), void *, int, struct evcnt *);
 #endif /* _KERNEL */
 
 #endif /* _VAX_SCB_H */

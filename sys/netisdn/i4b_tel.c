@@ -27,7 +27,7 @@
  *	i4b_tel.c - device driver for ISDN telephony
  *	--------------------------------------------
  *
- *	$Id: i4b_tel.c,v 1.21 2007/12/05 17:20:03 pooka Exp $
+ *	$Id: i4b_tel.c,v 1.24 2009/03/18 10:22:43 cegger Exp $
  *
  * $FreeBSD$
  *
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_tel.c,v 1.21 2007/12/05 17:20:03 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_tel.c,v 1.24 2009/03/18 10:22:43 cegger Exp $");
 
 #include "isdntel.h"
 
@@ -175,19 +175,19 @@ static u_char sinetab[];
 
 #ifndef __FreeBSD__
 #define	PDEVSTATIC	/* - not static - */
-PDEVSTATIC void isdntelattach __P((void));
-PDEVSTATIC int isdntelioctl __P((dev_t dev, u_long cmd, void *data, int flag, struct lwp *l));
+PDEVSTATIC void isdntelattach(void);
+PDEVSTATIC int isdntelioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l);
 
-int isdntelopen __P((dev_t dev, int flag, int fmt, struct lwp *l));
-int isdntelclose __P((dev_t dev, int flag, int fmt, struct lwp *l));
-int isdntelread __P((dev_t dev, struct uio *uio, int ioflag));
-int isdntelwrite __P((dev_t dev, struct uio * uio, int ioflag));
+int isdntelopen(dev_t dev, int flag, int fmt, struct lwp *l);
+int isdntelclose(dev_t dev, int flag, int fmt, struct lwp *l);
+int isdntelread(dev_t dev, struct uio *uio, int ioflag);
+int isdntelwrite(dev_t dev, struct uio * uio, int ioflag);
 
 #ifdef OS_USES_POLL
-int isdntelpoll	__P((dev_t dev, int events, struct lwp *l));
-int isdntelkqfilter __P((dev_t dev, struct knote *kn));
+int isdntelpoll(dev_t dev, int events, struct lwp *l);
+int isdntelkqfilter(dev_t dev, struct knote *kn);
 #else
-int isdntelsel __P((dev_t dev, int rw, struct lwp *l));
+int isdntelsel(dev_t dev, int rw, struct lwp *l);
 #endif
 
 #endif /* __FreeBSD__ */
@@ -327,7 +327,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 isdntelattach(void *dummy)
 #else
-isdntelattach()
+isdntelattach(void)
 #endif
 {
 	int i, j;
@@ -338,6 +338,8 @@ isdntelattach()
 	{
 		for(j=0; j < NOFUNCS; j++)
 		{
+			selinit(&tel_sc[i][j].selp);
+
 			tel_sc[i][j].devstate = ST_IDLE;
 			tel_sc[i][j].audiofmt = CVT_NONE;
 			tel_sc[i][j].rcvttab = 0;
@@ -1166,7 +1168,7 @@ tel_connect(void *softc, void *cdp)
 			sc->devstate &= ~ST_RDWAITDATA;
 			wakeup((void *) &sc->result);
 		}
-		selnotify(&sc->selp, 0);
+		selnotify(&sc->selp, 0, 0);
 	}
 }
 
@@ -1207,7 +1209,7 @@ tel_disconnect(void *softc, void *cdp)
 			sc->devstate &= ~ST_RDWAITDATA;
 			wakeup((void *) &sc->result);
 		}
-		selnotify(&sc->selp, 0);
+		selnotify(&sc->selp, 0, 0);
 
 		if (sc->devstate & ST_TONE) {
 			sc->devstate &= ~ST_TONE;
@@ -1235,7 +1237,7 @@ tel_dialresponse(void *softc, int status, cause_t cause)
 			sc->devstate &= ~ST_RDWAITDATA;
 			wakeup((void *) &sc->result);
 		}
-		selnotify(&sc->selp, 0);
+		selnotify(&sc->selp, 0, 0);
 	}
 }
 
@@ -1262,7 +1264,7 @@ tel_rx_data_rdy(void *softc)
 		sc->devstate &= ~ST_RDWAITDATA;
 		wakeup((void *) &sc->isdn_linktab->rx_queue);
 	}
-	selnotify(&sc->selp, 0);
+	selnotify(&sc->selp, 0, 0);
 }
 
 /*---------------------------------------------------------------------------*
@@ -1283,7 +1285,7 @@ tel_tx_queue_empty(void *softc)
 	if(sc->devstate & ST_TONE) {
 		tel_tone(sc);
 	} else {
-		selnotify(&sc->selp, 0);
+		selnotify(&sc->selp, 0, 0);
 	}
 }
 

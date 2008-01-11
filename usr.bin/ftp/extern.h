@@ -1,7 +1,7 @@
-/*	$NetBSD: extern.h,v 1.72 2007/05/24 05:05:18 lukem Exp $	*/
+/*	$NetBSD: extern.h,v 1.78 2010/03/04 21:40:53 lukem Exp $	*/
 
 /*-
- * Copyright (c) 1996-2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996-2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -141,7 +134,7 @@ int	ftp_login(const char *, const char *, const char *);
 void	get(int, char **);
 struct cmd *getcmd(const char *);
 int	getit(int, char **, int, const char *);
-int	getline(FILE *, char *, size_t, const char **);
+int	get_line(FILE *, char *, size_t, const char **);
 struct option *getoption(const char *);
 char   *getoptionvalue(const char *);
 void	getremoteinfo(void);
@@ -149,7 +142,7 @@ int	getreply(int);
 char   *globulize(const char *);
 char   *gunique(const char *);
 void	help(int, char **);
-char   *hookup(char *, char *);
+char   *hookup(const char *, const char *);
 void	idlecmd(int, char **);
 int	initconn(void);
 void	intr(int);
@@ -173,7 +166,7 @@ const char *onoff(int);
 void	opts(int, char **);
 void	newer(int, char **);
 void	page(int, char **);
-int	parseport(const char *, int);
+const char *parse_rfc2616time(struct tm *, const char *);
 int	parserate(int, char **, int);
 char   *prompt(void);
 void	proxabort(int);
@@ -209,6 +202,8 @@ void	setcr(int, char **);
 void	setdebug(int, char **);
 void	setedit(int, char **);
 void	setepsv4(int, char **);
+void	setepsv6(int, char **);
+void	setepsv(int, char **);
 void	setform(int, char **);
 void	setftmode(int, char **);
 void	setgate(int, char **);
@@ -234,6 +229,7 @@ void	settype(int, char **);
 void	setupsockbufsize(int);
 void	setverbose(int, char **);
 void	setxferbuf(int, char **);
+void	set_option(const char *, const char *, int);
 void	shell(int, char **);
 void	site(int, char **);
 void	sizecmd(int, char **);

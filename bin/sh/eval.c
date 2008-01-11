@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.88 2006/10/16 00:36:19 christos Exp $	*/
+/*	$NetBSD: eval.c,v 1.101 2011/02/17 15:13:49 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,13 +37,15 @@
 #if 0
 static char sccsid[] = "@(#)eval.c	8.9 (Berkeley) 6/8/95";
 #else
-__RCSID("$NetBSD: eval.c,v 1.88 2006/10/16 00:36:19 christos Exp $");
+__RCSID("$NetBSD: eval.c,v 1.101 2011/02/17 15:13:49 pooka Exp $");
 #endif
 #endif /* not lint */
 
+#include <stdbool.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <stdio.h>
+#include <errno.h>
 #include <unistd.h>
 #include <sys/fcntl.h>
 #include <sys/times.h>
@@ -92,7 +94,7 @@ MKINIT int loopnest;		/* current loop nesting level */
 int funcnest;			/* depth of function calls */
 
 
-char *commandname;
+const char *commandname;
 struct strlist *cmdenviron;
 int exitstatus;			/* exit status of last command */
 int back_exitstatus;		/* exit status of backquoted command */
@@ -179,7 +181,7 @@ evalcmd(int argc, char **argv)
                         STPUTC('\0', concat);
                         p = grabstackstr(concat);
                 }
-                evalstring(p, EV_TESTED);
+                evalstring(p, 0);
         }
         return exitstatus;
 }
@@ -216,6 +218,9 @@ evalstring(char *s, int flag)
 void
 evaltree(union node *n, int flags)
 {
+	bool do_etest;
+
+	do_etest = false;
 	if (n == NULL) {
 		TRACE(("evaltree(NULL) called\n"));
 		exitstatus = 0;
@@ -253,6 +258,7 @@ evaltree(union node *n, int flags)
 		break;
 	case NSUBSHELL:
 		evalsubshell(n, flags);
+		do_etest = !(flags & EV_TESTED);
 		break;
 	case NBACKGND:
 		evalsubshell(n, flags);
@@ -289,9 +295,11 @@ evaltree(union node *n, int flags)
 		break;
 	case NPIPE:
 		evalpipe(n);
+		do_etest = !(flags & EV_TESTED);
 		break;
 	case NCMD:
 		evalcommand(n, flags, (struct backcmd *)NULL);
+		do_etest = !(flags & EV_TESTED);
 		break;
 	default:
 		out1fmt("Node type = %d\n", n->type);
@@ -301,7 +309,7 @@ evaltree(union node *n, int flags)
 out:
 	if (pendingsigs)
 		dotrap();
-	if ((flags & EV_EXIT) != 0)
+	if ((flags & EV_EXIT) != 0 || (eflag && exitstatus != 0 && do_etest))
 		exitshell(exitstatus);
 }
 
@@ -512,14 +520,14 @@ evalpipe(union node *n)
 			INTON;
 			if (prevfd > 0) {
 				close(0);
-				copyfd(prevfd, 0);
+				copyfd(prevfd, 0, 1);
 				close(prevfd);
 			}
 			if (pip[1] >= 0) {
 				close(pip[0]);
 				if (pip[1] != 1) {
 					close(1);
-					copyfd(pip[1], 1);
+					copyfd(pip[1], 1, 1);
 					close(pip[1]);
 				}
 			}
@@ -583,7 +591,7 @@ evalbackcmd(union node *n, struct backcmd *result)
 			close(pip[0]);
 			if (pip[1] != 1) {
 				close(1);
-				copyfd(pip[1], 1);
+				copyfd(pip[1], 1, 1);
 				close(pip[1]);
 			}
 			eflag = 0;
@@ -658,6 +666,7 @@ parse_command_args(int argc, char **argv, int *use_syspath)
 }
 
 int vforked = 0;
+extern char *trap[];
 
 /*
  * Execute a simple command.
@@ -682,7 +691,7 @@ evalcommand(union node *cmd, int flgs, struct backcmd *backcmd)
 	struct job * volatile jp;
 	struct jmploc jmploc;
 	struct jmploc *volatile savehandler = NULL;
-	char *volatile savecmdname;
+	const char *volatile savecmdname;
 	volatile struct shparam saveparam;
 	struct localvar *volatile savelocalvars;
 	volatile int e;
@@ -752,13 +761,13 @@ evalcommand(union node *cmd, int flgs, struct backcmd *backcmd)
 		for (sp = varlist.list ; sp ; sp = sp->next) {
 			if (sep != 0)
 				outc(sep, &errout);
-			out2str(sp->text);
+			out2shstr(sp->text);
 			sep = ' ';
 		}
 		for (sp = arglist.list ; sp ; sp = sp->next) {
 			if (sep != 0)
 				outc(sep, &errout);
-			out2str(sp->text);
+			out2shstr(sp->text);
 			sep = ' ';
 		}
 		outc('\n', &errout);
@@ -813,7 +822,7 @@ evalcommand(union node *cmd, int flgs, struct backcmd *backcmd)
 	}
 
 	/* Fork off a child process if necessary. */
-	if (cmd->ncmd.backgnd
+	if (cmd->ncmd.backgnd || (trap[0] && (flags & EV_EXIT) != 0)
 	 || (cmdentry.cmdtype == CMDNORMAL && (flags & EV_EXIT) == 0)
 	 || ((flags & EV_BACKCMD) != 0
 	    && ((cmdentry.cmdtype != CMDBUILTIN && cmdentry.cmdtype != CMDSPLBLTIN)
@@ -896,7 +905,7 @@ normal_fork:
 			close(pip[0]);
 			if (pip[1] != 1) {
 				close(1);
-				copyfd(pip[1], 1);
+				copyfd(pip[1], 1, 1);
 				close(pip[1]);
 			}
 		}
@@ -1070,9 +1079,6 @@ out:
 		 */
 		setvar("_", lastarg, 0);
 	popstackmark(&smark);
-
-	if (eflag && exitstatus && !(flags & EV_TESTED))
-		exitshell(exitstatus);
 }
 
 

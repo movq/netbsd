@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.6 2007/04/08 09:35:47 scw Exp $
+#	$NetBSD: Makefile.inc,v 1.8 2008/02/09 02:37:21 mrg Exp $
 
 # gdtoa sources
 .PATH: ${.CURDIR}/gdtoa

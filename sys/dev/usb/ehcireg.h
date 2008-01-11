@@ -1,4 +1,4 @@
-/*	$NetBSD: ehcireg.h,v 1.25 2006/10/09 11:38:54 mlelstv Exp $	*/
+/*	$NetBSD: ehcireg.h,v 1.32 2011/01/18 08:29:24 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,6 +61,9 @@
 #define  EHCI_LEG_HC_OS_OWNED		0x01000000
 #define  EHCI_LEG_HC_BIOS_OWNED		0x00010000
 #define PCI_EHCI_USBLEGCTLSTS	0x04
+#define  EHCI_LEG_EXT_SMI_BAR		0x80000000
+#define  EHCI_LEG_EXT_SMI_PCICMD	0x40000000
+#define  EHCI_LEG_EXT_SMI_OS_CHANGE	0x20000000
 
 #define EHCI_CAP_GET_ID(cap) ((cap) & 0xff)
 #define EHCI_CAP_GET_NEXT(cap) (((cap) >> 8) & 0xff)
@@ -80,6 +76,8 @@
 #define EHCI_HCIVERSION		0x02	/* RO Interface version number */
 
 #define EHCI_HCSPARAMS		0x04	/* RO Structural parameters */
+#define  EHCI_HCS_N_TT(x)	(((x) >> 20) & 0xf) /* # of xacts xlater ETTF */
+#define  EHCI_HCS_N_PTT(x)	(((x) >> 20) & 0xf) /* ports per xlater ETTF */
 #define  EHCI_HCS_DEBUGPORT(x)	(((x) >> 20) & 0xf)
 #define  EHCI_HCS_P_INDICATOR(x) ((x) & 0x10000)
 #define  EHCI_HCS_N_CC(x)	(((x) >> 12) & 0xf) /* # of companion ctlrs */
@@ -151,6 +149,10 @@
 #define  EHCI_CONF_CF		0x00000001 /* RW configure flag */
 
 #define EHCI_PORTSC(n)		(0x40+4*(n)) /* RO, RW, RWC Port Status reg */
+#define  EHCI_PS_PSPD		0x03000000 /* RO port speed (ETTF) */
+#define  EHCI_PS_PSPD_FS	0x00000000 /* Full speed (ETTF) */
+#define  EHCI_PS_PSPD_LS	0x01000000 /* Low speed (ETTF) */
+#define  EHCI_PS_PSPD_HS	0x02000000 /* High speed (ETTF) */
 #define  EHCI_PS_WKOC_E		0x00400000 /* RW wake on over current ena */
 #define  EHCI_PS_WKDSCNNT_E	0x00200000 /* RW wake on disconnect ena */
 #define  EHCI_PS_WKCNNT_E	0x00100000 /* RW wake on connect ena */
@@ -173,6 +175,15 @@
 
 #define EHCI_PORT_RESET_COMPLETE 2 /* ms */
 
+#define	EHCI_USBMODE		0xa8		/* USB Device mode */
+#define	  EHCI_USBMODE_SDIS	__BIT(4)	/* Stream disable mode 1=act */
+#define	  EHCI_USBMODE_SLOM	__BIT(3)	/* setup lockouts on */
+#define	  EHCI_USBMODE_ES	__BIT(2)	/* Endian Select ES=1 */
+#define	  EHCI_USBMODE_CM	__BITS(0,1)	/* Controller Mode */
+#define	  EHCI_USBMODE_CM_IDLE	0x00		/* Idle (combo host/device) */
+#define	  EHCI_USBMODE_CM_DEV	0x02		/* Device Controller */
+#define	  EHCI_USBMODE_CM_HOST	0x03		/* Host Controller */
+
 #define EHCI_FLALIGN_ALIGN	0x1000
 #define EHCI_MAX_PORTS		16 /* only 4 bits available in EHCI_HCS_N_PORTS */
 
@@ -192,10 +203,44 @@ typedef u_int32_t ehci_link_t;
 
 typedef u_int32_t ehci_physaddr_t;
 
+typedef u_int32_t ehci_isoc_trans_t;
+typedef u_int32_t ehci_isoc_bufr_ptr_t;
+
 /* Isochronous Transfer Descriptor */
+#define EHCI_ITD_NUFRAMES USB_UFRAMES_PER_FRAME
+#define EHCI_ITD_NBUFFERS 7
 typedef struct {
-	volatile ehci_link_t	itd_next;
-	/* XXX many more */
+	volatile ehci_link_t		itd_next;
+	volatile ehci_isoc_trans_t	itd_ctl[EHCI_ITD_NUFRAMES];
+#define EHCI_ITD_GET_STATUS(x) (((x) >> 28) & 0xf)
+#define EHCI_ITD_SET_STATUS(x) (((x) & 0xf) << 28)
+#define EHCI_ITD_ACTIVE		0x80000000
+#define EHCI_ITD_BUF_ERR	0x40000000
+#define EHCI_ITD_BABBLE		0x20000000
+#define EHCI_ITD_ERROR		0x10000000
+#define EHCI_ITD_GET_LEN(x) (((x) >> 16) & 0xfff)
+#define EHCI_ITD_SET_LEN(x) (((x) & 0xfff) << 16)
+#define EHCI_ITD_IOC		0x8000
+#define EHCI_ITD_GET_IOC(x) (((x) >> 15) & 1)
+#define EHCI_ITD_SET_IOC(x) (((x) << 15) & EHCI_ITD_IOC)
+#define EHCI_ITD_GET_PG(x) (((x) >> 12) & 0x7)
+#define EHCI_ITD_SET_PG(x) (((x) & 0x7) << 12)
+#define EHCI_ITD_GET_OFFS(x) (((x) >> 0) & 0xfff)
+#define EHCI_ITD_SET_OFFS(x) (((x) & 0xfff) << 0)
+	volatile ehci_isoc_bufr_ptr_t	itd_bufr[EHCI_ITD_NBUFFERS];
+#define EHCI_ITD_GET_BPTR(x) ((x) & 0xfffff000)
+#define EHCI_ITD_SET_BPTR(x) ((x) & 0xfffff000)
+#define EHCI_ITD_GET_EP(x) (((x) >> 8) & 0xf)
+#define EHCI_ITD_SET_EP(x) (((x) & 0xf) << 8)
+#define EHCI_ITD_GET_DADDR(x) ((x) & 0x7f)
+#define EHCI_ITD_SET_DADDR(x) ((x) & 0x7f)
+#define EHCI_ITD_GET_DIR(x) (((x) >> 11) & 1)
+#define EHCI_ITD_SET_DIR(x) (((x) & 1) << 11)
+#define EHCI_ITD_GET_MAXPKT(x) ((x) & 0x7ff)
+#define EHCI_ITD_SET_MAXPKT(x) ((x) & 0x7ff)
+#define EHCI_ITD_GET_MULTI(x) ((x) & 0x3)
+#define EHCI_ITD_SET_MULTI(x) ((x) & 0x3)
+	volatile ehci_isoc_bufr_ptr_t	itd_bufr_hi[EHCI_ITD_NBUFFERS];
 } ehci_itd_t;
 #define EHCI_ITD_ALIGN 32
 
@@ -293,5 +338,36 @@ typedef struct {
 	volatile ehci_link_t	fstn_back;
 } ehci_fstn_t;
 #define EHCI_FSTN_ALIGN 32
+
+/* Debug Port */
+#define PCI_CAP_DEBUGPORT_OFFSET __BITS(28,16)
+#define PCI_CAP_DEBUGPORT_BAR	__BITS(31,29)
+/* Debug Port Registers, offset into DEBUGPORT_BAR at DEBUGPORT_OFFSET */
+#define EHCI_DEBUG_SC		0x00
+/* Status/Control Register */
+#define  EHCI_DSC_DATA_LENGTH	__BITS(3,0)
+#define  EHCI_DSC_WRITE		__BIT(4)
+#define  EHCI_DSC_GO		__BIT(5)
+#define  EHCI_DSC_ERROR		__BIT(6)
+#define  EHCI_DSC_EXCEPTION	__BITS(9,7)
+#define   EHCI_DSC_EXCEPTION_NONE	0
+#define   EHCI_DSC_EXCEPTION_XACT	1
+#define   EHCI_DSC_EXCEPTION_HW		2
+#define  EHCI_DSC_IN_USE	__BIT(10)
+#define  EHCI_DSC_DONE		__BIT(16)
+#define  EHCI_DSC_ENABLED	__BIT(28)
+#define  EHCI_DSC_OWNER		__BIT(30)
+#define EHCI_DEBUG_UPR		0x04
+/* USB PIDs Register */
+#define  EHCI_DPR_TOKEN		__BITS(7,0)
+#define  EHCI_DPR_SEND		__BITS(15,8)
+#define  EHCI_DPR_RECIEVED	__BITS(23,16)
+/* Data Registers */
+#define EHCI_DEBUG_DATA0123	0x08
+#define EHCI_DEBUG_DATA4567	0x0c
+#define EHCI_DEBUG_DAR		0x10
+/* Device Address Register */
+#define  EHCI_DAR_ENDPOINT	__BITS(3,0)
+#define  EHCI_DAR_ADDRESS	__BITS(14,8)
 
 #endif /* _DEV_PCI_EHCIREG_H_ */

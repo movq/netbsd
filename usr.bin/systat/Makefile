@@ -1,11 +1,10 @@
-#	$NetBSD: Makefile,v 1.34 2007/05/28 12:06:32 tls Exp $
+#	$NetBSD: Makefile,v 1.36 2010/02/06 23:45:26 he Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/6/93
 
 .include <bsd.own.mk>
 
 USE_FORT?= yes	# setgid
 PROG=	systat
-WARNS=3
 
 .PATH:	${NETBSDSRCDIR}/usr.bin/vmstat ${NETBSDSRCDIR}/usr.bin/who
 
@@ -16,8 +15,8 @@ SRCS=	bufcache.c cmds.c cmdtab.c disks.c df.c drvstats.c fetch.c \
 	globalcmds.c icmp.c iostat.c ip.c keyboard.c main.c mbufs.c \
 	netcmds.c netstat.c pigs.c ps.c swap.c tcp.c vmstat.c utmpentry.c \
 	syscall.c
-DPADD=	${LIBCURSES} ${LIBM} ${LIBKVM}
-LDADD=	-lutil -lcurses -lm -lkvm
+DPADD=	${LIBCURSES} ${LIBTERMINFO} ${LIBM} ${LIBKVM}
+LDADD=	-lutil -lcurses -lterminfo -lm -lkvm
 BINGRP=	kmem
 BINMODE=2555
 LINKS=	${BINDIR}/systat ${BINDIR}/sysstat

@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp_cfg.c,v 1.14 2007/10/19 03:37:19 manu Exp $	*/
+/*	$NetBSD: isakmp_cfg.c,v 1.24 2010/09/21 13:14:17 vanhu Exp $	*/
 
 /* Id: isakmp_cfg.c,v 1.55 2006/08/22 18:17:17 manubsd Exp */
 
@@ -38,7 +38,7 @@
 #include <sys/socket.h>
 #include <sys/queue.h>
 
-#include <utmp.h>
+#include <utmpx.h>
 #if defined(__APPLE__) && defined(__MACH__)
 #include <util.h>
 #endif
@@ -114,6 +114,8 @@ static vchar_t *isakmp_cfg_void(struct ph1handle *, struct isakmp_data *);
 #endif
 static vchar_t *isakmp_cfg_addr4(struct ph1handle *, 
 				 struct isakmp_data *, in_addr_t *);
+static vchar_t *isakmp_cfg_addrnet4(struct ph1handle *, 
+				 struct isakmp_data *, in_addr_t *, in_addr_t *);
 static void isakmp_cfg_getaddr4(struct isakmp_data *, struct in_addr *);
 static vchar_t *isakmp_cfg_addr4_list(struct ph1handle *,
 				      struct isakmp_data *, in_addr_t *, int);
@@ -446,8 +448,8 @@ isakmp_cfg_reply(iph1, attrpl)
 	
 	if ((iph1->status == PHASE1ST_ESTABLISHED) && 
 	    iph1->rmconf->mode_cfg) {
-		switch (AUTHMETHOD(iph1)) {
-		case FICTIVE_AUTH_METHOD_XAUTH_PSKEY_I:
+		switch (iph1->approval->authmethod) {
+		case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_I:
 		case OAKLEY_ATTR_AUTH_METHOD_HYBRID_RSA_I:
 		/* Unimplemented */
 		case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_I: 
@@ -473,8 +475,7 @@ isakmp_cfg_reply(iph1, attrpl)
 			    "Cannot allocate memory: %s\n", strerror(errno));
 		} else {
 			memcpy(buf->v, attrpl + 1, buf->l);
-			EVT_PUSH(iph1->local, iph1->remote, 
-			    EVTT_ISAKMP_CFG_DONE, buf);
+			evt_phase1(iph1, EVT_PHASE1_MODE_CFG, buf);
 			vfree(buf);
 		}
 	}
@@ -629,7 +630,7 @@ isakmp_cfg_request(iph1, attrpl)
 	    ISAKMP_NPTYPE_ATTR, ISAKMP_FLAG_E, 0);
 
 	if (iph1->status == PHASE1ST_ESTABLISHED) {
-		switch (AUTHMETHOD(iph1)) {
+		switch (iph1->approval->authmethod) {
 		case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_R:
 		case OAKLEY_ATTR_AUTH_METHOD_HYBRID_RSA_R:
 		/* Unimplemented */
@@ -731,7 +732,8 @@ isakmp_cfg_set(iph1, attrpl)
 	    ISAKMP_NPTYPE_ATTR, ISAKMP_FLAG_E, 0);
 
 	if (iph1->mode_cfg->flags & ISAKMP_CFG_DELETE_PH1) {
-		if (iph1->status == PHASE1ST_ESTABLISHED)
+		if (iph1->status == PHASE1ST_ESTABLISHED ||
+		    iph1->status == PHASE1ST_DYING)
 			isakmp_info_send_d1(iph1);
 		remph1(iph1);
 		delph1(iph1);
@@ -901,8 +903,15 @@ retry_source:
 		break;
 
 	case INTERNAL_IP4_SUBNET:
-		return isakmp_cfg_addr4(iph1, 
-		    attr, &isakmp_cfg_config.network4);
+		if(isakmp_cfg_config.splitnet_count > 0){
+			return isakmp_cfg_addrnet4(iph1, attr,
+						    &isakmp_cfg_config.splitnet_list->network.addr4.s_addr,
+						    &isakmp_cfg_config.splitnet_list->network.mask4.s_addr);
+		}else{
+			plog(LLV_INFO, LOCATION, NULL,
+			     "%s requested but no splitnet in configuration\n",
+			     s_isakmp_cfg_type(type));
+		}
 		break;
 
 	default:
@@ -1042,6 +1051,36 @@ isakmp_cfg_addr4(iph1, attr, addr)
 }
 
 static vchar_t *
+isakmp_cfg_addrnet4(iph1, attr, addr, mask)
+	struct ph1handle *iph1;
+	struct isakmp_data *attr;
+	in_addr_t *addr;
+	in_addr_t *mask;
+{
+	vchar_t *buffer;
+	struct isakmp_data *new;
+	size_t len;
+	in_addr_t netbuff[2];
+
+	len = sizeof(netbuff);
+	if ((buffer = vmalloc(sizeof(*attr) + len)) == NULL) {
+		plog(LLV_ERROR, LOCATION, NULL, "Cannot allocate memory\n");
+		return NULL;
+	}
+
+	new = (struct isakmp_data *)buffer->v;
+
+	new->type = attr->type;
+	new->lorv = htons(len);
+	netbuff[0]=*addr;
+	netbuff[1]=*mask;
+	memcpy(new + 1, netbuff, len);
+	
+	return buffer;
+}
+
+
+static vchar_t *
 isakmp_cfg_addr4_list(iph1, attr, addr, nbr)
 	struct ph1handle *iph1;
 	struct isakmp_data *attr;
@@ -1127,7 +1166,7 @@ isakmp_cfg_send(iph1, payload, np, flags, new_exchange)
 	struct isakmp_cfg_state *ics = iph1->mode_cfg;
 
 	/* Check if phase 1 is established */
-	if ((iph1->status != PHASE1ST_ESTABLISHED) || 
+	if ((iph1->status < PHASE1ST_ESTABLISHED) ||
 	    (iph1->local == NULL) ||
 	    (iph1->remote == NULL)) {
 		plog(LLV_ERROR, LOCATION, NULL, 
@@ -1151,28 +1190,6 @@ isakmp_cfg_send(iph1, payload, np, flags, new_exchange)
 		goto end;
 	}
 
-	switch (iph1->remote->sa_family) {
-	case AF_INET:
-#if (!defined(ENABLE_NATT)) || (defined(BROKEN_NATT))
-		((struct sockaddr_in *)iph2->dst)->sin_port = 0;
-		((struct sockaddr_in *)iph2->src)->sin_port = 0;
-#endif
-		break;
-#ifdef INET6
-	case AF_INET6:
-#if (!defined(ENABLE_NATT)) || (defined(BROKEN_NATT))
-		((struct sockaddr_in6 *)iph2->dst)->sin6_port = 0;
-		((struct sockaddr_in6 *)iph2->src)->sin6_port = 0;
-#endif
-		break;
-#endif
-	default:
-		plog(LLV_ERROR, LOCATION, NULL,
-			"invalid family: %d\n", iph1->remote->sa_family);
-		delph2(iph2);
-		goto end;
-	}
-	iph2->ph1 = iph1;
 	iph2->side = INITIATOR;
 	iph2->status = PHASE2ST_START;
 
@@ -1191,7 +1208,7 @@ isakmp_cfg_send(iph1, payload, np, flags, new_exchange)
 		}
 
 		/* generate HASH(1) */
-		hash = oakley_compute_hash1(iph2->ph1, iph2->msgid, payload);
+		hash = oakley_compute_hash1(iph1, iph2->msgid, payload);
 		if (hash == NULL) {
 			delph2(iph2);
 			goto end;
@@ -1290,7 +1307,6 @@ err:
 	if (iph2->sendbuf != NULL)
 		vfree(iph2->sendbuf);
 
-	unbindph12(iph2);
 	remph2(iph2);
 	delph2(iph2);
 end:
@@ -1504,24 +1520,6 @@ isakmp_cfg_accounting_radius(iph1, inout)
 	struct ph1handle *iph1;
 	int inout;
 {
-	/* For first time use, initialize Radius */
-	if (radius_acct_state == NULL) {
-		if ((radius_acct_state = rad_acct_open()) == NULL) {
-			plog(LLV_ERROR, LOCATION, NULL,
-			    "Cannot init librradius\n");
-			return -1;
-		}
-
-		if (rad_config(radius_acct_state, NULL) != 0) {
-			 plog(LLV_ERROR, LOCATION, NULL,
-			     "Cannot open librarius config file: %s\n",
-			     rad_strerror(radius_acct_state));
-			  rad_close(radius_acct_state);
-			  radius_acct_state = NULL;
-			  return -1;
-		}
-	}
-
 	if (rad_create_request(radius_acct_state, 
 	    RAD_ACCOUNTING_REQUEST) != 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
@@ -1663,8 +1661,7 @@ isakmp_cfg_accounting_system(port, raddr, usr, inout)
 	int inout;
 {
 	int error = 0;
-	struct utmp ut;
-	char term[UT_LINESIZE];
+	struct utmpx ut;
 	char addr[NI_MAXHOST];
 	
 	if (usr == NULL || usr[0]=='\0') {
@@ -1673,36 +1670,33 @@ isakmp_cfg_accounting_system(port, raddr, usr, inout)
 		return -1;
 	}
 
-	sprintf(term, TERMSPEC, port);
+	memset(&ut, 0, sizeof ut);
+	gettimeofday((struct timeval *)&ut.ut_tv, NULL);
+	snprintf(ut.ut_id, sizeof ut.ut_id, TERMSPEC, port);
 
 	switch (inout) {
 	case ISAKMP_CFG_LOGIN:
-		strncpy(ut.ut_name, usr, UT_NAMESIZE);
-		ut.ut_name[UT_NAMESIZE - 1] = '\0';
-
-		strncpy(ut.ut_line, term, UT_LINESIZE);
-		ut.ut_line[UT_LINESIZE - 1] = '\0';
+		ut.ut_type = USER_PROCESS;
+		strncpy(ut.ut_user, usr, sizeof ut.ut_user);
 
 		GETNAMEINFO_NULL(raddr, addr);
-		strncpy(ut.ut_host, addr, UT_HOSTSIZE);
-		ut.ut_host[UT_HOSTSIZE - 1] = '\0';
+		strncpy(ut.ut_host, addr, sizeof ut.ut_host);
 
-		ut.ut_time = time(NULL);
- 
 		plog(LLV_INFO, LOCATION, NULL,
 			"Accounting : '%s' logging on '%s' from %s.\n",
-			ut.ut_name, ut.ut_line, ut.ut_host);
+			ut.ut_user, ut.ut_id, addr);
 
-		login(&ut);
+		pututxline(&ut);
 
 		break;
 	case ISAKMP_CFG_LOGOUT:	
+		ut.ut_type = DEAD_PROCESS;
 
 		plog(LLV_INFO, LOCATION, NULL,
 			"Accounting : '%s' unlogging from '%s'.\n",
-			usr, term);
+			usr, ut.ut_id);
 
-		logout(term);
+		pututxline(&ut);
 
 		break;
 	default:
@@ -2091,7 +2085,7 @@ isakmp_cfg_resize_pool(size)
 	/* If a pool already exists, check if we can shrink it */
 	if ((isakmp_cfg_config.port_pool != NULL) &&
 	    (size < isakmp_cfg_config.pool_size)) {
-		for (i = isakmp_cfg_config.pool_size; i >= size; --i) {
+		for (i = isakmp_cfg_config.pool_size-1; i >= size; --i) {
 			if (isakmp_cfg_config.port_pool[i].used) {
 				plog(LLV_ERROR, LOCATION, NULL, 
 				    "resize pool from %zu to %d impossible "
@@ -2184,10 +2178,12 @@ isakmp_cfg_init(cold)
 	isakmp_cfg_config.splitdns_list = NULL;
 	isakmp_cfg_config.splitdns_len = 0;
 
+#if 0
 	if (cold == ISAKMP_CFG_INIT_COLD) {
 		if ((error = isakmp_cfg_resize_pool(ISAKMP_CFG_MAX_CNX)) != 0)
 			return error;
 	}
+#endif
 
 	return 0;
 }

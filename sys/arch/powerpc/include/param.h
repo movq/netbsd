@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.20 2006/08/28 13:43:35 yamt Exp $	*/
+/*	$NetBSD: param.h,v 1.23 2011/03/05 14:27:48 matt Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -45,7 +45,11 @@
 
 /*
  * Machine dependent constants for PowerPC (32-bit only currently)
+ * For userland regardless of port, force MACHINE to be "powerpc"
  */
+#ifndef _KERNEL
+#undef MACHINE
+#endif
 #ifndef MACHINE
 #define	MACHINE		"powerpc"
 #endif
@@ -91,25 +95,16 @@
  * of the hardware page size.
  */
 #ifndef MSIZE
+#ifdef _LP64
+#define	MSIZE		512		/* size of an mbuf */
+#else  /* _LP64 */
 #define	MSIZE		256		/* size of an mbuf */
+#endif /* _LP64 */
 #endif
 #ifndef MCLSHIFT
 #define	MCLSHIFT	11		/* convert bytes to m_buf clusters */
 #endif
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
-
-#ifndef NMBCLUSTERS
-
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
-#endif
 
 /*
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized

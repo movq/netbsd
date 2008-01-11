@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64465pcmcia.c,v 1.24 2007/12/15 00:39:20 perry Exp $	*/
+/*	$NetBSD: hd64465pcmcia.c,v 1.26 2009/11/07 07:27:44 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64465pcmcia.c,v 1.24 2007/12/15 00:39:20 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64465pcmcia.c,v 1.26 2009/11/07 07:27:44 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -840,7 +833,7 @@ __sh_hd64465_map(vaddr_t va, paddr_t pa, size_t sz, uint32_t flags)
 
 	epa = pa + sz;
 	while (pa < epa) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, 0);
 		pte = __pmap_kpte_lookup(va);
 		KDASSERT(pte);
 		*pte |= flags;  /* PTEA PCMCIA assistant bit */

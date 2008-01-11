@@ -1,4 +1,4 @@
-/*	$NetBSD: xmivar.h,v 1.1 2000/07/06 17:45:52 ragge Exp $	*/
+/*	$NetBSD: xmivar.h,v 1.3 2009/05/12 14:48:08 cegger Exp $	*/
 
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden. All rights reserved.
@@ -34,7 +34,7 @@
  * per-XMI-adapter state.
  */
 struct xmi_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot;		/* Space tag for the XMI bus */
 	bus_dma_tag_t sc_dmat;
 	bus_addr_t sc_addr;		/* Address base address for this bus */
@@ -61,9 +61,9 @@ struct xmi_attach_args {
  * XMI node list.
  */
 struct xmi_list {
-	u_short xl_nr;		/* Unit ID# */
-	u_short xl_havedriver;	/* Have device driver (informal) */
-	char *xl_name;		/* DEC name */
+	uint16_t xl_nr;		/* Unit ID# */
+	uint16_t xl_havedriver;	/* Have device driver (informal) */
+	const char *xl_name;	/* DEC name */
 };
 
 /* Prototype */

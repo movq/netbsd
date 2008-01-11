@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.251 2007/11/12 15:06:45 jmmv Exp $
+#	$NetBSD: Makefile,v 1.282 2011/01/29 16:56:26 jym Exp $
 
 #
 # This is the top-level makefile for building NetBSD. For an outline of
@@ -51,16 +51,18 @@
 #	is the not root directory if cross compiling.
 #   release:
 #	Does a `make distribution', and then tars up the DESTDIR files
-#	into RELEASEDIR/${MACHINE}, in release(7) format.
+#	into ${RELEASEDIR}/${RELEASEMACHINEDIR}, in release(7) format.
 #	(See etc/Makefile for more information on this.)
 #   regression-tests:
 #	Runs the regression tests in "regress" on this host.
 #   sets:
-#	Populate ${RELEASEDIR}/${MACHINE}/binary/sets from ${DESTDIR}
+#	Populate ${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/sets
+#	from ${DESTDIR}
 #   sourcesets:
 #	Populate ${RELEASEDIR}/source/sets from ${NETBSDSRCDIR}
 #   syspkgs:
-#	Populate ${RELEASEDIR}/${MACHINE}/binary/syspkgs from ${DESTDIR}
+#	Populate ${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/syspkgs
+#	from ${DESTDIR}
 #   iso-image:
 #	Create CD-ROM image in RELEASEDIR/iso.
 #	RELEASEDIR must already have been populated by `make release'
@@ -72,8 +74,10 @@
 #
 # Targets invoked by `make build,' in order:
 #   cleandir:        cleans the tree.
-#   obj:             creates object directories.
+#   do-top-obj:      creates the top level object directory.
+#   do-tools-obj:    creates object directories for the host toolchain.
 #   do-tools:        builds host toolchain.
+#   obj:             creates object directories.
 #   do-distrib-dirs: creates the distribution directories.
 #   includes:        installs include files.
 #   do-tools-compat: builds the "libnbcompat" library; needed for some
@@ -82,12 +86,29 @@
 #   do-libgcc:       builds and installs prerequisites from
 #                    gnu/lib/crtstuff${LIBGCC_EXT} (if necessary) and
 #                    gnu/lib/libgcc${LIBGCC_EXT}.
+#   do-libpcc:       builds and install prerequisites from
+#                    external/bsd/pcc/crtstuff (if necessary) and
+#                    external/bsd/pcc/libpcc.
 #   do-lib-libc:     builds and installs prerequisites from lib/libc.
 #   do-lib:          builds and installs prerequisites from lib.
-#   do-gnu-lib:      builds and installs prerequisites from gnu/lib.
+#   do-sys-rump-dev-lib: builds and installs prerequisites from sys/rump/dev/lib
+#   do-sys-rump-fs-lib:  builds and installs prerequisites from sys/rump/fs/lib
+#   do-sys-rump-kern-lib:  builds and installs prereq. from sys/rump/kern/lib
+#   do-sys-rump-net-lib: builds and installs prerequisites from sys/rump/net/lib
+#   do-sys-modules:  builds and installs kernel modules (used by rump binaries)
 #   do-ld.so:        builds and installs prerequisites from libexec/ld.*_so.
+#   do-compat-lib-csu: builds and installs prerequisites from compat/lib/csu
+#                    if ${MKCOMPAT} != "no".
+#   do-compat-libgcc: builds and installs prerequisites from
+#                    compat/gnu/lib/crtstuff${LIBGCC_EXT} (if necessary) and
+#                    compat/gnu/lib/libgcc${LIBGCC_EXT} if ${MKCOMPAT} != "no".
+#   do-compat-lib-libc: builds and installs prerequisites from compat/lib/libc
+#                    if ${MKCOMPAT} != "no".
 #   do-build:        builds and installs the entire system.
-#   do-x11:          builds and installs X11R6 from src/x11 if ${MKX11} != "no"
+#   do-x11:          builds and installs X11 if ${MKX11} != "no"; either
+#                    X11R7 from src/external/mit/xorg if ${X11FLAVOUR} == "Xorg"
+#                    or X11R6 from src/x11
+#   do-extsrc:       builds and installs extsrc if ${MKEXTSRC} != "no".
 #   do-obsolete:     installs the obsolete sets (for the postinstall-* targets).
 #
 
@@ -120,15 +141,17 @@ _SRC_TOP_OBJ_=
 .endfor
 .endif
 
-_SUBDIR=	tools lib include gnu bin games libexec sbin usr.bin
-_SUBDIR+=	usr.sbin share rescue sys etc tests .WAIT distrib regress
-
 #
-# Weed out directories that don't exist.
+# _SUBDIR is used to set SUBDIR, after removing directories that have
+# BUILD_${dir}=no, or that have no ${dir}/Makefile.
 #
+_SUBDIR=	tools lib include gnu external crypto/external bin games
+_SUBDIR+=	libexec sbin usr.bin
+_SUBDIR+=	usr.sbin share rescue sys etc tests compat .WAIT distrib regress
 
 .for dir in ${_SUBDIR}
-.if ("${dir}" == ".WAIT") || exists(${dir}/Makefile) && (${BUILD_${dir}:Uyes} != "no")
+.if "${dir}" == ".WAIT" \
+	|| (${BUILD_${dir}:Uyes} != "no" && exists(${dir}/Makefile))
 SUBDIR+=	${dir}
 .endif
 .endfor
@@ -158,27 +181,29 @@ _POSTINSTALL=	${.CURDIR}/usr.sbin/postinstall/postinstall
 
 postinstall-check: .PHONY
 	@echo "   === Post installation checks ==="
-	${HOST_SH} ${_POSTINSTALL} -s ${.CURDIR} -d ${DESTDIR}/ check; if [ $$? -gt 1 ]; then exit 1; fi
+	AWK=${TOOL_AWK:Q} MAKE=${MAKE:Q} ${HOST_SH} ${_POSTINSTALL} -s ${.CURDIR} -d ${DESTDIR}/ check; if [ $$? -gt 1 ]; then exit 1; fi
 	@echo "   ================================"
 
 postinstall-fix: .NOTMAIN .PHONY
 	@echo "   === Post installation fixes ==="
-	${HOST_SH} ${_POSTINSTALL} -s ${.CURDIR} -d ${DESTDIR}/ fix
+	AWK=${TOOL_AWK:Q} MAKE=${MAKE:Q} ${HOST_SH} ${_POSTINSTALL} -s ${.CURDIR} -d ${DESTDIR}/ fix
 	@echo "   ==============================="
 
 postinstall-fix-obsolete: .NOTMAIN .PHONY
 	@echo "   === Removing obsolete files ==="
-	${HOST_SH} ${_POSTINSTALL} -s ${.CURDIR} -d ${DESTDIR}/ fix obsolete
+	AWK=${TOOL_AWK:Q} MAKE=${MAKE:Q} ${HOST_SH} ${_POSTINSTALL} -s ${.CURDIR} -d ${DESTDIR}/ fix obsolete
 	@echo "   ==============================="
 
 
 #
 # Targets (in order!) called by "make build".
 #
+.if defined(HAVE_GCC)
 .if ${HAVE_GCC} == "3"
 LIBGCC_EXT=3
 .else
 LIBGCC_EXT=4
+.endif
 .endif
 
 BUILDTARGETS+=	check-tools
@@ -186,11 +211,18 @@ BUILDTARGETS+=	check-tools
 BUILDTARGETS+=	cleandir
 .endif
 .if ${MKOBJDIRS} != "no"
+BUILDTARGETS+=	do-top-obj
+.endif
+.if ${USETOOLS} == "yes"	# {
+.if ${MKOBJDIRS} != "no"
+BUILDTARGETS+=	do-tools-obj
+.endif
+BUILDTARGETS+=	do-tools
+.endif # USETOOLS		# }
+.if ${MKOBJDIRS} != "no"
 BUILDTARGETS+=	obj
 .endif
-.if ${USETOOLS} == "yes"
-BUILDTARGETS+=	do-tools
-.endif
+BUILDTARGETS+=	clean_METALOG
 .if !defined(NODISTRIBDIRS)
 BUILDTARGETS+=	do-distrib-dirs
 .endif
@@ -202,12 +234,28 @@ BUILDTARGETS+=	do-lib-csu
 .if ${MKGCC} != "no"
 BUILDTARGETS+=	do-libgcc
 .endif
+.if ${MKPCC} != "no"
+BUILDTARGET+=	do-libpcc
+.endif
 BUILDTARGETS+=	do-lib-libc
-BUILDTARGETS+=	do-lib do-gnu-lib
+BUILDTARGETS+=	do-lib
+.if (${MACHINE} != "evbppc") && ${MKKMOD} != "no"
+BUILDTARGETS+=	do-sys-modules
+.endif
+BUILDTARGETS+=	do-sys-rump-dev-lib do-sys-rump-fs-lib
+BUILDTARGETS+=	do-sys-rump-kern-lib do-sys-rump-net-lib
+.if ${MKCOMPAT} != "no"
+BUILDTARGETS+=	do-compat-lib-csu
+BUILDTARGETS+=	do-compat-libgcc
+BUILDTARGETS+=	do-compat-lib-libc
+.endif
 BUILDTARGETS+=	do-ld.so
 BUILDTARGETS+=	do-build
 .if ${MKX11} != "no"
 BUILDTARGETS+=	do-x11
+.endif
+.if ${MKEXTSRC} != "no"
+BUILDTARGETS+=	do-extsrc
 .endif
 BUILDTARGETS+=	do-obsolete
 
@@ -284,7 +332,7 @@ installworld: .PHONY .MAKE
 .endif
 .endif
 	${MAKEDIRTARGET} distrib/sets installsets \
-	    INSTALLDIR=${INSTALLWORLDDIR:U/} INSTALLSETS=
+		INSTALLDIR=${INSTALLWORLDDIR:U/} INSTALLSETS=${INSTALLSETS:Q}
 	${MAKEDIRTARGET} . postinstall-check DESTDIR=${INSTALLWORLDDIR}
 	@echo   "make ${.TARGET} started at:  ${START_TIME}"
 	@printf "make ${.TARGET} finished at: " && date
@@ -341,6 +389,12 @@ check-tools: .PHONY
 	@echo '*** WARNING: NBUILDJOBS is obsolete; use -j directly instead!'
 .endif
 
+# Delete or sanitise a leftover METALOG from a previous build.
+clean_METALOG: .PHONY .MAKE
+.if ${MKUPDATE} != "no"
+	${MAKEDIRTARGET} distrib/sets clean_METALOG
+.endif
+
 do-distrib-dirs: .PHONY .MAKE
 .if !defined(DESTDIR) || ${DESTDIR} == ""
 	${MAKEDIRTARGET} etc distrib-dirs DESTDIR=/
@@ -353,29 +407,74 @@ do-${targ}: .PHONY ${targ}
 	@true
 .endfor
 
-.for dir in tools tools/compat lib/csu gnu/lib/crtstuff${LIBGCC_EXT} gnu/lib/libgcc${LIBGCC_EXT} lib/libc lib/libdes lib gnu/lib
+.if defined(HAVE_GCC)
+.if ${USE_COMPILERCRTSTUFF} == "yes"
+BUILD_CC_LIB= gnu/lib/crtstuff${LIBGCC_EXT}
+.endif
+BUILD_CC_LIB+= gnu/lib/libgcc${LIBGCC_EXT}
+.elif defined(HAVE_PCC)
+BUILD_CC_LIB+= external/bsd/pcc/crtstuff
+BUILD_CC_LIB+= external/bsd/pcc/libpcc
+.endif
+
+.for dir in tools tools/compat lib/csu ${BUILD_CC_LIB} lib/libc lib sys/rump/dev/lib sys/rump/fs/lib sys/rump/kern/lib sys/rump/net/lib sys/modules
 do-${dir:S/\//-/g}: .PHONY .MAKE
 .for targ in dependall install
 	${MAKEDIRTARGET} ${dir} ${targ}
 .endfor
 .endfor
 
+.if ${MKCOMPAT} != "no"
+COMPAT_SUBDIR_LIST=lib/csu ${BUILD_CC_LIB} lib/libc
+.for dir in ${COMPAT_SUBDIR_LIST}
+do-compat-${dir:S/\//-/g}: .PHONY .MAKE
+.for targ in dependall install
+	${MAKEDIRTARGET} compat ${targ} BOOTSTRAP_SUBDIRS="../../../${dir}"
+.endfor
+.endfor
+.endif
+
+do-top-obj: .PHONY .MAKE
+	${MAKEDIRTARGET} . obj NOSUBDIR=
+
+do-tools-obj: .PHONY .MAKE
+	${MAKEDIRTARGET} tools obj
+
 do-libgcc: .PHONY .MAKE
+.if defined(HAVE_GCC)
 .if ${MKGCC} != "no"
+.if ${USE_COMPILERCRTSTUFF} == "yes"
 .if (${HAVE_GCC} == "3" || ${HAVE_GCC} == "4")
 	${MAKEDIRTARGET} . do-gnu-lib-crtstuff${LIBGCC_EXT}
 .endif
+.endif
 	${MAKEDIRTARGET} . do-gnu-lib-libgcc${LIBGCC_EXT}
+.endif
+.endif
+
+do-compat-libgcc: .PHONY .MAKE
+.if defined(HAVE_GCC)
+.if ${MKGCC} != "no"
+.if ${USE_COMPILERCRTSTUFF} == "yes"
+	${MAKEDIRTARGET} . do-compat-gnu-lib-crtstuff${LIBGCC_EXT}
+.endif
+	${MAKEDIRTARGET} . do-compat-gnu-lib-libgcc${LIBGCC_EXT}
+.endif
+.endif
+
+do-libpcc: .PHONY .MAKE
+.if defined(HAVE_PCC)
+.if ${MKPCC} != "no"
+.if ${USE_COMPILERCRTSTUFF} == "yes"
+	${MAKEDIRTARGET} . do-pcc-lib-crtstuff
+.endif
+	${MAKEDIRTARGET} . do-pcc-lib-libpcc
+.endif
 .endif
 
 do-ld.so: .PHONY .MAKE
 .for targ in dependall install
-.if (${OBJECT_FMT} == "a.out")
-	${MAKEDIRTARGET} libexec/ld.aout_so ${targ}
-.endif
-.if (${OBJECT_FMT} == "ELF")
 	${MAKEDIRTARGET} libexec/ld.elf_so ${targ}
-.endif
 .endfor
 
 do-build: .PHONY .MAKE
@@ -384,7 +483,24 @@ do-build: .PHONY .MAKE
 .endfor
 
 do-x11: .PHONY .MAKE
+.if ${MKX11} != "no"
+.if ${X11FLAVOUR} == "Xorg"
+	${MAKEDIRTARGET} external/mit/xorg build
+.else
 	${MAKEDIRTARGET} x11 build
+.endif
+.else
+	@echo "MKX11 is not enabled"
+	@false
+.endif
+
+do-extsrc: .PHONY .MAKE
+.if ${MKEXTSRC} != "no"
+	${MAKEDIRTARGET} extsrc build
+.else
+	@echo "MKEXTSRC is not enabled"
+	@false
+.endif
 
 do-obsolete: .PHONY .MAKE
 	${MAKEDIRTARGET} etc install-obsolete-lists

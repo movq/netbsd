@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_private.h,v 1.10 2007/10/17 19:58:14 garbled Exp $	*/
+/*	$NetBSD: bus_private.h,v 1.12 2010/11/12 13:40:11 uebayasi Exp $	*/
 /*	NetBSD: bus.h,v 1.8 2005/03/09 19:04:46 matt Exp	*/
 
 /*-
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -172,7 +165,7 @@ struct x86_bus_dma_cookie {
 #endif /* _BUS_PMAP_ENTER */
 
 #if !defined(_BUS_VIRT_TO_BUS)
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 static __inline bus_addr_t _bus_virt_to_bus(struct pmap *, vaddr_t);
 #define	_BUS_VIRT_TO_BUS(pm, va) _bus_virt_to_bus((pm), (va))

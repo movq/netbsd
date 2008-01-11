@@ -1,4 +1,4 @@
-/*	$NetBSD: printnat.c,v 1.1.1.6 2007/04/14 20:17:31 martin Exp $	*/
+/*	$NetBSD: printnat.c,v 1.3 2009/08/19 08:35:32 darrenr Exp $	*/
 
 /*
  * Copyright (C) 2002-2005 by Darren Reed.
@@ -13,7 +13,7 @@
 
 
 #if !defined(lint)
-static const char rcsid[] = "@(#)Id: printnat.c,v 1.22.2.13 2006/12/09 10:37:47 darrenr Exp";
+static const char rcsid[] = "@(#)Id: printnat.c,v 1.22.2.15 2008/07/24 09:30:35 darrenr Exp";
 #endif
 
 /*
@@ -136,6 +136,8 @@ int opts;
 		if (opts & OPT_DEBUG)
 			printf("\tpmax %u\n", np->in_pmax);
 	} else {
+		int protoprinted = 0;
+
 		if (!(np->in_flags & IPN_FILTER)) {
 			printf("%s/", inet_ntoa(np->in_in[0].in4));
 			bits = count4bits(np->in_inmsk);
@@ -172,6 +174,7 @@ int opts;
 			printf(" %.*s/", (int)sizeof(np->in_plabel),
 				np->in_plabel);
 			printproto(pr, np->in_p, NULL);
+			protoprinted = 1;
 		} else if (np->in_redir == NAT_MAPBLK) {
 			if ((np->in_pmin == 0) &&
 			    (np->in_flags & IPN_AUTOPORTMAP))
@@ -187,6 +190,7 @@ int opts;
 				printf(" portmap ");
 			}
 			printproto(pr, np->in_p, np);
+			protoprinted = 1;
 			if (np->in_flags & IPN_AUTOPORTMAP) {
 				printf(" auto");
 				if (opts & OPT_DEBUG)
@@ -198,9 +202,6 @@ int opts;
 				printf(" %d:%d", ntohs(np->in_pmin),
 				       ntohs(np->in_pmax));
 			}
-		} else if (np->in_flags & IPN_TCPUDP || np->in_p) {
-			putchar(' ');
-			printproto(pr, np->in_p, np);
 		}
 
 		if (np->in_flags & IPN_FRAG)
@@ -212,6 +213,12 @@ int opts;
 			printf(" mssclamp %d", np->in_mssclamp);
 		if (np->in_tag.ipt_tag[0] != '\0')
 			printf(" tag %s", np->in_tag.ipt_tag);
+		if (!protoprinted && (np->in_flags & IPN_TCPUDP || np->in_p)) {
+			putchar(' ');
+			printproto(pr, np->in_p, np);
+		}
+		if (np->in_flags & IPN_SEQUENTIAL)
+			printf(" sequential");
 		printf("\n");
 		if (opts & OPT_DEBUG) {
 			struct in_addr nip;

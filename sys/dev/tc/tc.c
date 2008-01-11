@@ -1,4 +1,4 @@
-/*	$NetBSD: tc.c,v 1.46 2007/04/12 21:35:08 matt Exp $	*/
+/*	$NetBSD: tc.c,v 1.50 2009/05/12 14:47:04 cegger Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Carnegie-Mellon University.
@@ -28,13 +28,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tc.c,v 1.46 2007/04/12 21:35:08 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tc.c,v 1.50 2009/05/12 14:47:04 cegger Exp $");
 
 #include "opt_tcverbose.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+
+#include <machine/cpu.h>	/* for badaddr */
 
 #include <dev/tc/tcreg.h>
 #include <dev/tc/tcvar.h>
@@ -43,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: tc.c,v 1.46 2007/04/12 21:35:08 matt Exp $");
 #include "locators.h"
 
 /* Definition of the driver for autoconfig. */
-static int	tcmatch(struct device *, struct cfdata *, void *);
+static int	tcmatch(device_t, cfdata_t, void *);
 
 CFATTACH_DECL(tc, sizeof(struct tc_softc),
     tcmatch, tcattach, NULL, NULL);
@@ -54,7 +56,7 @@ static int	tcprint(void *, const char *);
 static void	tc_devinfo(const char *, char *, size_t);
 
 static int
-tcmatch(struct device *parent, struct cfdata *cf, void *aux)
+tcmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct tcbus_attach_args *tba = aux;
 
@@ -65,7 +67,7 @@ tcmatch(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-tcattach(struct device *parent, struct device *self, void *aux)
+tcattach(device_t parent, device_t self, void *aux)
 {
 	struct tc_softc *sc = device_private(self);
 	struct tcbus_attach_args *tba = aux;
@@ -195,10 +197,11 @@ tcprint(void *aux, const char *pnp)
 }
 
 
-#define	NTC_ROMOFFS	2
-static const tc_offset_t tc_slot_romoffs[NTC_ROMOFFS] = {
+static const tc_offset_t tc_slot_romoffs[] = {
 	TC_SLOT_ROM,
+#ifndef __vax__
 	TC_SLOT_PROTOROM,
+#endif
 };
 
 int
@@ -207,7 +210,7 @@ tc_checkslot(tc_addr_t slotbase, char *namep)
 	struct tc_rommap *romp;
 	int i, j;
 
-	for (i = 0; i < NTC_ROMOFFS; i++) {
+	for (i = 0; i < __arraycount(tc_slot_romoffs); i++) {
 		romp = (struct tc_rommap *)
 		    (slotbase + tc_slot_romoffs[i]);
 
@@ -240,26 +243,26 @@ tc_checkslot(tc_addr_t slotbase, char *namep)
 }
 
 const struct evcnt *
-tc_intr_evcnt(struct device *dev, void *cookie)
+tc_intr_evcnt(device_t dev, void *cookie)
 {
-	struct tc_softc *sc = tc_cd.cd_devs[0];
+	struct tc_softc *sc = device_lookup_private(&tc_cd, 0);
 
 	return ((*sc->sc_intr_evcnt)(dev, cookie));
 }
 
 void
-tc_intr_establish(struct device *dev, void *cookie, int level,
+tc_intr_establish(device_t dev, void *cookie, int level,
     int (*handler)(void *), void *arg)
 {
-	struct tc_softc *sc = tc_cd.cd_devs[0];
+	struct tc_softc *sc = device_lookup_private(&tc_cd, 0);
 
 	(*sc->sc_intr_establish)(dev, cookie, level, handler, arg);
 }
 
 void
-tc_intr_disestablish(struct device *dev, void *cookie)
+tc_intr_disestablish(device_t dev, void *cookie)
 {
-	struct tc_softc *sc = tc_cd.cd_devs[0];
+	struct tc_softc *sc = device_lookup_private(&tc_cd, 0);
 
 	(*sc->sc_intr_disestablish)(dev, cookie);
 }

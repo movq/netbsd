@@ -1,4 +1,4 @@
-/*	$NetBSD: fb_elb.c,v 1.8 2007/03/04 05:59:46 christos Exp $	*/
+/*	$NetBSD: fb_elb.c,v 1.11 2010/05/15 08:53:26 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fb_elb.c,v 1.8 2007/03/04 05:59:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fb_elb.c,v 1.11 2010/05/15 08:53:26 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -146,6 +139,7 @@ fb_elb_attach(struct device *parent, struct device *self, void *aux)
 
 	if (is_console) {
 		sc->sc_fb = &console_dev;
+		sc->sc_fb->fb_ri.ri_flg &= ~RI_NO_AUTO;
 	} else {
 		sc->sc_fb = malloc(sizeof(struct fb_dev), M_DEVBUF, M_WAITOK);
 		memset(sc->sc_fb, 0, sizeof(struct fb_dev));
@@ -183,6 +177,8 @@ fb_init(struct fb_dev *fb, int full)
 		ri->ri_stride = ri->ri_width;
 		ri->ri_bits = fb->fb_vram;
 		ri->ri_flg = RI_CENTER;
+		if (ri == &console_dev.fb_ri)
+			ri->ri_flg |= RI_NO_AUTO;
 
 		rasops_init(ri, 500, 500);
 	} else {

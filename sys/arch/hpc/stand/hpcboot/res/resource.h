@@ -1,4 +1,4 @@
-/* -*-C++-*-	$NetBSD: resource.h,v 1.8 2005/12/11 12:17:28 christos Exp $	*/
+/* -*-C++-*-	$NetBSD: resource.h,v 1.11 2010/04/06 16:20:28 nonaka Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,7 +62,9 @@
 #define	IDC_MAIN_ROOT_SD	102
 #define	IDC_MAIN_ROOT_MD	103
 #define	IDC_MAIN_ROOT_NFS	104
-#define	IDC_MAIN_ROOT_MD_OPS	105
+#define	IDC_MAIN_ROOT_DK	105
+#define	IDC_MAIN_ROOT_LD	106
+#define	IDC_MAIN_ROOT_MD_OPS	107
 
 #define	IDC_MAIN_OPTION_A	150
 #define	IDC_MAIN_OPTION_S	151
@@ -128,7 +123,9 @@
 #define	IDS_DIR_CARD_JP1		10020
 #define	IDS_DIR_CARD_JP2		10022
 #define	IDS_DIR_CARD_MMCARD		10024
-#define	IDS_DIR_USER_DEFINED		10026
+#define	IDS_DIR_CARD_MINISD_JP		10026
+#define	IDS_DIR_CARD_MICROSD_JP		10028
+#define	IDS_DIR_USER_DEFINED		10030
 
 
 #define	IDS_DIR_START			IDS_DIR_FFS_ROOT1

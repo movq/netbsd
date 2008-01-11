@@ -1,4 +1,4 @@
-/*	$NetBSD: lockd_lock.c,v 1.28 2007/11/04 23:12:50 christos Exp $	*/
+/*	$NetBSD: lockd_lock.c,v 1.31 2009/11/19 22:27:26 christos Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -62,11 +57,7 @@ typedef struct {
 static int
 fhcmp(const nfs_fhandle_t *fh1, const nfs_fhandle_t *fh2)
 {
-
-	if (fh1->fhsize != fh2->fhsize) {
-		return 1;
-	}
-	return memcmp(fh1->fhdata, fh2->fhdata, fh1->fhsize);
+	return memcmp(fh1->fhdata, fh2->fhdata, MIN(fh1->fhsize, fh2->fhsize));
 }
 
 static int
@@ -541,10 +532,11 @@ do_lock(struct file_lock *fl, int block)
 		    fl->client_name);
 	}
 	syslog(LOG_DEBUG, "lock from %s.%" PRIu32 " for file%s%s: "
-	    "dev %u ino %llu (uid %d), flags %d",
+	    "dev %llu ino %llu (uid %d), flags %d",
 	    fl->client_name, fl->client.svid,
 	    fl->client.exclusive ? " (exclusive)":"", block ? " (block)":"",
-	    st.st_dev, (unsigned long long)st.st_ino, st.st_uid, fl->flags);
+	    (unsigned long long)st.st_dev,
+	    (unsigned long long)st.st_ino, st.st_uid, fl->flags);
 	lflags = LOCK_NB;
 	if (fl->client.exclusive == 0)
 		lflags |= LOCK_SH;

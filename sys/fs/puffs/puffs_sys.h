@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_sys.h,v 1.69 2008/01/02 22:37:20 pooka Exp $	*/
+/*	$NetBSD: puffs_sys.h,v 1.77 2011/01/11 14:04:54 kefren Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006  Antti Kantee.  All Rights Reserved.
@@ -93,10 +93,28 @@ extern int puffsdebug; /* puffs_subr.c */
 #define PUFFS_WCACHEINFO(pmp)	0
 
 struct puffs_newcookie {
-	void	*pnc_cookie;
+	puffs_cookie_t	pnc_cookie;
 
 	LIST_ENTRY(puffs_newcookie) pnc_entries;
 };
+
+enum puffs_sopreqtype {
+	PUFFS_SOPREQSYS_EXIT,
+	PUFFS_SOPREQ_FLUSH,
+	PUFFS_SOPREQ_UNMOUNT,
+};
+
+struct puffs_sopreq {
+	union {
+		struct puffs_req preq;
+		struct puffs_flush pf;
+	} psopr_u;
+
+	enum puffs_sopreqtype psopr_sopreq;
+	TAILQ_ENTRY(puffs_sopreq) psopr_entries;
+};
+#define psopr_preq psopr_u.preq
+#define psopr_pf psopr_u.pf
 
 TAILQ_HEAD(puffs_wq, puffs_msgpark);
 LIST_HEAD(puffs_node_hashlist, puffs_node);
@@ -122,7 +140,7 @@ struct puffs_mount {
 	struct mount			*pmp_mp;
 
 	struct vnode			*pmp_root;
-	void				*pmp_root_cookie;
+	puffs_cookie_t			pmp_root_cookie;
 	enum vtype			pmp_root_vtype;
 	vsize_t				pmp_root_vsize;
 	dev_t				pmp_root_rdev;
@@ -143,6 +161,12 @@ struct puffs_mount {
 	void				*pmp_curopaq;
 
 	uint64_t			pmp_nextmsgid;
+
+	kmutex_t			pmp_sopmtx;
+	kcondvar_t			pmp_sopcv;
+	int				pmp_sopthrcount;
+	TAILQ_HEAD(, puffs_sopreq)	pmp_sopreqs;
+	bool				pmp_docompat;
 };
 
 #define PUFFSTAT_BEFOREINIT	0
@@ -152,7 +176,8 @@ struct puffs_mount {
 
 
 #define PNODE_NOREFS	0x01	/* no backend reference			*/
-#define PNODE_SUSPEND	0x04	/* issue all operations as FAF		*/
+#define PNODE_DYING	0x02	/* NOREFS + inactive			*/
+#define PNODE_FAF	0x04	/* issue all operations as FAF		*/
 #define PNODE_DOINACT	0x08	/* if inactive-on-demand, call inactive */
 
 #define PNODE_METACACHE_ATIME	0x10	/* cache atime metadata */
@@ -167,7 +192,7 @@ struct puffs_node {
 	kmutex_t	pn_mtx;
 	int		pn_refcount;
 
-	void		*pn_cookie;	/* userspace pnode cookie	*/
+	puffs_cookie_t	pn_cookie;	/* userspace pnode cookie	*/
 	struct vnode	*pn_vp;		/* backpointer to vnode		*/
 	uint32_t	pn_stat;	/* node status			*/
 
@@ -182,6 +207,8 @@ struct puffs_node {
 
 	voff_t		pn_serversize;
 
+	struct lockf *	pn_lockf;
+
 	LIST_ENTRY(puffs_node) pn_hashent;
 };
 
@@ -193,9 +220,11 @@ void	puffs_msgif_destroy(void);
 int	puffs_msgmem_alloc(size_t, struct puffs_msgpark **, void **, int);
 void	puffs_msgmem_release(struct puffs_msgpark *);
 
+void	puffs_sop_thread(void *);
+
 void	puffs_msg_setfaf(struct puffs_msgpark *);
 void	puffs_msg_setdelta(struct puffs_msgpark *, size_t);
-void	puffs_msg_setinfo(struct puffs_msgpark *, int, int, void *);
+void	puffs_msg_setinfo(struct puffs_msgpark *, int, int, puffs_cookie_t);
 void	puffs_msg_setcall(struct puffs_msgpark *, parkdone_fn, void *);
 
 void	puffs_msg_enqueue(struct puffs_mount *, struct puffs_msgpark *);
@@ -205,17 +234,18 @@ int	puffs_msg_wait2(struct puffs_mount *, struct puffs_msgpark *,
 
 void	puffs_msg_sendresp(struct puffs_mount *, struct puffs_req *, int);
 
-int	puffs_getvnode(struct mount *, void *, enum vtype, voff_t, dev_t,
-		       struct vnode **);
+int	puffs_getvnode(struct mount *, puffs_cookie_t, enum vtype,
+		       voff_t, dev_t, struct vnode **);
 int	puffs_newnode(struct mount *, struct vnode *, struct vnode **,
-		      void *, struct componentname *, enum vtype, dev_t);
+		      puffs_cookie_t, struct componentname *,
+		      enum vtype, dev_t);
 void	puffs_putvnode(struct vnode *);
 
 void	puffs_releasenode(struct puffs_node *);
 void	puffs_referencenode(struct puffs_node *);
 
 #define PUFFS_NOSUCHCOOKIE (-1)
-int	puffs_cookie2vnode(struct puffs_mount *, void *, int, int,
+int	puffs_cookie2vnode(struct puffs_mount *, puffs_cookie_t, int, int,
 			   struct vnode **);
 void	puffs_makecn(struct puffs_kcn *, struct puffs_kcred *,
 		     const struct componentname *, int);
@@ -233,7 +263,11 @@ void	puffs_mp_release(struct puffs_mount *);
 void	puffs_gop_size(struct vnode *, off_t, off_t *, int); 
 void	puffs_gop_markupdate(struct vnode *, int);
 
-void	puffs_senderr(struct puffs_mount *, int, int, const char *, void *);
+void	puffs_senderr(struct puffs_mount *, int, int, const char *,
+		      puffs_cookie_t);
+
+bool	puffs_compat_outgoing(struct puffs_req *, struct puffs_req**, ssize_t*);
+void	puffs_compat_incoming(struct puffs_req *, struct puffs_req *);
 
 void	puffs_updatenode(struct puffs_node *, int, voff_t);
 #define PUFFS_UPDATEATIME	0x01

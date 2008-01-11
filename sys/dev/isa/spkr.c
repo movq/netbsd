@@ -1,4 +1,4 @@
-/*	$NetBSD: spkr.c,v 1.27 2007/12/20 18:45:32 dyoung Exp $	*/
+/*	$NetBSD: spkr.c,v 1.31 2010/07/27 14:34:34 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1990 Eric S. Raymond (esr@snark.thyrsus.com)
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.27 2007/12/20 18:45:32 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.31 2010/07/27 14:34:34 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,14 +62,10 @@ __KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.27 2007/12/20 18:45:32 dyoung Exp $");
 
 #include <dev/isa/spkrio.h>
 
-int spkrprobe(struct device *, struct cfdata *, void *);
-void spkrattach(struct device *, struct device *, void *);
+int spkrprobe(device_t, cfdata_t, void *);
+void spkrattach(device_t, device_t, void *);
 
-struct spkr_softc {
-	struct device sc_dev;
-};
-
-CFATTACH_DECL(spkr, sizeof(struct spkr_softc),
+CFATTACH_DECL_NEW(spkr, 0,
     spkrprobe, spkrattach, NULL, NULL);
 
 dev_type_open(spkropen);
@@ -175,7 +171,7 @@ static const int pitchtab[] =
 #define NOCTAVES (__arraycount(pitchtab) / OCTAVE_NOTES)
 
 static void
-playinit()
+playinit(void)
 {
     octave = DFLT_OCTAVE;
     whole = (hz * SECS_PER_MIN * WHOLE_NOTE) / DFLT_TEMPO;
@@ -407,15 +403,13 @@ static void *spkr_inbuf;
 static int spkr_attached = 0;
 
 int
-spkrprobe(struct device *parent, struct cfdata *match,
-    void *aux)
+spkrprobe(device_t parent, cfdata_t match, void *aux)
 {
 	return (!spkr_attached);
 }
 
 void
-spkrattach(struct device *parent, struct device *self,
-    void *aux)
+spkrattach(device_t parent, device_t self, void *aux)
 {
 	printf("\n");
 	ppicookie = ((struct pcppi_attach_args *)aux)->pa_cookie;
@@ -428,11 +422,10 @@ spkrattach(struct device *parent, struct device *self,
 }
 
 int
-spkropen(dev_t dev, int	flags, int mode,
-    struct lwp *l)
+spkropen(dev_t dev, int	flags, int mode, struct lwp *l)
 {
 #ifdef SPKRDEBUG
-    printf("spkropen: entering with dev = %x\n", dev);
+    printf("spkropen: entering with dev = %"PRIx64"\n", dev);
 #endif /* SPKRDEBUG */
 
     if (minor(dev) != 0 || !spkr_attached)
@@ -454,7 +447,7 @@ spkrwrite(dev_t dev, struct uio *uio, int flags)
     int n;
     int error;
 #ifdef SPKRDEBUG
-    printf("spkrwrite: entering with dev = %x, count = %d\n",
+    printf("spkrwrite: entering with dev = %"PRIx64", count = %zu\n",
 		dev, uio->uio_resid);
 #endif /* SPKRDEBUG */
 
@@ -474,7 +467,7 @@ int spkrclose(dev_t dev, int flags, int mode,
     struct lwp *l)
 {
 #ifdef SPKRDEBUG
-    printf("spkrclose: entering with dev = %x\n", dev);
+    printf("spkrclose: entering with dev = %"PRIx64"\n", dev);
 #endif /* SPKRDEBUG */
 
     if (minor(dev) != 0)
@@ -492,7 +485,7 @@ int spkrioctl(dev_t dev, u_long cmd, void *data, int	flag,
     struct lwp *l)
 {
 #ifdef SPKRDEBUG
-    printf("spkrioctl: entering with dev = %x, cmd = %lx\n", dev, cmd);
+    printf("spkrioctl: entering with dev = %"PRIx64", cmd = %lx\n", dev, cmd);
 #endif /* SPKRDEBUG */
 
     if (minor(dev) != 0)

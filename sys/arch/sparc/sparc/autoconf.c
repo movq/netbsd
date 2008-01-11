@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.226 2007/12/05 12:31:27 tsutsui Exp $ */
+/*	$NetBSD: autoconf.c,v 1.240 2011/01/14 02:06:31 rmind Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,10 +48,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.226 2007/12/05 12:31:27 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.240 2011/01/14 02:06:31 rmind Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
+#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_sparc_arch.h"
 
@@ -72,16 +73,17 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.226 2007/12/05 12:31:27 tsutsui Exp $
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/msgbuf.h>
-#include <sys/user.h>
 #include <sys/boot_flag.h>
 #include <sys/ksyms.h>
 
 #include <net/if.h>
+#include <net/if_ether.h>
 
 #include <dev/cons.h>
 
 #include <uvm/uvm_extern.h>
 
+#include <machine/pcb.h>
 #include <machine/bus.h>
 #include <machine/promlib.h>
 #include <machine/autoconf.h>
@@ -119,7 +121,7 @@ extern	int kgdb_debug_panic;
 #endif
 extern void *bootinfo;
 
-#if !NKSYMS && !defined(DDB) && !defined(LKM)
+#if !NKSYMS && !defined(DDB) && !defined(MODULAR)
 void bootinfo_relocate(void *);
 #endif
 
@@ -262,8 +264,8 @@ static void bootstrapIIep(void);
 void
 bootstrap(void)
 {
-	extern struct user *proc0paddr;
-#if NKSYMS || defined(DDB) || defined(LKM)
+	extern uint8_t u0[];
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	struct btinfo_symtab *bi_sym;
 #else
 	extern int end[];
@@ -273,12 +275,11 @@ bootstrap(void)
 
 	/* Find the number of CPUs as early as possible */
 	sparc_ncpus = find_cpus();
-
-	/* Attach user structure to proc0 */
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, (vaddr_t)u0);
 
 	cpuinfo.master = 1;
 	getcpuinfo(&cpuinfo, 0);
+	curlwp = &lwp0;
 
 #if defined(SUN4M) || defined(SUN4D)
 	/* Switch to sparc v8 multiply/divide functions on v8 machines */
@@ -288,7 +289,7 @@ bootstrap(void)
 	}
 #endif /* SUN4M || SUN4D */
 
-#if !NKSYMS && !defined(DDB) && !defined(LKM)
+#if !NKSYMS && !defined(DDB) && !defined(MODULAR)
 	/*
 	 * We want to reuse the memory where the symbols were stored
 	 * by the loader. Relocate the bootinfo array which is loaded
@@ -314,18 +315,6 @@ bootstrap(void)
 	initmsgbuf((void *)KERNBASE, 8192);
 #endif
 
-#if NKSYMS || defined(DDB) || defined(LKM)
-	if ((bi_sym = lookup_bootinfo(BTINFO_SYMTAB)) != NULL) {
-		if (bi_sym->ssym < KERNBASE) {
-			/* Assume low-loading boot loader */
-			bi_sym->ssym += KERNBASE;
-			bi_sym->esym += KERNBASE;
-		}
-		ksyms_init(bi_sym->nsym, (int *)bi_sym->ssym,
-		    (int *)bi_sym->esym);
-	}
-#endif
-
 #if defined(SUN4M)
 	/*
 	 * sun4m bootstrap is complex and is totally different for "normal" 4m
@@ -345,12 +334,24 @@ bootstrap(void)
 		/* Map Interrupt Enable Register */
 		pmap_kenter_pa(INTRREG_VA,
 		    INT_ENABLE_REG_PHYSADR | PMAP_NC | PMAP_OBIO,
-		    VM_PROT_READ | VM_PROT_WRITE);
+		    VM_PROT_READ | VM_PROT_WRITE, 0);
 		pmap_update(pmap_kernel());
 		/* Disable all interrupts */
 		*((unsigned char *)INTRREG_VA) = 0;
 	}
 #endif /* SUN4 || SUN4C */
+
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+	if ((bi_sym = lookup_bootinfo(BTINFO_SYMTAB)) != NULL) {
+		if (bi_sym->ssym < KERNBASE) {
+			/* Assume low-loading boot loader */
+			bi_sym->ssym += KERNBASE;
+			bi_sym->esym += KERNBASE;
+		}
+		ksyms_addsyms_elf(bi_sym->nsym, (void*)bi_sym->ssym,
+		    (void*)bi_sym->esym);
+	}
+#endif
 }
 
 #if defined(SUN4M) && !defined(MSIIEP)
@@ -502,7 +503,7 @@ bootpath_build(void)
 	/*
 	 * Grab boot path from PROM and split into `bootpath' components.
 	 */
-	bzero(bootpath, sizeof(bootpath));
+	memset(bootpath, 0, sizeof(bootpath));
 	bp = bootpath;
 	cp = prom_getbootpath();
 	switch (prom_version()) {
@@ -913,6 +914,7 @@ st_crazymap(int n)
 void
 cpu_configure(void)
 {
+	struct pcb *pcb0;
 
 	/* initialise the softintr system */
 	sparc_softintr_init();
@@ -968,14 +970,12 @@ cpu_configure(void)
 		panic("mainbus not configured");
 
 	/*
-	 * XXX Re-zero proc0's user area, to nullify the effect of the
+	 * XXX Re-zero lwp0's pcb, to nullify the effect of the
 	 * XXX stack running into it during auto-configuration.
 	 * XXX - should fix stack usage.
 	 */
-	{
-		extern struct user *proc0paddr;
-		bzero(proc0paddr, sizeof(struct user));
-	}
+	pcb0 = lwp_getpcb(&lwp0);
+	memset(pcb0, 0, sizeof(struct pcb));
 
 	spl0();
 }
@@ -1182,7 +1182,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 #if defined(SUN4)
 	if (CPU_ISSUN4) {
 
-		bzero(&ma, sizeof(ma));
+		memset(&ma, 0, sizeof(ma));
 		/* Configure the CPU. */
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
@@ -1245,7 +1245,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 					continue;
 			}
 
-			bzero(&ma, sizeof(ma));
+			memset(&ma, 0, sizeof(ma));
 			ma.ma_bustag = &mainbus_space_tag;
 			ma.ma_dmatag = &mainbus_dma_tag;
 			ma.ma_node = node;
@@ -1257,7 +1257,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 			}
 		}
 	} else if (CPU_ISSUN4C) {
-		bzero(&ma, sizeof(ma));
+		memset(&ma, 0, sizeof(ma));
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
 		ma.ma_node = findroot();
@@ -1273,7 +1273,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 			panic(sp);
 		}
 
-		bzero(&ma, sizeof ma);
+		memset(&ma, 0, sizeof ma);
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
 		ma.ma_name = prom_getpropstringA(node, "name",
@@ -1320,7 +1320,7 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		if (sp != NULL)
 			continue; /* an "early" device already configured */
 
-		bzero(&ma, sizeof ma);
+		memset(&ma, 0, sizeof ma);
 		ma.ma_bustag = &mainbus_space_tag;
 		ma.ma_dmatag = &mainbus_dma_tag;
 		ma.ma_name = prom_getpropstringA(node, "name",
@@ -1383,7 +1383,7 @@ prom_getprop_reg1(int node, struct openprom_addr *rrp)
 		if (error == ENOENT &&
 		    strcmp(prom_getpropstringA(node, "device_type", buf, sizeof buf),
 			   "hierarchical") == 0) {
-			bzero(rrp, sizeof(struct openprom_addr));
+			memset(rrp, 0, sizeof(struct openprom_addr));
 			error = 0;
 		}
 		return (error);
@@ -1466,32 +1466,6 @@ romgetcursoraddr(int **rowp, int **colp)
 #endif /* RASTERCONSOLE */
 
 /*
- * find a device matching "name" and unit number
- */
-struct device *
-getdevunit(const char *name, int unit)
-{
-	struct device *dev = TAILQ_FIRST(&alldevs);
-	char num[10], fullname[16];
-	int lunit;
-
-	/* compute length of name and decimal expansion of unit number */
-	sprintf(num, "%d", unit);
-	lunit = strlen(num);
-	if (strlen(name) + lunit >= sizeof(fullname) - 1)
-		panic("config_attach: device name too long");
-
-	strcpy(fullname, name);
-	strcat(fullname, num);
-
-	while (strcmp(dev->dv_xname, fullname) != 0) {
-		if ((dev = TAILQ_NEXT(dev, dv_list)) == NULL)
-			return NULL;
-	}
-	return dev;
-}
-
-/*
  * Device registration used to determine the boot device.
  */
 #include <dev/scsipi/scsi_all.h>
@@ -1515,6 +1489,7 @@ static int bus_class(struct device *);
 static const char *bus_compatible(const char *);
 static int instance_match(struct device *, void *, struct bootpath *);
 static void nail_bootdev(struct device *, struct bootpath *);
+static void set_network_props(struct device *, void *);
 
 static struct {
 	const char	*name;
@@ -1593,6 +1568,45 @@ bus_class(struct device *dev)
 		class = BUSCLASS_SBUS;
 
 	return (class);
+}
+
+static void
+set_network_props(struct device *dev, void *aux)
+{
+	struct mainbus_attach_args *ma;
+	struct sbus_attach_args *sa;
+	struct iommu_attach_args *iom;
+	struct pci_attach_args *pa;
+	uint8_t eaddr[ETHER_ADDR_LEN];
+	prop_dictionary_t dict;
+	prop_data_t blob;
+	int ofnode;
+
+	ofnode = 0;
+	switch (bus_class(device_parent(dev))) {
+	case BUSCLASS_MAINBUS:
+		ma = aux;
+		ofnode = ma->ma_node;
+		break;
+	case BUSCLASS_SBUS:
+		sa = aux;
+		ofnode = sa->sa_node;
+		break;
+	case BUSCLASS_IOMMU:
+		iom = aux;
+		ofnode = iom->iom_node;
+		break;
+	case BUSCLASS_PCI:
+		pa = aux;
+		ofnode = PCITAG_NODE(pa->pa_tag);
+		break;
+	}
+
+	prom_getether(ofnode, eaddr);
+	dict = device_properties(dev);
+	blob = prop_data_create_data(eaddr, ETHER_ADDR_LEN);
+	prop_dictionary_set(dict, "mac-address", blob);
+	prop_object_release(blob);
 }
 
 int
@@ -1769,7 +1783,11 @@ device_register(struct device *dev, void *aux)
 		}
 	} else if (device_is_a(dev, "le") ||
 		   device_is_a(dev, "hme") ||
-		   device_is_a(dev, "be")) {
+		   device_is_a(dev, "be") ||
+		   device_is_a(dev, "ie")) {
+
+		set_network_props(dev, aux);
+
 		/*
 		 * LANCE, Happy Meal, or BigMac ethernet device
 		 */
@@ -1793,12 +1811,12 @@ device_register(struct device *dev, void *aux)
 		struct scsipi_periph *periph = sa->sa_periph;
 		struct scsipi_channel *chan = periph->periph_channel;
 		struct scsibus_softc *sbsc =
-			(struct scsibus_softc *)device_parent(dev);
+			device_private(device_parent(dev));
 		u_int target = bp->val[0];
 		u_int lun = bp->val[1];
 
 		/* Check the controller that this scsibus is on */
-		if ((bp-1)->dev != device_parent(&sbsc->sc_dev))
+		if ((bp-1)->dev != device_parent(sbsc->sc_dev))
 			return;
 
 		/*
@@ -1893,7 +1911,7 @@ lookup_bootinfo(int type)
 	return (NULL);
 }
 
-#if !NKSYMS && !defined(DDB) && !defined(LKM)
+#if !NKSYMS && !defined(DDB) && !defined(MODULAR)
 /*
  * Move bootinfo from the current kernel top to the proposed
  * location. As a side-effect, `kernel_top' is adjusted to point
@@ -1955,4 +1973,4 @@ bootinfo_relocate(void *newloc)
 	bootinfo = newloc;
 	kernel_top = (char *)newloc + ALIGN(bi_size);
 }
-#endif /* !NKSYMS && !defined(DDB) && !defined(LKM) */
+#endif /* !NKSYMS && !defined(DDB) && !defined(MODULAR) */

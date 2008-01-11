@@ -1,4 +1,4 @@
-/*	$NetBSD: isadma_bounce.c,v 1.7 2007/03/05 18:21:59 matt Exp $	*/
+/*	$NetBSD: isadma_bounce.c,v 1.9 2011/02/20 07:51:22 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isadma_bounce.c,v 1.7 2007/03/05 18:21:59 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isadma_bounce.c,v 1.9 2011/02/20 07:51:22 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,8 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: isadma_bounce.c,v 1.7 2007/03/05 18:21:59 matt Exp $
 #include <dev/isa/isavar.h>
 
 #include <uvm/uvm_extern.h>
-
-extern	paddr_t avail_end;
 
 /*
  * Cookie used by bouncing ISA DMA.  A pointer to one of these is stashed
@@ -145,7 +136,7 @@ isadma_bounce_dmamap_create(bus_dma_tag_t t, bus_size_t size, int nsegments,
 	 * ISA DMA controller), we may have to bounce it as well.
 	 */
 	cookieflags = 0;
-	if (avail_end > (t->_wbase + t->_wsize) ||
+	if (mips_avail_end > (t->_wbase + t->_wsize) ||
 	    ((map->_dm_size / PAGE_SIZE) + 1) > map->_dm_segcnt) {
 		cookieflags |= ID_MIGHT_NEED_BOUNCE;
 		cookiesize += (sizeof(bus_dma_segment_t) *
@@ -547,10 +538,10 @@ isadma_bounce_dmamem_alloc(bus_dma_tag_t t, bus_size_t size,
 {
 	paddr_t high;
 
-	if (avail_end > ISA_DMA_BOUNCE_THRESHOLD)
+	if (mips_avail_end > ISA_DMA_BOUNCE_THRESHOLD)
 		high = trunc_page(ISA_DMA_BOUNCE_THRESHOLD);
 	else
-		high = trunc_page(avail_end);
+		high = trunc_page(mips_avail_end);
 
 	return (_bus_dmamem_alloc_range(t, size, alignment, boundary,
 	    segs, nsegs, rsegs, flags, 0, high));

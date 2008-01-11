@@ -1,4 +1,4 @@
-/*	$NetBSD: c.h,v 1.5 2007/12/20 20:12:12 christos Exp $	*/
+/*	$NetBSD: c.h,v 1.7 2009/06/20 17:03:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1991 Carnegie Mellon University
@@ -56,16 +56,26 @@
 #ifndef	_C_INCLUDE_
 #define	_C_INCLUDE_
 
-#define	MAX(a,b) (((a)>(b))?(a):(b))
+#include <sys/cdefs.h>
+#include <sys/param.h>
 
 #ifndef	FALSE
 #define FALSE	0
 #endif	/* FALSE */
+
 #ifndef	TRUE
 #define TRUE	1
 #endif	/* TRUE */
 
-#define sizeofA(array)	(sizeof(array)/sizeof(array[0]))
+#ifndef MAX
+#define MAX(a,b) ((a)>(b)?(a):(b))
+#endif
+
+#ifdef __arraycount
+#define sizeofA(array)	__arraycount(array)
+#else
+#define sizeofA(array) (sizeof(array)/sizeof(array[0]))
+#endif
 
 #ifndef __unused
 #ifndef __GNUC__

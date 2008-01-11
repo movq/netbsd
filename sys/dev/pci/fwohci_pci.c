@@ -1,4 +1,4 @@
-/*	$NetBSD: fwohci_pci.c,v 1.28 2007/12/09 20:28:08 jmcneill Exp $	*/
+/*	$NetBSD: fwohci_pci.c,v 1.39 2010/04/29 06:41:27 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,20 +30,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fwohci_pci.c,v 1.28 2007/12/09 20:28:08 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fwohci_pci.c,v 1.39 2010/04/29 06:41:27 kiyohara Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/socket.h>
-#include <sys/device.h>
-#include <sys/select.h>
-
 #include <sys/bus.h>
+#include <sys/device.h>
 #include <sys/intr.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/systm.h>
 
+#include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
-#include <dev/ieee1394/fw_port.h>
 #include <dev/ieee1394/firewire.h>
 #include <dev/ieee1394/firewirereg.h>
 #include <dev/ieee1394/fwdma.h>
@@ -66,21 +58,31 @@ struct fwohci_pci_softc {
 	void *psc_ih;
 };
 
-static int fwohci_pci_match(struct device *, struct cfdata *, void *);
-static void fwohci_pci_attach(struct device *, struct device *, void *);
+static int fwohci_pci_match(device_t, cfdata_t, void *);
+static void fwohci_pci_attach(device_t, device_t, void *);
+static int fwohci_pci_detach(device_t, int);
 
-static bool fwohci_pci_suspend(device_t);
-static bool fwohci_pci_resume(device_t);
+static bool fwohci_pci_suspend(device_t, const pmf_qual_t *);
+static bool fwohci_pci_resume(device_t, const pmf_qual_t *);
 
-CFATTACH_DECL(fwohci_pci, sizeof(struct fwohci_pci_softc),
-    fwohci_pci_match, fwohci_pci_attach, NULL, NULL);
+CFATTACH_DECL_NEW(fwohci_pci, sizeof(struct fwohci_pci_softc),
+    fwohci_pci_match, fwohci_pci_attach, fwohci_pci_detach, NULL);
 
 static int
-fwohci_pci_match(struct device *parent, struct cfdata *match,
+fwohci_pci_match(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
+	/*
+	 * XXX
+	 * Firewire controllers used in some G3 PowerBooks hang the system
+	 * when trying to discover devices - don't attach to those for now
+	 * until someone with the right hardware can investigate
+	 */
+	if ((PCI_VENDOR(pa->pa_id) == PCI_VENDOR_APPLE) &&
+	    (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_APPLE_PBG3_FW))
+	    return 0;
 	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_SERIALBUS &&
 	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_SERIALBUS_FIREWIRE &&
 	    PCI_INTERFACE(pa->pa_class) == PCI_INTERFACE_OHCI)
@@ -90,15 +92,14 @@ fwohci_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-fwohci_pci_attach(struct device *parent, struct device *self,
-    void *aux)
+fwohci_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
-	struct fwohci_pci_softc *psc = (struct fwohci_pci_softc *) self;
+	struct fwohci_pci_softc *psc = device_private(self);
 	char devinfo[256];
 	char const *intrstr;
 	pci_intr_handle_t ih;
-	u_int32_t csr;
+	uint32_t csr;
 
 	aprint_naive(": IEEE 1394 Controller\n");
 
@@ -106,6 +107,7 @@ fwohci_pci_attach(struct device *parent, struct device *self,
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
+	psc->psc_sc.fc.dev = self;
 	psc->psc_sc.fc.dmat = pa->pa_dmat;
 	psc->psc_pc = pa->pa_pc;
 	psc->psc_tag = pa->pa_tag;
@@ -114,41 +116,48 @@ fwohci_pci_attach(struct device *parent, struct device *self,
 	if (pci_mapreg_map(pa, PCI_OHCI_MAP_REGISTER, PCI_MAPREG_TYPE_MEM, 0,
 	    &psc->psc_sc.bst, &psc->psc_sc.bsh,
 	    NULL, &psc->psc_sc.bssize)) {
-		aprint_error("%s: can't map OHCI register space\n",
-		    self->dv_xname);
+		aprint_error_dev(self, "can't map OHCI register space\n");
 		goto fail;
 	}
 
 	/* Disable interrupts, so we don't get any spurious ones. */
-	OHCI_CSR_WRITE(&psc->psc_sc, FWOHCI_INTMASKCLR, OHCI_INT_EN);
+	OWRITE(&psc->psc_sc, FWOHCI_INTMASKCLR, OHCI_INT_EN);
 
 	/* Enable the device. */
 	csr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
-	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
-	    csr | PCI_COMMAND_MASTER_ENABLE);
+	csr |= PCI_COMMAND_MASTER_ENABLE | PCI_COMMAND_MEM_ENABLE;
+	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG, csr);
+
+	/*
+	 * Some Sun FireWire controllers have their intpin register
+	 * bogusly set to 0, although it should be 3. Correct that.
+	 */
+	if ((PCI_VENDOR(pa->pa_id) == PCI_VENDOR_SUN) &&
+	    (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SUN_FIREWIRE))
+		if (pa->pa_intrpin == 0)
+			pa->pa_intrpin = 3;
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: couldn't map interrupt\n", self->dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		goto fail;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, ih);
-	psc->psc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO, fwohci_filt,
+	psc->psc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO, fwohci_intr,
 	    &psc->psc_sc);
 	if (psc->psc_ih == NULL) {
-		aprint_error("%s: couldn't establish interrupt",
-		    self->dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		goto fail;
 	}
-	aprint_normal("%s: interrupting at %s\n", self->dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	if (!pmf_device_register(self, fwohci_pci_suspend, fwohci_pci_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
-	if (fwohci_init(&(psc->psc_sc), &(psc->psc_sc.fc._dev)) != 0) {
+	if (fwohci_init(&psc->psc_sc) != 0) {
 		pci_intr_disestablish(pa->pa_pc, psc->psc_ih);
 		bus_space_unmap(psc->psc_sc.bst, psc->psc_sc.bsh,
 		    psc->psc_sc.bssize);
@@ -164,27 +173,50 @@ fail:
 	return;
 }
 
+static int
+fwohci_pci_detach(device_t self, int flags)
+{
+	struct fwohci_pci_softc *psc = device_private(self);
+	int rv;
+
+	pmf_device_deregister(self);
+	rv = fwohci_detach(&psc->psc_sc, flags);
+	if (rv)
+		return rv;
+
+	if (psc->psc_ih != NULL) {
+		pci_intr_disestablish(psc->psc_pc, psc->psc_ih);
+		psc->psc_ih = NULL;
+	}
+	if (psc->psc_sc.bssize) {
+		bus_space_unmap(psc->psc_sc.bst, psc->psc_sc.bsh,
+		    psc->psc_sc.bssize);
+		psc->psc_sc.bssize = 0;
+	}
+	return 0;
+}
+
 static bool
-fwohci_pci_suspend(device_t dv)
+fwohci_pci_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct fwohci_pci_softc *psc = device_private(dv);
 	int s;
 
 	s = splbio();
-	fwohci_stop(&psc->psc_sc, psc->psc_sc.fc.dev);
+	fwohci_stop(&psc->psc_sc);
 	splx(s);
 
 	return true;
 }
 
 static bool
-fwohci_pci_resume(device_t dv)
+fwohci_pci_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct fwohci_pci_softc *psc = device_private(dv);
 	int s;
 
 	s = splbio();
-	fwohci_resume(&psc->psc_sc, psc->psc_sc.fc.dev);
+	fwohci_resume(&psc->psc_sc);
 	splx(s);
 
 	return true;

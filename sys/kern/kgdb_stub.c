@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_stub.c,v 1.22 2005/12/07 05:53:24 thorpej Exp $	*/
+/*	$NetBSD: kgdb_stub.c,v 1.24 2011/04/03 22:29:28 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_stub.c,v 1.22 2005/12/07 05:53:24 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_stub.c,v 1.24 2011/04/03 22:29:28 dyoung Exp $");
 
 #include "opt_kgdb.h"
 
@@ -69,7 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: kgdb_stub.c,v 1.22 2005/12/07 05:53:24 thorpej Exp $
 #define KGDB_DEVRATE 19200
 #endif
 
-int kgdb_dev = KGDB_DEV;	/* remote debugging device (NODEV if none) */
+dev_t kgdb_dev = KGDB_DEV;	/* remote debugging device (NODEV if none) */
 int kgdb_rate = KGDB_DEVRATE;	/* remote debugging baud rate */
 int kgdb_active = 0;		/* remote debugging active if != 0 */
 int kgdb_debug_init = 0;	/* != 0 waits for remote at system init */
@@ -93,6 +93,16 @@ static kgdb_reg_t gdb_regs[KGDB_NUMREGS];
  * is shared with DDB.
  */
 void (*db_trap_callback)(int);
+
+void kgdb_voidop(void);
+
+__weak_alias(kgdb_entry_notice, kgdb_voidop);
+
+void
+kgdb_voidop(void)
+{
+	return;
+}
 
 /*
  * This little routine exists simply so that bcopy() can be debugged.
@@ -321,7 +331,9 @@ kgdb_trap(int type, db_regs_t *regs)
 	size_t len;
 	u_char *p;
 
-	if (kgdb_dev < 0 || kgdb_getc == NULL) {
+	kgdb_entry_notice(type, regs);
+
+	if (kgdb_dev == NODEV || kgdb_getc == NULL) {
 		/* not debugging */
 		return (0);
 	}
@@ -526,4 +538,10 @@ kgdb_trap(int type, db_regs_t *regs)
 	if (db_trap_callback) db_trap_callback(0);
 	kgdb_recover = 0;
 	return (1);
+}
+
+int
+kgdb_disconnected(void)
+{
+	return 1;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: tss.h,v 1.3 2008/01/05 21:47:20 yamt Exp $	*/
+/*	$NetBSD: tss.h,v 1.5 2008/10/26 00:08:15 mrg Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -38,6 +38,8 @@
 #ifndef _AMD64_TSS_H_
 #define _AMD64_TSS_H_
 
+#ifdef __x86_64__
+
 /*
  * TSS structure. Since TSS hw switching is not supported in long
  * mode, this is mainly there for the I/O permission map in
@@ -45,16 +47,16 @@
  */
 
 struct x86_64_tss {
-	u_int32_t	tss_reserved1;
-	u_int64_t	tss_rsp0;
-	u_int64_t	tss_rsp1;
-	u_int64_t	tss_rsp3;
-	u_int32_t	tss_reserved2;
-	u_int32_t	tss_reserved3;
-	u_int64_t	tss_ist[7];
-	u_int32_t	tss_reserved4;
-	u_int32_t	tss_reserved5;
-	u_int32_t	tss_iobase;
+	uint32_t	tss_reserved1;
+	uint64_t	tss_rsp0;
+	uint64_t	tss_rsp1;
+	uint64_t	tss_rsp3;
+	uint32_t	tss_reserved2;
+	uint32_t	tss_reserved3;
+	uint64_t	tss_ist[7];
+	uint32_t	tss_reserved4;
+	uint32_t	tss_reserved5;
+	uint32_t	tss_iobase;
 } __packed;
 
 /*
@@ -62,5 +64,11 @@ struct x86_64_tss {
  * (i.e. any I/O attempt generates an exception.)
  */
 #define	IOMAP_INVALOFF	0xffff
+
+#else	/*	__x86_64__	*/
+
+#include <i386/tss.h>
+
+#endif	/*	__x86_64__	*/
 
 #endif /* _AMD64_TSS_H_ */

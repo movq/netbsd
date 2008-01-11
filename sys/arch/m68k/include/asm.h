@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.24 2006/01/20 22:02:40 christos Exp $	*/
+/*	$NetBSD: asm.h,v 1.28 2011/02/12 16:32:36 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -142,9 +135,9 @@
 #define ALTENTRY(name, rname)	_ENTRY(_C_LABEL(name))
 #endif
 
-#define RCSID(x)	.text			;	\
+#define RCSID(x)	.pushsection ".ident"	;	\
 			.asciz x		;	\
-			.even
+			.popsection
 
 /*
  * Global variables of whatever sort.
@@ -186,6 +179,31 @@
 	9:	.asciz	x			;	\
 		.even
 
+/*
+ * Need a better place for these but these are common across
+ * all m68k ports so let's define just once.
+ */
+#define INTERRUPT_SAVEREG	moveml	#0xC0C0,%sp@-
+#define INTERRUPT_RESTOREREG	moveml	%sp@+,#0x0303
+
+/* 64-bit counter increments */
+#define CPUINFO_INCREMENT(n)					\
+	lea	_C_LABEL(cpu_info_store)+(n)+4,%a1;		\
+	addq.l	#1,(%a1);					\
+	clr.l	%d0;		/* doesn't change CCR[X] */	\
+	move.l	-(%a1),%d1;	/* doesn't change CCR[X] */	\
+	addx.l	%d0,%d1;					\
+	move.l	%d1,(%a1)
+
+/* 64-bit counter increments */
+#define CPUINFO_ADD(n, addend)					\
+	lea	_C_LABEL(cpu_info_store)+(n)+4,%a1;		\
+	add.l	addend,(%a1);					\
+	clr.l	%d0;		/* doesn't change CCR[X] */	\
+	move.l	-(%a1),%d1;	/* doesn't change CCR[X] */	\
+	addx.l	%d0,%d1;					\
+	move.l	%d1,(%a1)
+
 #endif /* _KERNEL */
 
 /*
@@ -213,15 +231,15 @@
 	alias = sym
 
 #ifdef __STDC__
-#define	__STRING(x)			#x
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg ## ,30,0,0,0 ;					\
-	.stabs __STRING(_ ## sym) ## ,1,0,0,0
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
 #else
-#define	__STRING(x)			"x"
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(_/**/sym),1,0,0,0
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
 #endif /* __STDC__ */
 
 /*

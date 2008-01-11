@@ -1,4 +1,4 @@
-/*	$NetBSD: vfwprintf.c,v 1.10 2007/02/03 00:28:33 christos Exp $	*/
+/*	$NetBSD: vfwprintf.c,v 1.23 2010/12/16 17:42:27 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -38,7 +38,7 @@
 static char sccsid[] = "@(#)vfprintf.c	8.1 (Berkeley) 6/4/93";
 __FBSDID("$FreeBSD: src/lib/libc/stdio/vfwprintf.c,v 1.27 2007/01/09 00:28:08 imp Exp $");
 #else
-__RCSID("$NetBSD: vfwprintf.c,v 1.10 2007/02/03 00:28:33 christos Exp $");
+__RCSID("$NetBSD: vfwprintf.c,v 1.23 2010/12/16 17:42:27 wiz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -87,7 +87,7 @@ __RCSID("$NetBSD: vfwprintf.c,v 1.10 2007/02/03 00:28:33 christos Exp $");
 #define STRCONST(a)	a
 #define WDECL(a, b)	a ## b
 #define END_OF_FILE	EOF
-#define MULTI		1
+#define MULTI		LONGINT
 #endif
 
 union arg {
@@ -98,6 +98,7 @@ union arg {
 	long long longlongarg;
 	unsigned long long ulonglongarg;
 	ptrdiff_t ptrdiffarg;
+	ssize_t ssizearg;
 	size_t	sizearg;
 	intmax_t intmaxarg;
 	uintmax_t uintmaxarg;
@@ -125,7 +126,7 @@ union arg {
 enum typeid {
 	T_UNUSED, TP_SHORT, T_INT, T_U_INT, TP_INT,
 	T_LONG, T_U_LONG, TP_LONG, T_LLONG, T_U_LLONG, TP_LLONG,
-	T_PTRDIFFT, TP_PTRDIFFT, T_SIZET, TP_SIZET,
+	T_PTRDIFFT, TP_PTRDIFFT, T_SSIZET, T_SIZET, TP_SIZET,
 	T_INTMAXT, T_UINTMAXT, TP_INTMAXT, TP_VOID, TP_CHAR, TP_SCHAR,
 	T_DOUBLE, T_LONG_DOUBLE, T_WINT, TP_WCHAR
 };
@@ -142,8 +143,8 @@ static wint_t	__xfputwc(CHAR_T, FILE *);
 static char	*__wcsconv(wchar_t *, int);
 static int	__sprint(FILE *, struct __suio *);
 #endif
-static void	__find_arguments(const CHAR_T *, va_list, union arg **);
-static void	__grow_type_table(int, enum typeid **, int *);
+static int	__find_arguments(const CHAR_T *, va_list, union arg **);
+static int	__grow_type_table(int, enum typeid **, int *);
 
 /*
  * Helper function for `fprintf to unbuffered unix file': creates a
@@ -162,6 +163,7 @@ __sbprintf(FILE *fp, const CHAR_T *fmt, va_list ap)
 	_DIAGASSERT(fmt != NULL);
 
 	_FILEEXT_SETUP(&fake, &fakeext);
+	memset(WCIO_GET(&fake), 0, sizeof(struct wchar_io_data));
 
 	/* copy the important variables */
 	fake._flags = fp->_flags & ~__SNBF;
@@ -473,9 +475,9 @@ __mbsconv(char *mbsarg, int prec)
 }
 #else
 /*
- * Convert a wide character string argument for the %ls format to a multibyte
+ * Convert a wide-character string argument for the %ls format to a multibyte
  * string representation. If not -1, prec specifies the maximum number of
- * bytes to output, and also means that we can't assume that the wide char.
+ * bytes to output, and also means that we can't assume that the wide-char.
  * string ends is null-terminated.
  */
 static char *
@@ -510,7 +512,7 @@ __wcsconv(wchar_t *wcsarg, int prec)
 			for (;;) {
 				clen = wcrtomb(buf, *p++, &mbs);
 				if (clen == 0 || clen == (size_t)-1 ||
-				    nbytes + clen > prec)
+				    nbytes + clen > (size_t)prec)
 					break;
 				nbytes += clen;
 			}
@@ -756,7 +758,7 @@ WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
 #define	INTMAX_SIZE	(INTMAXT|SIZET|PTRDIFFT|LLONGINT)
 #define SJARG() \
 	(flags&INTMAXT ? GETARG(intmax_t) : \
-	    flags&SIZET ? (intmax_t)GETARG(size_t) : \
+	    flags&SIZET ? (intmax_t)GETARG(ssize_t) : \
 	    flags&PTRDIFFT ? (intmax_t)GETARG(ptrdiff_t) : \
 	    (intmax_t)GETARG(long long))
 #define	UJARG() \
@@ -780,7 +782,8 @@ WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
 		int hold = nextarg; \
 		if (argtable == NULL) { \
 			argtable = statargtable; \
-			__find_arguments (fmt0, orgap, &argtable); \
+			if (__find_arguments(fmt0, orgap, &argtable) == -1) \
+				goto oomem; \
 		} \
 		nextarg = n2; \
 		val = GETARG (int); \
@@ -812,7 +815,7 @@ WDECL(__vf,printf_unlocked)(FILE *fp, const CHAR_T *fmt0, va_list ap)
 
 	/* optimise fprintf(stderr) (and other unbuffered Unix files) */
 	if ((fp->_flags & (__SNBF|__SWR|__SRW)) == (__SNBF|__SWR) &&
-	    fp->_file >= 0)
+	    __sfileno(fp) != -1)
 		return (__sbprintf(fp, fmt0, ap));
 
 	fmt = (CHAR_T *)__UNCONST(fmt0);
@@ -895,6 +898,12 @@ reswitch:	switch (ch) {
 			flags |= GROUPING;
 			thousands_sep = *(localeconv()->thousands_sep);
 			grouping = localeconv()->grouping;
+			/* If the locale doesn't define the above, use sane
+			 * defaults - otherwise silly things happen! */
+			if (thousands_sep == 0)
+				thousands_sep = ',';
+			if (!grouping || !*grouping)
+				grouping = "\3";
 			goto rflag;
 		case '.':
 			if ((ch = *fmt++) == '*') {
@@ -926,8 +935,9 @@ reswitch:	switch (ch) {
 				nextarg = n;
 				if (argtable == NULL) {
 					argtable = statargtable;
-					__find_arguments (fmt0, orgap,
-					    &argtable);
+					if (__find_arguments(fmt0, orgap,
+					    &argtable) == -1)
+						goto oomem;
 				}
 				goto rflag;
 			}
@@ -1042,6 +1052,8 @@ reswitch:	switch (ch) {
 				    __hdtoa(fparg.dbl, xdigs, prec,
 				        &expt, &signflag, &dtoaend);
 			}
+			if (dtoaresult == NULL)
+				goto oomem;
 			
 			if (prec < 0)
 				prec = dtoaend - dtoaresult;
@@ -1056,6 +1068,8 @@ reswitch:	switch (ch) {
 			/*XXX inefficient*/
 			result = convbuf = strdup(dtoaresult);
 #endif
+			if (result == NULL)
+				goto oomem;
 			__freedtoa(dtoaresult);
 			goto fp_common;
 		case 'e':
@@ -1091,6 +1105,8 @@ fp_begin:
 				if (expt == 9999)
 					expt = INT_MAX;
 			}
+			if (dtoaresult == NULL)
+				goto oomem;
 			ndig = dtoaend - dtoaresult;
 			if (convbuf != NULL)
 				free(convbuf);
@@ -1100,6 +1116,8 @@ fp_begin:
 			/*XXX inefficient*/
 			result = convbuf = strdup(dtoaresult);
 #endif
+			if (result == NULL)
+				goto oomem;
 			__freedtoa(dtoaresult);
 fp_common:
 			if (signflag)
@@ -1113,6 +1131,7 @@ fp_common:
 					result = (ch >= 'a') ? STRCONST("inf") :
 					    STRCONST("INF");
 				size = 3;
+				flags &= ~ZEROPAD;
 				break;
 			}
 #else
@@ -1143,6 +1162,7 @@ fp_common:
 				else
 					result = STRCONST("inf");
 				size = 3;
+				flags &= ~ZEROPAD;
 				break;
 			}
 			if (isnan(_double)) {
@@ -1151,12 +1171,15 @@ fp_common:
 				else
 					result = STRCONST("nan");
 				size = 3;
+				flags &= ~ZEROPAD;
 				break;
 			}
 
 			flags |= FPT;
 			dtoaresult = cvt(_double, prec, flags, &softsign,
 			    &expt, ch, &ndig);
+			if (dtoaresult == NULL)
+				goto oomem;
 			if (convbuf != NULL)
 				free(convbuf);
 #ifndef NARROW
@@ -1165,6 +1188,8 @@ fp_common:
 			/*XXX inefficient*/
 			result = convbuf = strdup(dtoaresult);
 #endif
+			if (result == NULL)
+				goto oomem;
 			__freedtoa(dtoaresult);
 			if (softsign)
 				sign = '-';
@@ -1512,6 +1537,10 @@ error:
 		free (argtable);
 	return (ret);
 	/* NOTREACHED */
+oomem:
+	errno = ENOMEM;
+	ret = END_OF_FILE;
+	goto error;
 }
 
 /*
@@ -1520,8 +1549,8 @@ error:
  * initial argument table should be an array of STATIC_ARG_TBL_SIZE entries.
  * It will be replaces with a malloc-ed one if it overflows.
  */ 
-static void
-__find_arguments (const CHAR_T *fmt0, va_list ap, union arg **argtable)
+static int
+__find_arguments(const CHAR_T *fmt0, va_list ap, union arg **argtable)
 {
 	CHAR_T *fmt;		/* format string */
 	int ch;			/* character from fmt */
@@ -1538,26 +1567,47 @@ __find_arguments (const CHAR_T *fmt0, va_list ap, union arg **argtable)
 	 * Add an argument type to the table, expanding if necessary.
 	 */
 #define ADDTYPE(type) \
-	/*LINTED null effect*/ \
-	(void)((nextarg >= tablesize) ? \
-		__grow_type_table(nextarg, &typetable, &tablesize) : (void)0, \
-	(nextarg > tablemax) ? tablemax = nextarg : 0, \
-	typetable[nextarg++] = type)
+	do { \
+		if (nextarg >= tablesize) \
+			if (__grow_type_table(nextarg, &typetable, \
+			    &tablesize) == -1) \
+				return -1; \
+		if (nextarg > tablemax) \
+			tablemax = nextarg; \
+		typetable[nextarg++] = type; \
+	} while (/*CONSTCOND*/0)
 
 #define	ADDSARG() \
-	(void)((flags&INTMAXT) ? ADDTYPE(T_INTMAXT) : \
-		((flags&SIZET) ? ADDTYPE(T_SIZET) : \
-		((flags&PTRDIFFT) ? ADDTYPE(T_PTRDIFFT) : \
-		((flags&LLONGINT) ? ADDTYPE(T_LLONG) : \
-		((flags&LONGINT) ? ADDTYPE(T_LONG) : ADDTYPE(T_INT))))))
+	do { \
+		if (flags & INTMAXT)  \
+			ADDTYPE(T_INTMAXT); \
+		else if (flags & SIZET)  \
+			ADDTYPE(T_SSIZET); \
+		else if (flags & PTRDIFFT) \
+			ADDTYPE(T_PTRDIFFT); \
+		else if (flags & LLONGINT) \
+			ADDTYPE(T_LLONG); \
+		else if (flags & LONGINT) \
+			ADDTYPE(T_LONG); \
+		else \
+			ADDTYPE(T_INT); \
+	} while (/*CONSTCOND*/0)
 
 #define	ADDUARG() \
-	(void)((flags&INTMAXT) ? ADDTYPE(T_UINTMAXT) : \
-		((flags&SIZET) ? ADDTYPE(T_SIZET) : \
-		((flags&PTRDIFFT) ? ADDTYPE(T_PTRDIFFT) : \
-		((flags&LLONGINT) ? ADDTYPE(T_U_LLONG) : \
-		((flags&LONGINT) ? ADDTYPE(T_U_LONG) : ADDTYPE(T_U_INT))))))
-
+	do { \
+		if (flags & INTMAXT)  \
+			ADDTYPE(T_UINTMAXT); \
+		else if (flags & SIZET)  \
+			ADDTYPE(T_SIZET); \
+		else if (flags & PTRDIFFT) \
+			ADDTYPE(T_PTRDIFFT); \
+		else if (flags & LLONGINT) \
+			ADDTYPE(T_U_LLONG); \
+		else if (flags & LONGINT) \
+			ADDTYPE(T_U_LONG); \
+		else \
+			ADDTYPE(T_U_INT); \
+	} while (/*CONSTCOND*/0)
 	/*
 	 * Add * arguments to the type array.
 	 */
@@ -1571,11 +1621,11 @@ __find_arguments (const CHAR_T *fmt0, va_list ap, union arg **argtable)
 	if (*cp == '$') { \
 		int hold = nextarg; \
 		nextarg = n2; \
-		ADDTYPE (T_INT); \
+		ADDTYPE(T_INT); \
 		nextarg = hold; \
 		fmt = ++cp; \
 	} else { \
-		ADDTYPE (T_INT); \
+		ADDTYPE(T_INT); \
 	}
 	fmt = (CHAR_T *)__UNCONST(fmt0);
 	typetable = stattypetable;
@@ -1750,6 +1800,8 @@ done:
 	if (tablemax >= STATIC_ARG_TBL_SIZE) {
 		*argtable = (union arg *)
 		    malloc (sizeof (union arg) * (tablemax + 1));
+		if (*argtable == NULL)
+			return -1;
 	}
 
 	(*argtable) [0].intarg = 0;
@@ -1797,6 +1849,9 @@ done:
 		    case TP_PTRDIFFT:
 			(*argtable) [n].pptrdiffarg = va_arg (ap, ptrdiff_t *);
 			break;
+		    case T_SSIZET:
+			(*argtable) [n].ssizearg = va_arg (ap, ssize_t);
+			break;
 		    case T_SIZET:
 			(*argtable) [n].sizearg = va_arg (ap, size_t);
 			break;
@@ -1839,12 +1894,13 @@ done:
 
 	if ((typetable != NULL) && (typetable != stattypetable))
 		free (typetable);
+	return 0;
 }
 
 /*
  * Increase the size of the type table.
  */
-static void
+static int
 __grow_type_table (int nextarg, enum typeid **typetable, int *tablesize)
 {
 	enum typeid *const oldtable = *typetable;
@@ -1856,18 +1912,21 @@ __grow_type_table (int nextarg, enum typeid **typetable, int *tablesize)
 		newsize = nextarg + 1;
 	if (oldsize == STATIC_ARG_TBL_SIZE) {
 		if ((newtable = malloc(newsize * sizeof(enum typeid))) == NULL)
-			abort();			/* XXX handle better */
+			return -1;
 		memcpy(newtable, oldtable, oldsize * sizeof(enum typeid));
 	} else {
 		newtable = realloc(oldtable, newsize * sizeof(enum typeid));
-		if (newtable == NULL)
-			abort();			/* XXX handle better */
+		if (newtable == NULL) {
+			free(oldtable);
+			return -1;
+		}
 	}
 	for (n = oldsize; n < newsize; n++)
 		newtable[n] = T_UNUSED;
 
 	*typetable = newtable;
 	*tablesize = newsize;
+	return 0;
 }
 
 
@@ -1898,6 +1957,8 @@ cvt(double value, int ndigits, int flags, char *sign, int *decpt, int ch,
 	}
 
 	digits = __dtoa(value, mode, ndigits, decpt, &dsgn, &rve);
+	if (digits == NULL)
+		return NULL;
 	if (dsgn) {
 		value = -value;
 		*sign = '-';

@@ -1,5 +1,7 @@
-#	$NetBSD: bsd.klinks.mk,v 1.1 2007/08/05 21:43:24 pooka Exp $
+#	$NetBSD: bsd.klinks.mk,v 1.8 2011/02/20 04:05:14 jmcneill Exp $
 #
+
+.include <bsd.own.mk>
 
 ##### Default values
 .if !defined(S)
@@ -20,8 +22,7 @@ CLEANFILES+=	sparc
 .elif ${MACHINE} == "i386"
 CLEANFILES+=	x86
 .elif ${MACHINE} == "amd64"
-CLEANFILES+=	x86
-CFLAGS+=	-mcmodel=kernel
+CLEANFILES+=	x86 i386
 .endif
 
 .if defined(XEN_BUILD) || ${MACHINE} == "xen"
@@ -34,12 +35,14 @@ CLEANFILES+=	x86
 
 # XXX.  This should be done a better way.  It's @'d to reduce visual spew.
 # XXX   .BEGIN is used to make sure the links are done before anything else.
-.if make(depend) || make(all) || make(dependall)
+.if !make(obj) && !make(clean) && !make(cleandir)
 .BEGIN:
 	@rm -f machine && \
 	    ln -s $S/arch/${MACHINE}/include machine
-	@rm -f ${MACHINE_CPU} && \
-	    ln -s $S/arch/${MACHINE_CPU}/include ${MACHINE_CPU}
+	@if [ -d $S/arch/${MACHINE_CPU} ]; then \
+	    rm -f ${MACHINE_CPU} && \
+	    ln -s $S/arch/${MACHINE_CPU}/include ${MACHINE_CPU}; \
+	 fi
 # XXX. it gets worse..
 .if ${MACHINE} == "sun2" || ${MACHINE} == "sun3"
 	@rm -f sun68k && \
@@ -52,6 +55,8 @@ CLEANFILES+=	x86
 .if ${MACHINE} == "amd64"
 	@rm -f x86 && \
 	    ln -s $S/arch/x86/include x86
+	@rm -f i386 && \
+	    ln -s $S/arch/i386/include i386
 .endif
 .if ${MACHINE_CPU} == "i386"
 	@rm -f x86 && \

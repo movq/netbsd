@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4281.c,v 1.36 2007/12/09 20:28:07 jmcneill Exp $	*/
+/*	$NetBSD: cs4281.c,v 1.44 2010/02/24 22:37:59 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2000 Tatoku Ogaito.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4281.c,v 1.36 2007/12/09 20:28:07 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4281.c,v 1.44 2010/02/24 22:37:59 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,8 +80,8 @@ __KERNEL_RCSID(0, "$NetBSD: cs4281.c,v 1.36 2007/12/09 20:28:07 jmcneill Exp $")
 #endif
 
 /* IF functions for audio driver */
-static int	cs4281_match(struct device *, struct cfdata *, void *);
-static void	cs4281_attach(struct device *, struct device *, void *);
+static int	cs4281_match(device_t, cfdata_t, void *);
+static void	cs4281_attach(device_t, device_t, void *);
 static int	cs4281_intr(void *);
 static int	cs4281_query_encoding(void *, struct audio_encoding *);
 static int	cs4281_set_params(void *, int, int, audio_params_t *,
@@ -106,8 +106,8 @@ static void	 cs4281_set_adc_rate(struct cs428x_softc *, int);
 static int      cs4281_init(struct cs428x_softc *, int);
 
 /* Power Management */
-static bool cs4281_suspend(device_t);
-static bool cs4281_resume(device_t);
+static bool cs4281_suspend(device_t, const pmf_qual_t *);
+static bool cs4281_resume(device_t, const pmf_qual_t *);
 
 static const struct audio_hw_if cs4281_hw_if = {
 	NULL,			/* open */
@@ -168,8 +168,7 @@ static struct audio_device cs4281_device = {
 
 
 static int
-cs4281_match(struct device *parent, struct cfdata *match,
-    void *aux)
+cs4281_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -182,7 +181,7 @@ cs4281_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-cs4281_attach(struct device *parent, struct device *self, void *aux)
+cs4281_attach(device_t parent, device_t self, void *aux)
 {
 	struct cs428x_softc *sc;
 	struct pci_attach_args *pa;
@@ -192,7 +191,7 @@ cs4281_attach(struct device *parent, struct device *self, void *aux)
 	char devinfo[256];
 	int error;
 
-	sc = (struct cs428x_softc *)self;
+	sc = device_private(self);
 	pa = (struct pci_attach_args *)aux;
 	pc = pa->pa_pc;
 	aprint_naive(": Audio controller\n");
@@ -208,23 +207,22 @@ cs4281_attach(struct device *parent, struct device *self, void *aux)
 	if (pci_mapreg_map(pa, PCI_BA0,
 	    PCI_MAPREG_TYPE_MEM|PCI_MAPREG_MEM_TYPE_32BIT, 0,
 	    &sc->ba0t, &sc->ba0h, NULL, NULL)) {
-		aprint_error("%s: can't map BA0 space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map BA0 space\n");
 		return;
 	}
 	if (pci_mapreg_map(pa, PCI_BA1,
 	    PCI_MAPREG_TYPE_MEM|PCI_MAPREG_MEM_TYPE_32BIT, 0,
 	    &sc->ba1t, &sc->ba1h, NULL, NULL)) {
-		aprint_error("%s: can't map BA1 space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map BA1 space\n");
 		return;
 	}
 
 	sc->sc_dmatag = pa->pa_dmat;
 
 	/* power up chip */
-	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
 	    pci_activate_null)) && error != EOPNOTSUPP) {
-		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
-		    error);
+		aprint_error_dev(&sc->sc_dev, "cannot activate %d\n", error);
 		return;
 	}
 
@@ -245,8 +243,7 @@ cs4281_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &sc->intrh)) {
-		aprint_error("%s: couldn't map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, sc->intrh);
@@ -254,14 +251,13 @@ cs4281_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = pci_intr_establish(sc->sc_pc, sc->intrh, IPL_AUDIO,
 	    cs4281_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Sound System start-up
@@ -284,7 +280,7 @@ cs4281_attach(struct device *parent, struct device *self, void *aux)
 	sc->host_if.write  = cs428x_write_codec;
 	sc->host_if.reset  = cs4281_reset_codec;
 	if (ac97_attach(&sc->host_if, self) != 0) {
-		aprint_error("%s: ac97_attach failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "ac97_attach failed\n");
 		return;
 	}
 	audio_attach_mi(&cs4281_hw_if, sc, &sc->sc_dev);
@@ -350,8 +346,7 @@ cs4281_intr(void *p)
 			if (sc->sc_pn >= sc->sc_pe)
 				sc->sc_pn = sc->sc_ps;
 		} else {
-			printf("%s: unexpected play intr\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "unexpected play intr\n");
 		}
 	}
 	if (intr & HISR_DMA1) {
@@ -371,8 +366,8 @@ cs4281_intr(void *p)
 			if ((sc->sc_ri % sc->sc_rcount) == 0)
 				sc->sc_rintr(sc->sc_rarg);
 		} else {
-			printf("%s: unexpected record intr\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev,
+			    "unexpected record intr\n");
 		}
 	}
 	DPRINTF(("\n"));
@@ -722,7 +717,7 @@ cs4281_trigger_input(void *addr, void *start, void *end, int blksize,
 }
 
 static bool
-cs4281_suspend(device_t dv)
+cs4281_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct cs428x_softc *sc = device_private(dv);
 
@@ -749,7 +744,7 @@ cs4281_suspend(device_t dv)
 }
 
 static bool
-cs4281_resume(device_t dv)
+cs4281_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct cs428x_softc *sc = device_private(dv);
 
@@ -837,8 +832,8 @@ cs4281_reset_codec(void *addr)
 	do {
 		delay(1000);
 		if (++n > 1000) {
-			printf("%s: timeout waiting for codec ready\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev,
+			    "timeout waiting for codec ready\n");
 			return ETIMEDOUT;
 		}
 		dat32 = BA0READ4(sc, CS428X_ACSTS) & ACSTS_CRDY;
@@ -852,8 +847,8 @@ cs4281_reset_codec(void *addr)
 	do {
 		delay(1);
 		if (++n > 1000) {
-			printf("%s: timeout waiting for codec calibration\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev,
+			    "timeout waiting for codec calibration\n");
 			return ETIMEDOUT;
 		}
 		cs428x_read_codec(sc, AC97_REG_POWER, &data);
@@ -868,8 +863,8 @@ cs4281_reset_codec(void *addr)
 	do {
 		delay(1000);
 		if (++n > 1000) {
-			printf("%s: timeout waiting for sampled input slots as valid\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "timeout waiting for "
+			    "sampled input slots as valid\n");
 			return ETIMEDOUT;
 		}
 		dat32 = BA0READ4(sc, CS428X_ACISV) & (ACISV_ISV3 | ACISV_ISV4) ;
@@ -995,8 +990,8 @@ cs4281_init(struct cs428x_softc *sc, int init)
 		 != (CLKCR1_DLLRDY | CLKCR1_CLKON)) {
 		delay(100);
 		if (++n > 1000) {
-			printf("%s: timeout waiting for clock stabilization\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev,
+			    "timeout waiting for clock stabilization\n");
 			return -1;
 		}
 	}
@@ -1005,8 +1000,8 @@ cs4281_init(struct cs428x_softc *sc, int init)
 	while (!(BA0READ4(sc, CS4281_CLKCR1) & CLKCR1_DLLRDY)) {
 		delay(1000);
 		if (++n > 1000) {
-			printf("%s: timeout waiting for clock stabilization\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev,
+			    "timeout waiting for clock stabilization\n");
 			return -1;
 		}
 	}
@@ -1020,8 +1015,8 @@ cs4281_init(struct cs428x_softc *sc, int init)
 	while ((BA0READ4(sc, CS428X_ACSTS) & ACSTS_CRDY) == 0) {
 		delay(100);
 		if (++n > 1000) {
-			printf("%s: timeout waiting for codec ready\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev,
+			    "timeout waiting for codec ready\n");
 			return -1;
 		}
 	}
@@ -1032,8 +1027,8 @@ cs4281_init(struct cs428x_softc *sc, int init)
 	while ((BA0READ4(sc, CS4281_ACSTS2) & ACSTS2_CRDY2) == 0) {
 		delay(100);
 		if (++n > 1000) {
-			printf("%s: timeout waiting for secondary codec ready\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev,
+			    "timeout waiting for secondary codec ready\n");
 			return -1;
 		}
 	}
@@ -1048,8 +1043,8 @@ cs4281_init(struct cs428x_softc *sc, int init)
 	do {
 		delay(1000);
 		if (++n > 1000) {
-			printf("%s: timeout waiting for codec ready\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev,
+			    "timeout waiting for codec ready\n");
 			return -1;
 		}
 		dat32 = BA0READ4(sc, CS428X_ACSTS) & ACSTS_CRDY;
@@ -1063,8 +1058,8 @@ cs4281_init(struct cs428x_softc *sc, int init)
 	do {
 		delay(1);
 		if (++n > 1000) {
-			printf("%s: timeout waiting for codec calibration\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev,
+			    "timeout waiting for codec calibration\n");
 			return -1;
 		}
 		cs428x_read_codec(sc, AC97_REG_POWER, &data);
@@ -1079,8 +1074,8 @@ cs4281_init(struct cs428x_softc *sc, int init)
 	do {
 		delay(1000);
 		if (++n > 1000) {
-			printf("%s: timeout waiting for sampled input slots as valid\n",
-			       sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "timeout waiting for "
+			    "sampled input slots as valid\n");
 			return -1;
 		}
 		dat32 = BA0READ4(sc, CS428X_ACISV) & (ACISV_ISV3 | ACISV_ISV4);

@@ -1,4 +1,4 @@
-/*	$NetBSD: reboot.c,v 1.34 2007/05/17 00:32:01 christos Exp $	*/
+/*	$NetBSD: reboot.c,v 1.38 2011/02/16 19:32:26 wiz Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -32,15 +32,15 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\n"
-"	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1986, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)reboot.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: reboot.c,v 1.34 2007/05/17 00:32:01 christos Exp $");
+__RCSID("$NetBSD: reboot.c,v 1.38 2011/02/16 19:32:26 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -85,7 +85,7 @@ main(int argc, char *argv[])
 	} else
 		howto = 0;
 	lflag = nflag = qflag = 0;
-	while ((ch = getopt(argc, argv, "dlnpq")) != -1)
+	while ((ch = getopt(argc, argv, "dlnpqvxz")) != -1)
 		switch(ch) {
 		case 'd':
 			howto |= RB_DUMP;
@@ -104,6 +104,15 @@ main(int argc, char *argv[])
 			break;
 		case 'q':
 			qflag = 1;
+			break;
+		case 'v':
+			howto |= AB_VERBOSE;
+			break;
+		case 'x':
+			howto |= AB_DEBUG;
+			break;
+		case 'z':
+			howto |= AB_SILENT;
 			break;
 		case '?':
 		default:
@@ -197,7 +206,7 @@ main(int argc, char *argv[])
 		 * single-user mode.
 		 */
 		if (errno != ESRCH) {
-			warn("SIGTERM processes");
+			warn("SIGTERM all processes");
 			goto restart;
 		}
 	}
@@ -216,6 +225,7 @@ main(int argc, char *argv[])
 		if (kill(-1, SIGKILL) == -1) {
 			if (errno == ESRCH)
 				break;
+			warn("SIGKILL all processes");
 			goto restart;
 		}
 		if (i > 5) {
@@ -226,6 +236,7 @@ main(int argc, char *argv[])
 	}
 
 	reboot(howto, bootstr);
+	warn("reboot()");
 	/* FALLTHROUGH */
 
 restart:
@@ -240,7 +251,7 @@ usage(void)
 {
 	const char *pflag = dohalt ? "p" : "";
 
-	(void)fprintf(stderr, "usage: %s [-dln%sq] [-- <boot string>]\n",
+	(void)fprintf(stderr, "usage: %s [-dln%sqvxz] [-- <boot string>]\n",
 	    getprogname(), pflag);
 	exit(1);
 }

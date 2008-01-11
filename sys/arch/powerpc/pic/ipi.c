@@ -1,4 +1,4 @@
-/* $NetBSD: ipi.c,v 1.2 2007/10/17 19:56:45 garbled Exp $ */
+/* $NetBSD: ipi.c,v 1.8 2011/05/02 02:01:33 matt Exp $ */
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.2 2007/10/17 19:56:45 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.8 2011/05/02 02:01:33 matt Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_pic.h"
@@ -44,8 +37,8 @@ __KERNEL_RCSID(0, "$NetBSD: ipi.c,v 1.2 2007/10/17 19:56:45 garbled Exp $");
 #include "opt_altivec.h"
 
 #include <sys/param.h>
-#include <sys/malloc.h>
 #include <sys/kernel.h>
+#include <sys/xcall.h>
 
 #include <powerpc/atomic.h>
 #include <powerpc/fpu.h>
@@ -65,7 +58,7 @@ volatile u_long IPI[CPU_MAXNUM];
 int
 ppcipi_intr(void *v)
 {
-	int cpu_id = cpu_number();
+	int cpu_id = curcpu()->ci_index;
 	int msr;
 	u_long ipi;
 
@@ -75,13 +68,8 @@ ppcipi_intr(void *v)
 	if (ipi == PPC_IPI_NOMESG)
 		return 1;
 
-	if (ipi & PPC_IPI_FLUSH_FPU)
-		save_fpu_cpu();
-
-#ifdef ALTIVEC
-	if (ipi & PPC_IPI_FLUSH_VEC)
-		save_vec_cpu();
-#endif
+	if (ipi & PPC_IPI_XCALL)
+		xc_ipi_handler();
 
 	if (ipi & PPC_IPI_HALT) {
 		aprint_normal("halting CPU %d\n", cpu_id);
@@ -91,7 +79,28 @@ ppcipi_intr(void *v)
 			mtmsr(msr);
 		}
 	}
+
 	return 1;
+}
+
+/*
+ * MD support for xcall(9) interface.
+ */
+
+void
+xc_send_ipi(struct cpu_info *ci)
+{
+
+	KASSERT(kpreempt_disabled());
+	KASSERT(curcpu() != ci);
+
+	if (ci) {
+		/* Unicast: remote CPU. */
+		ppc_send_ipi(ci->ci_cpuid, PPC_IPI_XCALL);
+	} else {
+		/* Broadcast: all, but local CPU (caller will handle it). */
+		ppc_send_ipi(IPI_T_NOTME, PPC_IPI_XCALL);
+	}
 }
 
 #endif /*MULTIPROCESSOR*/
