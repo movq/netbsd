@@ -1,4 +1,4 @@
-/* $NetBSD: mips_mcclock.c,v 1.16 2008/01/03 22:35:27 joerg Exp $ */
+/* $NetBSD: mips_mcclock.c,v 1.19 2011/02/20 07:45:48 matt Exp $ */
 
 /*
  * Copyright (c) 1997 Jonathan Stone (hereinafter referred to as the author)
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mips_mcclock.c,v 1.16 2008/01/03 22:35:27 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mips_mcclock.c,v 1.19 2011/02/20 07:45:48 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,9 +60,7 @@ unsigned mips_mcclock_to_mhz(unsigned iters);
  * polling function.
  */
 unsigned
-mc_cpuspeed(mcclock_addr, cpuintmask)
-	vaddr_t mcclock_addr;
-    	int cpuintmask;
+mc_cpuspeed(vaddr_t mcclock_addr, int cpuintmask)
 {
 	return mips_mc_cpuspeed((void *)mcclock_addr, cpuintmask,
 	           mips_mcclock_tickloop);
@@ -79,10 +77,7 @@ mc_cpuspeed(mcclock_addr, cpuintmask)
  * before the clock is attached, so we can't use the normal clock driver.
  */
 unsigned
-mips_mc_cpuspeed(mcclock_addr, clockmask, tickpollfn)
-	void *mcclock_addr;
-	int clockmask;
-	int (*tickpollfn)(void *mcclock_addr, int clockmask);
+mips_mc_cpuspeed(void *mcclock_addr, int clockmask, int (*tickpollfn)(void *mcclock_addr, int clockmask))
 {
 	int s;
 	int iters = 0;
@@ -123,11 +118,11 @@ mips_mc_cpuspeed(mcclock_addr, clockmask, tickpollfn)
 	 * appropriate base for  DELAY() and delay(), from
 	 * the number of completed iterations.
 	 */
-	cpu_mhz = mips_mcclock_to_mhz(iters);
+	mips_options.mips_cpu_mhz = mips_mcclock_to_mhz(iters);
 
 #if defined(DEBUG)
 	printf("mcclock: iters %d computed MHz %d, instrs per usec=%d\n",
-	       iters, cpu_mhz, cpuspeed);
+	       iters, mips_options.mips_cpu_mhz, cpuspeed);
 #endif
 	return (iters);
 }
@@ -143,9 +138,7 @@ mips_mc_cpuspeed(mcclock_addr, clockmask, tickpollfn)
  */
 
 int
-mips_mcclock_tickloop(mcclock_addr, clockmask)
-	void *mcclock_addr;
-	int clockmask;
+mips_mcclock_tickloop(void *mcclock_addr, int clockmask)
 {
 	int iters;
 	volatile int junk;

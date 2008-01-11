@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_inode.c,v 1.116 2008/01/02 11:49:11 ad Exp $	*/
+/*	$NetBSD: lfs_inode.c,v 1.122 2010/02/16 23:20:30 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_inode.c,v 1.116 2008/01/02 11:49:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_inode.c,v 1.122 2010/02/16 23:20:30 mlelstv Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -233,8 +226,11 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 	/*
 	 * Just return and not update modification times.
 	 */
-	if (oip->i_size == length)
+	if (oip->i_size == length) {
+		/* still do a uvm_vnp_setsize() as writesize may be larger */
+		uvm_vnp_setsize(ovp, length);
 		return (0);
+	}
 
 	if (ovp->v_type == VLNK &&
 	    (oip->i_size < ump->um_maxsymlinklen ||
@@ -362,7 +358,7 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 			memset((char *)bp->b_data + offset, 0,
 			       (u_int)(size - offset));
 		allocbuf(bp, size, 1);
-		if ((bp->b_cflags & BC_LOCKED) != 0 && bp->b_iodone == NULL) {
+		if ((bp->b_flags & B_LOCKED) != 0 && bp->b_iodone == NULL) {
 			mutex_enter(&lfs_lock);
 			locked_queue_bytes -= obufsize - bp->b_bufsize;
 			mutex_exit(&lfs_lock);
@@ -414,6 +410,7 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 
 	oip->i_size = oip->i_ffs1_size = length;
 	uvm_vnp_setsize(ovp, length);
+
 	/*
 	 * Calculate index into inode's block list of
 	 * last direct and indirect blocks (if any)
@@ -739,7 +736,7 @@ lfs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn,
 		trace(TR_BREADHIT, pack(vp, fs->lfs_bsize), lbn);
 	} else {
 		trace(TR_BREADMISS, pack(vp, fs->lfs_bsize), lbn);
-		curlwp->l_proc->p_stats->p_ru.ru_inblock++; /* pay for read */
+		curlwp->l_ru.ru_inblock++; /* pay for read */
 		bp->b_flags |= B_READ;
 		if (bp->b_bcount > bp->b_bufsize)
 			panic("lfs_indirtrunc: bad buffer size");
@@ -855,7 +852,7 @@ restart:
 		nbp = LIST_NEXT(bp, b_vnbufs);
 		if (bp->b_lblkno < lbn)
 			continue;
-		error = bbusy(bp, catch, slptimeo);
+		error = bbusy(bp, catch, slptimeo, NULL);
 		if (error == EPASSTHROUGH)
 			goto restart;
 		if (error != 0) {
@@ -877,7 +874,7 @@ restart:
 		nbp = LIST_NEXT(bp, b_vnbufs);
 		if (bp->b_lblkno < lbn)
 			continue;
-		error = bbusy(bp, catch, slptimeo);
+		error = bbusy(bp, catch, slptimeo, NULL);
 		if (error == EPASSTHROUGH)
 			goto restart;
 		if (error != 0) {

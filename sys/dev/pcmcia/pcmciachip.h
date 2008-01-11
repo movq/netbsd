@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmciachip.h,v 1.14 2007/10/19 12:01:06 ad Exp $	*/
+/*	$NetBSD: pcmciachip.h,v 1.16 2009/05/12 14:42:19 cegger Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -40,7 +40,7 @@ struct pcmcia_io_handle;
 
 /* interfaces for pcmcia to call the chipset */
 
-typedef struct pcmcia_chip_functions *pcmcia_chipset_tag_t;
+typedef const struct pcmcia_chip_functions *pcmcia_chipset_tag_t;
 typedef void *pcmcia_chipset_handle_t;
 typedef int pcmcia_mem_handle_t;
 
@@ -149,8 +149,8 @@ struct pcmciabus_attach_args {
 
 /* interfaces for the chipset to call pcmcia */
 
-int	pcmcia_card_attach(struct device *);
-void	pcmcia_card_detach(struct device *, int);
-void	pcmcia_card_deactivate(struct device *);
+int	pcmcia_card_attach(device_t);
+void	pcmcia_card_detach(device_t, int);
+void	pcmcia_card_deactivate(device_t);
 
 #endif /* _PCMCIA_PCMCIACHIP_H_ */

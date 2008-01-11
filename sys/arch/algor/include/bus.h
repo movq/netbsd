@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.13 2007/03/04 05:59:08 christos Exp $	*/
+/*	$NetBSD: bus.h,v 1.15 2010/12/09 05:15:06 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -92,7 +85,7 @@
 #define	__BUS_SPACE_ADDRESS_SANITY(p, t, d)				\
 ({									\
 	if (__BUS_SPACE_ALIGNED_ADDRESS((p), t) == 0) {			\
-		printf("%s 0x%lx not aligned to %lu bytes %s:%d\n",	\
+		printf("%s 0x%lx not aligned to %zu bytes %s:%d\n",	\
 		    d, (u_long)(p), sizeof(t), __FILE__, __LINE__);	\
 	}								\
 	(void) 0;							\

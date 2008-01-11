@@ -1,4 +1,4 @@
-/* $NetBSD: pci_alphabook1.c,v 1.8 2002/05/15 16:57:42 thorpej Exp $ */
+/* $NetBSD: pci_alphabook1.c,v 1.15 2011/04/04 20:37:44 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.8 2002/05/15 16:57:42 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.15 2011/04/04 20:37:44 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -75,10 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.8 2002/05/15 16:57:42 thorpej E
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/autoconf.h>
-#include <machine/bus.h>
 #include <machine/intr.h>
 
 #include <dev/isa/isavar.h>
@@ -93,18 +82,18 @@ __KERNEL_RCSID(0, "$NetBSD: pci_alphabook1.c,v 1.8 2002/05/15 16:57:42 thorpej E
 
 #include "sio.h"
 
-int     dec_alphabook1_intr_map __P((struct pci_attach_args *, pci_intr_handle_t *));
-const char *dec_alphabook1_intr_string __P((void *, pci_intr_handle_t));
-const struct evcnt *dec_alphabook1_intr_evcnt __P((void *, pci_intr_handle_t));
-void    *dec_alphabook1_intr_establish __P((void *, pci_intr_handle_t,
-	    int, int (*func)(void *), void *));
-void    dec_alphabook1_intr_disestablish __P((void *, void *));
+int     dec_alphabook1_intr_map(const struct pci_attach_args *,
+	    pci_intr_handle_t *);
+const char *dec_alphabook1_intr_string(void *, pci_intr_handle_t);
+const struct evcnt *dec_alphabook1_intr_evcnt(void *, pci_intr_handle_t);
+void    *dec_alphabook1_intr_establish(void *, pci_intr_handle_t,
+	    int, int (*func)(void *), void *);
+void    dec_alphabook1_intr_disestablish(void *, void *);
 
 #define	LCA_SIO_DEVICE	7	/* XXX */
 
 void
-pci_alphabook1_pickintr(lcp)
-	struct lca_config *lcp;
+pci_alphabook1_pickintr(struct lca_config *lcp)
 {
 	bus_space_tag_t iot = &lcp->lc_iot;
 	pci_chipset_tag_t pc = &lcp->lc_pc;
@@ -137,9 +126,8 @@ pci_alphabook1_pickintr(lcp)
 }
 
 int
-dec_alphabook1_intr_map(pa, ihp)
-	struct pci_attach_args *pa;
-	pci_intr_handle_t *ihp;
+dec_alphabook1_intr_map(const struct pci_attach_args *pa,
+    pci_intr_handle_t *ihp)
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin;
@@ -185,9 +173,7 @@ dec_alphabook1_intr_map(pa, ihp)
 }
 
 const char *
-dec_alphabook1_intr_string(lcv, ih)
-	void *lcv;
-	pci_intr_handle_t ih;
+dec_alphabook1_intr_string(void *lcv, pci_intr_handle_t ih)
 {
 #if 0
 	struct lca_config *lcp = lcv;
@@ -197,9 +183,7 @@ dec_alphabook1_intr_string(lcv, ih)
 }
 
 const struct evcnt *
-dec_alphabook1_intr_evcnt(lcv, ih)
-	void *lcv;
-	pci_intr_handle_t ih;
+dec_alphabook1_intr_evcnt(void *lcv, pci_intr_handle_t ih)
 {
 #if 0
 	struct lca_config *lcp = lcv;
@@ -209,11 +193,7 @@ dec_alphabook1_intr_evcnt(lcv, ih)
 }
 
 void *
-dec_alphabook1_intr_establish(lcv, ih, level, func, arg)
-	void *lcv, *arg;
-	pci_intr_handle_t ih;
-	int level;
-	int (*func) __P((void *));
+dec_alphabook1_intr_establish(void *lcv, pci_intr_handle_t ih, int level, int (*func)(void *), void *arg)
 {
 #if 0
 	struct lca_config *lcp = lcv;
@@ -224,8 +204,7 @@ dec_alphabook1_intr_establish(lcv, ih, level, func, arg)
 }
 
 void
-dec_alphabook1_intr_disestablish(lcv, cookie)
-	void *lcv, *cookie;
+dec_alphabook1_intr_disestablish(void *lcv, void *cookie)
 {
 #if 0
 	struct lca_config *lcp = lcv;

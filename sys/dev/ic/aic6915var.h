@@ -1,4 +1,4 @@
-/*	$NetBSD: aic6915var.h,v 1.1 2001/06/18 22:05:36 thorpej Exp $	*/
+/*	$NetBSD: aic6915var.h,v 1.3 2009/09/27 10:00:11 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -125,7 +118,6 @@ struct sf_softc {
 	bus_space_handle_t sc_sh_func;	/* sub-handle for func regs */
 	bus_dma_tag_t sc_dmat;		/* bus DMA tag */
 	struct ethercom sc_ethercom;	/* ethernet common data */
-	void *sc_sdhook;		/* shutdown hook */
 	int sc_iomapped;		/* are we I/O mapped? */
 
 	struct mii_data sc_mii;		/* MII/media information */

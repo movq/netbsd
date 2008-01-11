@@ -1,4 +1,4 @@
-/*	$Id: shutdown_xenbus.c,v 1.4 2007/11/22 16:17:08 bouyer Exp $	*/
+/*	$Id: shutdown_xenbus.c,v 1.6 2009/10/19 18:41:11 bouyer Exp $	*/
 
 /*-
  * Copyright (c)2006 YAMAMOTO Takashi,
@@ -37,11 +37,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -61,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: shutdown_xenbus.c,v 1.4 2007/11/22 16:17:08 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shutdown_xenbus.c,v 1.6 2009/10/19 18:41:11 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -148,10 +143,10 @@ shutdown_xenbus_setup(void)
 
 	if (sysmon_pswitch_register(&xenbus_power) != 0 ||
 	    sysmon_pswitch_register(&xenbus_reset) != 0) {
-		printf("%s: unable to register with sysmon\n", __func__);
+		aprint_error("%s: unable to register with sysmon\n", __func__);
 		return;
 	}
 	if (register_xenbus_watch(&xenbus_shutdown_watch)) {
-		printf("%s: unable to watch control/shutdown\n", __func__);
+		aprint_error("%s: unable to watch control/shutdown\n", __func__);
 	}
 }

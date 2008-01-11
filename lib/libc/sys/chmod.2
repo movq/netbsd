@@ -1,4 +1,4 @@
-.\"	$NetBSD: chmod.2,v 1.32 2007/01/09 06:41:57 wiz Exp $
+.\"	$NetBSD: chmod.2,v 1.37 2010/05/31 12:16:20 njoly Exp $
 .\"
 .\" Copyright (c) 1980, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)chmod.2	8.1 (Berkeley) 6/4/93
 .\"
-.Dd January 9, 2007
+.Dd January 4, 2009
 .Dt CHMOD 2
 .Os
 .Sh NAME
@@ -82,7 +82,7 @@ A mode is created from
 .Em or'd
 permission bit masks
 defined in
-.Aq Pa sys/stat.h :
+.In sys/stat.h :
 .Bd -literal -offset indent -compact
 #define S_IRWXU 0000700    /* RWX mask for owner */
 #define S_IRUSR 0000400    /* R for owner */
@@ -104,24 +104,33 @@ defined in
 #define S_ISVTX 0001000    /* save swapped text even after use */
 .Ed
 .Pp
-The
+If mode
 .Dv ISVTX
 (the
-.Em sticky bit )
-indicates to the system which executable files are shareable (the
-default) and the system maintains the program text of the files
-in the swap area.
-The sticky bit may only be set by the super user
-on shareable executable files.
+.Sq sticky bit )
+is set on a regular file, it historically meant that the system should
+save a shareable copy of the program text in the swap area.
+When applied to commonly used programs like the shell or editor, this
+would decrease memory usage and startup time.
+In
+.Nx ,
+the sticky bit may still be set on regular files by the super-user,
+but has no effect.
+The historical meaning became obsolete in the 1980s with the advent of
+memory-mapped executables, and is only documented as a matter of
+historical interest.
 .Pp
 If mode
 .Dv ISVTX
-(the `sticky bit') is set on a directory,
+(the
+.Sq sticky bit )
+is set on a directory,
 an unprivileged user may not delete or rename
 files of other users in that directory.
 The sticky bit may be set by any user on a directory which the user
 owns or has appropriate permissions.
-For more details of the properties of the sticky bit, see
+.Pp
+For more information about the properties of the sticky bit, see
 .Xr sticky 7 .
 .Pp
 Changing the owner of a file
@@ -148,9 +157,9 @@ will fail and the file mode will be unchanged if:
 A component of the path prefix is not a directory.
 .It Bq Er ENAMETOOLONG
 A component of a pathname exceeded
-.Dv {NAME_MAX}
+.Brq Dv NAME_MAX
 characters, or an entire path name exceeded
-.Dv {PATH_MAX}
+.Brq Dv PATH_MAX
 characters.
 .It Bq Er ENOENT
 The named file does not exist.
@@ -218,6 +227,8 @@ does not refer to a directory.
 .Xr chown 2 ,
 .Xr open 2 ,
 .Xr stat 2 ,
+.Xr getmode 3 ,
+.Xr setmode 3 ,
 .Xr sticky 7 ,
 .Xr symlink 7
 .Sh STANDARDS

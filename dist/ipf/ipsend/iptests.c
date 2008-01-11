@@ -1,4 +1,4 @@
-/*	$NetBSD: iptests.c,v 1.13 2007/10/09 01:23:20 mrg Exp $	*/
+/*	$NetBSD: iptests.c,v 1.16 2010/04/17 21:00:09 darrenr Exp $	*/
 
 /*
  * Copyright (C) 1993-1998 by Darren Reed.
@@ -8,7 +8,7 @@
  */
 #if !defined(lint)
 static const char sccsid[] = "%W% %G% (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: iptests.c,v 2.8.2.8 2007/02/17 12:41:51 darrenr Exp";
+static const char rcsid[] = "@(#)Id: iptests.c,v 2.8.2.12 2009/12/27 06:53:15 darrenr Exp";
 #endif
 #include <sys/param.h>
 #include <sys/types.h>
@@ -23,7 +23,7 @@ typedef	int	boolean_t;
 #endif
 #include <sys/time.h>
 #if !defined(__osf__)
-# ifdef __NetBSD__ 
+# ifdef __NetBSD__
 #  include <machine/lock.h>
 #  include <sys/mutex.h>
 # endif
@@ -53,8 +53,9 @@ typedef	int	boolean_t;
 #endif
 #if defined(solaris)
 # include <sys/stream.h>
+#else
+# include <sys/socketvar.h>
 #endif
-#include <sys/socketvar.h>
 #ifdef sun
 #include <sys/systm.h>
 #include <sys/session.h>
@@ -80,7 +81,9 @@ typedef	int	boolean_t;
 # if defined(__FreeBSD__)
 #  include "radix_ipf.h"
 # endif
-# include <net/route.h>
+# if !defined(solaris)
+#  include <net/route.h>
+# endif
 #else
 # define __KERNEL__	/* because there's a macro not wrapped by this */
 # include <net/route.h>	/* in this file :-/ */
@@ -88,12 +91,6 @@ typedef	int	boolean_t;
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netinet/ip.h>
-#if !defined(linux)
-# include <netinet/ip_var.h>
-# if !defined(__hpux)
-#  include <netinet/in_pcb.h>
-# endif
-#endif
 #if defined(__SVR4) || defined(__svr4__) || defined(__sgi)
 # include <sys/sysmacros.h>
 #endif
@@ -103,6 +100,12 @@ typedef	int	boolean_t;
 #include <string.h>
 #ifdef __hpux
 # undef _NET_ROUTE_INCLUDED
+#endif
+#if !defined(linux)
+# include <netinet/ip_var.h>
+# if !defined(__hpux) && !defined(solaris)
+#  include <netinet/in_pcb.h>
+# endif
 #endif
 #include "ipsend.h"
 #if !defined(linux) && !defined(__hpux)

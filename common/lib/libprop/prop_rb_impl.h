@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_rb_impl.h,v 1.4 2006/09/09 15:19:18 thorpej Exp $	*/
+/*	$NetBSD: prop_rb_impl.h,v 1.8 2010/09/25 01:42:38 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,6 +31,20 @@
 
 #ifndef _PROP_RB_IMPL_H_
 #define	_PROP_RB_IMPL_H_
+
+#ifdef __NetBSD__
+#include <sys/rbtree.h>
+
+/*
+ * Define local names for common rb_tree functions.
+ */
+#define	_prop_rb_tree_init		rb_tree_init
+#define	_prop_rb_tree_insert_node	rb_tree_insert_node
+#define	_prop_rb_tree_find		rb_tree_find_node
+#define	_prop_rb_tree_remove_node	rb_tree_remove_node
+#define	_prop_rb_tree_iterate		rb_tree_iterate
+
+#else	/* __NetBSD__ */
 
 #include <sys/types.h>
 #include <sys/queue.h>
@@ -132,7 +139,7 @@ struct rb_tree {
 };
 
 void	_prop_rb_tree_init(struct rb_tree *, const struct rb_tree_ops *);
-void	_prop_rb_tree_insert_node(struct rb_tree *, struct rb_node *);
+bool	_prop_rb_tree_insert_node(struct rb_tree *, struct rb_node *);
 struct rb_node	*
 	_prop_rb_tree_find(struct rb_tree *, const void *);
 void	_prop_rb_tree_remove_node(struct rb_tree *, struct rb_node *);
@@ -141,5 +148,7 @@ void	_prop_rb_tree_check(const struct rb_tree *, bool);
 #endif
 struct rb_node *
 	_prop_rb_tree_iterate(struct rb_tree *, struct rb_node *, unsigned int);
+
+#endif /* __NetBSD__ */
 
 #endif	/* _PROP_RB_IMPL_H_*/

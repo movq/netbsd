@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi_util.c,v 1.49 2007/03/04 06:02:50 christos Exp $	*/
+/*	$NetBSD: usbdi_util.c,v 1.55 2010/11/03 22:34:24 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,18 +31,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usbdi_util.c,v 1.49 2007/03/04 06:02:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usbdi_util.c,v 1.55 2010/11/03 22:34:24 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/proc.h>
 #include <sys/device.h>
-#elif defined(__FreeBSD__)
-#include <sys/bus.h>
-#endif
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbhid.h>
@@ -58,8 +47,8 @@ __KERNEL_RCSID(0, "$NetBSD: usbdi_util.c,v 1.49 2007/03/04 06:02:50 christos Exp
 #include <dev/usb/usbdi_util.h>
 
 #ifdef USB_DEBUG
-#define DPRINTF(x)	if (usbdebug) logprintf x
-#define DPRINTFN(n,x)	if (usbdebug>(n)) logprintf x
+#define DPRINTF(x)	if (usbdebug) printf x
+#define DPRINTFN(n,x)	if (usbdebug>(n)) printf x
 extern int usbdebug;
 #else
 #define DPRINTF(x)
@@ -383,7 +372,7 @@ usbd_get_hid_descriptor(usbd_interface_handle ifc)
 
 usbd_status
 usbd_read_report_desc(usbd_interface_handle ifc, void **descp, int *sizep,
-		       usb_malloc_type mem)
+		       struct malloc_type * mem)
 {
 	usb_interface_descriptor_t *id;
 	usb_hid_descriptor_t *hid;
@@ -450,7 +439,7 @@ usbd_bulk_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
 		splx(s);
 		return (err);
 	}
-	error = tsleep((void *)xfer, PZERO | PCATCH, lbl, 0);
+	error = tsleep(xfer, PZERO | PCATCH, lbl, 0);
 	splx(s);
 	if (error) {
 		DPRINTF(("usbd_bulk_transfer: tsleep=%d\n", error));
@@ -509,19 +498,19 @@ usbd_intr_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
 }
 
 void
-usb_detach_wait(device_ptr_t dv)
+usb_detach_wait(device_t dv)
 {
-	DPRINTF(("usb_detach_wait: waiting for %s\n", USBDEVPTRNAME(dv)));
+	DPRINTF(("usb_detach_wait: waiting for %s\n", device_xname(dv)));
 	if (tsleep(dv, PZERO, "usbdet", hz * 60))
 		printf("usb_detach_wait: %s didn't detach\n",
-		        USBDEVPTRNAME(dv));
-	DPRINTF(("usb_detach_wait: %s done\n", USBDEVPTRNAME(dv)));
+		        device_xname(dv));
+	DPRINTF(("usb_detach_wait: %s done\n", device_xname(dv)));
 }
 
 void
-usb_detach_wakeup(device_ptr_t dv)
+usb_detach_wakeup(device_t dv)
 {
-	DPRINTF(("usb_detach_wakeup: for %s\n", USBDEVPTRNAME(dv)));
+	DPRINTF(("usb_detach_wakeup: for %s\n", device_xname(dv)));
 	wakeup(dv);
 }
 
@@ -549,6 +538,9 @@ usb_find_desc_if(usbd_device_handle dev, int type, int subtype,
 {
 	usbd_desc_iter_t iter;
 	const usb_cdc_descriptor_t *desc;
+
+	if (id == NULL)
+		return usb_find_desc(dev, type, subtype);
 
 	usb_desc_iter_init(dev, &iter);
 

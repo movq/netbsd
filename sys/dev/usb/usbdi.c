@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi.c,v 1.121 2007/10/19 12:01:23 ad Exp $	*/
+/*	$NetBSD: usbdi.c,v 1.131 2010/12/20 18:49:11 phx Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdi.c,v 1.28 1999/11/17 22:33:49 n_hibma Exp $	*/
 
 /*
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,24 +32,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.121 2007/10/19 12:01:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.131 2010/12/20 18:49:11 phx Exp $");
 
 #include "opt_compat_netbsd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/kernel.h>
 #include <sys/device.h>
-#elif defined(__FreeBSD__)
-#include <sys/module.h>
-#include <sys/bus.h>
-#include <sys/conf.h>
-#include "usb_if.h"
-#if defined(DIAGNOSTIC) && defined(__i386__)
-#include <sys/cpu.h>
-#endif
-#endif
 #include <sys/malloc.h>
 #include <sys/proc.h>
 
@@ -73,8 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.121 2007/10/19 12:01:23 ad Exp $");
 #include <fs/unicode.h>
 
 #ifdef USB_DEBUG
-#define DPRINTF(x)	if (usbdebug) logprintf x
-#define DPRINTFN(n,x)	if (usbdebug>(n)) logprintf x
+#define DPRINTF(x)	if (usbdebug) printf x
+#define DPRINTFN(n,x)	if (usbdebug>(n)) printf x
 extern int usbdebug;
 #else
 #define DPRINTF(x)
@@ -98,7 +81,7 @@ usbd_xfer_isread(usbd_xfer_handle xfer)
 			UE_DIR_IN);
 }
 
-#ifdef USB_DEBUG
+#if defined(USB_DEBUG) || defined(EHCI_DEBUG)
 void
 usbd_dump_iface(struct usbd_interface *iface)
 {
@@ -390,7 +373,7 @@ usbd_alloc_xfer(usbd_device_handle dev)
 	if (xfer == NULL)
 		return (NULL);
 	xfer->device = dev;
-	usb_callout_init(xfer->timeout_handle);
+	callout_init(&xfer->timeout_handle, 0);
 	DPRINTFN(5,("usbd_alloc_xfer() = %p\n", xfer));
 	return (xfer);
 }
@@ -401,7 +384,7 @@ usbd_free_xfer(usbd_xfer_handle xfer)
 	DPRINTFN(5,("usbd_free_xfer: %p\n", xfer));
 	if (xfer->rqflags & (URQ_DEV_DMABUF | URQ_AUTO_DMABUF))
 		usbd_free_buffer(xfer);
-#if defined(__NetBSD__) && defined(DIAGNOSTIC)
+#if defined(DIAGNOSTIC)
 	if (callout_pending(&xfer->timeout_handle)) {
 		callout_stop(&xfer->timeout_handle);
 		printf("usbd_free_xfer: timout_handle pending");
@@ -522,21 +505,33 @@ usbd_interface2endpoint_descriptor(usbd_interface_handle iface, u_int8_t index)
 	return (iface->endpoints[index].edesc);
 }
 
+/* Some drivers may wish to abort requests on the default pipe, *
+ * but there is no mechanism for getting a handle on it.        */
+usbd_status
+usbd_abort_default_pipe(struct usbd_device *device)
+{
+
+	return usbd_abort_pipe(device->default_pipe);
+}
+
 usbd_status
 usbd_abort_pipe(usbd_pipe_handle pipe)
 {
 	usbd_status err;
 	int s;
+	usbd_xfer_handle intrxfer = pipe->intrxfer;
 
 #ifdef DIAGNOSTIC
 	if (pipe == NULL) {
-		printf("usbd_close_pipe: pipe==NULL\n");
+		printf("usbd_abort_pipe: pipe==NULL\n");
 		return (USBD_NORMAL_COMPLETION);
 	}
 #endif
 	s = splusb();
 	err = usbd_ar_pipe(pipe);
 	splx(s);
+	if (pipe->intrxfer != intrxfer)
+		usbd_free_xfer(intrxfer);
 	return (err);
 }
 
@@ -822,17 +817,15 @@ usb_transfer_complete(usbd_xfer_handle xfer)
 		xfer->status = USBD_SHORT_XFER;
 	}
 
-	if (xfer->callback)
-		xfer->callback(xfer, xfer->priv, xfer->status);
-
-#ifdef DIAGNOSTIC
-	if (pipe->methods->done != NULL)
+	if (repeat) {
+		if (xfer->callback)
+			xfer->callback(xfer, xfer->priv, xfer->status);
 		pipe->methods->done(xfer);
-	else
-		printf("usb_transfer_complete: pipe->methods->done == NULL\n");
-#else
-	pipe->methods->done(xfer);
-#endif
+	} else {
+		pipe->methods->done(xfer);
+		if (xfer->callback)
+			xfer->callback(xfer, xfer->priv, xfer->status);
+	}
 
 	if (sync && !polling)
 		wakeup(xfer);
@@ -934,10 +927,6 @@ usbd_do_request_flags_pipe(usbd_device_handle dev, usbd_pipe_handle pipe,
 	usbd_status err;
 
 #ifdef DIAGNOSTIC
-#if defined(__i386__) && defined(__FreeBSD__)
-	KASSERT(intr_nesting_level == 0,
-	       	("usbd_do_request: in interrupt context"));
-#endif
 	if (dev->bus->intr_context) {
 		printf("usbd_do_request: not in process context\n");
 		return (USBD_INVAL);
@@ -1226,14 +1215,3 @@ usbd_get_string0(usbd_device_handle dev, int si, char *buf, int unicode)
 #endif
 	return (USBD_NORMAL_COMPLETION);
 }
-
-#if defined(__FreeBSD__)
-int
-usbd_driver_load(module_t mod, int what, void *arg)
-{
-	/* XXX should implement something like a function that removes all generic devices */
-
- 	return (0);
-}
-
-#endif

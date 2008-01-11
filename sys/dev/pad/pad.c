@@ -1,4 +1,4 @@
-/* $NetBSD: pad.c,v 1.4 2007/12/09 20:28:04 jmcneill Exp $ */
+/* $NetBSD: pad.c,v 1.16 2010/09/03 19:19:48 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pad.c,v 1.4 2007/12/09 20:28:04 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pad.c,v 1.16 2010/09/03 19:19:48 jmcneill Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -46,6 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: pad.c,v 1.4 2007/12/09 20:28:04 jmcneill Exp $");
 #include <sys/condvar.h>
 #include <sys/select.h>
 #include <sys/audioio.h>
+#include <sys/vnode.h>
+#include <sys/module.h>
 
 #include <dev/audio_if.h>
 #include <dev/audiovar.h>
@@ -57,12 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: pad.c,v 1.4 2007/12/09 20:28:04 jmcneill Exp $");
 #define PADUNIT(x)	minor(x)
 
 extern struct cfdriver pad_cd;
-
-static struct audio_device pad_device = {
-	"Pseudo Audio",
-	"1.0",
-	"pad",
-};
 
 typedef struct pad_block {
 	uint8_t		*pb_ptr;
@@ -77,8 +67,10 @@ enum {
 	PAD_ENUM_LAST,
 };
 
-static int	pad_match(struct device *, struct cfdata *, void *);
-static void	pad_attach(struct device *, struct device *, void *);
+static int	pad_match(device_t, cfdata_t, void *);
+static void	pad_attach(device_t, device_t, void *);
+static int	pad_detach(device_t, int);
+static void	pad_childdet(device_t, device_t);
 
 static int	pad_query_encoding(void *, struct audio_encoding *);
 static int	pad_set_params(void *, int, int,
@@ -120,7 +112,6 @@ static const struct audio_format pad_formats[PAD_NFORMATS] = {
 
 extern void	padattach(int);
 
-static pad_softc_t *	pad_find_softc(dev_t);
 static int		pad_add_block(pad_softc_t *, uint8_t *, int);
 static int		pad_get_block(pad_softc_t *, pad_block_t *, int);
 
@@ -142,17 +133,16 @@ const struct cdevsw pad_cdevsw = {
 	.d_flag = D_OTHER,
 };
 
-CFATTACH_DECL(pad, sizeof(pad_softc_t), pad_match, pad_attach, NULL, NULL);
+CFATTACH_DECL2_NEW(pad, sizeof(pad_softc_t), pad_match, pad_attach, pad_detach,
+    NULL, NULL, pad_childdet);
 
 void
 padattach(int n)
 {
 	int i, err;
-	struct cfdata *cf;
+	cfdata_t cf;
 
-#ifdef DEBUG
-	printf("pad: requested %d units\n", n);
-#endif
+	aprint_debug("pad: requested %d units\n", n);
 
 	err = config_cfattach_attach(pad_cd.cd_name, &pad_ca);
 	if (err) {
@@ -180,22 +170,13 @@ padattach(int n)
 	return;
 }
 
-static pad_softc_t *
-pad_find_softc(dev_t dev)
-{
-	int unit;
-
-	unit = PADUNIT(dev);
-	if (unit >= pad_cd.cd_ndevs)
-		return NULL;
-
-	return pad_cd.cd_devs[unit];
-}
-
 static int
 pad_add_block(pad_softc_t *sc, uint8_t *blk, int blksize)
 {
 	int l;
+
+	if (sc->sc_open == 0)
+		return EIO;
 
 	if (sc->sc_buflen + blksize > PAD_BUFSIZE)
 		return ENOBUFS;
@@ -242,20 +223,27 @@ pad_get_block(pad_softc_t *sc, pad_block_t *pb, int blksize)
 }
 
 static int
-pad_match(struct device *parent, struct cfdata *data, void *opaque)
+pad_match(device_t parent, cfdata_t data, void *opaque)
 {
 	return 1;
 }
 
 static void
-pad_attach(struct device *parent, struct device *self, void *opaque)
+pad_childdet(device_t self, device_t child)
 {
-	pad_softc_t *sc;
+	pad_softc_t *sc = device_private(self);
 
-	sc = (pad_softc_t *)self;
+	sc->sc_audiodev = NULL;
+}
+
+static void
+pad_attach(device_t parent, device_t self, void *opaque)
+{
+	pad_softc_t *sc = device_private(self);
 
 	aprint_normal_dev(self, "outputs: 44100Hz, 16-bit, stereo\n");
 
+	sc->sc_dev = self;
 	sc->sc_open = 0;
 	if (auconv_create_encodings(pad_formats, PAD_NFORMATS,
 	    &sc->sc_encodings) != 0) {
@@ -269,7 +257,7 @@ pad_attach(struct device *parent, struct device *self, void *opaque)
 	sc->sc_swvol = 255;
 	sc->sc_buflen = 0;
 	sc->sc_rpos = sc->sc_wpos = 0;
-	sc->sc_audiodev = (void *)audio_attach_mi(&pad_hw_if, sc, &sc->sc_dev);
+	sc->sc_audiodev = (void *)audio_attach_mi(&pad_hw_if, sc, sc->sc_dev);
 
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
@@ -277,14 +265,37 @@ pad_attach(struct device *parent, struct device *self, void *opaque)
 	return;
 }
 
+static int
+pad_detach(device_t self, int flags)
+{
+	pad_softc_t *sc = device_private(self);
+	int cmaj, mn, rc;
+
+	cmaj = cdevsw_lookup_major(&pad_cdevsw);
+	mn = device_unit(self);
+	vdevgone(cmaj, mn, mn, VCHR);
+
+	if ((rc = config_detach_children(self, flags)) != 0)
+		return rc;
+
+	pmf_device_deregister(self);
+
+	mutex_destroy(&sc->sc_mutex);
+	cv_destroy(&sc->sc_condvar);
+
+	auconv_delete_encodings(sc->sc_encodings);
+
+	return 0;
+}
+
 int
 pad_open(dev_t dev, int flags, int fmt, struct lwp *l)
 {
 	pad_softc_t *sc;
 
-	sc = pad_find_softc(dev);
+	sc = device_lookup_private(&pad_cd, PADUNIT(dev));
 	if (sc == NULL)
-		return ENODEV;
+		return ENXIO;
 
 	if (sc->sc_open++) {
 		sc->sc_open--;
@@ -299,9 +310,9 @@ pad_close(dev_t dev, int flags, int fmt, struct lwp *l)
 {
 	pad_softc_t *sc;
 
-	sc = pad_find_softc(dev);
+	sc = device_lookup_private(&pad_cd, PADUNIT(dev));
 	if (sc == NULL)
-		return ENODEV;
+		return ENXIO;
 
 	KASSERT(sc->sc_open > 0);
 	sc->sc_open--;
@@ -318,9 +329,9 @@ pad_read(dev_t dev, struct uio *uio, int flags)
 	void *intrarg;
 	int err;
 
-	sc = pad_find_softc(dev);
+	sc = device_lookup_private(&pad_cd, PADUNIT(dev));
 	if (sc == NULL)
-		return ENODEV;
+		return ENXIO;
 
 	err = 0;
 
@@ -345,8 +356,10 @@ pad_read(dev_t dev, struct uio *uio, int flags)
 			    hz/100);
 			if (err != 0 && err != EWOULDBLOCK) {
 				mutex_exit(&sc->sc_mutex);
-				aprint_error_dev(&sc->sc_dev,
-				    "cv_timedwait_sig returned %d\n", err);
+				if (err != ERESTART)
+					aprint_error_dev(sc->sc_dev,
+					    "cv_timedwait_sig returned %d\n",
+					    err);
 				return EINTR;
 			}
 			intr = sc->sc_intr;
@@ -460,8 +473,9 @@ pad_halt_input(void *opaque)
 static int
 pad_getdev(void *opaque, struct audio_device *ret)
 {
-
-	*ret = pad_device;
+	strlcpy(ret->name, "Virtual Audio", sizeof(ret->name));
+	strlcpy(ret->version, osrelease, sizeof(ret->version));
+	strlcpy(ret->config, "pad", sizeof(ret->config));
 
 	return 0;
 }
@@ -553,3 +567,100 @@ pad_round_blocksize(void *opaque, int blksize, int mode,
 {
 	return PAD_BLKSIZE;
 }
+
+#ifdef _MODULE
+
+MODULE(MODULE_CLASS_DRIVER, pad, NULL);
+
+static const struct cfiattrdata audiobuscf_iattrdata = {
+	"audiobus", 0, { { NULL, NULL, 0 }, }
+};
+static const struct cfiattrdata * const pad_attrs[] = {
+	&audiobuscf_iattrdata, NULL
+};
+
+CFDRIVER_DECL(pad, DV_DULL, pad_attrs);
+extern struct cfattach pad_ca;
+static int padloc[] = { -1, -1 };
+
+static struct cfdata pad_cfdata[] = {
+	{
+		.cf_name = "pad",
+		.cf_atname = "pad",
+		.cf_unit = 0,
+		.cf_fstate = FSTATE_STAR,
+		.cf_loc = padloc,
+		.cf_flags = 0,
+		.cf_pspec = NULL,
+	},
+	{ NULL, NULL, 0, 0, NULL, 0, NULL }
+};
+
+static int
+pad_modcmd(modcmd_t cmd, void *arg)
+{
+	devmajor_t cmajor = NODEVMAJOR, bmajor = NODEVMAJOR;
+	int error, s;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = config_cfdriver_attach(&pad_cd);
+		if (error) {
+			return error;
+		}
+
+		error = config_cfattach_attach(pad_cd.cd_name, &pad_ca);
+		if (error) {
+			config_cfdriver_detach(&pad_cd);
+			aprint_error("%s: unable to register cfattach\n",
+				pad_cd.cd_name);
+
+			return error;
+		}
+
+		s = splaudio();
+		error = config_cfdata_attach(pad_cfdata, 1);
+		splx(s);
+		if (error) {
+			config_cfattach_detach(pad_cd.cd_name, &pad_ca);
+			config_cfdriver_detach(&pad_cd);
+			aprint_error("%s: unable to register cfdata\n",
+				pad_cd.cd_name);
+
+			return error;
+		}
+
+		error = devsw_attach(pad_cd.cd_name, NULL, &bmajor, &pad_cdevsw, &cmajor);
+		if (error) {
+			error = config_cfdata_detach(pad_cfdata);
+			if (error) {
+				return error;
+			}
+			config_cfattach_detach(pad_cd.cd_name, &pad_ca);
+			config_cfdriver_detach(&pad_cd);
+			aprint_error("%s: unable to register devsw\n",
+				pad_cd.cd_name);
+
+			return error;
+		}
+
+		(void)config_attach_pseudo(pad_cfdata);
+
+		return 0;
+	case MODULE_CMD_FINI:
+		error = config_cfdata_detach(pad_cfdata);
+		if (error) {
+			return error;
+		}
+
+		config_cfattach_detach(pad_cd.cd_name, &pad_ca);
+		config_cfdriver_detach(&pad_cd);
+		devsw_detach(NULL, &pad_cdevsw);
+
+		return 0;
+	default:
+		return ENOTTY;
+	}
+}
+
+#endif

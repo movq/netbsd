@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_segment.c,v 1.207 2008/01/02 11:49:11 ad Exp $	*/
+/*	$NetBSD: lfs_segment.c,v 1.220 2011/04/03 01:19:37 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_segment.c,v 1.207 2008/01/02 11:49:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_segment.c,v 1.220 2011/04/03 01:19:37 rmind Exp $");
 
 #ifdef DEBUG
 # define vndebug(vp, str) do {						\
@@ -115,9 +108,6 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_segment.c,v 1.207 2008/01/02 11:49:11 ad Exp $")
 
 MALLOC_JUSTDEFINE(M_SEGMENT, "LFS segment", "Segment for LFS");
 
-extern int count_lock_queue(void);
-extern kmutex_t vnode_free_list_lock;		/* XXX */
-
 static void lfs_generic_callback(struct buf *, void (*)(struct buf *));
 static void lfs_free_aiodone(struct buf *);
 static void lfs_super_aiodone(struct buf *);
@@ -130,7 +120,7 @@ static void lfs_cluster_callback(struct buf *);
  */
 #define	LFS_PARTIAL_FITS(fs) \
 	((fs)->lfs_fsbpseg - ((fs)->lfs_offset - (fs)->lfs_curseg) > \
-	fragstofsb((fs), (fs)->lfs_frag))
+	(fs)->lfs_frag)
 
 /*
  * Figure out whether we should do a checkpoint write or go ahead with
@@ -382,10 +372,6 @@ lfs_vflush(struct vnode *vp)
 	if (vp->v_uflag & VU_DIROP) {
 		DLOG((DLOG_VNODE, "lfs_vflush: flushing VU_DIROP\n"));
 		/* panic("lfs_vflush: VU_DIROP being flushed...this can\'t happen"); */
-	}
-	if (vp->v_usecount < 0) {
-		printf("usecount=%ld\n", (long)vp->v_usecount);
-		panic("lfs_vflush: usecount<0");
 	}
 #endif
 
@@ -689,8 +675,8 @@ lfs_segwrite(struct mount *mp, int flags)
 		curseg = 0;
 		for (n = 0; n < fs->lfs_segtabsz; n++) {
 			dirty = 0;
-			if (bread(fs->lfs_ivnode,
-			    fs->lfs_cleansz + n, fs->lfs_bsize, NOCRED, &bp))
+			if (bread(fs->lfs_ivnode, fs->lfs_cleansz + n,
+			    fs->lfs_bsize, NOCRED, B_MODIFY, &bp))
 				panic("lfs_segwrite: ifile read");
 			segusep = (SEGUSE *)bp->b_data;
 			maxseg = min(segleft, fs->lfs_sepb);
@@ -798,7 +784,7 @@ lfs_segwrite(struct mount *mp, int flags)
 		}
 #endif
 		mutex_exit(&vp->v_interlock);
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 	} else {
 		(void) lfs_writeseg(fs, sp);
 	}
@@ -1392,13 +1378,13 @@ loop:
 # endif /* LFS_USE_B_INVAL */
 		if (!(bp->b_oflags & BO_DELWRI))
 			panic("lfs_gather: bp not BO_DELWRI");
-		if (!(bp->b_cflags & BC_LOCKED)) {
+		if (!(bp->b_flags & B_LOCKED)) {
 			DLOG((DLOG_SEG, "lfs_gather: lbn %" PRId64
-			      " blk %" PRId64 " not BC_LOCKED\n",
+			      " blk %" PRId64 " not B_LOCKED\n",
 			      bp->b_lblkno,
 			      dbtofsb(fs, bp->b_blkno)));
 			VOP_PRINT(bp->b_vp);
-			panic("lfs_gather: bp not BC_LOCKED");
+			panic("lfs_gather: bp not B_LOCKED");
 		}
 #endif
 		if (lfs_gatherblock(sp, bp, &bufcache_lock)) {
@@ -1459,7 +1445,7 @@ lfs_update_single(struct lfs *fs, struct segment *sp,
 	if (daddr > 0)
 		daddr = dbtofsb(fs, daddr);
 
-	bb = fragstofsb(fs, numfrags(fs, size));
+	bb = numfrags(fs, size);
 	switch (num) {
 	    case 0:
 		    ooff = ip->i_ffs1_db[lbn];
@@ -1482,7 +1468,8 @@ lfs_update_single(struct lfs *fs, struct segment *sp,
 		    break;
 	    default:
 		    ap = &a[num - 1];
-		    if (bread(vp, ap->in_lbn, fs->lfs_bsize, NOCRED, &bp))
+		    if (bread(vp, ap->in_lbn, fs->lfs_bsize, NOCRED,
+			B_MODIFY, &bp))
 			    panic("lfs_updatemeta: bread bno %" PRId64,
 				  ap->in_lbn);
 
@@ -1665,7 +1652,7 @@ lfs_updatemeta(struct segment *sp)
 		for (bytesleft = sbp->b_bcount; bytesleft > 0;
 		     bytesleft -= fs->lfs_bsize) {
 			size = MIN(bytesleft, fs->lfs_bsize);
-			bb = fragstofsb(fs, numfrags(fs, size));
+			bb = numfrags(fs, size);
 			lbn = *sp->start_lbp++;
 			lfs_update_single(fs, sp, sp->vp, lbn, fs->lfs_offset,
 			    size);
@@ -2160,7 +2147,7 @@ lfs_writeseg(struct lfs *fs, struct segment *sp)
 		for (byteoffset = 0; byteoffset < (*bpp)->b_bcount;
 		     byteoffset += fs->lfs_bsize) {
 #ifdef LFS_USE_B_INVAL
-			if ((*bpp)->b_cflags & BC_INVAL) != 0 &&
+			if (((*bpp)->b_cflags & BC_INVAL) != 0 &&
 			    (*bpp)->b_iodone != NULL) {
 				if (copyin((void *)(*bpp)->b_saveaddr +
 					   byteoffset, dp, el_size)) {
@@ -2313,7 +2300,7 @@ lfs_writeseg(struct lfs *fs, struct segment *sp)
 		devvp->v_numoutput++;
 		mutex_exit(&devvp->v_interlock);
 		VOP_STRATEGY(devvp, cbp);
-		curproc->p_stats->p_ru.ru_oublock++;
+		curlwp->l_ru.ru_oublock++;
 	}
 
 	if (lfs_dostats) {
@@ -2379,7 +2366,7 @@ lfs_writesuper(struct lfs *fs, daddr_t daddr)
 		BIO_SETPRIO(bp, BPRIO_TIMECRITICAL);
 	else
 		BIO_SETPRIO(bp, BPRIO_TIMELIMITED);
-	curproc->p_stats->p_ru.ru_oublock++;
+	curlwp->l_ru.ru_oublock++;
 
 	mutex_enter(&devvp->v_interlock);
 	devvp->v_numoutput++;
@@ -2520,7 +2507,7 @@ lfs_cluster_aiodone(struct buf *bp)
 
 		mutex_enter(&bufcache_lock);
 		if (tbp->b_iodone == NULL) {
-			KASSERT(tbp->b_cflags & BC_LOCKED);
+			KASSERT(tbp->b_flags & B_LOCKED);
 			bremfree(tbp);
 			if (vp) {
 				mutex_enter(&vp->v_interlock);
@@ -2530,8 +2517,8 @@ lfs_cluster_aiodone(struct buf *bp)
 			tbp->b_flags |= B_ASYNC; /* for biodone */
 		}
 
-		if (((tbp->b_cflags | tbp->b_oflags) &
-		    (BC_LOCKED | BO_DELWRI)) == BC_LOCKED)
+		if (((tbp->b_flags | tbp->b_oflags) &
+		    (B_LOCKED | BO_DELWRI)) == B_LOCKED)
 			LFS_UNLOCK_BUF(tbp);
 
 		if (tbp->b_oflags & BO_DONE) {
@@ -2558,7 +2545,7 @@ lfs_cluster_aiodone(struct buf *bp)
 			tbp->b_flags |= B_ASYNC;
 			/* Master buffers have BC_AGE */
 			if (tbp->b_private == tbp)
-				tbp->b_flags |= BC_AGE;
+				tbp->b_cflags |= BC_AGE;
 		}
 		mutex_exit(&bufcache_lock);
 
@@ -2747,7 +2734,7 @@ lfs_vref(struct vnode *vp)
 	 * being able to flush all of the pages from this vnode, which
 	 * will cause it to panic.  So, return 0 if a flush is in progress.
 	 */
-	error = vget(vp, LK_NOWAIT | LK_INTERLOCK);
+	error = vget(vp, LK_NOWAIT);
 	if (error == EBUSY && IS_FLUSHING(VTOI(vp)->i_lfs, vp)) {
 		++fs->lfs_flushvp_fakevref;
 		return 0;
@@ -2776,7 +2763,8 @@ lfs_vunref(struct vnode *vp)
 	}
 
 	/* does not call inactive */
-	vrele(vp);	/* XXXAD fix later */
+	mutex_enter(&vp->v_interlock);
+	vrelel(vp, 0);
 }
 
 /*
@@ -2794,7 +2782,8 @@ lfs_vunref_head(struct vnode *vp)
 	ASSERT_SEGLOCK(VTOI(vp)->i_lfs);
 
 	/* does not call inactive, inserts non-held vnode at head of freelist */
-	vrele(vp);	/* XXXAD fix later */
+	mutex_enter(&vp->v_interlock);
+	vrelel(vp, 0);
 }
 
 

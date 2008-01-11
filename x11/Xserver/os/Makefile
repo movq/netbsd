@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.15 2007/04/21 00:41:20 matt Exp $
+#	$NetBSD: Makefile,v 1.18 2011/05/30 02:12:02 christos Exp $
 
 .include "../Makefile.serverlib"
 .include <bsd.own.mk>
@@ -16,7 +16,8 @@ CPPFLAGS+=	-I${X11SRCDIR.xc}/programs/Xserver/include \
 		-I${X11SRCDIR.xc}/programs/Xserver/Xext \
 		-I${X11SRCDIR.xc}/include/fonts \
 		-I${X11SRCDIR.xc}/programs/Xserver/render \
-		-I${X11SRCDIR.xc}/programs/Xserver/lbx
+		-I${X11SRCDIR.xc}/programs/Xserver/lbx \
+		-I${X11SRCDIR.xc}
 
 CPPFLAGS+=	-DXSERV_t -DTRANS_SERVER \
 		${X11FLAGS.CONNECTION} \
@@ -50,7 +51,7 @@ CPPFLAGS.transport.c=	-DBSD44SOCKETS -I${X11SRCDIR.xc}/lib/xtrans
 CPPFLAGS.utils.c=	${XDMCP_DEFINES} ${X11FLAGS.EXTENSION}
 CPPFLAGS.xdmauth.c=	${XDMCP_DEFINES}
 COPTS.xdmauth.c=	-Wno-error	# XXX
-.if ${MACHINE} == "vax"
+.if ${MACHINE_ARCH} == "vax"
 COPTS.connection.c=	-O2	# XXX
 .endif
 CPPFLAGS.xdmcp.c=	${XDMCP_DEFINES} -DBSD44SOCKETS

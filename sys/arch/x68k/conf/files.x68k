@@ -1,11 +1,9 @@
-#	$NetBSD: files.x68k,v 1.64 2007/12/31 13:38:53 ad Exp $
+#	$NetBSD: files.x68k,v 1.73 2011/05/14 10:19:58 tsutsui Exp $
 #
 # new style config file for x68k architecture
 #
 
 defflag				M060SP
-
-defflag	opt_m680x0.h		M68020 M68030 M68040 M68060
 
 defflag				JUPITER
 defflag				PANICBUTTON
@@ -21,11 +19,11 @@ attach	mainbus at root
 
 device	cpu
 attach	cpu at mainbus
+file	arch/x68k/x68k/mainbus.c
 
 define	event {}
 file	arch/x68k/dev/event.c		event
 
-file	arch/x68k/x68k/x68k_init.c
 file	arch/x68k/x68k/autoconf.c
 file	arch/x68k/x68k/conf.c
 file	arch/x68k/x68k/disksubr.c	disk
@@ -41,6 +39,8 @@ file	arch/m68k/m68k/pmap_motorola.c
 file	arch/m68k/m68k/procfs_machdep.c	procfs
 file	arch/m68k/m68k/sys_machdep.c
 file	arch/m68k/m68k/vm_machdep.c
+
+file	common/bus_dma/bus_dmamem_common.c
 
 file	dev/cons.c
 file	dev/cninit.c
@@ -96,6 +96,10 @@ file	arch/x68k/x68k/clock.c		clock needs-flag
 device kbd: event
 attach	kbd at mfp
 file	arch/x68k/dev/kbd.c		kbd needs-flag
+
+device pow: sysmon_power, sysmon_taskq
+attach	pow at mfp
+file	arch/x68k/dev/pow.c		pow
 
 device rtc
 attach	rtc at intio
@@ -162,13 +166,12 @@ device	mha: scsi
 attach	mha at scsirom
 file	arch/x68k/dev/mha.c		mha needs-flag
 
+device	sram
+attach	sram at intio
+file	arch/x68k/dev/sram.c		sram
+
 defpseudo bell
 file	arch/x68k/dev/opmbell.c		bell needs-flag
-
-defpseudo sram
-file	arch/x68k/dev/sram.c		sram needs-flag
-defpseudo pow
-file	arch/x68k/dev/pow.c		pow needs-count
 
 # Nereid Ethernet
 attach	ne at intio with ne_intio: rtl80x9
@@ -205,7 +208,9 @@ file arch/m68k/m68k/linux_trap.c	compat_linux
 include "compat/ossaudio/files.ossaudio"
 
 # USB support
-include "dev/wscons/files.wscons"
 include "dev/usb/files.usb"
+
+# ATA and ATAPI support
+include "dev/ata/files.ata"
 
 include "arch/x68k/conf/majors.x68k"

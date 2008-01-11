@@ -1,4 +1,4 @@
-/*	$NetBSD: scan.c,v 1.26 2007/12/20 20:15:59 christos Exp $	*/
+/*	$NetBSD: scan.c,v 1.29 2011/01/04 10:23:40 wiz Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -166,11 +166,6 @@ extern time_t scantime;		/* time of this scan */
 extern int trace;		/* trace directories */
 extern int newonly;		/* new files only */
 
-#ifdef RCSSTAT
-extern char *rcs_branch;
-extern int candorcs;
-#endif
-
 /*************************************************
  ***   STATIC   R O U T I N E S    ***
  *************************************************/
@@ -297,10 +292,10 @@ getrelease(char *release)
 				rewound = TRUE;
 				continue;
 			}
-			q = index(p, '\n');
+			q = strchr(p, '\n');
 			if (q)
 				*q = 0;
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			q = nxtarg(&p, " \t");
 			if (strcmp(q, release) != 0)
@@ -357,10 +352,10 @@ makescanlists(void)
 	f = fopen(buf, "r");
 	if (f != NULL) {
 		while ((p = fgets(buf, sizeof(buf), f)) != NULL) {
-			q = index(p, '\n');
+			q = strchr(p, '\n');
 			if (q)
 				*q = 0;
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			q = nxtarg(&p, " \t");
 			(void) parserelease(&tl, q, p);
@@ -481,9 +476,9 @@ readlistfile(char *fname)
 		goaway("Can't read list file %s", fname);
 	cdprefix(prefix);
 	while ((p = fgets(buf, sizeof(buf), f)) != NULL) {
-		if ((q = index(p, '\n')) != NULL)
+		if ((q = strchr(p, '\n')) != NULL)
 			*q = '\0';
-		if (index("#;:", *p))
+		if (strchr("#;:", *p))
 			continue;
 		q = nxtarg(&p, " \t");
 		if (*q == '\0')
@@ -644,27 +639,6 @@ listentry(char *name, char *fullname, char *updir, int always)
 	}
 	if (access(name, R_OK) < 0)
 		return;
-#ifdef RCSSTAT
-	if (candorcs) {
-		char rcs_release[STRINGLENGTH];
-		int status;
-		if (rcs_branch != NULL)
-#ifdef CVS
-			sprintf(rcs_release, "-r %s", rcs_branch);
-#else
-			sprintf(rcs_release, "-r%s", rcs_branch);
-#endif
-		else
-			rcs_release[0] = '\0';
-#ifdef CVS
-		sprintf(sys_com, "cvs -d %s -r -l -Q co -p %s %s > %s\n", cvs_root, rcs_release, name, rcs_file);
-#else
-		status = runp("rcsstat", "rcsstat", "-q", rcs_release, name, 0);
-#endif
-		if (status != 0)
-			return;
-	}
-#endif
 	listname(fullname, &statbuf);
 }
 
@@ -851,7 +825,7 @@ getscanfile(char *scanfile)
 		(void) fclose(f);
 		return (FALSE);
 	}
-	if ((q = index(p, '\n')) != NULL)
+	if ((q = strchr(p, '\n')) != NULL)
 		*q = '\0';
 	if (*p++ != 'V') {
 		(void) fclose(f);
@@ -869,7 +843,7 @@ getscanfile(char *scanfile)
 	}
 	notwanted = FALSE;
 	while ((p = fgets(buf, sizeof(buf), f)) != NULL) {
-		q = index(p, '\n');
+		q = strchr(p, '\n');
 		if (q)
 			*q = 0;
 		ts.Tflags = 0;
@@ -890,17 +864,17 @@ getscanfile(char *scanfile)
 			p++;
 			ts.Tflags |= FNOACCT;
 		}
-		if ((q = index(p, ' ')) == NULL)
+		if ((q = strchr(p, ' ')) == NULL)
 			goaway("scanfile format inconsistent");
 		*q++ = '\0';
 		ts.Tmode = atoo(p);
 		p = q;
-		if ((q = index(p, ' ')) == NULL)
+		if ((q = strchr(p, ' ')) == NULL)
 			goaway("scanfile format inconsistent");
 		*q++ = '\0';
 		ts.Tctime = atoi(p);
 		p = q;
-		if ((q = index(p, ' ')) == NULL)
+		if ((q = strchr(p, ' ')) == NULL)
 			goaway("scanfile format inconsistent");
 		*q++ = 0;
 		ts.Tmtime = atoi(p);
@@ -968,9 +942,9 @@ makescanfile(char *scanfile)
 	if (scanF == NULL)
 		goto out;
 	if (fprintf(scanF, "V%d\n", SCANVERSION) < 0)
-		goto out;
+		goto closeout;
 	if (Tprocess(listT, recordone, scanF) != SCMOK)
-		goto out;
+		goto closeout;
 	if (fclose(scanF) != 0)
 		goto out;
 	if (rename(tname, fname) < 0) {
@@ -983,6 +957,8 @@ makescanfile(char *scanfile)
 	tbuf[1].tv_usec = 0;
 	(void) utimes(fname, tbuf);
 	return;
+closeout:
+	(void) fclose(scanF);
 out:
 	goaway("Can't write scan file temp %s for %s", tname, collname);
 }

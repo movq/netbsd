@@ -1,4 +1,4 @@
-/*      $NetBSD: ip6_etherip.c,v 1.7 2007/12/20 19:53:33 dyoung Exp $        */
+/*      $NetBSD: ip6_etherip.c,v 1.14 2010/08/24 00:07:00 jakllsch Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.7 2007/12/20 19:53:33 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.14 2010/08/24 00:07:00 jakllsch Exp $");
 
 #include "opt_inet.h"
 
@@ -85,6 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.7 2007/12/20 19:53:33 dyoung Exp $
 #ifdef INET6
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
+#include <netinet6/ip6_private.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/ip6_etherip.h>
 #endif
@@ -92,6 +93,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_etherip.c,v 1.7 2007/12/20 19:53:33 dyoung Exp $
 #include <net/if_ether.h>
 #include <net/if_media.h>
 #include <net/if_etherip.h>
+#include <net/bpf.h>
 
 #include <machine/stdarg.h>
 
@@ -186,23 +188,19 @@ ip6_etherip_output(struct ifnet *ifp, struct mbuf *m)
 }
 
 int
-ip6_etherip_input(struct mbuf *m, ...)
+ip6_etherip_input(struct mbuf **mp, int *offp, int proto)
 {
+	struct mbuf *m = *mp;
+	int off = *offp;
 	struct etherip_softc *sc;
 	const struct ip6_hdr *ip6;
 	struct sockaddr_in6 *src6, *dst6;
 	struct ifnet *ifp = NULL;
-	int off, proto;
-	va_list ap;
-
-	va_start(ap, m);
-	off = va_arg(ap, int);
-	proto = va_arg(ap, int);
-	va_end(ap);
+	int s;
 
 	if (proto != IPPROTO_ETHERIP) {
 		m_freem(m);
-		ip6stat.ip6s_nogif++;
+		IP6_STATINC(IP6_STAT_NOGIF);
 		return IPPROTO_DONE;
 	}
 
@@ -230,7 +228,7 @@ ip6_etherip_input(struct mbuf *m, ...)
 	/* no matching device found */
 	if (!ifp) {
 		m_freem(m);
-		ip6stat.ip6s_odropped++;
+		IP6_STATINC(IP6_STAT_ODROPPED);
 		return IPPROTO_DONE;
 	}
 
@@ -261,13 +259,13 @@ ip6_etherip_input(struct mbuf *m, ...)
 	m->m_pkthdr.rcvif = ifp;
 	m->m_flags &= ~(M_BCAST|M_MCAST);
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	ifp->if_ipackets++;
+
+	s = splnet();
 	(ifp->if_input)(ifp, m);
+	splx(s);
 
 	return IPPROTO_DONE;
 }

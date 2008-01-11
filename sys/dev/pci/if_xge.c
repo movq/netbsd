@@ -1,4 +1,4 @@
-/*      $NetBSD: if_xge.c,v 1.7 2008/01/04 21:18:03 ad Exp $ */
+/*      $NetBSD: if_xge.c,v 1.15 2010/04/05 07:20:28 joerg Exp $ */
 
 /*
  * Copyright (c) 2004, SUNET, Swedish University Computer Network.
@@ -43,9 +43,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.7 2008/01/04 21:18:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.15 2010/04/05 07:20:28 joerg Exp $");
 
-#include "bpfilter.h"
 #include "rnd.h"
 
 #include <sys/param.h>
@@ -65,9 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.7 2008/01/04 21:18:03 ad Exp $");
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -180,8 +177,8 @@ struct xge_softc {
 #endif
 };
 
-static int xge_match(struct device *parent, struct cfdata *cf, void *aux);
-static void xge_attach(struct device *parent, struct device *self, void *aux);
+static int xge_match(device_t parent, cfdata_t cf, void *aux);
+static void xge_attach(device_t parent, device_t self, void *aux);
 static int xge_alloc_txmem(struct xge_softc *);
 static int xge_alloc_rxmem(struct xge_softc *);
 static void xge_start(struct ifnet *);
@@ -253,7 +250,7 @@ pif_wkey(struct xge_softc *sc, bus_size_t csr, uint64_t val)
 CFATTACH_DECL(xge, sizeof(struct xge_softc),
     xge_match, xge_attach, NULL, NULL);
 
-#define XNAME sc->sc_dev.dv_xname
+#define XNAME device_xname(&sc->sc_dev)
 
 #define XGE_RXSYNC(desc, what) \
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_rxmap, \
@@ -269,7 +266,7 @@ CFATTACH_DECL(xge, sizeof(struct xge_softc),
 #define	XGE_IP_MAXPACKET	65535	/* same as IP_MAXPACKET */
 
 static int
-xge_match(struct device *parent, struct cfdata *cf, void *aux)
+xge_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -281,7 +278,7 @@ xge_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-xge_attach(struct device *parent, struct device *self, void *aux)
+xge_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	struct xge_softc *sc;
@@ -294,7 +291,7 @@ xge_attach(struct device *parent, struct device *self, void *aux)
 	uint64_t val;
 	int i;
 
-	sc = (struct xge_softc *)self;
+	sc = device_private(self);
 
 	sc->sc_dmat = pa->pa_dmat;
 
@@ -523,7 +520,7 @@ xge_attach(struct device *parent, struct device *self, void *aux)
 	    ether_sprintf(enaddr));
 
 	ifp = &sc->sc_ethercom.ec_if;
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_baudrate = 10000000000LL;
 	ifp->if_init = xge_init;
 	ifp->if_stop = xge_stop;
@@ -554,14 +551,13 @@ xge_attach(struct device *parent, struct device *self, void *aux)
 	 * Setup interrupt vector before initializing.
 	 */
 	if (pci_intr_map(pa, &ih))
-		return aprint_error("%s: unable to map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		return aprint_error_dev(&sc->sc_dev, "unable to map interrupt\n");
 	intrstr = pci_intr_string(pc, ih);
 	if ((sc->sc_ih =
 	    pci_intr_establish(pc, ih, IPL_NET, xge_intr, sc)) == NULL)
-		return aprint_error("%s: unable to establish interrupt at %s\n",
-		    sc->sc_dev.dv_xname, intrstr ? intrstr : "<unknown>");
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+		return aprint_error_dev(&sc->sc_dev, "unable to establish interrupt at %s\n",
+		    intrstr ? intrstr : "<unknown>");
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 #ifdef XGE_EVENT_COUNTERS
 	evcnt_attach_dynamic(&sc->sc_intr, EVCNT_TYPE_MISC,
@@ -634,7 +630,7 @@ xge_init(struct ifnet *ifp)
 		char buf[200];
 		printf("%s: adapter not quiescent, aborting\n", XNAME);
 		val = (val & QUIESCENT) ^ QUIESCENT;
-		bitmask_snprintf(val, QUIESCENT_BMSK, buf, sizeof buf);
+		snprintb(buf, sizeof buf, QUIESCENT_BMSK, val);
 		printf("%s: ADAPTER_STATUS missing bits %s\n", XNAME, buf);
 		return 1;
 	}
@@ -814,10 +810,7 @@ xge_intr(void *pv)
 				m->m_pkthdr.csum_flags |= M_CSUM_TCP_UDP_BAD;
 		}
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		(*ifp->if_input)(ifp, m);
 
@@ -840,12 +833,12 @@ xge_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 	case SIOCSIFMTU:
-		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > XGE_MAX_MTU) {
+		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > XGE_MAX_MTU)
 			error = EINVAL;
-		} else {
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET){
 			PIF_WCSR(RMAC_MAX_PYLD_LEN,
 			    RMAC_PYLD_LEN(ifr->ifr_mtu));
-			ifp->if_mtu = ifr->ifr_mtu;
+			error = 0;
 		}
 		break;
 
@@ -855,10 +848,16 @@ xge_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET){
+		if ((error = ether_ioctl(ifp, cmd, data)) != ENETRESET)
+			break;
+
+		error = 0;
+
+		if (cmd != SIOCADDMULTI && cmd != SIOCDELMULTI)
+			;
+		else if (ifp->if_flags & IFF_RUNNING) {
 			/* Change multicast list */
 			xge_mcast_filter(sc);
-			error = 0;
 		}
 		break;
 	}
@@ -994,10 +993,7 @@ xge_start(struct ifnet *ifp)
 		TXP_WCSR(TXDL_PAR, par);
 		TXP_WCSR(TXDL_LCR, lcr);
 
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		sc->sc_nexttx = NEXTTX(nexttx);
 	}

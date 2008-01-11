@@ -1,4 +1,4 @@
-/*	$NetBSD: mb8795.c,v 1.42 2007/10/17 19:56:03 garbled Exp $	*/
+/*	$NetBSD: mb8795.c,v 1.49 2010/04/24 19:58:13 dbj Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Darrin B. Jewell
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,10 +25,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mb8795.c,v 1.42 2007/10/17 19:56:03 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mb8795.c,v 1.49 2010/04/24 19:58:13 dbj Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 #include "rnd.h"
 
 #include <sys/param.h>
@@ -65,10 +59,8 @@ __KERNEL_RCSID(0, "$NetBSD: mb8795.c,v 1.42 2007/10/17 19:56:03 garbled Exp $");
 
 
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <machine/cpu.h>
 #include <machine/bus.h>
@@ -119,7 +111,7 @@ mb8795_config(struct mb8795_softc *sc, int *media, int nmedia, int defmedia)
 	DPRINTF(("%s: mb8795_config()\n",sc->sc_dev.dv_xname));
 
 	/* Initialize ifnet structure. */
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = mb8795_start;
 	ifp->if_ioctl = mb8795_ioctl;
@@ -332,20 +324,15 @@ mb8795_rint(struct mb8795_softc *sc)
 			}
 #endif
 
-#if NBPFILTER > 0
 			/*
 			 * Pass packet to bpf if there is a listener.
 			 */
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m);
-#endif
+			bpf_mtap(ifp, m);
 
-			{
-				ifp->if_ipackets++;
+			ifp->if_ipackets++;
 
-				/* Pass the packet up. */
-				(*ifp->if_input)(ifp, m);
-			}
+			/* Pass the packet up. */
+			(*ifp->if_input)(ifp, m);
 
 			s = spldma();
 
@@ -359,20 +346,21 @@ mb8795_rint(struct mb8795_softc *sc)
 	if (mb8795_debug) {
 		char sbuf[256];
 
-		bitmask_snprintf(rxstat, MB8795_RXSTAT_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), MB8795_RXSTAT_BITS, rxstat);
 		printf("%s: rx interrupt, rxstat = %s\n",
 		       sc->sc_dev.dv_xname, sbuf);
 
-		bitmask_snprintf(MB_READ_REG(sc, MB8795_RXSTAT),
-				 MB8795_RXSTAT_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), MB8795_RXSTAT_BITS,
+		    MB_READ_REG(sc, MB8795_RXSTAT));
+				
 		printf("rxstat = 0x%s\n", sbuf);
 
-		bitmask_snprintf(MB_READ_REG(sc, MB8795_RXMASK),
-				 MB8795_RXMASK_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), MB8795_RXMASK_BITS,
+		    MB_READ_REG(sc, MB8795_RXMASK));
 		printf("rxmask = 0x%s\n", sbuf);
 
-		bitmask_snprintf(MB_READ_REG(sc, MB8795_RXMODE),
-				 MB8795_RXMODE_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), MB8795_RXMODE_BITS,
+		    MB_READ_REG(sc, MB8795_RXMODE));
 		printf("rxmode = 0x%s\n", sbuf);
 	}
 #endif
@@ -431,7 +419,7 @@ mb8795_tint(struct mb8795_softc *sc)
 	if (txstat & MB8795_TXSTAT_READY) {
 		char sbuf[256];
 
-		bitmask_snprintf(txstat, MB8795_TXSTAT_BITS, sbuf, sizeof(sbuf));
+		snprintb(sbuf, sizeof(sbuf), MB8795_TXSTAT_BITS, txstat);
 		panic("%s: unexpected tx interrupt %s",
 				sc->sc_dev.dv_xname, sbuf);
 
@@ -596,19 +584,18 @@ mb8795_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
-		DPRINTF(("%s: mb8795_ioctl() SIOCSIFADDR\n",sc->sc_dev.dv_xname));
+	case SIOCINITIFADDR:
+		DPRINTF(("%s: mb8795_ioctl() SIOCINITIFADDR\n",sc->sc_dev.dv_xname));
 		ifp->if_flags |= IFF_UP;
 
+		mb8795_init(sc);
 		switch (ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
-			mb8795_init(sc);
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
-			mb8795_init(sc);
 			break;
 		}
 		break;
@@ -616,27 +603,31 @@ mb8795_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	case SIOCSIFFLAGS:
 		DPRINTF(("%s: mb8795_ioctl() SIOCSIFFLAGS\n",sc->sc_dev.dv_xname));
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_RUNNING:
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
 /* 			ifp->if_flags &= ~IFF_RUNNING; */
 			mb8795_reset(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-		    	   (ifp->if_flags & IFF_RUNNING) == 0) {
+			break;
+		case IFF_UP:
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
 			mb8795_init(sc);
-		} else {
+			break;
+		default:
 			/*
 			 * Reset the interface to pick up changes in any other
 			 * flags that affect hardware registers.
 			 */
 			mb8795_init(sc);
+			break;
 		}
 #ifdef MB8795_DEBUG
 		if (ifp->if_flags & IFF_DEBUG)
@@ -668,7 +659,7 @@ mb8795_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = EINVAL;
+		error = ether_ioctl(ifp, cmd, data);
 		break;
 	}
 
@@ -721,13 +712,10 @@ mb8795_start(struct ifnet *ifp)
 			return;
 		}
 
-#if NBPFILTER > 0
 		/*
 		 * Pass packet to bpf if there is a listener.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 
 		s = spldma();
 		IF_ENQUEUE(&sc->sc_tx_snd, m);

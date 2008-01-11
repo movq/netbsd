@@ -1,4 +1,4 @@
-/*	$NetBSD: mkfs.c,v 1.104 2007/12/08 21:40:23 jnemeth Exp $	*/
+/*	$NetBSD: mkfs.c,v 1.109 2011/03/06 17:08:16 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1989, 1993
@@ -73,7 +73,7 @@
 #if 0
 static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: mkfs.c,v 1.104 2007/12/08 21:40:23 jnemeth Exp $");
+__RCSID("$NetBSD: mkfs.c,v 1.109 2011/03/06 17:08:16 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,6 +84,7 @@ __RCSID("$NetBSD: mkfs.c,v 1.104 2007/12/08 21:40:23 jnemeth Exp $");
 #include <ufs/ufs/dinode.h>
 #include <ufs/ufs/dir.h>
 #include <ufs/ufs/ufs_bswap.h>
+#include <ufs/ufs/quota2.h>
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 #include <sys/ioctl.h>
@@ -157,11 +158,23 @@ int iobuf_memsize;		/* Actual buffer size */
 
 int	fsi, fso;
 
+static void
+fserr(int num)
+{
+#ifdef GARBAGE
+	extern int Gflag;
+
+	if (Gflag)
+		return;
+#endif
+	exit(num);
+}
+
 void
 mkfs(const char *fsys, int fi, int fo,
     mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 {
-	uint fragsperinodeblk, ncg;
+	uint fragsperinodeblk, ncg, u;
 	uint cgzero;
 	uint64_t inodeblks, cgall;
 	int32_t cylno, i, csfrags;
@@ -177,7 +190,7 @@ mkfs(const char *fsys, int fi, int fo,
 #ifdef MFS
 	if (mfs && !Nflag) {
 		calc_memfree();
-		if (fssize * sectorsize > memleft)
+		if ((uint64_t)fssize * sectorsize > memleft)
 			fssize = memleft / sectorsize;
 		if ((membase = mkfs_malloc(fssize * sectorsize)) == NULL)
 			exit(12);
@@ -207,12 +220,12 @@ mkfs(const char *fsys, int fi, int fo,
 	if (sblock.fs_avgfilesize <= 0) {
 		printf("illegal expected average file size %d\n",
 		    sblock.fs_avgfilesize);
-		exit(14);
+		fserr(14);
 	}
 	if (sblock.fs_avgfpdir <= 0) {
 		printf("illegal expected number of files per directory %d\n",
 		    sblock.fs_avgfpdir);
-		exit(15);
+		fserr(15);
 	}
 	/*
 	 * collect and verify the block and fragment sizes
@@ -222,32 +235,32 @@ mkfs(const char *fsys, int fi, int fo,
 	if (!powerof2(sblock.fs_bsize)) {
 		printf("block size must be a power of 2, not %d\n",
 		    sblock.fs_bsize);
-		exit(16);
+		fserr(16);
 	}
 	if (!powerof2(sblock.fs_fsize)) {
 		printf("fragment size must be a power of 2, not %d\n",
 		    sblock.fs_fsize);
-		exit(17);
+		fserr(17);
 	}
 	if (sblock.fs_fsize < sectorsize) {
 		printf("fragment size %d is too small, minimum is %d\n",
 		    sblock.fs_fsize, sectorsize);
-		exit(18);
+		fserr(18);
 	}
 	if (sblock.fs_bsize < MINBSIZE) {
 		printf("block size %d is too small, minimum is %d\n",
 		    sblock.fs_bsize, MINBSIZE);
-		exit(19);
+		fserr(19);
 	}
 	if (sblock.fs_bsize > MAXBSIZE) {
 		printf("block size %d is too large, maximum is %d\n",
 		    sblock.fs_bsize, MAXBSIZE);
-		exit(19);
+		fserr(19);
 	}
 	if (sblock.fs_bsize < sblock.fs_fsize) {
 		printf("block size (%d) cannot be smaller than fragment size (%d)\n",
 		    sblock.fs_bsize, sblock.fs_fsize);
-		exit(20);
+		fserr(20);
 	}
 
 	if (maxbsize < bsize || !powerof2(maxbsize)) {
@@ -282,15 +295,15 @@ mkfs(const char *fsys, int fi, int fo,
 			"minimum with block size %d is %d\n",
 		    sblock.fs_fsize, sblock.fs_bsize,
 		    sblock.fs_bsize / MAXFRAG);
-		exit(21);
+		fserr(21);
 	}
 	sblock.fs_fsbtodb = ilog2(sblock.fs_fsize / sectorsize);
 	sblock.fs_size = dbtofsb(&sblock, fssize);
 	if (Oflag <= 1) {
-		if (sblock.fs_size >= 1ull << 31) {
+		if ((uint64_t)sblock.fs_size >= 1ull << 31) {
 			printf("Too many fragments (0x%" PRIx64
-			    ") for a UFS1 filesystem\n", sblock.fs_size);
-			exit(22);
+			    ") for a FFSv1 filesystem\n", sblock.fs_size);
+			fserr(22);
 		}
 		sblock.fs_magic = FS_UFS1_MAGIC;
 		sblock.fs_sblockloc = SBLOCK_UFS1;
@@ -353,7 +366,7 @@ mkfs(const char *fsys, int fi, int fo,
 	if (sblock.fs_size < sblock.fs_iblkno + 3 * sblock.fs_frag) {
 		printf("Filesystem size %lld < minimum size of %d\n",
 		    (long long)sblock.fs_size, sblock.fs_iblkno + 3 * sblock.fs_frag);
-		exit(23);
+		fserr(23);
 	}
 	if (num_inodes != 0)
 		inodeblks = howmany(num_inodes, INOPB(&sblock));
@@ -370,7 +383,7 @@ mkfs(const char *fsys, int fi, int fo,
 	if (inodeblks == 0)
 		inodeblks = 1;
 	/* Ensure that there are at least 2 data blocks (or we fail below) */
-	if (inodeblks > (sblock.fs_size - sblock.fs_iblkno)/sblock.fs_frag - 2)
+	if (inodeblks > (uint64_t)(sblock.fs_size - sblock.fs_iblkno)/sblock.fs_frag - 2)
 		inodeblks = (sblock.fs_size-sblock.fs_iblkno)/sblock.fs_frag-2;
 	/* Even UFS2 limits number of inodes to 2^31 (fs_ipg is int32_t) */
 	if (inodeblks * INOPB(&sblock) >= 1ull << 31)
@@ -388,10 +401,10 @@ mkfs(const char *fsys, int fi, int fo,
 		 * but for small file sytems (especially ones with a lot
 		 * of inodes) this is not desirable (or possible).
 		 */
-		i = sblock.fs_size / 2 / (sblock.fs_iblkno +
+		u = sblock.fs_size / 2 / (sblock.fs_iblkno +
 						inodeblks * sblock.fs_frag);
-		if (i > ncg)
-			ncg = i;
+		if (u > ncg)
+			ncg = u;
 		if (ncg > MINCYLGRPS)
 			ncg = MINCYLGRPS;
 		if (ncg > inodeblks)
@@ -417,10 +430,10 @@ mkfs(const char *fsys, int fi, int fo,
 	}
 	sblock.fs_ipg = inodes_per_cg;
 	/* Sanity check on our sums... */
-	if (CGSIZE(&sblock) > sblock.fs_bsize) {
+	if ((int)CGSIZE(&sblock) > sblock.fs_bsize) {
 		printf("CGSIZE miscalculated %d > %d\n",
 		    (int)CGSIZE(&sblock), sblock.fs_bsize);
-		exit(24);
+		fserr(24);
 	}
 
 	sblock.fs_dblkno = sblock.fs_iblkno + sblock.fs_ipg / INOPF(&sblock);
@@ -516,6 +529,12 @@ mkfs(const char *fsys, int fi, int fo,
 		sblock.fs_old_cstotal.cs_nifree = sblock.fs_cstotal.cs_nifree;
 		sblock.fs_old_cstotal.cs_nffree = sblock.fs_cstotal.cs_nffree;
 	}
+	/* add quota data in superblock */
+	if (quotas) {
+		sblock.fs_flags |= FS_DOQUOTA2;
+		sblock.fs_quota_magic = Q2_HEAD_MAGIC;
+		sblock.fs_quota_flags = quotas;
+	}
 	/*
 	 * Dump out summary information about file system.
 	 */
@@ -574,7 +593,7 @@ mkfs(const char *fsys, int fi, int fo,
 		 */
 		if (fssize <= 0) {
 			printf("preposterous size %lld\n", (long long)fssize);
-			exit(13);
+			fserr(13);
 		}
 		wtfs(fssize - 1, sectorsize, iobuf);
 
@@ -603,7 +622,7 @@ mkfs(const char *fsys, int fi, int fo,
 			    tv.tv_sec, 0);
 			wtfs(APPLEUFS_LABEL_OFFSET/sectorsize,
 			    APPLEUFS_LABEL_SIZE, &appleufs);
-		} else {
+		} else if (APPLEUFS_LABEL_SIZE % sectorsize == 0) {
 			struct appleufslabel appleufs;
 			/* Look for & zap any existing valid apple ufs labels */
 			rdfs(APPLEUFS_LABEL_OFFSET/sectorsize,
@@ -735,6 +754,7 @@ initcg(int cylno, const struct timeval *tv)
 {
 	daddr_t cbase, dmax;
 	int32_t i, d, dlower, dupper, blkno;
+	uint32_t u;
 	struct ufs1_dinode *dp1;
 	struct ufs2_dinode *dp2;
 	int start;
@@ -755,7 +775,7 @@ initcg(int cylno, const struct timeval *tv)
 		if (dupper >= cgstart(&sblock, cylno + 1)) {
 			printf("\rToo many cylinder groups to fit summary "
 				"information into first cylinder group\n");
-			exit(40);
+			fserr(40);
 		}
 	}
 	memset(&acg, 0, sblock.fs_cgsize);
@@ -808,12 +828,12 @@ initcg(int cylno, const struct timeval *tv)
 	}
 	if (acg.cg_nextfreeoff > sblock.fs_cgsize) {
 		printf("Panic: cylinder group too big\n");
-		exit(37);
+		fserr(37);
 	}
 	acg.cg_cs.cs_nifree += sblock.fs_ipg;
 	if (cylno == 0)
-		for (i = 0; i < ROOTINO; i++) {
-			setbit(cg_inosused(&acg, 0), i);
+		for (u = 0; u < ROOTINO; u++) {
+			setbit(cg_inosused(&acg, 0), u);
 			acg.cg_cs.cs_nifree--;
 		}
 	if (cylno > 0) {
@@ -995,11 +1015,18 @@ int
 fsinit(const struct timeval *tv, mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 {
 	union dinode node;
-#ifdef LOSTDIR
 	int i;
+	int qblocks = 0;
+	int qinos = 0;
+	uint8_t q2h_hash_shift;
+	uint16_t q2h_hash_mask;
+#ifdef LOSTDIR
 	int dirblksiz = DIRBLKSIZ;
 	if (isappleufs)
 		dirblksiz = APPLEUFS_DIRBLKSIZ;
+	int nextino = LOSTFOUNDINO+1;
+#else
+	int nextino = ROOTINO+1;
 #endif
 
 	/*
@@ -1036,6 +1063,7 @@ fsinit(const struct timeval *tv, mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 			return (0);
 		node.dp1.di_blocks = btodb(fragroundup(&sblock,
 		    node.dp1.di_size));
+		qblocks += node.dp1.di_blocks;
 		node.dp1.di_uid = geteuid();
 		node.dp1.di_gid = getegid();
 		wtfs(fsbtodb(&sblock, node.dp1.di_db[0]), node.dp1.di_size,
@@ -1057,11 +1085,13 @@ fsinit(const struct timeval *tv, mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 			return (0);
 		node.dp2.di_blocks = btodb(fragroundup(&sblock,
 		    node.dp2.di_size));
+		qblocks += node.dp2.di_blocks;
 		node.dp2.di_uid = geteuid();
 		node.dp2.di_gid = getegid();
 		wtfs(fsbtodb(&sblock, node.dp2.di_db[0]), node.dp2.di_size,
 		    buf);
 	}
+	qinos++;
 	iput(&node, LOSTFOUNDINO);
 #endif
 	/*
@@ -1089,6 +1119,7 @@ fsinit(const struct timeval *tv, mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 			return (0);
 		node.dp1.di_blocks = btodb(fragroundup(&sblock,
 		    node.dp1.di_size));
+		qblocks += node.dp1.di_blocks;
 		wtfs(fsbtodb(&sblock, node.dp1.di_db[0]), sblock.fs_fsize, buf);
 	} else {
 		if (mfs) {
@@ -1115,9 +1146,97 @@ fsinit(const struct timeval *tv, mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 			return (0);
 		node.dp2.di_blocks = btodb(fragroundup(&sblock,
 		    node.dp2.di_size));
+		qblocks += node.dp2.di_blocks;
 		wtfs(fsbtodb(&sblock, node.dp2.di_db[0]), sblock.fs_fsize, buf);
 	}
+	qinos++;
 	iput(&node, ROOTINO);
+	/*
+	 * compute the size of the hash table
+	 * We know the smallest block size is 4k, so we can use 2k
+	 * for the hash table; as an entry is 8 bytes we can store
+	 * 256 entries. So let start q2h_hash_shift at 8
+	 */
+	for (q2h_hash_shift = 8;
+	    q2h_hash_shift < 15;
+	    q2h_hash_shift++) {
+		if ((sizeof(uint64_t) << (q2h_hash_shift + 1)) +
+		    sizeof(struct quota2_header) > (u_int)sblock.fs_bsize)
+			break;
+	}
+	q2h_hash_mask = (1 << q2h_hash_shift) - 1;
+	for (i = 0; i < MAXQUOTAS; i++) {
+		struct quota2_header *q2h;
+		struct quota2_entry *q2e;
+		uint64_t offset;
+		uid_t uid = (i == USRQUOTA ? geteuid() : getegid());
+
+		if ((quotas & FS_Q2_DO_TYPE(i)) == 0)
+			continue;
+		quota2_create_blk0(sblock.fs_bsize, buf, q2h_hash_shift,
+		    i, needswap);
+		/* grab an entry from header for root dir */
+		q2h = (void *)buf;
+		offset = ufs_rw64(q2h->q2h_free, needswap);
+		q2e = (void *)((char *)buf + offset);
+		q2h->q2h_free = q2e->q2e_next;
+		memcpy(q2e, &q2h->q2h_defentry, sizeof(*q2e));
+		q2e->q2e_uid = ufs_rw32(uid, needswap);
+		q2e->q2e_val[QL_BLOCK].q2v_cur = ufs_rw64(qblocks, needswap);
+		q2e->q2e_val[QL_FILE].q2v_cur = ufs_rw64(qinos, needswap);
+		/* add to the hash entry */
+		q2e->q2e_next = q2h->q2h_entries[uid & q2h_hash_mask];
+		q2h->q2h_entries[uid & q2h_hash_mask] =
+		    ufs_rw64(offset, needswap);
+
+		memset(&node, 0, sizeof(node));
+		if (sblock.fs_magic == FS_UFS1_MAGIC) {
+			node.dp1.di_atime = tv->tv_sec;
+			node.dp1.di_atimensec = tv->tv_usec * 1000;
+			node.dp1.di_mtime = tv->tv_sec;
+			node.dp1.di_mtimensec = tv->tv_usec * 1000;
+			node.dp1.di_ctime = tv->tv_sec;
+			node.dp1.di_ctimensec = tv->tv_usec * 1000;
+			node.dp1.di_mode = IFREG;
+			node.dp1.di_nlink = 1;
+			node.dp1.di_size = sblock.fs_bsize;
+			node.dp1.di_db[0] =
+			    alloc(node.dp1.di_size, node.dp1.di_mode);
+			if (node.dp1.di_db[0] == 0)
+				return (0);
+			node.dp1.di_blocks = btodb(fragroundup(&sblock,
+			    node.dp1.di_size));
+			node.dp1.di_uid = geteuid();
+			node.dp1.di_gid = getegid();
+			wtfs(fsbtodb(&sblock, node.dp1.di_db[0]),
+			     node.dp1.di_size, buf);
+		} else {
+			node.dp2.di_atime = tv->tv_sec;
+			node.dp2.di_atimensec = tv->tv_usec * 1000;
+			node.dp2.di_mtime = tv->tv_sec;
+			node.dp2.di_mtimensec = tv->tv_usec * 1000;
+			node.dp2.di_ctime = tv->tv_sec;
+			node.dp2.di_ctimensec = tv->tv_usec * 1000;
+			node.dp2.di_birthtime = tv->tv_sec;
+			node.dp2.di_birthnsec = tv->tv_usec * 1000;
+			node.dp2.di_mode = IFREG;
+			node.dp2.di_nlink = 1;
+			node.dp2.di_size = sblock.fs_bsize;
+			node.dp2.di_db[0] =
+			    alloc(node.dp2.di_size, node.dp2.di_mode);
+			if (node.dp2.di_db[0] == 0)
+				return (0);
+			node.dp2.di_blocks = btodb(fragroundup(&sblock,
+			    node.dp2.di_size));
+			node.dp2.di_uid = geteuid();
+			node.dp2.di_gid = getegid();
+			wtfs(fsbtodb(&sblock, node.dp2.di_db[0]),
+			    node.dp2.di_size, buf);
+		}
+		iput(&node, nextino);
+		sblock.fs_quotafile[i] = nextino;
+		nextino++;
+	}
 	return (1);
 }
 
@@ -1227,7 +1346,7 @@ iput(union dinode *ip, ino_t ino)
 		ffs_cg_swap(&acg, &acg, &sblock);
 	if (acg.cg_magic != CG_MAGIC) {
 		printf("cg 0: bad magic number\n");
-		exit(31);
+		fserr(31);
 	}
 	acg.cg_cs.cs_nifree--;
 	setbit(cg_inosused(&acg, 0), ino);
@@ -1237,10 +1356,10 @@ iput(union dinode *ip, ino_t ino)
 	wtfs(fsbtodb(&sblock, cgtod(&sblock, 0)), sblock.fs_cgsize, &acg);
 	sblock.fs_cstotal.cs_nifree--;
 	fscs_0->cs_nifree--;
-	if (ino >= sblock.fs_ipg * sblock.fs_ncg) {
+	if (ino >= (ino_t)(sblock.fs_ipg * sblock.fs_ncg)) {
 		printf("fsinit: inode value out of range (%llu).\n",
 		    (unsigned long long)ino);
-		exit(32);
+		fserr(32);
 	}
 	d = fsbtodb(&sblock, ino_to_fsba(&sblock, ino));
 	rdfs(d, sblock.fs_bsize, (char *)iobuf);

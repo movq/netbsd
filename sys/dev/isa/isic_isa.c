@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isa.c,v 1.29 2007/10/19 12:00:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isa.c,v 1.35 2009/05/12 09:10:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -81,9 +74,9 @@ __KERNEL_RCSID(0, "$NetBSD: isic_isa.c,v 1.29 2007/10/19 12:00:19 ad Exp $");
 extern const struct isdn_layer1_isdnif_driver isic_std_driver;
 
 /* local functions */
-static int isic_isa_probe(struct device *, struct cfdata *, void *);
+static int isic_isa_probe(device_t, cfdata_t, void *);
 
-static void isic_isa_attach(struct device *, struct device *, void *);
+static void isic_isa_attach(device_t, device_t, void *);
 static int setup_io_map(int flags, bus_space_tag_t iot,
 	bus_space_tag_t memt, bus_size_t iobase, bus_size_t maddr,
 	int *num_mappings, struct isic_io_map *maps, int *iosize,
@@ -94,14 +87,14 @@ CFATTACH_DECL(isic_isa, sizeof(struct isic_softc),
     isic_isa_probe, isic_isa_attach, NULL, NULL);
 
 #define	ISIC_FMT	"%s: "
-#define	ISIC_PARM	sc->sc_dev.dv_xname
+#define	ISIC_PARM	device_xname(&sc->sc_dev)
 #define	TERMFMT	"\n"
 
 /*
  * Probe card
  */
 static int
-isic_isa_probe(struct device *parent, struct cfdata *cf, void *aux)
+isic_isa_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t memt = ia->ia_memt, iot = ia->ia_iot;
@@ -543,8 +536,7 @@ isicattach(int flags, struct isic_softc *sc)
 				break;
 
 			default:
-				printf("%s: Error, IPAC version %d unknown!\n",
-					sc->sc_dev.dv_xname, ret);
+				aprint_error_dev(&sc->sc_dev, "Error, IPAC version %d unknown!\n", ret);
 				return(0);
 				break;
 		}
@@ -783,7 +775,7 @@ isicattach(int flags, struct isic_softc *sc)
  * Attach the card
  */
 static void
-isic_isa_attach(struct device *parent, struct device *self, void *aux)
+isic_isa_attach(device_t parent, device_t self, void *aux)
 {
 	struct isic_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
@@ -978,11 +970,7 @@ isic_isa_attach(struct device *parent, struct device *self, void *aux)
  * mappings already setup when returning!
  */
 static int
-setup_io_map(flags, iot, memt, iobase, maddr, num_mappings, maps, iosize, msize)
-	int flags, *num_mappings, *iosize, *msize;
-	bus_size_t iobase, maddr;
-	bus_space_tag_t iot, memt;
-	struct isic_io_map *maps;
+setup_io_map(int flags, bus_space_tag_t iot, bus_space_tag_t memt, bus_size_t iobase, bus_size_t maddr, int *num_mappings, struct isic_io_map *maps, int *iosize, int *msize)
 {
 	/* nothing mapped yet */
 	*num_mappings = 0;
@@ -1280,9 +1268,7 @@ setup_io_map(flags, iot, memt, iobase, maddr, num_mappings, maps, iosize, msize)
 }
 
 static void
-args_unmap(num_mappings, maps)
-	int *num_mappings;
-	struct isic_io_map *maps;
+args_unmap(int *num_mappings, struct isic_io_map *maps)
 {
 	int i, n;
 	for (i = 0, n = *num_mappings; i < n; i++)

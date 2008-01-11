@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.38 2007/03/04 06:00:50 christos Exp $	*/
+/*	$NetBSD: pmap.h,v 1.53 2010/11/14 13:33:23 uebayasi Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -38,6 +38,9 @@
 #include <machine/pte.h>
 #include <sys/queue.h>
 #include <uvm/uvm_object.h>
+#ifdef _KERNEL
+#include <machine/cpuset.h>
+#endif
 #endif
 
 /*
@@ -108,15 +111,29 @@ extern struct page_size_map page_size_map[];
 #define va_to_dir(v)	(int)((((paddr_t)(v))>>PDSHIFT)&PDMASK)
 #define va_to_pte(v)	(int)((((paddr_t)(v))>>PTSHIFT)&PTMASK)
 
+#ifdef MULTIPROCESSOR
+#define PMAP_LIST_MAXNUMCPU	CPUSET_MAXNUMCPU
+#else
+#define PMAP_LIST_MAXNUMCPU	1
+#endif
+
 struct pmap {
 	struct uvm_object pm_obj;
 #define pm_lock pm_obj.vmobjlock
 #define pm_refs pm_obj.uo_refs
-	LIST_ENTRY(pmap) pm_list;		/* pmap_ctxlist */
+	LIST_ENTRY(pmap) pm_list[PMAP_LIST_MAXNUMCPU];	/* per cpu ctx used list */
 
 	struct pmap_statistics pm_stats;
 
-	int pm_ctx;		/* Current context */
+	/*
+	 * We record the context used on any cpu here. If the context
+	 * is actually present in the TLB, it will be the plain context
+	 * number. If the context is allocated, but has been flushed
+	 * from the tlb, the number will be negative.
+	 * If this pmap has no context allocated on that cpu, the entry
+	 * will be 0.
+	 */
+	int pm_ctx[PMAP_LIST_MAXNUMCPU];	/* Current context per cpu */
 
 	/*
 	 * This contains 64-bit pointers to pages that contain
@@ -152,12 +169,7 @@ struct prom_map {
    then there is an aliasing in the d$ */
 #define VA_ALIAS_MASK   (1 << 13)
 
-typedef	struct pmap *pmap_t;
-
 #ifdef	_KERNEL
-extern struct pmap kernel_pmap_;
-#define	pmap_kernel()	(&kernel_pmap_)
-
 #ifdef PMAP_COUNT_DEBUG
 /* diagnostic versions if PMAP_COUNT_DEBUG option is used */
 int pmap_count_res(struct pmap *);
@@ -191,12 +203,36 @@ void		switchexit(struct lwp *, int);
 void		pmap_kprotect(vaddr_t, vm_prot_t);
 
 /* SPARC64 specific */
-int	ctx_alloc(struct pmap *);
-void	ctx_free(struct pmap *);
+void		pmap_copy_page_phys(paddr_t, paddr_t);
+void		pmap_zero_page_phys(paddr_t);
 
 /* Installed physical memory, as discovered during bootstrap. */
 extern int phys_installed_size;
 extern struct mem_region *phys_installed;
+
+#define	__HAVE_VM_PAGE_MD
+
+/*
+ * For each struct vm_page, there is a list of all currently valid virtual
+ * mappings of that page.  An entry is a pv_entry_t.
+ */
+struct pmap;
+typedef struct pv_entry {
+	struct pv_entry	*pv_next;	/* next pv_entry */
+	struct pmap	*pv_pmap;	/* pmap where mapping lies */
+	vaddr_t		pv_va;		/* virtual address for mapping */
+} *pv_entry_t;
+/* PV flags encoded in the low bits of the VA of the first pv_entry */
+
+struct vm_page_md {
+	struct pv_entry mdpg_pvh;
+};
+#define	VM_MDPAGE_INIT(pg)						\
+do {									\
+	(pg)->mdpage.mdpg_pvh.pv_next = NULL;				\
+	(pg)->mdpage.mdpg_pvh.pv_pmap = NULL;				\
+	(pg)->mdpage.mdpg_pvh.pv_va = 0;				\
+} while (/*CONSTCOND*/0)
 
 #endif	/* _KERNEL */
 

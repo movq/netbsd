@@ -1,4 +1,4 @@
-/*	$NetBSD: ad1848.c,v 1.27 2007/12/11 00:21:51 martin Exp $	*/
+/*	$NetBSD: ad1848.c,v 1.30 2011/04/27 07:47:33 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -102,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ad1848.c,v 1.27 2007/12/11 00:21:51 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ad1848.c,v 1.30 2011/04/27 07:47:33 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -141,6 +134,7 @@ __KERNEL_RCSID(0, "$NetBSD: ad1848.c,v 1.27 2007/12/11 00:21:51 martin Exp $");
 #ifdef AUDIO_DEBUG
 #define DPRINTF(x)	if (ad1848debug) printf x
 int	ad1848debug = 0;
+void ad1848_dump_regs(struct ad1848_softc *);
 #else
 #define DPRINTF(x)
 #endif
@@ -222,7 +216,7 @@ ad1848_from_vol(mixer_ctrl_t *cp, struct ad1848_volume *vol)
 }
 
 
-inline int
+int
 ad_read(struct ad1848_softc *sc, int reg)
 {
 	int x;
@@ -233,7 +227,7 @@ ad_read(struct ad1848_softc *sc, int reg)
 	return x;
 }
 
-inline void
+void
 ad_write(struct ad1848_softc *sc, int reg, int data)
 {
 
@@ -247,7 +241,7 @@ ad_write(struct ad1848_softc *sc, int reg, int data)
  * indirection through CS_XREG (I23).
  */
 
-inline int
+int
 ad_xread(struct ad1848_softc *sc, int reg)
 {
 	int x;
@@ -259,7 +253,7 @@ ad_xread(struct ad1848_softc *sc, int reg)
 	return x;
 }
 
-inline void
+void
 ad_xwrite(struct ad1848_softc *sc, int reg, int val)
 {
 

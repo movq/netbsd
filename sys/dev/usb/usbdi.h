@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi.h,v 1.75 2007/08/15 04:00:34 kiyohara Exp $	*/
+/*	$NetBSD: usbdi.h,v 1.79 2009/09/04 17:53:12 dyoung Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdi.h,v 1.18 1999/11/17 22:33:49 n_hibma Exp $	*/
 
 /*
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -90,6 +83,7 @@ typedef void (*usbd_callback)(usbd_xfer_handle, usbd_private_handle,
 
 #define USBD_NO_TIMEOUT 0
 #define USBD_DEFAULT_TIMEOUT 5000 /* ms = 5 s */
+#define	USBD_CONFIG_TIMEOUT  (3*USBD_DEFAULT_TIMEOUT)
 
 #if defined(__FreeBSD__)
 #define USB_CDEV_MAJOR 108
@@ -119,6 +113,7 @@ void usbd_get_xfer_status(usbd_xfer_handle, usbd_private_handle *,
 usb_endpoint_descriptor_t *usbd_interface2endpoint_descriptor
 			(usbd_interface_handle, u_int8_t);
 usbd_status usbd_abort_pipe(usbd_pipe_handle);
+usbd_status usbd_abort_default_pipe(usbd_device_handle);
 usbd_status usbd_clear_endpoint_stall(usbd_pipe_handle);
 usbd_status usbd_clear_endpoint_stall_async(usbd_pipe_handle);
 void usbd_clear_endpoint_toggle(usbd_pipe_handle);
@@ -170,7 +165,7 @@ void usbd_set_polling(usbd_device_handle, int);
 const char *usbd_errstr(usbd_status);
 
 void usbd_add_dev_event(int, usbd_device_handle);
-void usbd_add_drv_event(int, usbd_device_handle, device_ptr_t);
+void usbd_add_drv_event(int, usbd_device_handle, device_t);
 
 char *usbd_devinfo_alloc(usbd_device_handle, int);
 void usbd_devinfo_free(char *);

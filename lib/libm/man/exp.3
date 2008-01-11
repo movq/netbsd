@@ -26,14 +26,19 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)exp.3	6.12 (Berkeley) 7/31/91
-.\"	$NetBSD: exp.3,v 1.23 2005/07/21 12:58:22 wiz Exp $
+.\" $FreeBSD: src/lib/msun/man/exp.3,v 1.24 2008/01/18 21:43:00 das Exp $
+.\"	$NetBSD: exp.3,v 1.26 2010/05/03 05:35:58 jruoho Exp $
 .\"
-.Dd July 21, 2005
+.Dd May 3, 2010
 .Dt EXP 3
 .Os
 .Sh NAME
 .Nm exp ,
 .Nm expf ,
+.\" The sorting error is intentional.  exp and expf should be adjacent.
+.Nm exp2 ,
+.Nm exp2f ,
+.\" .Nm exp2l ,
 .Nm expm1 ,
 .Nm expm1f ,
 .Nm log ,
@@ -55,6 +60,12 @@
 .Fn exp "double x"
 .Ft float
 .Fn expf "float x"
+.Ft double
+.Fn exp2 "double x"
+.Ft float
+.Fn exp2f "float x"
+.\" .Ft long double
+.\" .Fn exp2l "long double x"
 .Ft double
 .Fn expm1 "double x"
 .Ft float
@@ -82,12 +93,28 @@
 .Sh DESCRIPTION
 The
 .Fn exp
-function computes the exponential value of the given argument
+and the
+.Fn expf
+functions compute the base
+.Ms e
+exponential value of the given argument
+.Fa x .
+.Pp
+The
+.Fn exp2 ,
+and
+.Fn exp2f
+.\" .Fn exp2f ,
+.\" and
+.\" .Fn exp2l
+functions compute the base 2 exponential of the given argument
 .Fa x .
 .Pp
 The
 .Fn expm1
-function computes the value exp(x)\-1 accurately even for tiny argument
+and the
+.Fn expm1f
+functions computes the value exp(x)\-1 accurately even for tiny argument
 .Fa x .
 .Pp
 The
@@ -117,7 +144,9 @@ to base 2.
 .Pp
 The
 .Fn pow
-computes the value
+and
+.Fn powf
+functions compute the value
 of
 .Ar x
 to the exponent
@@ -165,10 +194,19 @@ unless
 .Fa x
 \*[Gt] \-1.
 .Sh ERRORS
-exp(x), log(x), expm1(x) and log1p(x) are accurate to within
-an
-.Em ulp ,
-and log10(x) to within about 2
+The values of
+.Fn exp x ,
+.Fn expm1 x ,
+.Fn exp2 x ,
+.Fn log x ,
+and
+.Fn log1p x ,
+are exact provided that they are representable.
+Otherwise the error in these functions is generally below one
+.Em ulp .
+The values of
+.Fn log10 x
+are within about 2
 .Em ulps ;
 an
 .Em ulp
@@ -201,7 +239,7 @@ for
 .Tn IEEE
 754 Double.
 Moderate values of
-.Fn pow
+.Fn pow x y
 are accurate enough that
 .Fn pow integer integer
 is exact until it is bigger than 2**56 on a
@@ -210,8 +248,15 @@ is exact until it is bigger than 2**56 on a
 .Tn IEEE
 754.
 .Sh NOTES
-The functions exp(x)\-1 and log(1+x) are called
-expm1 and logp1 in
+The functions 
+.Fn exp x\ \-\ 1
+and
+.Fn log 1\ \+\ x
+are called
+.Fn expm1 x
+and 
+.Fn logp1 x
+in
 .Tn BASIC
 on the Hewlett\-Packard
 .Tn HP Ns \-71B
@@ -221,12 +266,16 @@ Macintosh,
 .Tn EXP1
 and
 .Tn LN1
-in Pascal, exp1 and log1 in C
+in Pascal,
+.Fn exp1 x
+and
+.Fn log1 x
+in C
 on
 .Tn APPLE
 Macintoshes, where they have been provided to make
 sure financial calculations of ((1+x)**n\-1)/x, namely
-expm1(n\(**log1p(x))/x, will be accurate when x is tiny.
+expm1(n*log1p(x))/x, will be accurate when x is tiny.
 They also provide accurate inverse hyperbolic functions.
 .Pp
 The function
@@ -298,6 +347,22 @@ and
 .Fn pow
 functions conform to
 .St -ansiC .
+The
+.Fn exp2 ,
+.Fn exp2f ,
+.Fn expf ,
+.Fn expm1 ,
+.Fn expm1f ,
+.Fn log1p ,
+.Fn log1pf ,
+.Fn log2 ,
+.Fn log2f ,
+.Fn log10f ,
+.Fn logf ,
+and
+.Fn powf
+functions conform to
+.St -isoC-99 .
 .Sh HISTORY
 A
 .Fn exp ,

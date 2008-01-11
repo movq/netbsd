@@ -1,4 +1,4 @@
-/*	$NetBSD: ess.c,v 1.75 2007/10/19 12:00:16 ad Exp $	*/
+/*	$NetBSD: ess.c,v 1.78 2010/05/22 16:35:00 tsutsui Exp $	*/
 
 /*
  * Copyright 1997
@@ -66,7 +66,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ess.c,v 1.75 2007/10/19 12:00:16 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ess.c,v 1.78 2010/05/22 16:35:00 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -922,7 +922,7 @@ essattach(struct ess_softc *sc, int enablejoy)
 		return;
 	}
 
-	printf(": ESS Technology ES%s [version 0x%04x]\n",
+	aprint_normal(": ESS Technology ES%s [version 0x%04x]\n",
 	    essmodel[sc->sc_model], sc->sc_version);
 
 	sc->sc_audio1.polled = sc->sc_audio1.irq == -1;
@@ -930,22 +930,22 @@ essattach(struct ess_softc *sc, int enablejoy)
 		sc->sc_audio1.ih = isa_intr_establish(sc->sc_ic,
 		    sc->sc_audio1.irq, sc->sc_audio1.ist, IPL_AUDIO,
 		    ess_audio1_intr, sc);
-		printf("%s: audio1 interrupting at irq %d\n",
-		    sc->sc_dev.dv_xname, sc->sc_audio1.irq);
+		aprint_normal_dev(sc->sc_dev,
+		    "audio1 interrupting at irq %d\n", sc->sc_audio1.irq);
 	} else
-		printf("%s: audio1 polled\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "audio1 polled\n");
 	sc->sc_audio1.maxsize = isa_dmamaxsize(sc->sc_ic, sc->sc_audio1.drq);
 
 	if (isa_drq_alloc(sc->sc_ic, sc->sc_audio1.drq) != 0) {
-		printf("%s: can't reserve drq %d\n",
-		    sc->sc_dev.dv_xname, sc->sc_audio1.drq);
+		aprint_error_dev(sc->sc_dev, "can't reserve drq %d\n",
+		    sc->sc_audio1.drq);
 		return;
 	}
 
 	if (isa_dmamap_create(sc->sc_ic, sc->sc_audio1.drq,
 	    sc->sc_audio1.maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-		printf("%s: can't create map for drq %d\n",
-		    sc->sc_dev.dv_xname, sc->sc_audio1.drq);
+		aprint_error_dev(sc->sc_dev, "can't create map for drq %d\n",
+		    sc->sc_audio1.drq);
 		return;
 	}
 
@@ -955,23 +955,24 @@ essattach(struct ess_softc *sc, int enablejoy)
 			sc->sc_audio2.ih = isa_intr_establish(sc->sc_ic,
 			    sc->sc_audio2.irq, sc->sc_audio2.ist, IPL_AUDIO,
 			    ess_audio2_intr, sc);
-			printf("%s: audio2 interrupting at irq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_audio2.irq);
+			aprint_normal_dev(sc->sc_dev,
+			    "audio2 interrupting at irq %d\n",
+			    sc->sc_audio2.irq);
 		} else
-			printf("%s: audio2 polled\n", sc->sc_dev.dv_xname);
+			aprint_normal_dev(sc->sc_dev, "audio2 polled\n");
 		sc->sc_audio2.maxsize = isa_dmamaxsize(sc->sc_ic,
 		    sc->sc_audio2.drq);
 
 		if (isa_drq_alloc(sc->sc_ic, sc->sc_audio2.drq) != 0) {
-			printf("%s: can't reserve drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_audio2.drq);
+			aprint_error_dev(sc->sc_dev, "can't reserve drq %d\n",
+			    sc->sc_audio2.drq);
 			return;
 		}
 
 		if (isa_dmamap_create(sc->sc_ic, sc->sc_audio2.drq,
 		    sc->sc_audio2.maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-			printf("%s: can't create map for drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_audio2.drq);
+			aprint_error_dev(sc->sc_dev, "can't create map for drq %d\n",
+			    sc->sc_audio2.drq);
 			return;
 		}
 	}
@@ -1043,14 +1044,14 @@ essattach(struct ess_softc *sc, int enablejoy)
 	    sc->sc_version);
 
 	if (ESS_USE_AUDIO1(sc->sc_model))
-		audio_attach_mi(&ess_1788_hw_if, sc, &sc->sc_dev);
+		audio_attach_mi(&ess_1788_hw_if, sc, sc->sc_dev);
 	else
-		audio_attach_mi(&ess_1888_hw_if, sc, &sc->sc_dev);
+		audio_attach_mi(&ess_1888_hw_if, sc, sc->sc_dev);
 
 	arg.type = AUDIODEV_TYPE_OPL;
 	arg.hwif = 0;
 	arg.hdl = 0;
-	(void)config_found(&sc->sc_dev, &arg, audioprint);
+	(void)config_found(sc->sc_dev, &arg, audioprint);
 
 #if NJOY_ESS > 0
 	if (sc->sc_model == ESS_1888 && enablejoy) {
@@ -1061,7 +1062,7 @@ essattach(struct ess_softc *sc, int enablejoy)
 		ess_write_mix_reg(sc, 0x40, m40);
 
 		arg.type = AUDIODEV_TYPE_AUX;
-		(void)config_found(&sc->sc_dev, &arg, audioprint);
+		(void)config_found(sc->sc_dev, &arg, audioprint);
 	}
 #endif
 

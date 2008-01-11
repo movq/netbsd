@@ -1,4 +1,4 @@
-/*	$NetBSD: if_loop.c,v 1.66 2007/10/19 12:16:44 ad Exp $	*/
+/*	$NetBSD: if_loop.c,v 1.73 2011/04/25 22:20:59 yamt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.66 2007/10/19 12:16:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.73 2011/04/25 22:20:59 yamt Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
@@ -73,7 +73,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.66 2007/10/19 12:16:44 ad Exp $");
 #include "opt_ipx.h"
 #include "opt_mbuftrace.h"
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,6 +94,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.66 2007/10/19 12:16:44 ad Exp $");
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
+#include <netinet/in_offload.h>
 #include <netinet/ip.h>
 #endif
 
@@ -103,9 +103,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.66 2007/10/19 12:16:44 ad Exp $");
 #include <netinet/in.h>
 #endif
 #include <netinet6/in6_var.h>
+#include <netinet6/in6_offload.h>
 #include <netinet/ip6.h>
 #endif
-
 
 #ifdef IPX
 #include <netipx/ipx.h>
@@ -122,9 +122,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.66 2007/10/19 12:16:44 ad Exp $");
 #include <netatalk/at_var.h>
 #endif
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #if defined(LARGE_LOMTU)
 #define LOMTU	(131072 +  MHLEN + MLEN)
@@ -157,10 +155,9 @@ loop_clone_create(struct if_clone *ifc, int unit)
 {
 	struct ifnet *ifp;
 
-	ifp = malloc(sizeof(*ifp), M_DEVBUF, M_WAITOK | M_ZERO);
+	ifp = if_alloc(IFT_LOOP);
 
-	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d",
-	    ifc->ifc_name, unit);
+	if_initname(ifp, ifc->ifc_name, unit);
 
 	ifp->if_mtu = LOMTU;
 	ifp->if_flags = IFF_LOOPBACK | IFF_MULTICAST | IFF_RUNNING;
@@ -178,9 +175,7 @@ loop_clone_create(struct if_clone *ifc, int unit)
 		lo0ifp = ifp;
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_NULL, sizeof(u_int));
-#endif
+	bpf_attach(ifp, DLT_NULL, sizeof(u_int));
 #ifdef MBUFTRACE
 	ifp->if_mowner = malloc(sizeof(struct mowner), M_DEVBUF,
 	    M_WAITOK | M_ZERO);
@@ -204,9 +199,7 @@ loop_clone_destroy(struct ifnet *ifp)
 	free(ifp->if_mowner, M_DEVBUF);
 #endif
 
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 
 	free(ifp, M_DEVBUF);
@@ -220,14 +213,13 @@ looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 {
 	int s, isr;
 	struct ifqueue *ifq = NULL;
+	int csum_flags;
 
 	MCLAIM(m, ifp->if_mowner);
 	if ((m->m_flags & M_PKTHDR) == 0)
 		panic("looutput: no header mbuf");
-#if NBPFILTER > 0
-	if (ifp->if_bpf && (ifp->if_flags & IFF_LOOPBACK))
-		bpf_mtap_af(ifp->if_bpf, dst->sa_family, m);
-#endif
+	if (ifp->if_flags & IFF_LOOPBACK)
+		bpf_mtap_af(ifp, dst->sa_family, m);
 	m->m_pkthdr.rcvif = ifp;
 
 	if (rt && rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE)) {
@@ -274,12 +266,25 @@ looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 
 #ifdef INET
 	case AF_INET:
+		csum_flags = m->m_pkthdr.csum_flags;
+		KASSERT((csum_flags & ~(M_CSUM_IPv4|M_CSUM_UDPv4)) == 0);
+		if (csum_flags != 0 && IN_LOOPBACK_NEED_CHECKSUM(csum_flags)) {
+			ip_undefer_csum(m, 0, csum_flags);
+		}
+		m->m_pkthdr.csum_flags = 0;
 		ifq = &ipintrq;
 		isr = NETISR_IP;
 		break;
 #endif
 #ifdef INET6
 	case AF_INET6:
+		csum_flags = m->m_pkthdr.csum_flags;
+		KASSERT((csum_flags & ~M_CSUM_UDPv6) == 0);
+		if (csum_flags != 0 &&
+		    IN6_LOOPBACK_NEED_CHECKSUM(csum_flags)) {
+			ip6_undefer_csum(m, 0, csum_flags);
+		}
+		m->m_pkthdr.csum_flags = 0;
 		m->m_flags |= M_LOOP;
 		ifq = &ip6intrq;
 		isr = NETISR_IPV6;
@@ -398,7 +403,7 @@ lostart(struct ifnet *ifp)
 /* ARGSUSED */
 void
 lortrequest(int cmd, struct rtentry *rt,
-    struct rt_addrinfo *info)
+    const struct rt_addrinfo *info)
 {
 
 	if (rt)
@@ -413,12 +418,12 @@ int
 loioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ifaddr *ifa;
-	struct ifreq *ifr;
+	struct ifreq *ifr = data;
 	int error = 0;
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP;
 		ifa = (struct ifaddr *)data;
 		if (ifa != NULL /*&& ifa->ifa_addr->sa_family == AF_ISO*/)
@@ -429,18 +434,16 @@ loioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFMTU:
-		ifr = (struct ifreq *)data;
 		if ((unsigned)ifr->ifr_mtu > LOMTU_MAX)
 			error = EINVAL;
-		else {
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET){
 			/* XXX update rt mtu for AF_ISO? */
-			ifp->if_mtu = ifr->ifr_mtu;
+			error = 0;
 		}
 		break;
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		ifr = (struct ifreq *)data;
 		if (ifr == NULL) {
 			error = EAFNOSUPPORT;		/* XXX */
 			break;
@@ -463,7 +466,7 @@ loioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = EINVAL;
+		error = ifioctl_common(ifp, cmd, data);
 	}
 	return (error);
 }

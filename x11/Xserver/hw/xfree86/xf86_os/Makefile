@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.14 2006/12/21 01:45:33 macallan Exp $
+#	$NetBSD: Makefile,v 1.21 2009/02/14 13:48:17 abs Exp $
 
 .include "../../../Makefile.serverlib"
 
@@ -12,16 +12,16 @@ SRCS.bsd=	bsd_init.c bsd_io.c bsd_VTsw.c libc_wrapper.c std_kbdEv.c \
 		kmod_noop.c bsd_kbd.c bsd_KbdMap.c at_scancode.c
 
 .PATH:	${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/os-support/linux
-.if ${MACHINE} == "amd64"
+.if ${MACHINE_ARCH} == "x86_64"
 SRCS.bsd+=	pm_noop.c
 .endif
-.if ${MACHINE} == "i386"
+.if ${MACHINE_ARCH} == "i386"
 SRCS.bsd+=	bsd_apm.c
 .endif
-.if ${MACHINE} == "i386" || ${MACHINE_ARCH} == "x86_64"
+.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
 SRCS.bsd+=	i386_video.c stdResource.c lnx_agp.c
 .for _FN in ${SRCS.bsd}
-.if ${MACHINE} == "i386"
+.if ${MACHINE_ARCH} == "i386"
 CPPFLAGS.${_FN}+=	-DPCCONS_SUPPORT -DHAS_APERTURE_DRV
 .endif
 CPPFLAGS.${_FN}+=	-DPCVT_SUPPORT -DWSCONS_SUPPORT \
@@ -30,10 +30,11 @@ CPPFLAGS.${_FN}+=	-DPCVT_SUPPORT -DWSCONS_SUPPORT \
 .endfor
 .endif
 
-.if ${MACHINE} == "macppc"
+.if ${MACHINE} == "macppc" || ${MACHINE} == "ofppc"
 SRCS.bsd+=	ppc_video.c bsdResource.c pm_noop.c lnx_agp.c
 .for _FN in ${SRCS.bsd}
-CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC -DUSE_PPC_MMAP
+CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC \
+			-DUSE_PPC_MMAP
 .endfor
 .endif
 
@@ -44,7 +45,7 @@ CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
 .endfor
 .endif
 
-.if ${MACHINE} == "sparc64" || ${MACHINE} == "sparc"
+.if ${MACHINE_ARCH} == "sparc64" || ${MACHINE_ARCH} == "sparc"
 SRCS.bsd+=	sparc64_video.c bsdResource.c pm_noop.c lnx_agp.c \
 		ioperm_noop.c netbsdSbus.c
 .for _FN in ${SRCS.bsd}
@@ -67,41 +68,48 @@ CPPFLAGS.${_FN}=        -DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
 .endif
 
 .if ${MACHINE} == "shark"
-SRCS.bsd+=      arm_video.c bsdResource.c pm_noop.c agp_noop.c ioperm_noop.c
+SRCS.bsd+=      ppc_video.c bsdResource.c pm_noop.c agp_noop.c
 .for _FN in ${SRCS.bsd}
-CPPFLAGS.${_FN}=        -DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
+CPPFLAGS.${_FN}=        -DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC -DUSE_PPC_MMAP
 .endfor
 .endif
 
 .PATH:	${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/os-support/bus
 SRCS.bus=	Pci.c
 
-.if ${MACHINE} == "i386" || ${MACHINE} == "amd64"
+.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
 SRCS.bus+=	ix86Pci.c
 .endif
 
 .if ${MACHINE} == "macppc" || ${MACHINE} == "cats" || \
-    ${MACHINE} == "sgimips" || ${MACHINE} == "sparc64" || \
-    ${MACHINE} == "sparc" || ${MACHINE} == "netwinder" || \
-    ${MACHINE} == "shark"
+    ${MACHINE} == "sgimips" || ${MACHINE_ARCH} == "sparc64" || \
+    ${MACHINE_ARCH} == "sparc" || ${MACHINE} == "netwinder" || \
+    ${MACHINE} == "shark" || ${MACHINE} == "ofppc"
 SRCS.bus+=	netbsdPci.c
 .endif
 
+.if ${MACHINE} == "macppc" || ${MACHINE} == "ofppc" || \
+    ${MACHINE_ARCH} == "sparc64" || ${MACHINE_ARCH} == "sparc"
+.for _FN in ${SRCS.bus}
+CPPFLAGS.${_FN}+=	-DPCI_VIA_TTYE0
+.endfor
+.endif
 
 .PATH:	${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/os-support/misc
 SRCS.misc=	xf86_Util.c Delay.c xf86_IlHack.c
 
-.if ${MACHINE} == "i386"
+.if ${MACHINE_ARCH} == "i386"
 SRCS.misc+=	BUSmemcpy.S IODelay.S SlowBcopy.S
 CPPFLAGS.BUSmemcpy.S=	-DUSE_GAS
 CPPFLAGS.IODelay.S=	-DUSE_GAS
 CPPFLAGS.SlowBcopy.S=	-DUSE_GAS
 .endif
 
-.if 	${MACHINE} == "amd64" || ${MACHINE} == "macppc" || \
+.if ${MACHINE_ARCH} == "x86_64" || ${MACHINE} == "macppc" || \
 	${MACHINE} == "cats" || ${MACHINE} == "sgimips" || \
-	${MACHINE} == "sparc64" || ${MACHINE} == "sparc" || \
-	${MACHINE} == "netwinder" || ${MACHINE} == "shark"
+	${MACHINE_ARCH} == "sparc64" || ${MACHINE_ARCH} == "sparc" || \
+	${MACHINE} == "netwinder" || ${MACHINE} == "shark" || \
+	${MACHINE} == "ofppc"
 SRCS.misc+=	CBUSmemcpy.c CIODelay.c CSlowBcopy.c
 .endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.c,v 1.19 2007/12/24 16:04:21 ad Exp $	*/
+/*	$NetBSD: sem.c,v 1.21 2008/11/14 15:49:20 ad Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2006, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: sem.c,v 1.19 2007/12/24 16:04:21 ad Exp $");
+__RCSID("$NetBSD: sem.c,v 1.21 2008/11/14 15:49:20 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/ksem.h>
@@ -85,7 +78,7 @@ struct _sem_st {
 #define	USEM_MAGIC	0x09fa4012
 
 	LIST_ENTRY(_sem_st) usem_list;
-	semid_t		usem_semid;	/* 0 -> user (non-shared) */
+	intptr_t		usem_semid;	/* 0 -> user (non-shared) */
 #define	USEM_USER	0		/* assumes kernel does not use NULL */
 	sem_t		*usem_identity;
 
@@ -95,7 +88,7 @@ struct _sem_st {
 	unsigned int	usem_count;
 };
 
-static int sem_alloc(unsigned int value, semid_t semid, sem_t *semp);
+static int sem_alloc(unsigned int value, intptr_t semid, sem_t *semp);
 static void sem_free(sem_t sem);
 
 static LIST_HEAD(, _sem_st) named_sems = LIST_HEAD_INITIALIZER(&named_sems);
@@ -114,7 +107,7 @@ sem_free(sem_t sem)
 }
 
 static int
-sem_alloc(unsigned int value, semid_t semid, sem_t *semp)
+sem_alloc(unsigned int value, intptr_t semid, sem_t *semp)
 {
 	sem_t sem;
 
@@ -137,7 +130,7 @@ sem_alloc(unsigned int value, semid_t semid, sem_t *semp)
 int
 sem_init(sem_t *sem, int pshared, unsigned int value)
 {
-	semid_t	semid;
+	intptr_t	semid;
 	int error;
 
 	semid = USEM_USER;
@@ -188,7 +181,7 @@ sem_t *
 sem_open(const char *name, int oflag, ...)
 {
 	sem_t *sem, s;
-	semid_t semid;
+	intptr_t semid;
 	mode_t mode;
 	unsigned int value;
 	int error;

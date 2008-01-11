@@ -1,4 +1,4 @@
-/* $NetBSD: dot_init.h,v 1.3 2007/05/15 16:51:39 skrll Exp $ */
+/* $NetBSD: dot_init.h,v 1.6 2009/11/09 14:34:42 skrll Exp $ */
 
 /*-
  * Copyright (c) 2001 Ross Harvey
@@ -51,6 +51,7 @@
 		".save	ar.pfs,loc1			\n"	\
 		"alloc	loc1=ar.pfs,0,2,0,0		\n"	\
 		"mov	loc0=b0	/* Save return addr */	\n"	\
+		".endp "#entry_pt"			\n"	\
 		".previous")
 
 /*-

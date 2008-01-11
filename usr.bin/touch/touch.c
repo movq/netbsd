@@ -1,4 +1,4 @@
-/*	$NetBSD: touch.c,v 1.26 2006/03/18 11:15:00 dsl Exp $	*/
+/*	$NetBSD: touch.c,v 1.29 2011/02/22 15:03:30 pooka Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)touch.c	8.2 (Berkeley) 4/28/95";
 #endif
-__RCSID("$NetBSD: touch.c,v 1.26 2006/03/18 11:15:00 dsl Exp $");
+__RCSID("$NetBSD: touch.c,v 1.29 2011/02/22 15:03:30 pooka Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -71,14 +71,14 @@ main(argc, argv)
 {
 	struct stat sb;
 	struct timeval tv[2];
-	int aflag, cflag, fflag, hflag, mflag, ch, fd, len, rval, timeset;
+	int aflag, cflag, hflag, mflag, ch, fd, len, rval, timeset;
 	char *p;
 	int (*change_file_times) __P((const char *, const struct timeval *));
 	int (*get_file_status) __P((const char *, struct stat *));
 
 	setlocale(LC_ALL, "");
 
-	aflag = cflag = fflag = hflag = mflag = timeset = 0;
+	aflag = cflag = hflag = mflag = timeset = 0;
 	if (gettimeofday(&tv[0], NULL))
 		err(1, "gettimeofday");
 
@@ -91,7 +91,6 @@ main(argc, argv)
 			cflag = 1;
 			break;
 		case 'f':
-			fflag = 1;
 			break;
 		case 'h':
 			hflag = 1;
@@ -190,9 +189,8 @@ main(argc, argv)
 		 if (!(*change_file_times)(*argv, NULL))
 			continue;
 
-		/* Try reading/writing. */
-		if (!S_ISLNK(sb.st_mode) && rw(*argv, &sb, fflag))
-			rval = 1;
+		rval = 1;
+		warn("%s", *argv);
 	}
 	exit(rval);
 }
@@ -312,58 +310,6 @@ stime_file(fname, tvp)
 		err(1, "%s", fname);
 	TIMESPEC_TO_TIMEVAL(&tvp[0], &sb.st_atimespec);
 	TIMESPEC_TO_TIMEVAL(&tvp[1], &sb.st_mtimespec);
-}
-
-int
-rw(fname, sbp, force)
-	char *fname;
-	struct stat *sbp;
-	int force;
-{
-	int fd, needed_chmod, rval;
-	u_char byte;
-
-	/* Try regular files and directories. */
-	if (!S_ISREG(sbp->st_mode) && !S_ISDIR(sbp->st_mode)) {
-		warnx("%s: %s", fname, strerror(EFTYPE));
-		return (1);
-	}
-
-	needed_chmod = rval = 0;
-	if ((fd = open(fname, O_RDWR, 0)) == -1) {
-		if (!force || chmod(fname, DEFFILEMODE))
-			goto err;
-		if ((fd = open(fname, O_RDWR, 0)) == -1)
-			goto err;
-		needed_chmod = 1;
-	}
-
-	if (sbp->st_size != 0) {
-		if (read(fd, &byte, sizeof(byte)) != sizeof(byte))
-			goto err;
-		if (lseek(fd, (off_t)0, SEEK_SET) == -1)
-			goto err;
-		if (write(fd, &byte, sizeof(byte)) != sizeof(byte))
-			goto err;
-	} else {
-		if (write(fd, &byte, sizeof(byte)) != sizeof(byte)) {
-err:			rval = 1;
-			warn("%s", fname);
-		} else if (ftruncate(fd, (off_t)0)) {
-			rval = 1;
-			warn("%s: file modified", fname);
-		}
-	}
-
-	if (fd >= 0 && close(fd) && rval != 1) {
-		rval = 1;
-		warn("%s", fname);
-	}
-	if (needed_chmod && chmod(fname, sbp->st_mode) && rval != 1) {
-		rval = 1;
-		warn("%s: permissions modified", fname);
-	}
-	return (rval);
 }
 
 __dead void

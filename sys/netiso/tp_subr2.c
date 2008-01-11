@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_subr2.c,v 1.36 2007/12/20 19:53:35 dyoung Exp $	*/
+/*	$NetBSD: tp_subr2.c,v 1.41 2009/04/18 14:58:06 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -66,7 +66,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_subr2.c,v 1.36 2007/12/20 19:53:35 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_subr2.c,v 1.41 2009/04/18 14:58:06 tsutsui Exp $");
 
 /*
  * this def'n is to cause the expansion of this macro in the routine
@@ -326,8 +326,8 @@ void
 tp_recycle_tsuffix(void *v)
 {
 	struct tp_pcb  *tpcb = v;
-	bzero((void *) tpcb->tp_lsuffix, sizeof(tpcb->tp_lsuffix));
-	bzero((void *) tpcb->tp_fsuffix, sizeof(tpcb->tp_fsuffix));
+	memset((void *) tpcb->tp_lsuffix, 0, sizeof(tpcb->tp_lsuffix));
+	memset((void *) tpcb->tp_fsuffix, 0, sizeof(tpcb->tp_fsuffix));
 	tpcb->tp_fsuffixlen = tpcb->tp_lsuffixlen = 0;
 
 	(tpcb->tp_nlproto->nlp_recycle_suffix) (tpcb->tp_npcb);
@@ -403,40 +403,7 @@ tp_quench(struct inpcb  *ipcb, int cmd)
 void
 tp_netcmd(struct tp_pcb *tpcb, int cmd)
 {
-#ifdef TPCONS
-	struct isopcb  *isop;
-	struct pklcd   *lcp;
-
-	if (tpcb->tp_netservice != ISO_CONS)
-		return;
-	isop = (struct isopcb *) tpcb->tp_npcb;
-	lcp = (struct pklcd *) isop->isop_chan;
-	switch (cmd) {
-
-	case CONN_CLOSE:
-	case CONN_REFUSE:
-		if (isop->isop_refcnt == 1) {
-			/*
-			 * This is really superfluous, since it would happen
-			 * anyway in iso_pcbdetach, although it is a courtesy
-			 * to free up the x.25 channel before the refwait
-			 * timer expires.
-			 */
-			lcp->lcd_upper = 0;
-			lcp->lcd_upnext = 0;
-			pk_disconnect(lcp);
-			isop->isop_chan = 0;
-			isop->isop_refcnt = 0;
-		}
-		break;
-
-	default:
-		printf("tp_netcmd(%p, %#x) NOT IMPLEMENTED\n", tpcb, cmd);
-		break;
-	}
-#else				/* TPCONS */
 	printf("tp_netcmd(): X25 NOT CONFIGURED!!\n");
-#endif
 }
 
 /*
@@ -479,7 +446,7 @@ copyQOSparms(const struct tp_conn_param *src, struct tp_conn_params *dst)
 	/* copy all but the bits stuff at the end */
 #define COPYSIZE (12 * sizeof(short))
 
-	bcopy((void *) src, (void *) dst, COPYSIZE);
+	memcpy((void *) dst, (void *) src, COPYSIZE);
 	dst->p_tpdusize = src->p_tpdusize;
 	dst->p_ack_strat = src->p_ack_strat;
 	dst->p_rx_strat = src->p_rx_strat;
@@ -510,7 +477,7 @@ tp_mss(struct tp_pcb *tpcb, int nhdr_size)
 	else
 		mss = 1 << tpcb->tp_tpdusize;
 	so = tpcb->tp_sock;
-	if ((rt = rtcache_getrt(tpcb->tp_routep)) == NULL) {
+	if ((rt = rtcache_validate(tpcb->tp_routep)) == NULL) {
 		bufsize = so->so_rcv.sb_hiwat;
 		goto punt_route;
 	}
@@ -646,28 +613,7 @@ tp_route_to(struct mbuf *m, struct tp_pcb *tpcb, void *channel)
 		dump_buf(mtod(m, void *), m->m_len);
 	}
 #endif
-	if (channel) {
-#ifdef TPCONS
-		struct pklcd   *lcp = (struct pklcd *) channel;
-		struct isopcb  *isop = (struct isopcb *) lcp->lcd_upnext,
-		               *isop_new = (struct isopcb *) tpcb->tp_npcb;
-		/*
-		 * The next 2 lines believe that you haven't set any network
-		 * level options or done a pcbconnect and XXXXXXX'edly apply
-		 * to both inpcb's and isopcb's
-		 */
-		iso_remque(isop_new);
-		free(isop_new, M_PCB);
-		tpcb->tp_npcb = (void *) isop;
-		tpcb->tp_netservice = ISO_CONS;
-		tpcb->tp_nlproto = nl_protosw + ISO_CONS;
-		if (isop->isop_refcnt++ == 0) {
-			iso_putsufx(isop, tpcb->tp_lsuffix,
-				    tpcb->tp_lsuffixlen, TP_LOCAL);
-			isop->isop_socket = tpcb->tp_sock;
-		}
-#endif
-	} else {
+	if (channel == NULL) {
 		switch (siso->siso_family) {
 		default:
 			error = EAFNOSUPPORT;
@@ -680,7 +626,7 @@ tp_route_to(struct mbuf *m, struct tp_pcb *tpcb, void *channel)
 				tpcb->tp_netservice = ISO_CLNS;
 				if (clnp_route(&siso->siso_addr, &isop->isop_route,
 				    flags, NULL, NULL) == 0) {
-					rt = rtcache_getrt(&isop->isop_route);
+					rt = rtcache_validate(&isop->isop_route);
 					if (rt && rt->rt_flags & RTF_PROTO1)
 						tpcb->tp_netservice = ISO_CONS;
 				}

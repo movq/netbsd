@@ -1,4 +1,4 @@
-/*	$NetBSD: dklist.c,v 1.7 2006/04/20 12:13:53 blymn Exp $	*/
+/*	$NetBSD: dklist.c,v 1.9 2009/04/17 04:03:39 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,7 +63,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dklist.c,v 1.7 2006/04/20 12:13:53 blymn Exp $");
+__RCSID("$NetBSD: dklist.c,v 1.9 2009/04/17 04:03:39 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -97,10 +90,10 @@ static SIMPLEQ_HEAD(, mlx_disk) mlx_disks;
 
 static struct nlist namelist[] = {
 #define X_DISK_COUNT	0
-	{ "_iostat_count" },	/* number of disks */
+	{ "_iostat_count", 0, 0, 0, 0 },	/* number of disks */
 #define X_DISKLIST	1
-	{ "_iostatlist" },	/* TAILQ of disks */
-	{ NULL },
+	{ "_iostatlist", 0, 0, 0, 0 },	/* TAILQ of disks */
+	{ NULL, 0, 0, 0, 0 },
 };
 
 #define	KVM_ERROR(_string) {						\
@@ -226,7 +219,7 @@ deref_kptr(kvm_t *kd, void *kptr, void *ptr, size_t len)
 {
 	char buf[128];
 
-	if (kvm_read(kd, (u_long)kptr, (char *)ptr, len) != len) {
+	if ((size_t)kvm_read(kd, (u_long)kptr, (char *)ptr, len) != len) {
 		memset(buf, 0, sizeof(buf));
 		snprintf(buf, sizeof buf, "can't dereference kptr 0x%lx",
 		    (u_long)kptr);

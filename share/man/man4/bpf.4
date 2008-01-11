@@ -1,6 +1,8 @@
+.\" $NetBSD: bpf.4,v 1.46 2010/06/08 04:11:06 jruoho Exp $
+.\"
 .\" -*- nroff -*-
 .\"
-.\"	$NetBSD: bpf.4,v 1.39 2006/08/04 23:30:53 wiz Exp $
+.\"	$NetBSD: bpf.4,v 1.46 2010/06/08 04:11:06 jruoho Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1992, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -24,7 +26,7 @@
 .\" This document is derived in part from the enet man page (enet.4)
 .\" distributed with 4.3BSD Unix.
 .\"
-.Dd August 4, 2006
+.Dd June 8, 2010
 .Dt BPF 4
 .Os
 .Sh NAME
@@ -87,7 +89,7 @@ Currently, only writes to Ethernets and SLIP links are supported.
 The
 .Xr ioctl 2
 command codes below are defined in
-.Aq Pa net/bpf.h .
+.In net/bpf.h .
 All commands require these includes:
 .Bd -literal -offset indent
 #include \*[Lt]sys/types.h\*[Gt]
@@ -129,7 +131,7 @@ is returned if no interface has been specified.
 The device types, prefixed with
 .Dq DLT_ ,
 are defined in
-.Aq Pa net/bpf.h .
+.In net/bpf.h .
 .It Dv BIOCGDLTLIST (struct bpf_dltlist)
 Returns an array of available type of the data link layer
 underlying the attached interface:
@@ -281,7 +283,7 @@ The current version numbers are given by
 and
 .Dv BPF_MINOR_VERSION
 from
-.Aq Pa net/bpf.h .
+.In net/bpf.h .
 An incompatible filter
 may result in undefined behavior (most likely, an error returned by
 .Xr ioctl 2
@@ -297,21 +299,35 @@ By default, the flag is disabled (value is 0).
 Enable/disable or get the
 .Dq see sent
 flag status.
-If enabled, packets sent will be passed to the filter.
+If enabled, packets sent by the host (not from
+.Nm )
+will be passed to the filter.
 By default, the flag is enabled (value is 1).
+.It Dv BIOCFEEDBACK BIOCSFEEDBACK BIOCGFEEDBACK (u_int)
+Set (or get)
+.Dq packet feedback mode .
+This allows injected packets to be fed back as input to the interface when
+output via the interface is successful.
+The first name is meant for
+.Fx
+compatibility, the two others follow the Get/Set convention.
+.\"When
+.\".Dv BPF_D_INOUT
+.\"direction is set, injected
+Injected
+outgoing packets are not returned by BPF to avoid
+duplication. This flag is initialized to zero by default.
 .El
 .Sh STANDARD IOCTLS
 .Nm
 now supports several standard
 .Xr ioctl 2 Ns 's
 which allow the user to do async and/or non-blocking I/O to an open
-.I bpf
+.Nm bpf
 file descriptor.
 .Bl -tag -width indent -offset indent
 .It Dv FIONREAD (int)
 Returns the number of bytes that are immediately available for reading.
-.It Dv SIOCGIFADDR (struct ifreq)
-Returns the address associated with the interface.
 .It Dv FIONBIO (int)
 Set or clear non-blocking I/O.
 If arg is non-zero, then doing a
@@ -332,7 +348,7 @@ will start receiving SIGIO's when packets
 arrive.
 Note that you must do an
 .Dv FIOSETOWN
-in order for this to take affect, as
+in order for this to take effect, as
 the system will not default this for you.
 The signal may be changed via
 .Dv BIOCSRSIG .
@@ -348,7 +364,7 @@ The following structure is prepended to each packet returned by
 .Xr read 2 :
 .Bd -literal -offset indent
 struct bpf_hdr {
-	struct timeval bh_tstamp;
+	struct bpf_timeval bh_tstamp;
 	uint32_t bh_caplen;
 	uint32_t bh_datalen;
 	uint16_t bh_hdrlen;
@@ -359,6 +375,10 @@ The fields, whose values are stored in host order, and are:
 .Bl -tag -width bh_datalen -offset indent
 .It Va bh_tstamp
 The time at which the packet was processed by the packet filter.
+This structure differs from the standard
+.Vt struct timeval
+in that both members are of type
+.Vt long .
 .It Va bh_caplen
 The length of the captured portion of the packet.
 This is the minimum of
@@ -396,7 +416,7 @@ has some knowledge of how to get from packet to packet.
 The macro
 .Dv BPF_WORDALIGN
 is defined in
-.Aq Pa net/bpf.h
+.In net/bpf.h
 to facilitate this process.
 It rounds up its argument
 to the nearest word aligned value (where a word is
@@ -450,7 +470,7 @@ BPF_ALU, BPF_JMP, BPF_RET, and BPF_MISC.
 Various other mode and
 operator bits are or'd into the class to give the actual instructions.
 The classes and modes are defined in
-.Aq Pa net/bpf.h .
+.In net/bpf.h .
 .Pp
 Below are the semantics for each defined BPF instruction.
 We use the convention that A is the accumulator, X is the index register,

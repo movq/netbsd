@@ -1,4 +1,4 @@
-/*	$NetBSD: make_lfs.c,v 1.11 2007/10/08 21:42:33 ad Exp $	*/
+/*	$NetBSD: make_lfs.c,v 1.16 2010/02/16 23:20:30 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,7 +62,7 @@
 #if 0
 static char sccsid[] = "@(#)lfs.c	8.5 (Berkeley) 5/24/95";
 #else
-__RCSID("$NetBSD: make_lfs.c,v 1.11 2007/10/08 21:42:33 ad Exp $");
+__RCSID("$NetBSD: make_lfs.c,v 1.16 2010/02/16 23:20:30 mlelstv Exp $");
 #endif
 #endif /* not lint */
 
@@ -239,7 +232,7 @@ make_dinode(ino_t ino, struct ufs1_dinode *dip, int nfrags, struct lfs *fs)
 		nfrags = roundup(nfrags, fs->lfs_frag);
 
 	dip->di_nlink = 1;
-	dip->di_blocks = fragstofsb(fs, nfrags);
+	dip->di_blocks = nfrags;
 
 	dip->di_size = (nfrags << fs->lfs_ffshift);
 	dip->di_atime = dip->di_mtime = dip->di_ctime = fs->lfs_tstamp;
@@ -247,7 +240,7 @@ make_dinode(ino_t ino, struct ufs1_dinode *dip, int nfrags, struct lfs *fs)
 	dip->di_inumber = ino;
 	dip->di_gen = 1;
 
-	fsb_per_blk = fragstofsb(fs, blkstofrags(fs, 1));
+	fsb_per_blk = blkstofrags(fs, 1);
 
 	if (NDADDR < nblocks) {
 		/* Count up how many indirect blocks we need, recursively */
@@ -258,7 +251,7 @@ make_dinode(ino_t ino, struct ufs1_dinode *dip, int nfrags, struct lfs *fs)
 			ifibc += bb;
 			--bb;
 		}
-		dip->di_blocks += fragstofsb(fs, blkstofrags(fs, ifibc));
+		dip->di_blocks += blkstofrags(fs, ifibc);
 	}
 
 	/* Assign the block addresses for the ifile */
@@ -680,9 +673,9 @@ make_lfs(int devfd, uint secsize, struct dkwedge_info *dkw, int minfree,
 	dip->di_mode = IFDIR | UMASK;
 	VTOI(vp)->i_lfs_osize = dip->di_size = DIRBLKSIZ;
 #ifdef MAKE_LF_DIR
-        VTOI(vp)->i_ffs_effnlink = dip->di_nlink = 3;
+	VTOI(vp)->i_nlink = dip->di_nlink = 3;
 #else
-        VTOI(vp)->i_ffs_effnlink = dip->di_nlink = 2;
+	VTOI(vp)->i_nlink = dip->di_nlink = 2;
 #endif
         VTOI(vp)->i_lfs_effnblks = dip->di_blocks =
 		btofsb(fs, roundup(DIRBLKSIZ,fs->lfs_fsize));
@@ -691,7 +684,7 @@ make_lfs(int devfd, uint secsize, struct dkwedge_info *dkw, int minfree,
 	if (DIRBLKSIZ < fs->lfs_bsize)
 		VTOI(vp)->i_lfs_fragsize[i - 1] =
 			roundup(DIRBLKSIZ,fs->lfs_fsize);
-	bread(vp, 0, fs->lfs_fsize, NOCRED, &bp);
+	bread(vp, 0, fs->lfs_fsize, NOCRED, 0, &bp);
 	make_dir(bp->b_data, lfs_root_dir, 
 		 sizeof(lfs_root_dir) / sizeof(struct direct));
 	VOP_BWRITE(bp);
@@ -703,7 +696,7 @@ make_lfs(int devfd, uint secsize, struct dkwedge_info *dkw, int minfree,
 	make_dinode(LOSTFOUNDINO, dip, howmany(DIRBLKSIZ,fs->lfs_fsize), fs);
 	dip->di_mode = IFDIR | UMASK;
 	VTOI(vp)->i_lfs_osize = dip->di_size = DIRBLKSIZ;
-        VTOI(vp)->i_ffs_effnlink = dip->di_nlink = 2;
+        VTOI(vp)->i_nlink = dip->di_nlink = 2;
         VTOI(vp)->i_lfs_effnblks = dip->di_blocks =
 		btofsb(fs, roundup(DIRBLKSIZ,fs->lfs_fsize));
 	for (i = 0; i < NDADDR && i < howmany(DIRBLKSIZ, fs->lfs_bsize); i++)
@@ -711,7 +704,7 @@ make_lfs(int devfd, uint secsize, struct dkwedge_info *dkw, int minfree,
 	if (DIRBLKSIZ < fs->lfs_bsize)
 		VTOI(vp)->i_lfs_fragsize[i - 1] =
 			roundup(DIRBLKSIZ,fs->lfs_fsize);
-	bread(vp, 0, fs->lfs_fsize, NOCRED, &bp);
+	bread(vp, 0, fs->lfs_fsize, NOCRED, 0, &bp);
 	make_dir(bp->b_data, lfs_lf_dir, 
 		 sizeof(lfs_lf_dir) / sizeof(struct direct));
 	VOP_BWRITE(bp);

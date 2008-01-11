@@ -1,4 +1,4 @@
-/*	$NetBSD: intio.c,v 1.26 2007/03/04 05:59:48 christos Exp $	*/
+/*	$NetBSD: intio.c,v 1.29 2010/12/31 22:41:55 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intio.c,v 1.26 2007/03/04 05:59:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intio.c,v 1.29 2010/12/31 22:41:55 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,15 +46,15 @@ __KERNEL_RCSID(0, "$NetBSD: intio.c,v 1.26 2007/03/04 05:59:48 christos Exp $");
 #include <hp300/dev/intiovar.h>
 
 struct intio_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct bus_space_tag sc_tag;
 };
 
-static int	intiomatch(struct device *, struct cfdata *, void *);
-static void	intioattach(struct device *, struct device *, void *);
+static int	intiomatch(device_t, cfdata_t, void *);
+static void	intioattach(device_t, device_t, void *);
 static int	intioprint(void *, const char *);
 
-CFATTACH_DECL(intio, sizeof(struct intio_softc),
+CFATTACH_DECL_NEW(intio, sizeof(struct intio_softc),
     intiomatch, intioattach, NULL, NULL);
 
 #if defined(HP320) || defined(HP330) || defined(HP340) || defined(HP345) || \
@@ -77,15 +70,25 @@ static const struct intio_builtins intio_3xx_builtins[] = {
 #define nintio_3xx_builtins	__arraycount(intio_3xx_builtins)
 #endif
 
-#if defined(HP362) || defined(HP382)
-static const struct intio_builtins intio_3x2_builtins[] = {
+#if defined(HP362)
+static const struct intio_builtins intio_362_builtins[] = {
+	{ "rtc",	RTC_BASE,	-1},
+	{ "hil",	HIL_BASE,	1},
+	{ "hpib",	HPIB_BASE,	3},
+	{ "dma",	DMA_BASE,	1},
+};
+#define nintio_362_builtins	__arraycount(intio_362_builtins)
+#endif
+
+#if defined(HP382)
+static const struct intio_builtins intio_382_builtins[] = {
 	{ "rtc",	RTC_BASE,	-1},
 	{ "frodo",	FRODO_BASE,	5},
 	{ "hil",	HIL_BASE,	1},
 	{ "hpib",	HPIB_BASE,	3},
 	{ "dma",	DMA_BASE,	1},
 };
-#define nintio_3x2_builtins	__arraycount(intio_3x2_builtins)
+#define nintio_382_builtins	__arraycount(intio_382_builtins)
 #endif
 
 #if defined(HP400) || defined(HP425) || defined(HP433)
@@ -103,8 +106,9 @@ static int intio_matched = 0;
 extern void *internalhpib;
 
 static int
-intiomatch(struct device *parent, struct cfdata *match, void *aux)
+intiomatch(device_t parent, cfdata_t cf, void *aux)
 {
+
 	/* Allow only one instance. */
 	if (intio_matched)
 		return 0;
@@ -114,16 +118,17 @@ intiomatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-intioattach(struct device *parent, struct device *self, void *aux)
+intioattach(device_t parent, device_t self, void *aux)
 {
-	struct intio_softc *sc = (struct intio_softc *)self;
+	struct intio_softc *sc = device_private(self);
 	struct intio_attach_args ia;
 	const struct intio_builtins *ib;
 	bus_space_tag_t bst = &sc->sc_tag;
 	int ndevs;
 	int i;
 
-	printf("\n");
+	sc->sc_dev = self;
+	aprint_normal("\n");
 
 	memset(bst, 0, sizeof(struct bus_space_tag));
 	bst->bustype = HP300_BUS_SPACE_INTIO;
@@ -146,11 +151,16 @@ intioattach(struct device *parent, struct device *self, void *aux)
 		ndevs = nintio_3xx_builtins;
 		break;
 #endif
-#if defined(HP362) || defined(HP382)
+#if defined(HP362)
 	case HP_362:
+		ib = intio_362_builtins;
+		ndevs = nintio_362_builtins;
+		break;
+#endif
+#if defined(HP382)
 	case HP_382:
-		ib = intio_3x2_builtins;
-		ndevs = nintio_3x2_builtins;
+		ib = intio_382_builtins;
+		ndevs = nintio_382_builtins;
 		break;
 #endif
 #if defined(HP400) || defined(HP425) || defined(HP433)

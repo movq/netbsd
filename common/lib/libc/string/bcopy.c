@@ -1,4 +1,4 @@
-/*	$NetBSD: bcopy.c,v 1.3 2007/06/04 18:19:27 christos Exp $	*/
+/*	$NetBSD: bcopy.c,v 1.9 2009/03/18 12:25:06 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)bcopy.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: bcopy.c,v 1.3 2007/06/04 18:19:27 christos Exp $");
+__RCSID("$NetBSD: bcopy.c,v 1.9 2009/03/18 12:25:06 tsutsui Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -46,6 +46,9 @@ __RCSID("$NetBSD: bcopy.c,v 1.3 2007/06/04 18:19:27 christos Exp $");
 #include <string.h>
 #else
 #include <lib/libkern/libkern.h>
+#if !defined(MEMCOPY) && defined(_STANDALONE)
+#include <lib/libsa/stand.h>
+#endif
 #endif
 
 #ifdef _FORTIFY_SOURCE
@@ -54,6 +57,7 @@ __RCSID("$NetBSD: bcopy.c,v 1.3 2007/06/04 18:19:27 christos Exp $");
 #undef memmove
 #endif
 
+#ifndef __OPTIMIZE_SIZE__
 /*
  * sizeof(word) MUST BE A POWER OF TWO
  * SO THAT wmask BELOW IS ALL ONES
@@ -68,17 +72,15 @@ typedef	long word;		/* "word" used for optimal copy speed */
  * This is the routine that actually implements
  * (the portable versions of) bcopy, memcpy, and memmove.
  */
-#ifdef MEMCOPY
+#if defined(MEMCOPY)
 void *
 memcpy(void *dst0, const void *src0, size_t length)
-#else
-#ifdef MEMMOVE
+#elif defined(MEMMOVE)
 void *
 memmove(void *dst0, const void *src0, size_t length)
 #else
 void
 bcopy(const void *src0, void *dst0, size_t length)
-#endif
 #endif
 {
 	char *dst = dst0;
@@ -155,3 +157,54 @@ done:
 	return;
 #endif
 }
+#else /* __OPTIMIZE_SIZE__ */
+#if defined(MEMCOPY)
+/*
+ * This is designed to be small, not fast.
+ */
+void *
+memcpy(void *s1, const void *s2, size_t n)
+{
+	const char *f = s2;
+	char *t = s1;
+
+	while (n-- > 0)
+		*t++ = *f++;
+	return s1;
+}
+#elif defined(MEMMOVE)
+/*
+ * This is designed to be small, not fast.
+ */
+void *
+memmove(void *s1, const void *s2, size_t n)
+{
+	const char *f = s2;
+	char *t = s1;
+
+	if (f < t) {
+		f += n;
+		t += n;
+		while (n-- > 0)
+			*--t = *--f;
+	} else {
+		while (n-- > 0)
+			*t++ = *f++;
+	}
+	return s1;
+}
+#else
+/*
+ * This is designed to be small, not fast.
+ */
+void
+bcopy(const void *s2, void *s1, size_t n)
+{
+	const char *f = s2;
+	char *t = s1;
+
+	while (n-- > 0)
+		*t++ = *f++;
+}
+#endif
+#endif /* __OPTIMIZE_SIZE__ */

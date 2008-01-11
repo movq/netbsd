@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.6 2007/05/28 12:06:20 tls Exp $
+# $NetBSD: Makefile.inc,v 1.12 2009/12/13 09:01:45 mrg Exp $
 # Copyright 1998 Juniper Networks, Inc.
 # All rights reserved.
 #
@@ -25,15 +25,20 @@
 #
 # $FreeBSD: src/lib/libpam/Makefile.inc,v 1.15 2004/03/15 13:23:20 des Exp $
 
+# This needs to be before bsd.init.mk
+.if defined(BSD_MK_COMPAT_FILE)
+.include <${BSD_MK_COMPAT_FILE}>
+.endif
+
 USE_FORT?= yes	# network client software *and* authentication software
 
-# Include support for static modules.
-CPPFLAGS+= -DOPENPAM_STATIC_MODULES
+.if defined(MLIBDIR)
+MODLIBDIR=/usr/lib/${MLIBDIR}/security
+.else
+MODLIBDIR=/usr/lib/security
+.endif
 
-# Enable the static module macros.
-CPPFLAGS+= -DOPENPAM_STATIC_MODULE
-
-CPPFLAGS+= -DOPENPAM_MODULES_DIR=\"/usr/lib/security\"
+CPPFLAGS+= -DOPENPAM_MODULES_DIR=\"${MODLIBDIR}\"
 # No debugging
 #CPPFLAGS+= -DDEBUG
 
@@ -43,5 +48,5 @@ CSHLIBFLAGS+= -DNO_STATIC_MODULES
 
 # Define the shared library version here.  libpam and the modules share a
 # version, and we need these variables early for module install rules.
-SHLIB_MAJOR=	0
+SHLIB_MAJOR=	3
 SHLIB_MINOR=	0

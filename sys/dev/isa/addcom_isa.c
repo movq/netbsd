@@ -1,4 +1,4 @@
-/*	$NetBSD: addcom_isa.c,v 1.16 2007/10/19 12:00:14 ad Exp $	*/
+/*	$NetBSD: addcom_isa.c,v 1.19 2009/05/12 09:10:15 cegger Exp $	*/
 
 /*
  * Copyright (c) 2000 Michael Graff.  All rights reserved.
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: addcom_isa.c,v 1.16 2007/10/19 12:00:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: addcom_isa.c,v 1.19 2009/05/12 09:10:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,16 +105,15 @@ static int slave_iobases[8] = {
 	0x208
 };
 
-int addcomprobe(struct device *, struct cfdata *, void *);
-void addcomattach(struct device *, struct device *, void *);
+int addcomprobe(device_t, cfdata_t, void *);
+void addcomattach(device_t, device_t, void *);
 int addcomintr(void *);
 
 CFATTACH_DECL(addcom_isa, sizeof(struct addcom_softc),
     addcomprobe, addcomattach, NULL, NULL);
 
 int
-addcomprobe(struct device *parent, struct cfdata *self,
-    void *aux)
+addcomprobe(device_t parent, cfdata_t self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -185,7 +184,7 @@ out:
 }
 
 void
-addcomattach(struct device *parent, struct device *self, void *aux)
+addcomattach(device_t parent, device_t self, void *aux)
 {
 	struct addcom_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
@@ -200,7 +199,7 @@ addcomattach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(iot, STATUS_IOADDR, STATUS_SIZE,
 			  0, &sc->sc_statusioh)) {
-		printf("%s: can't map status space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map status space\n");
 		return;
 	}
 
@@ -211,8 +210,7 @@ addcomattach(struct device *parent, struct device *self, void *aux)
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 				  &sc->sc_slaveioh[i])) {
-			printf("%s: can't map i/o space for slave %d\n",
-			       sc->sc_dev.dv_xname, i);
+			aprint_error_dev(&sc->sc_dev, "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}

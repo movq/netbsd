@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.6 2001/09/22 03:34:18 tv Exp $
+# $NetBSD: Makefile,v 1.8 2010/08/25 16:30:44 christos Exp $
 
 PROG = ustarboot
 
@@ -11,7 +11,8 @@ CPPFLAGS += ${UNIFIED_CPPFLAGS} \
 		-DBOOT_TYPE_NAME='"ustar"' \
 		-DLIBSA_SINGLE_DEVICE=blkdev \
 		  -D"blkdevioctl(x,y,z)=EINVAL" \
-		-DLIBSA_SINGLE_FILESYSTEM=ustarfs
+		-DLIBSA_SINGLE_FILESYSTEM=ustarfs \
+		-DNO_LOAD_BACKWARDS
 
 CLEANFILES+= ${PROG}.sym
 

@@ -1,6 +1,10 @@
-/*	$NetBSD: sbrk.S,v 1.9 2002/07/30 06:08:00 matt Exp $	*/
+/*	$NetBSD: sbrk.S,v 1.11 2011/01/16 02:43:10 matt Exp $	*/
 
 #include "SYS.h"
+
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: sbrk.S,v 1.11 2011/01/16 02:43:10 matt Exp $")
+#endif /* LIBC_SCCS && !lint */
 
 	.globl	_C_LABEL(__curbrk)
 	.globl	_C_LABEL(_end)
@@ -17,26 +21,21 @@ _C_LABEL(__curbrk):
 ENTRY(_sbrk)
 #ifdef PIC
 	mflr	%r10
-	bl	_GLOBAL_OFFSET_TABLE_@local-4
-	mflr	%r5
+	PIC_GOTSETUP(%r5)
 	mtlr	%r10
 	lwz	%r5,_C_LABEL(__curbrk)@got(%r5)
 	lwz	%r6,0(%r5)
 #else
 	lis	%r5,_C_LABEL(__curbrk)@ha
-	lwz	%r6,_C_LABEL(__curbrk)@l(%r5)	# r6 = old break
+	lwzu	%r6,_C_LABEL(__curbrk)@l(%r5)	# r6 = old break, r5 = &curbrk
 #endif
 	add	%r3,%r3,%r6
 	mr	%r7,%r3				# r7 = new break
-	li	%r0,SYS_break
-	sc					# break(new_break)
+	_DOSYSCALL(break)			# break(new_break)
 	bso	1f
 	mr	%r3,%r6				# set return value
-#ifdef PIC
-	stw	%r7,0(%r5)
-#else
-	stw	%r7,_C_LABEL(__curbrk)@l(%r5)	# record new break
-#endif
+	stw	%r7,0(%r5)			# record new break
 	blr
 1:
-	b	PIC_PLT(_C_LABEL(__cerror))
+	b	_C_LABEL(__cerror)
+END(_sbrk)

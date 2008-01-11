@@ -1,4 +1,4 @@
-/* $NetBSD: mips_mcclock_loop.S,v 1.2 2005/12/11 12:18:09 christos Exp $ */
+/* $NetBSD: mips_mcclock_loop.S,v 1.5 2011/03/28 12:26:59 tsutsui Exp $ */
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -50,10 +43,10 @@
 
 
 LEAF_NOPROFILE(mips_mcclock_loop_with_clock)
-	subu	sp, CALLFRAME_SIZ
-	sw	s0, 0(sp)
-	sw	ra, CALLFRAME_RA(sp)
-	j	2f
+	PTR_SUBU	sp, CALLFRAME_SIZ
+	REG_S		s0, CALLFRAME_S0(sp)
+	REG_S		ra, CALLFRAME_RA(sp)
+	j		2f
 	 move	s0, zero		# iters = 0;
 1:
 	.set	push
@@ -64,24 +57,24 @@ LEAF_NOPROFILE(mips_mcclock_loop_with_clock)
 	ssnop
 	.set	pop
 
-	addu	s0, 1			# iters++;
-2:	jal	mips_cp0_cause_read	# v0 = mips_cp0_cause_read();
+	addu		s0, 1			# iters++;
+2:	jal		mips_cp0_cause_read	# v0 = mips_cp0_cause_read();
 	 nop
-	and	v0, a0			# v0 &= clockmask;
-	beqz	v0, 1b			# if zero then repeat
-	 move	v0, s0			# return iters
-	lw	ra, CALLFRAME_RA(sp)
-	lw	s0, 0(sp)
-	j	ra
-	 addu	sp, CALLFRAME_SIZ
+	and		v0, a0			# v0 &= clockmask;
+	beqz		v0, 1b			# if zero then repeat
+	 move		v0, s0			# return iters
+	REG_L		ra, CALLFRAME_RA(sp)
+	REG_L		s0, CALLFRAME_S0(sp)
+	j		ra
+	 PTR_ADDU	sp, CALLFRAME_SIZ
 END(mips_mcclock_loop_with_clock)
 
 LEAF_NOPROFILE(mips_mcclock_loop_without_clock)
-	subu	sp, CALLFRAME_SIZ
-	sw	s0, 0(sp)
-	sw	ra, CALLFRAME_RA(sp)
-	j	2f
-	 move	s0, zero		# iters = 0;
+	PTR_SUBU	sp, CALLFRAME_SIZ
+	REG_S		s0, CALLFRAME_S0(sp)
+	REG_S		ra, CALLFRAME_RA(sp)
+	j		2f
+	 move		s0, zero		# iters = 0;
 1:
 	.set	push
 	.set	mips32
@@ -89,14 +82,14 @@ LEAF_NOPROFILE(mips_mcclock_loop_without_clock)
 	ssnop
 	.set	pop
 
-	addu	s0, 1			# iters++;
-2:	jal	mips_cp0_cause_read	# v0 = mips_cp0_cause_read();
+	addu		s0, 1			# iters++;
+2:	jal		mips_cp0_cause_read	# v0 = mips_cp0_cause_read();
 	 nop
-	and	v0, a0			# v0 &= clockmask;
-	beqz	v0, 1b			# if zero then repeat
-	 move	v0, s0			# return iters
-	lw	ra, CALLFRAME_RA(sp)
-	lw	s0, 0(sp)
-	j	ra
-	 addu	sp, CALLFRAME_SIZ
+	and		v0, a0			# v0 &= clockmask;
+	beqz		v0, 1b			# if zero then repeat
+	 move		v0, s0			# return iters
+	REG_L		ra, CALLFRAME_RA(sp)
+	REG_L		s0, CALLFRAME_S0(sp)
+	j		ra
+	 PTR_ADDU	sp, CALLFRAME_SIZ
 END(mips_mcclock_loop_without_clock)

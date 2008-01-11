@@ -1,4 +1,4 @@
-.\"	$NetBSD: window.1,v 1.15 2003/08/07 11:17:34 agc Exp $
+.\"	$NetBSD: window.1,v 1.21 2011/03/10 13:23:41 jmmv Exp $
 .\"
 .\" Copyright (c) 1985, 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	@(#)window.1	8.2 (Berkeley) 12/30/93
 .\"
-.Dd December 30, 1993
+.Dd March 10, 2011
 .Dt WINDOW 1
 .Os
 .Sh NAME
@@ -50,6 +50,21 @@
 implements a window environment on
 .Tn ASCII
 terminals.
+.Pp
+Please note that
+.Nm
+is scheduled for removal on
+.Nx 7.0 .
+This is the last
+.Nx
+release that provides
+.Nm .
+Use
+.Xr tmux 1
+instead or install the
+.Sq misc/window
+package from
+.Xr pkgsrc 7 .
 .Pp
 A window is a rectangular portion of the physical terminal
 screen associated with a set of processes.
@@ -367,7 +382,7 @@ The content of the yank buffer is written to the current window as input.
 Stop output in the current window.
 .It Ic ^Q
 Start output in the current window.
-.It Ic :
+.It Ic \&:
 Enter a line to be executed as long commands.
 Normal line
 editing characters (erase character, erase word, erase line)
@@ -401,7 +416,7 @@ is a new line,
 .Dq \er
 a carriage return).
 For example, these are legal strings:
-abcde01234, "\*[Am]#$^*\*[Am]#", ab"$#"cd, ab\\$\\#cd, "/usr/ucb/window".
+abcde01234, "\*[Am]#$^*\*[Am]#", ab"$#"cd, ab\e$\e#cd, "/usr/ucb/window".
 .Pp
 A number is an integer value in one of three forms:
 a decimal number, an octal number preceded by
@@ -471,11 +486,7 @@ They are listed below.
 .Pp
 The operators in order of increasing precedence:
 .Bl -tag -width Fl
-.It Xo
-.Aq Va expr1
-.Ic =
-.Aq Va expr2
-.Xc
+.It Ao Va expr1 Ac Ic = Ao Va expr2 Ac
 Assignment.
 The variable of name
 .Aq Va expr1 ,
@@ -484,13 +495,7 @@ is assigned the result of
 .Aq Va expr2 .
 Returns the value of
 .Aq Va expr2 .
-.It Xo
-.Aq Va expr1
-.Ic \&?
-.Aq Va expr2
-.Ic :
-.Aq Va expr3
-.Xc
+.It Ao Va expr1 Ac Ic \&? Ao Va expr2 Ac : Ao Va expr3 Ac
 Returns the value of
 .Aq Va expr2
 if
@@ -507,11 +512,7 @@ is evaluated.
 .Aq Va Expr1
 must
 be numeric.
-.It Xo
-.Aq Va expr1
-.Ic \&|\&|
-.Aq Va expr2
-.Xc
+.It Ao Va expr1 Ac Ic \&|\&| Ao Va expr2 Ac
 Logical or.
 Numeric values only.
 Short circuit evaluation is supported
@@ -520,70 +521,33 @@ Short circuit evaluation is supported
 evaluates true, then
 .Aq Va expr2
 is not evaluated).
-.It Xo
-.Aq Va expr1
-.Ic \&\*[Am]\&\*[Am]
-.Aq Va expr2
-.Xc
+.It Ao Va expr1 Ac Ic \&\*[Am]\&\*[Am] Ao Va expr2 Ac
 Logical and with short circuit evaluation.
 Numeric values only.
-.It Xo
-.Aq Va expr1
-.Ic \&|
-.Aq Va expr2
-.Xc
+.It Ao Va expr1 Ac Ic \&| Ao Va expr2 Ac
 Bitwise or.
 Numeric values only.
-.It Xo
-.Aq Va expr1
-.Ic ^
-.Aq Va expr2
-.Xc
+.It Ao Va expr1 Ac Ic ^ Ao Va expr2 Ac
 Bitwise exclusive or.
 Numeric values only.
-.It Xo
-.Aq Va expr1
-.Ic \&\*[Am]
-.Aq Va expr2
-.Xc
+.It Ao Va expr1 Ac Ic \&\*[Am] Ao Va expr2 Ac
 Bitwise and.
 Numeric values only.
-.It Xo
-.Aq Va expr1
-.Ic ==
-.Aq Va expr2 ,
-.Aq Va expr1
-.Ic !=
-.Aq expr2
-.Xc
+.It Ao Va expr1 Ac Ic == Ao Va expr2 Ac , Ao Va expr1 Ac Ic != Ao expr2 Ac
 Comparison (equal and not equal, respectively).
 The boolean result (either 1 or 0) of the comparison is returned.
 The operands can be numeric or string valued.
 One string operand
 forces the other to be converted to a string in necessary.
-.It Xo
-.Aq Va expr1
-.Ic \*[Lt]
-.Aq Va expr2 ,
-.Aq Va expr1
-.Ic \*[Gt]
-.Aq Va expr2 ,
-.Aq Va expr1
-.Ic \*[Le]
-.Aq Va expr2 ,
-.Xc
+.It Ao Va expr1 Ac Ic \*[Lt] Ao Va expr2 Ac , \
+Ao Va expr1 Ac Ic \*[Gt] Ao Va expr2 Ac , \
+Ao Va expr1 Ac Ic \*[Le] Ao Va expr2 Ac ,
 Less than, greater than, less than or equal to,
 greater than or equal to.
 Both numeric and string values, with
 automatic conversion as above.
-.It Xo
-.Aq Va expr1
-.Ic \*[Lt]\*[Lt]
-.Aq Va expr2 ,
-.Aq Va expr1
-.Ic \*[Gt]\*[Gt]
-.Aq Va expr2
-.Xc
+.It Ao Va expr1 Ac Ic \*[Lt]\*[Lt] Ao Va expr2 Ac , \
+Ao Va expr1 Ac Ic \*[Gt]\*[Gt] Ao Va expr2 Ac
 If both operands are numbers,
 .Aq Va expr1
 is bit
@@ -600,40 +564,19 @@ returns (if
 .Aq Va expr2
 is also a string, then its length is used
 in place of its value).
-.It Xo
-.Aq Va expr1
-.Ic +
-.Aq Va expr2 ,
-.Aq Va expr1
-.Ic -
-.Aq Va expr2
-.Xc
+.It Ao Va expr1 Ac Ic + Ao Va expr2 Ac , Ao Va expr1 Ac Ic - Ao Va expr2 Ac
 Addition and subtraction on numbers.
 For
 .Dq + ,
 if one
 argument is a string, then the other is converted to a string,
 and the result is the concatenation of the two strings.
-.It Xo
-.Aq Va expr1
-.Ic \&*
-.Aq Va expr2 ,
-.Aq Va expr1
-.Ic \&/
-.Aq Va expr2 ,
-.Aq Va expr1
-.Ic \&%
-.Aq Va expr2
-.Xc
+.It Ao Va expr1 Ac Ic \&* Ao Va expr2 Ac , \
+Ao Va expr1 Ac Ic \&/ Ao Va expr2 Ac , Ao Va expr1 Ac Ic \&% Ao Va expr2 Ac
 Multiplication, division, modulo.
 Numbers only.
-.It Xo
-.Ic \- Ns Aq Va expr ,
-.Ic ~ Ns Aq Va expr ,
-.Ic \&! Ns Aq Va expr ,
-.Ic \&$ Ns Aq Va expr ,
-.Ic \&$? Ns Aq Va expr
-.Xc
+.It Ic \- Ns Ao Va expr Ac , Ic ~ Ns Ao Va expr Ac , \
+Ic \&! Ns Ao Va expr Ac , Ic \&$ Ns Ao Va expr Ac , Ic \&$? Ns Ao Va expr Ac
 The first three are unary minus, bitwise complement and logical complement
 on numbers only.
 The operator,
@@ -654,9 +597,7 @@ tests for the existence of the variable
 .Aq Va expr ,
 and returns 1
 if it exists or 0 otherwise.
-.It Xo
-.Ao Va expr Ac Ns Pq Aq Ar arglist
-.Xc
+.It Ao Va expr Ac Ns Pq Aq Ar arglist
 Function call.
 .Aq Va Expr
 must be a string that is the unique
@@ -702,7 +643,7 @@ Aliases return no value.
 .Ss  Builtin Functions
 The arguments are listed by name in their natural order.
 Optional arguments are in square brackets
-.Sq Op .
+.Sq Op ""
 Arguments
 that have no names are in angle brackets
 .Sq \*[Lt]\*[Gt] .
@@ -720,10 +661,7 @@ with
 obvious meanings, or it can be a numeric expression,
 in which case a non-zero value is true.
 .Bl -tag -width Fl
-.It Xo
-.Ic alias Ns Po Bq Aq Ar string ,
-.Bq Aq Ar string\-list Pc
-.Xc
+.It Ic alias Ns Po Bo Ao Ar string Ac Bc , Bo Ao Ar string\-list Ac Bc Pc
 If no argument is given, all currently defined alias macros are
 listed.
 Otherwise,
@@ -802,10 +740,7 @@ as described above).
 Default is no change.
 The old value (as a number) is returned.
 The initial value is 1 (true).
-.It Xo
-.Ic echo Ns ( Op Ar window ,
-.Bq Aq Ar string\-list )
-.Xc
+.It Ic echo Ns ( Oo Ar window Oc , Bq Aq Ar string\-list )
 Write the list of strings,
 .Aq Ar string-list ,
 to
@@ -831,10 +766,7 @@ in the form
 .Fl ^X ,
 meaning
 .No control\- Ns Ar X .
-.It Xo
-.Ic foreground Ns ( Bq Ar window ,
-.Bq Ar flag )
-.Xc
+.It Ic foreground Ns ( Bo Ar window Bc , Bq Ar flag )
 Move
 .Nm
 in or out of foreground.
@@ -847,10 +779,7 @@ is the current window,
 default for
 .Ar flag
 is no change.
-.It Xo
-.Ic label Ns ( Bq Ar window ,
-.Bq Ar label )
-.Xc
+.It Ic label Ns ( Bo Ar window Bc , Bq Ar label )
 Set the label of
 .Nm
 to
@@ -864,7 +793,7 @@ window, default for
 .Ar label
 is no change.
 To turn off a label, set it to an empty string ("").
-.It Ic list Ns Pq
+.It Ic list Ns Pq ""
 No arguments.
 List the identifiers and labels of all windows.
 No value is returned.
@@ -905,24 +834,14 @@ Returns -1 if
 .Ar variable
 does not exist,
 0 otherwise.
-.It Ic variables Ns Pq
+.It Ic variables Ns Pq ""
 No arguments.
 List all variables.
 No value is returned.
-.It Xo
-.Ic window Ns ( Bq Ar row ,
-.Bq Ar column ,
-.Bq Ar nrow ,
-.Bq Ar ncol ,
-.Bq Ar nline ,
-.Bq Ar label ,
-.Bq Ar pty ,
-.Bq Ar frame ,
-.Bq Ar mapnl ,
-.Bq Ar keepopen ,
-.Bq Ar smooth ,
-.Bq Ar shell ) .
-.Xc
+.It Ic window Ns ( Bo Ar row Bc , Bo Ar column Bc , Bo Ar nrow Bc , \
+Bo Ar ncol Bc , Bo Ar nline Bc , Bo Ar label Bc , Bo Ar pty Bc , \
+Bo Ar frame Bc , Bo Ar mapnl Bc , Bo Ar keepopen Bc , Bo Ar smooth Bc , \
+Bo Ar shell Bc ) .
 Open a window with upper left corner at
 .Ar row  ,
 .Ar column
@@ -978,10 +897,7 @@ by
 .Ar default_shell  ,
 see above).
 The created window's identifier is returned as a number.
-.It Xo
-.Ic write Ns ( Bq Ar window ,
-.Bq Aq Ar string\-list )
-.Xc
+.It Ic write Ns ( Bo Ar window Bc , Bq Aq Ar string\-list )
 Send the list of strings,
 .Aq Ar string-list ,
 to
@@ -1048,8 +964,22 @@ startup command file.
 .It Pa /dev/[pt]ty[pq]?
 pseudo-terminal devices.
 .El
+.Sh EXAMPLES
+The following example
+.Pa ~/.windowrc
+will open two windows.
+The upper one will take one third of the screen
+and run tcpdump, the lower one will take
+the remaining two thirds of the screen and run
+the default shell:
+.Bd -literal
+window r=1, nr=$nrow/3-1, l=tcpdump\e pcn0, sh=tcpdump \e-ni pcn0
+window r=$nrow/3, nr=2*$nrow/3+1
+.Ed
 .Sh DIAGNOSTICS
 Should be self explanatory.
+.Sh SEE ALSO
+.Xr tmux 1
 .Sh HISTORY
 The
 .Nm

@@ -1,4 +1,4 @@
-/*	$NetBSD: vfscanf.c,v 1.38 2007/04/01 19:23:55 christos Exp $	*/
+/*	$NetBSD: vfscanf.c,v 1.41 2010/12/16 17:42:27 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -38,7 +38,7 @@
 static char sccsid[] = "@(#)vfscanf.c	8.1 (Berkeley) 6/4/93";
 __FBSDID("$FreeBSD: src/lib/libc/stdio/vfscanf.c,v 1.41 2007/01/09 00:28:07 imp Exp $");
 #else
-__RCSID("$NetBSD: vfscanf.c,v 1.38 2007/04/01 19:23:55 christos Exp $");
+__RCSID("$NetBSD: vfscanf.c,v 1.41 2010/12/16 17:42:27 wiz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -140,6 +140,12 @@ __svfscanf(FILE *fp, char const *fmt0, va_list ap)
 	return (ret);
 }
 
+#define SCANF_SKIP_SPACE() \
+do { \
+	while ((fp->_r > 0 || __srefill(fp) == 0) && isspace(*fp->_p)) \
+		nread++, fp->_r--, fp->_p++; \
+} while (/*CONSTCOND*/ 0)
+
 /*
  * __svfscanf_unlocked - non-MT-safe version of __svfscanf
  */
@@ -159,7 +165,7 @@ __svfscanf_unlocked(FILE *fp, const char *fmt0, va_list ap)
 	int base;		/* base argument to conversion function */
 	char ccltab[256];	/* character class table for %[...] */
 	char buf[BUF];		/* buffer for numeric and mb conversions */
-	wchar_t *wcp;		/* handy wide character pointer */
+	wchar_t *wcp;		/* handy wide-character pointer */
 	size_t nconv;		/* length of multibyte sequence converted */
 	static const mbstate_t initial;
 	mbstate_t mbs;
@@ -198,6 +204,7 @@ __svfscanf_unlocked(FILE *fp, const char *fmt0, va_list ap)
 again:		c = *fmt++;
 		switch (c) {
 		case '%':
+			SCANF_SKIP_SPACE();
 literal:
 			if (fp->_r <= 0 && __srefill(fp))
 				goto input_failure;
@@ -811,7 +818,7 @@ literal:
 					float res = strtof(buf, &p);
 					*va_arg(ap, float *) = res;
 				}
-				if (__scanfdebug && p - buf != width)
+				if (__scanfdebug && (size_t)(p - buf) != width)
 					abort();
 				nassigned++;
 			}

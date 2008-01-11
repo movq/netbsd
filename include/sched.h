@@ -1,4 +1,4 @@
-/*	$NetBSD: sched.h,v 1.8 2005/10/09 11:17:28 kleink Exp $	*/
+/*	$NetBSD: sched.h,v 1.12 2009/01/11 03:04:12 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,25 +37,20 @@
 #include <sys/sched.h>
 
 /* Required by POSIX 1003.1, section 13.1, lines 12-13. */
-#include <time.h>	
-
-/* Functions */
+#include <time.h>
 
 __BEGIN_DECLS
-/* 
- * These are permitted to fail and return -1 and set errno = ENOSYS if
- * _POSIX_PRIORITY_SCHEDULING is not defined.
- */
 int	sched_setparam(pid_t, const struct sched_param *);
 int	sched_getparam(pid_t, struct sched_param *);
 int	sched_setscheduler(pid_t, int, const struct sched_param *);
 int	sched_getscheduler(pid_t);
 int	sched_get_priority_max(int);
 int	sched_get_priority_min(int);
-int	sched_rr_get_interval(pid_t, struct timespec *);
+#ifndef __LIBC12_SOURCE__
+int	sched_rr_get_interval(pid_t, struct timespec *)
+    __RENAME(__sched_rr_get_interval50);
+#endif
 
-
-/* Not optional in the presence of _POSIX_THREADS */
 int	sched_yield(void);
 int	__libc_thr_yield(void);
 __END_DECLS
@@ -73,14 +61,16 @@ __END_DECLS
 
 #if defined(_NETBSD_SOURCE)
 
-/*
- * Stuff that for historical reasons is in <sched.h>, but not defined
- * by any standard.
- */
-
 __BEGIN_DECLS
+
+/* Process affinity functions (not portable) */
+int	sched_getaffinity_np(pid_t, size_t, cpuset_t *);
+int	sched_setaffinity_np(pid_t, size_t, cpuset_t *);
+
+/* Historical functions, not defined in standard */
 pid_t	 clone(int (*)(void *), void *, int, void *);
 pid_t	__clone(int (*)(void *), void *, int, void *);
+
 __END_DECLS
 
 #endif /* _NETBSD_SOURCE */

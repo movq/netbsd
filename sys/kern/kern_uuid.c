@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_uuid.c,v 1.13 2008/01/07 16:13:49 ad Exp $	*/
+/*	$NetBSD: kern_uuid.c,v 1.17 2010/05/04 19:23:56 kardel Exp $	*/
 
 /*
  * Copyright (c) 2002 Marcel Moolenaar
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.13 2008/01/07 16:13:49 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.17 2010/05/04 19:23:56 kardel Exp $");
 
 #include <sys/param.h>
 #include <sys/endian.h>
@@ -57,9 +57,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.13 2008/01/07 16:13:49 ad Exp $");
  * Note that the generator state is itself an UUID, but the time and clock
  * sequence fields are written in the native byte order.
  */
-
-/* XXX Do we have a similar ASSERT()? */
-#define CTASSERT(x)
 
 CTASSERT(sizeof(struct uuid) == 16);
 
@@ -139,19 +136,15 @@ uuid_node(uint16_t *node)
  * the Unix time since 00:00:00.00, January 1, 1970 to the date of the
  * Gregorian reform to the Christian calendar.
  */
-/*
- * At present, NetBSD has no timespec source, only timeval sources.  So,
- * we use timeval.
- */
 static uint64_t
 uuid_time(void)
 {
-	struct timeval tv;
+	struct timespec tsp;
 	uint64_t xtime = 0x01B21DD213814000LL;
 
-	microtime(&tv);
-	xtime += (uint64_t)tv.tv_sec * 10000000LL;
-	xtime += (uint64_t)(10 * tv.tv_usec);
+	nanotime(&tsp);
+	xtime += (uint64_t)tsp.tv_sec * 10000000LL;
+	xtime += (uint64_t)(tsp.tv_nsec / 100);
 	return (xtime & ((1LL << 60) - 1LL));
 }
 
@@ -184,14 +177,41 @@ uuid_generate(struct uuid_private *uuid, uint64_t *timep, int count)
 	mutex_exit(&uuid_mutex);
 }
 
-int
-sys_uuidgen(struct lwp *l, const struct sys_uuidgen_args *uap, register_t *retval)
+static int
+kern_uuidgen(struct uuid *store, int count, bool to_user)
 {
 	struct uuid_private uuid;
 	uint64_t xtime;
-	int error;
-	int i;
+	int error = 0, i;
 
+	KASSERT(count >= 1);
+
+	/* Generate the base UUID. */
+	uuid_generate(&uuid, &xtime, count);
+
+	/* Set sequence and variant and deal with byte order. */
+	uuid.seq = htobe16(uuid.seq | 0x8000);
+
+	for (i = 0; i < count; xtime++, i++) {
+		/* Set time and version (=1) and deal with byte order. */
+		uuid.time.x.low = (uint32_t)xtime;
+		uuid.time.x.mid = (uint16_t)(xtime >> 32);
+		uuid.time.x.hi = ((uint16_t)(xtime >> 48) & 0xfff) | (1 << 12);
+		if (to_user) {
+			error = copyout(&uuid, store + i, sizeof(uuid));
+			if (error != 0)
+				break;
+		} else {
+			memcpy(store + i, &uuid, sizeof(uuid));
+		}
+	}
+
+	return error;
+}
+
+int
+sys_uuidgen(struct lwp *l, const struct sys_uuidgen_args *uap, register_t *retval)
+{
 	/*
 	 * Limit the number of UUIDs that can be created at the same time
 	 * to some arbitrary number. This isn't really necessary, but I
@@ -201,26 +221,13 @@ sys_uuidgen(struct lwp *l, const struct sys_uuidgen_args *uap, register_t *retva
 	if (SCARG(uap,count) < 1 || SCARG(uap,count) > 2048)
 		return (EINVAL);
 
-	/* XXX: pre-validate accessibility to the whole of the UUID store? */
+	return kern_uuidgen(SCARG(uap, store), SCARG(uap,count), true);
+}
 
-	/* Generate the base UUID. */
-	uuid_generate(&uuid, &xtime, SCARG(uap, count));
-
-	/* Set sequence and variant and deal with byte order. */
-	uuid.seq = htobe16(uuid.seq | 0x8000);
-
-	/* XXX: this should copyout larger chunks at a time. */
-	for (i = 0; i < SCARG(uap, count); xtime++, i++) {
-		/* Set time and version (=1) and deal with byte order. */
-		uuid.time.x.low = (uint32_t)xtime;
-		uuid.time.x.mid = (uint16_t)(xtime >> 32);
-		uuid.time.x.hi = ((uint16_t)(xtime >> 48) & 0xfff) | (1 << 12);
-		error = copyout(&uuid, SCARG(uap,store) + i, sizeof(uuid));
-		if (error != 0)
-			return error;
-	}
-
-	return 0;
+int
+uuidgen(struct uuid *store, int count)
+{
+	return kern_uuidgen(store,count, false);
 }
 
 int
@@ -315,7 +322,7 @@ uuid_dec_be(void const *buf, struct uuid *uuid)
 	int i;
 
 	uuid->time_low = be32dec(p);
-	uuid->time_mid = le16dec(p + 4);
+	uuid->time_mid = be16dec(p + 4);
 	uuid->time_hi_and_version = be16dec(p + 6);
 	uuid->clock_seq_hi_and_reserved = p[8];
 	uuid->clock_seq_low = p[9];

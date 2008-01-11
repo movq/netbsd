@@ -1,4 +1,4 @@
-/*	$NetBSD: local.h,v 1.20 2005/05/14 23:51:02 christos Exp $	*/
+/*	$NetBSD: local.h,v 1.29 2010/10/24 17:44:32 tron Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,6 +37,9 @@
 #include "wcio.h"
 #include "fileext.h"
 
+#include <limits.h>
+#include <stdbool.h>
+
 /*
  * Information local to this implementation of stdio,
  * in particular, macros and private variables.
@@ -44,6 +47,7 @@
 
 extern int	__sflush __P((FILE *));
 extern FILE	*__sfp __P((void));
+extern void	__sfpinit __P((FILE *));
 extern int	__srefill __P((FILE *));
 extern int	__sread __P((void *, char *, int));
 extern int	__swrite __P((void *, char const *, int));
@@ -75,8 +79,9 @@ extern int	__gettemp __P((char *, int *, int));
 extern wint_t	__fgetwc_unlock __P((FILE *));
 extern wint_t	__fputwc_unlock __P((wchar_t, FILE *));
 
+extern ssize_t	__getdelim(char **__restrict, size_t *__restrict, int,
+    FILE *__restrict);
 extern char	*__fgetstr __P((FILE * __restrict, size_t * __restrict, int));
-extern int	 __slbexpand __P((FILE *, size_t));
 extern int 	 __vfwprintf_unlocked __P((FILE *, const wchar_t *,
     _BSD_VA_LIST_));
 extern int	 __vfwscanf_unlocked __P((FILE * __restrict,
@@ -103,11 +108,21 @@ extern int	 __vfwscanf_unlocked __P((FILE * __restrict,
 /*
  * test for an fgetln() buffer.
  */
-#define	HASLB(fp) ((fp)->_lb._base != NULL)
 #define	FREELB(fp) { \
-	free((char *)(fp)->_lb._base); \
-	(fp)->_lb._base = NULL; \
+	free(_EXT(fp)->_fgetstr_buf); \
+	_EXT(fp)->_fgetstr_buf = NULL; \
+	_EXT(fp)->_fgetstr_len = 0; \
 }
 
 extern void __flockfile_internal __P((FILE *, int));
 extern void __funlockfile_internal __P((FILE *, int));
+
+/*
+ * Detect if the current file position fits in a long int.
+ */
+
+static __inline bool
+__fpos_overflow(fpos_t pos)
+{
+  return (pos < LONG_MIN) || (pos > LONG_MAX);
+}

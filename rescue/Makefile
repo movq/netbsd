@@ -1,10 +1,15 @@
-#	$NetBSD: Makefile,v 1.20 2008/01/09 11:26:06 simonb Exp $
+#	$NetBSD: Makefile,v 1.27 2010/03/10 23:13:10 abs Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 WARNS=		1
+# XXX
+.if ${MACHINE_ARCH} != "m68000"
 DBG=		-Os
+.endif
+
+CRUNCHGEN_FLAGS=-d "${DBG}"
 
 RESCUEDIR=	/rescue
 CRUNCHBIN=	rescue
@@ -14,7 +19,7 @@ LISTS=		${.CURDIR}/list
 TARGETDIR=	${DESTDIR}/rescue
 PARSELISTENV+=  TARGETDIR=${TARGETDIR:Q}
 
-.for f in edlabel ldconfig pdisk
+.for f in ldconfig pdisk
 PROG_${f}!=	cd ${NETBSDSRCDIR}/sbin/${f} && ${MAKE} -V PROG
 .if (${PROG_${f}} != "")
 LISTS+=		${.CURDIR}/list.${f}
@@ -30,11 +35,10 @@ LISTS+=		${.CURDIR}/list.crypto
 CRUNCHENV+=	MKKERBEROS=no		# for ssh
 .endif
 
-.if (${OBJECT_FMT} == "ELF")
-PARSELISTENV+=	LDD_CMD=ldd_elf
-.else
-PARSELISTENV+=	LDD_CMD=ldd_aout
-.endif
+LISTS+=		${.CURDIR}/list.ldd
+LDD_ELF32DIR!=	cd ${NETBSDSRCDIR}/usr.bin/ldd/elf32 && ${PRINTOBJDIR}
+LDD_ELF64DIR!=	cd ${NETBSDSRCDIR}/usr.bin/ldd/elf64 && ${PRINTOBJDIR}
+PARSELISTENV+=	LDD_ELF32DIR=${LDD_ELF32DIR} LDD_ELF64DIR=${LDD_ELF64DIR}
 
 #	Specially built objects to override the behaviour of
 #	various library functions

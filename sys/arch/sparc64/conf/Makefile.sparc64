@@ -1,4 +1,4 @@
-# 	$NetBSD: Makefile.sparc64,v 1.64 2007/10/17 19:57:27 garbled Exp $
+# 	$NetBSD: Makefile.sparc64,v 1.70 2011/01/17 18:11:10 joerg Exp $
 
 #=========================================================================
 #
@@ -75,7 +75,7 @@ AFLAGS+=	-Wa,-Av8plusa
 CC_NOOPT=	${NORMAL_C:C/-O./-O0/}
 .endif
 CFLAGS+=	-mno-fpu
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
+AFLAGS+=	-x assembler-with-cpp
 
 ##
 ## (3) libkern and compat
@@ -85,20 +85,25 @@ AFLAGS+=	-x assembler-with-cpp -traditional-cpp
 ##
 ## (4) local objects, compile rules, and dependencies
 ##
-MD_OBJS=	locore.o
+MD_OBJS=	locore.o copy.o mp_subr.o
 MD_CFILES=
-MD_SFILES=	${SPARC64}/sparc64/locore.s
+MD_SFILES=	${SPARC64}/sparc64/locore.s ${SPARC64}/sparc64/copy.S \
+	 ${SPARC64}/sparc64/mp_subr.S
 
 locore.o: ${SPARC64}/sparc64/locore.s assym.h
 	${NORMAL_S}
 
-in_cksum.o: assym.h
+copy.o:	${SPARC64}/sparc64/copy.S assym.h
+	${NORMAL_S}
+
+mp_subr.o:	${SPARC64}/sparc64/mp_subr.S assym.h
+	${NORMAL_S}
 
 ##
 ## (5) link settings
 ##
 TEXTADDR?=	01000000
-LINKFORMAT=	-n -T ${SPARC64}/conf/${KERN_LDSCRIPT}
+LINKFORMAT=	-T ${SPARC64}/conf/${KERN_LDSCRIPT}
 .if ${LP64} == "yes"
 KERN_LDSCRIPT?= kern.ldscript
 .else
@@ -113,6 +118,8 @@ KERN_LDSCRIPT?= kern32.ldscript
 bwtwo.o cgsix.o cgthree.o cgtwo.o cons.o dma.o esp.o fb.o if_ie.o: Makefile
 ms.c obio.o zs.c autoconf.o clock.o cpu.o disksubr.o locore.o: Makefile
 machdep.o mem.o openprom.o pmap.o vm_machdep.o: Makefile
+
+cpu_in_cksum.o lock_stubs.o: assym.h
 
 ##
 ## (7) misc settings
@@ -142,9 +149,6 @@ machdep.o mem.o openprom.o pmap.o vm_machdep.o: Makefile
 %LOAD
 
 %RULES
-
-## Include rules for Atheros WLAN
-.include "$S/contrib/dev/ath/netbsd/Makefile.ath.inc"
 
 ##
 ## (9) port independent kernel machinery

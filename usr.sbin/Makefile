@@ -1,37 +1,30 @@
-#	$NetBSD: Makefile,v 1.229 2007/08/04 11:03:03 ad Exp $
+#	$NetBSD: Makefile,v 1.256 2011/05/09 08:51:18 manu Exp $
 #	from: @(#)Makefile	5.20 (Berkeley) 6/12/93
 
 .include <bsd.own.mk>
 
-SUBDIR=	ac accton acpitools altq amd apm apmd arp bad144 bind bootp \
-	btconfig btdevctl bthcid btuartd catman \
-	chown chroot chrtbl cnwctl cpuctl cron dev_mkdb \
+SUBDIR=	ac accton acpitools altq apm apmd arp bad144 bootp \
+	btattach btconfig btdevctl bthcid btpand catman \
+	chroot cnwctl cpuctl crash dev_mkdb \
 	dhcp diskpart dumpfs dumplfs edquota eeprom \
-	envstat eshconfig etcupdate extattrctl fssconfig fwctl gpioctl \
-	grfconfig grfinfo gspa hilinfo ifwatchd inetd installboot \
+	envstat eshconfig etcupdate extattrctl flashctl fssconfig fusermount \
+	fwctl gpioctl grfconfig gspa hdaudioctl ifwatchd inetd \
+	installboot \
 	iopctl iostat ipwctl irdaattach isdn iteconfig iwictl\
-	kgmon lastlogin link lmcconfig lockstat lpr mailwrapper makefs \
-	map-mbone mdconfig memswitch mlxctl mopd mountd moused \
+	kgmon lastlogin ldpd link lmcconfig lockstat lpr mailwrapper makefs \
+	map-mbone mdconfig memswitch mlxctl mmcformat mopd mountd moused \
 	mrinfo mrouted mscdlabel mtrace \
-	mtree ndbootd ndiscvt netgroup_mkdb nfsd ntp ofctl paxctl pcictl \
-	pkg_install \
-	pppd pstat pwd_mkdb postinstall powerd quot quotacheck quotaon \
-	rarpd rbootd rdate \
+	mtree ndbootd ndiscvt netgroup_mkdb nfsd ofctl paxctl pcictl perfused \
+	pppd psrset pstat pwd_mkdb postinstall powerd puffs quot quotacheck \
+	quotactl quotaon rarpd rbootd rdate \
 	repquota rmt rpc.bootparamd rpc.lockd rpc.pcnfsd \
  	rpc.statd rpcbind rwhod sa screenblank sdpd services_mkdb sesd \
-	sliplogin sntp \
+	schedctl sliplogin \
 	spray srtconfig sti sunlabel sup syslogd tadpolectl tcpdchk \
-	tcpdmatch tcpdump tcpdrop timed tpctl traceroute trpt unlink \
-	usbdevs user videomode vipw veriexecgen vnconfig wiconfig wlanctl wpa \
+	tcpdmatch tcpdrop timed tpctl traceroute trpt unlink \
+	usbdevs user videomode vipw veriexecgen vnconfig wake wiconfig \
+	wlanctl \
 	wsconscfg wsfontload wsmoused wsmuxctl zdump zic
-
-.if (${MKISCSI} != "no")
-SUBDIR+= iscsi 
-.endif
-
-.if (${MKKERBEROS} != "no")
-SUBDIR+= hprop kadmin kdc kstash ktutil
-.endif
 
 .if (${MKYP} != "no")
 SUBDIR+= rpc.yppasswdd ypbind yppoll ypserv ypset
@@ -55,6 +48,11 @@ SUBDIR+=pvcsif pvctxctl
 SUBDIR+= racoon racoonctl
 .endif
 
+# NPF
+.if (${MKNPF} != "no")
+SUBDIR+=npf
+.endif
+
 # IP Filter
 .if (${MKIPFILTER} != "no")
 SUBDIR+=ipf
@@ -63,11 +61,6 @@ SUBDIR+=ipf
 # PF
 .if (${MKPF} != "no")
 SUBDIR+=pf
-.endif
-
-# puffs
-.if (${MKPUFFS} != "no")
-SUBDIR+=puffs fusermount
 .endif
 
 .include <bsd.subdir.mk>

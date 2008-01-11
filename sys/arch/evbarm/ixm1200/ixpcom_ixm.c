@@ -1,4 +1,4 @@
-/*	$NetBSD: ixpcom_ixm.c,v 1.6 2003/03/25 06:53:16 igy Exp $ */
+/*	$NetBSD: ixpcom_ixm.c,v 1.8 2009/10/21 14:15:51 rmind Exp $ */
 /*
  * Copyright (c) 2002
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixpcom_ixm.c,v 1.6 2003/03/25 06:53:16 igy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixpcom_ixm.c,v 1.8 2009/10/21 14:15:51 rmind Exp $");
 
 /* Front-end of ixpcom */
 
@@ -63,10 +57,7 @@ CFATTACH_DECL(ixpcom_ixm, sizeof(struct ixpcom_softc),
     ixpcom_ixm_match, ixpcom_ixm_attach, NULL, NULL);
 
 static int
-ixpcom_ixm_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ixpcom_ixm_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	if (strcmp(match->cf_name, "ixpcom") == 0)
 		return 1;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sm_pcmcia.c,v 1.49 2007/10/19 12:01:05 ad Exp $	*/
+/*	$NetBSD: if_sm_pcmcia.c,v 1.54 2009/05/12 14:42:18 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2000, 2004 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sm_pcmcia.c,v 1.49 2007/10/19 12:01:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sm_pcmcia.c,v 1.54 2009/05/12 14:42:18 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,10 +61,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_sm_pcmcia.c,v 1.49 2007/10/19 12:01:05 ad Exp $")
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciadevs.h>
 
-int	sm_pcmcia_match(struct device *, struct cfdata *, void *);
+int	sm_pcmcia_match(device_t, cfdata_t, void *);
 int	sm_pcmcia_validate_config(struct pcmcia_config_entry *);
-void	sm_pcmcia_attach(struct device *, struct device *, void *);
-int	sm_pcmcia_detach(struct device *, int);
+void	sm_pcmcia_attach(device_t, device_t, void *);
+int	sm_pcmcia_detach(device_t, int);
 
 struct sm_pcmcia_softc {
 	struct	smc91cxx_softc sc_smc;		/* real "smc" softc */
@@ -112,7 +105,7 @@ const size_t sm_pcmcia_nproducts =
     sizeof(sm_pcmcia_products) / sizeof(sm_pcmcia_products[0]);
 
 int
-sm_pcmcia_match(struct device *parent, struct cfdata *match,
+sm_pcmcia_match(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
@@ -128,8 +121,7 @@ sm_pcmcia_match(struct device *parent, struct cfdata *match,
 }
 
 int
-sm_pcmcia_validate_config(cfe)
-	struct pcmcia_config_entry *cfe;
+sm_pcmcia_validate_config(struct pcmcia_config_entry *cfe)
 {
 	if (cfe->iftype != PCMCIA_IFTYPE_IO ||
 	    cfe->num_memspace != 0 ||
@@ -140,7 +132,7 @@ sm_pcmcia_validate_config(cfe)
 }
 
 void
-sm_pcmcia_attach(struct device *parent, struct device *self, void *aux)
+sm_pcmcia_attach(device_t parent, device_t self, void *aux)
 {
 	struct sm_pcmcia_softc *psc = (struct sm_pcmcia_softc *)self;
 	struct smc91cxx_softc *sc = &psc->sc_smc;
@@ -153,7 +145,7 @@ sm_pcmcia_attach(struct device *parent, struct device *self, void *aux)
 
 	error = pcmcia_function_configure(pa->pf, sm_pcmcia_validate_config);
 	if (error) {
-		aprint_error("%s: configure failed, error=%d\n", self->dv_xname,
+		aprint_error_dev(self, "configure failed, error=%d\n",
 		    error);
 		return;
 	}
@@ -178,8 +170,7 @@ sm_pcmcia_attach(struct device *parent, struct device *self, void *aux)
 	} else {
 		if (!sm_pcmcia_ascii_enaddr(pa->pf->sc->card.cis1_info[3], enaddr) &&
 		    !sm_pcmcia_ascii_enaddr(pa->pf->sc->card.cis1_info[2], enaddr))
-			aprint_error("%s: unable to get Ethernet address\n",
-			    self->dv_xname);
+			aprint_error_dev(self, "unable to get Ethernet address\n");
 	}
 
 	/* Perform generic intialization. */
@@ -194,9 +185,7 @@ fail:
 }
 
 int
-sm_pcmcia_detach(self, flags)
-	struct device *self;
-	int flags;
+sm_pcmcia_detach(device_t self, int flags)
 {
 	struct sm_pcmcia_softc *psc = (struct sm_pcmcia_softc *)self;
 	int error;
@@ -204,7 +193,7 @@ sm_pcmcia_detach(self, flags)
 	if (psc->sc_state != SM_PCMCIA_ATTACHED)
 		return (0);
 
-	error = smc91cxx_detach((struct device *)&psc->sc_smc, flags);
+	error = smc91cxx_detach((device_t)&psc->sc_smc, flags);
 	if (error)
 		return (error);
 
@@ -214,9 +203,7 @@ sm_pcmcia_detach(self, flags)
 }
 
 int
-sm_pcmcia_ascii_enaddr(cisstr, myla)
-	const char *cisstr;
-	u_int8_t *myla;
+sm_pcmcia_ascii_enaddr(const char *cisstr, u_int8_t *myla)
 {
 	u_int8_t digit;
 	int i;
@@ -251,8 +238,7 @@ sm_pcmcia_ascii_enaddr(cisstr, myla)
 }
 
 int
-sm_pcmcia_enable(sc)
-	struct smc91cxx_softc *sc;
+sm_pcmcia_enable(struct smc91cxx_softc *sc)
 {
 	struct sm_pcmcia_softc *psc = (struct sm_pcmcia_softc *)sc;
 	int error;
@@ -273,8 +259,7 @@ sm_pcmcia_enable(sc)
 }
 
 void
-sm_pcmcia_disable(sc)
-	struct smc91cxx_softc *sc;
+sm_pcmcia_disable(struct smc91cxx_softc *sc)
 {
 	struct sm_pcmcia_softc *psc = (struct sm_pcmcia_softc *)sc;
 

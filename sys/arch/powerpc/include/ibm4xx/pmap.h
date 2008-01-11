@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.13 2007/02/21 22:59:49 thorpej Exp $	*/
+/*	$NetBSD: pmap.h,v 1.15 2011/01/18 01:02:54 matt Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -128,9 +128,9 @@
  * Extra flags to pass to pmap_enter() -- make sure they don't conflict
  * w/PMAP_CANFAIL or PMAP_WIRED
  */
-#define	PME_NOCACHE	0x100
-#define	PME_WRITETHROUG	0x200
-#define	PMAP_NC		PME_NOCACHE	/* XXX: OEA pmap compat. for bus_dma */
+#define	PME_NOCACHE	0x1000000
+#define	PME_WRITETHROUG	0x2000000
+#define	PMAP_MD_NOCACHE	PME_NOCACHE	/* XXX: OEA pmap compat. for bus_dma */
 
 #ifndef _LOCORE
 
@@ -144,12 +144,8 @@ struct pmap {
 	volatile u_int *pm_ptbl[STSZ];	/* Array of 64 pointers to page tables. */
 };
 
-typedef	struct pmap *pmap_t;
-
 #ifdef	_KERNEL
 #define	PMAP_GROWKERNEL
-extern struct pmap kernel_pmap_;
-#define	pmap_kernel()	(&kernel_pmap_)
 
 #define	PMAP_ATTR_REF		0x1
 #define	PMAP_ATTR_CHG		0x2

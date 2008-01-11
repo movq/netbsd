@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.12 2005/12/11 12:17:00 christos Exp $	*/
+/*	$NetBSD: bootxx.c,v 1.15 2009/08/24 13:04:37 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.
@@ -34,7 +34,6 @@
 
 #include <lib/libsa/stand.h>
 #include <atari_stand.h>
-#include <string.h>
 #include <libkern.h>
 #include <tosdefs.h>
 #include <sys/boot_flag.h>
@@ -44,6 +43,7 @@
 
 typedef int      (*bxxx_t)(void *, void *, struct osdsc *);
 
+int	bootxx(void *, void *, int);
 void	boot_BSD(struct kparamb *) __attribute__((noreturn));
 int	bootxxx(void *, void *, struct osdsc *);
 int	load_booter(struct osdsc *);
@@ -57,11 +57,11 @@ bootxx(void *readsector, void *disklabel, int autoboot)
 	osdsc_t		*od = &os_desc;
 	bxxx_t		bootxxx = (bxxx_t)(LOADADDR3);
 
-	bzero(edata, end - edata);
+	memset(edata, 0, end - edata);
 	setheap(end, (void*)(LOADADDR3 - 4));
 
 	printf("\033v\nNetBSD/atari secondary bootloader"
-						" ($Revision: 1.12 $)\n\n");
+						" ($Revision: 1.15 $)\n\n");
 
 	if (init_dskio(readsector, disklabel, -1))
 		return -1;
@@ -191,7 +191,7 @@ load_booter(osdsc_t *od)
 	}
 	if (fd < 0)
 		return -1;
-	while((bsize = read(fd, bstart, 1024)) > 0) {
+	while ((bsize = read(fd, bstart, 1024)) > 0) {
 		bstart += bsize;
 	}
 	close(fd);
@@ -201,7 +201,8 @@ load_booter(osdsc_t *od)
 void
 _rtt(void)
 {
+
 	printf("Halting...\n");
-	for(;;)
+	for (;;)
 		;
 }

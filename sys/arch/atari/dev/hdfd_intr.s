@@ -1,4 +1,4 @@
-/*	$NetBSD: hdfd_intr.s,v 1.8 2003/05/03 18:10:46 wiz Exp $
+/*	$NetBSD: hdfd_intr.s,v 1.10 2010/12/20 00:25:30 matt Exp $
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -16,12 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Leo Weppelman.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -54,7 +48,7 @@
 ENTRY_NOPROFILE(mfp_hdfd_nf)
 	addql	#1,nintr		|  add another interrupt
 
-	moveml	%d0-%d1/%a0-%a1,%sp@-	|  Save scratch registers
+	INTERRUPT_SAVEREG		|  Save scratch registers
 	movl	_C_LABEL(fdio_addr),%a0	|  Get base of fdc registers
 	movb	%a0@(fdsts),%d0		|  Get fdsts
 	btst	#5,%d0			|  DMA active?
@@ -71,7 +65,7 @@ hdfd_rd_nf:
 	subql	#1, _C_LABEL(fddmalen)	|  decrement bytecount
 	movl	%a1,_C_LABEL(fddmaaddr)	|  update DMA pointer
 |	addql	#1,_cnt+V_INTR		|  chalk up another interrupt
-	moveml	%sp@+,%d0-%d1/%a0-%a1
+	INTERRUPT_RESTOREREG
 	rte
 hdfd_wrt_nf:
 	movb	%a1@+,%a0@(fddata)	|  Push a byte
@@ -83,7 +77,7 @@ hdfd_wrt_nf:
 ENTRY_NOPROFILE(mfp_hdfd_fifo)
 	addql	#1,_C_LABEL(intrcnt_user)+88	|  add another interrupt
 
-	moveml	%d0-%d1/%a0-%a1,%sp@-	|  Save scratch registers
+	INTERRUPT_SAVEREG		|  Save scratch registers
 	movl	_C_LABEL(fdio_addr),%a0	|  Get base of fdc registers
 	movb	%a0@(fdsts),%d0		|  Get fdsts
 	btst	#5,%d0			|  DMA active?
@@ -125,8 +119,8 @@ hdfdc1:
 	 * seems wrong....
 	 */
 hdfdc_xit:
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
-	moveml	%sp@+,%d0-%d1/%a0-%a1
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
 	rte
 
 	/*
@@ -139,9 +133,9 @@ hdfdc_norm:
 	movl	nintr,%d0
 	clrl	nintr
 	addl	%d0, _C_LABEL(intrcnt_user)+88	|  add another interrupt
-	addl	%d0,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	CPUINFO_ADD(CI_NINTR, %d0)
 0:	jbsr	_C_LABEL(fdc_ctrl_intr)		|  handle interrupt
-	moveml	%sp@+,%d0-%d1/%a0-%a1	|    and saved registers
+	INTERRUPT_RESTOREREG 			|    and saved registers
 	jra	_ASM_LABEL(rei)
 
 	.data

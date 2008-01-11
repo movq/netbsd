@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.52 2006/10/23 19:45:56 he Exp $	*/
+/*	$NetBSD: main.c,v 1.60 2011/05/30 14:20:48 joerg Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,24 +14,20 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
@@ -47,6 +43,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <locale.h>
 
 #include "defs.h"
 #include "md.h"
@@ -94,7 +91,7 @@ static const struct f_arg fflagopts[] = {
 	{"ftp proxy", "", ftp.proxy, sizeof ftp.proxy},
 	{"nfs host", "", nfs_host, sizeof nfs_host},
 	{"nfs dir", "/bsd/release", nfs_dir, sizeof nfs_dir},
-	{"cd dev", "cd0a", cdrom_dev, sizeof cdrom_dev},
+	{"cd dev", CD_NAME, cdrom_dev, sizeof cdrom_dev},
 	{"fd dev", "/dev/fd0a", fd_dev, sizeof fd_dev},
 	{"local dev", "", localfs_dev, sizeof localfs_dev},
 	{"local fs", "ffs", localfs_fs, sizeof localfs_fs},
@@ -113,7 +110,7 @@ init(void)
 
 	sizemult = 1;
 	disktype = "unknown";
-	tmp_mfs_size = 0;
+	tmp_ramdisk_size = 0;
 	doessf = "";
 	clean_xfer_dir = 0;
 	mnt2_mounted = 0;
@@ -140,7 +137,7 @@ main(int argc, char **argv)
 	if (!getenv("TERM")) {
 		(void)fprintf(stderr,
 			 "sysinst: environment variable TERM not set.\n");
-		exit(1);
+		exit(4);
 	}
 
 	/* argv processing */
@@ -167,7 +164,7 @@ main(int argc, char **argv)
 	/* initialize message window */
 	if (menu_init()) {
 		__menu_initerror();
-		exit(1);
+		exit(4);
 	}
 
 	/*
@@ -208,7 +205,7 @@ main(int argc, char **argv)
 
 	/* Menu processing */
 	process_menu(MENU_netbsd, NULL);
-	
+
 	exit_cleanly = 1;
 	return 0;
 }
@@ -307,7 +304,18 @@ select_language(void)
 	}
 	free(lang_msg);
 	free(fnames);
+
+	/* set locale according to selected language */
+	cp = msg_string(MSG_sysinst_message_locale);
+	if (cp) {
+		setlocale(LC_CTYPE, cp);
+		setenv("LC_CTYPE", cp, 1);
+	}
 }
+
+#ifndef md_may_remove_boot_medium
+#define md_may_remove_boot_medium()	(boot_media_still_needed()<=0)
+#endif
 
 /* toplevel menu handler ... */
 void
@@ -317,9 +325,11 @@ toplevel(void)
 	/* Display banner message in (english, francais, deutsch..) */
 	msg_display(MSG_hello);
 	msg_display_add(MSG_md_hello);
+	if (md_may_remove_boot_medium())
+		msg_display_add(MSG_md_may_remove_boot_medium);
 	msg_display_add(MSG_thanks);
 
-	/* 
+	/*
 	 * Undo any stateful side-effects of previous menu choices.
 	 * XXX must be idempotent, since we get run each time the main
 	 *     menu is displayed.
@@ -335,7 +345,7 @@ static void
 usage(void)
 {
 
-	(void)fprintf(stderr, msg_string(MSG_usage));
+	(void)fprintf(stderr, "%s", msg_string(MSG_usage));
 	exit(1);
 }
 

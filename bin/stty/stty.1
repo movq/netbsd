@@ -1,4 +1,4 @@
-.\"	$NetBSD: stty.1,v 1.34 2007/06/24 18:03:00 christos Exp $
+.\"	$NetBSD: stty.1,v 1.39 2010/04/05 16:19:54 joerg Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"     @(#)stty.1	8.5 (Berkeley) 6/1/94
 .\"
-.Dd June 24, 2007
+.Dd December 14, 2009
 .Dt STTY 1
 .Os
 .Sh NAME
@@ -324,7 +324,7 @@ is set, echo control characters as ^X.
 Otherwise control characters echo as themselves.
 .It Cm echoprt Pq Fl echoprt
 For printing terminals.
-If set, echo erased characters backwards within ``\\''
+If set, echo erased characters backwards within ``\e''
 and ``/''.
 Otherwise, disable this feature.
 .It Cm noflsh Pq Fl noflsh
@@ -373,30 +373,30 @@ If string is the
 two character sequence "^-" or the
 string "undef" the control character
 is disabled (i.e. set to
-.Pf { Dv _POSIX_VDISABLE Ns } . )
+.Bro Dv _POSIX_VDISABLE Brc . )
 .Pp
 Recognized control-characters:
 .Bd -ragged -offset indent
-.Bl -column character Subscript
-.It control-
+.Bl -column character Subscript Description
+.It control- Ta "" Ta ""
 .It character	Subscript	Description
 .It _________	_________	_______________
-.It eof Ta Tn VEOF	EOF No character
-.It eol Ta Tn VEOL	EOL No character
-.It eol2 Ta Tn VEOL2	EOL2 No character
-.It erase Ta Tn VERASE	ERASE No character
-.It werase Ta Tn VWERASE	WERASE No character
-.It kill Ta Tn VKILL	KILL No character
-.It reprint Ta Tn VREPRINT	REPRINT No character
-.It intr Ta Tn VINTR	INTR No character
-.It quit Ta Tn VQUIT	QUIT No character
-.It susp Ta Tn VSUSP	SUSP No character
-.It dsusp Ta Tn VDSUSP	DSUSP No character
-.It start Ta Tn VSTART	START No character
-.It stop Ta Tn VSTOP	STOP No character
-.It lnext Ta Tn VLNEXT	LNEXT No character
-.It status Ta Tn VSTATUS	STATUS No character
-.It discard Ta Tn VDISCARD	DISCARD No character
+.It eof Ta Tn VEOF Ta EOF No character
+.It eol Ta Tn VEOL Ta EOL No character
+.It eol2 Ta Tn VEOL2 Ta EOL2 No character
+.It erase Ta Tn VERASE Ta ERASE No character
+.It werase Ta Tn VWERASE Ta WERASE No character
+.It kill Ta Tn VKILL Ta KILL No character
+.It reprint Ta Tn VREPRINT Ta REPRINT No character
+.It intr Ta Tn VINTR Ta INTR No character
+.It quit Ta Tn VQUIT Ta QUIT No character
+.It susp Ta Tn VSUSP Ta SUSP No character
+.It dsusp Ta Tn VDSUSP Ta DSUSP No character
+.It start Ta Tn VSTART Ta START No character
+.It stop Ta Tn VSTOP Ta STOP No character
+.It lnext Ta Tn VLNEXT Ta LNEXT No character
+.It status Ta Tn VSTATUS Ta STATUS No character
+.It discard Ta Tn VDISCARD Ta DISCARD No character
 .El
 .Ed
 .It Cm min Ar number
@@ -436,7 +436,9 @@ characters back to system defaults.
 .It Cm sane
 Resets all modes to reasonable values for interactive terminal use.
 .It Cm insane
-Resets all modes to unreasonable values for interactive terminal use.
+Sets all modes to random values, which are very likely
+.Pq but not guaranteed
+to be unreasonable for interactive terminal use.
 .It Cm tty
 Set the line discipline to the standard terminal line discipline
 .Dv TTYDISC .

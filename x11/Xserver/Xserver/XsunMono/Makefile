@@ -1,11 +1,11 @@
-#	$NetBSD: Makefile,v 1.4 2005/10/03 20:22:08 macallan Exp $
+#	$NetBSD: Makefile,v 1.6 2009/02/14 13:48:16 abs Exp $
+
+NOMAN=	# defined (must come before bsd.own.mk)
 
 .include <bsd.own.mk>
 
 PROG=	XsunMono
 BINMODE=4711
-
-MKMAN=	no
 
 .include "../Makefile.Xserver"
 
@@ -15,7 +15,7 @@ LDADD=	${LIBDIR.hw/sun}/sunInitMono.o ${LIBDIR.hw/sun}/sunInExMono.o \
 	${LDADD.hw/sun} ${LDADD.dix} ${LDADD.os} ${LDADD.mfb} ${LDADD.mi} \
 	${LDADD.Xext/ext} ${LDADD.xkb}
 
-.if ${MACHINE} == "sparc64" || ${MACHINE} == "sparc"
+.if ${MACHINE_ARCH} == "sparc64" || ${MACHINE_ARCH} == "sparc"
 LDADD+= ${LDADD.xinput}
 DPADD+=	${DPADD.xinput}
 .endif

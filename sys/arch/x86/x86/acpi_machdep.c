@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_machdep.c,v 1.20 2007/12/17 14:11:12 joerg Exp $	*/
+/*	$NetBSD: acpi_machdep.c,v 1.29 2011/01/14 18:33:34 jruoho Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -40,12 +40,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_machdep.c,v 1.20 2007/12/17 14:11:12 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_machdep.c,v 1.29 2011/01/14 18:33:34 jruoho Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/malloc.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -69,9 +68,11 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_machdep.c,v 1.20 2007/12/17 14:11:12 joerg Exp 
 
 #include "ioapic.h"
 
-#include "acpi.h"
+#include "acpica.h"
 #include "opt_mpbios.h"
 #include "opt_acpi.h"
+
+extern uint32_t cpus_attached;
 
 ACPI_STATUS
 acpi_md_OsInitialize(void)
@@ -96,6 +97,7 @@ acpi_md_OsGetRootPointer(void)
 	ACPI_STATUS Status;
 
 	Status = AcpiFindRootPointer(&PhysicalAddress);
+
 	if (ACPI_FAILURE(Status))
 		PhysicalAddress = 0;
 
@@ -103,11 +105,14 @@ acpi_md_OsGetRootPointer(void)
 }
 
 ACPI_STATUS
-acpi_md_OsInstallInterruptHandler(UINT32 InterruptNumber,
+acpi_md_OsInstallInterruptHandler(uint32_t InterruptNumber,
     ACPI_OSD_HANDLER ServiceRoutine, void *Context, void **cookiep)
 {
 	void *ih;
 	struct pic *pic;
+#if NIOAPIC > 0
+	struct ioapic_softc *sc;
+#endif
 	int irq, pin, trigger;
 
 #if NIOAPIC > 0
@@ -138,9 +143,9 @@ acpi_md_OsInstallInterruptHandler(UINT32 InterruptNumber,
 	 */
 
 #if NIOAPIC > 0
-	pic = (struct pic *)ioapic_find_bybase(InterruptNumber);
-	if (pic != NULL) {
-		struct ioapic_softc *sc = (struct ioapic_softc *)pic;
+	sc = ioapic_find_bybase(InterruptNumber);
+	if (sc != NULL) {
+		pic = &sc->sc_pic;
 		struct mp_intr_map *mip;
 
 		if (pic->pic_type == PIC_IOAPIC) {
@@ -173,7 +178,7 @@ sci_override:
 	 * XXX probably, IPL_BIO is enough.
 	 */
 	ih = intr_establish(irq, pic, pin, trigger, IPL_TTY,
-	    (int (*)(void *)) ServiceRoutine, Context);
+	    (int (*)(void *)) ServiceRoutine, Context, false);
 	if (ih == NULL)
 		return (AE_NO_MEMORY);
 	*cookiep = ih;
@@ -188,10 +193,10 @@ acpi_md_OsRemoveInterruptHandler(void *cookie)
 
 ACPI_STATUS
 acpi_md_OsMapMemory(ACPI_PHYSICAL_ADDRESS PhysicalAddress,
-    UINT32 Length, void **LogicalAddress)
+    uint32_t Length, void **LogicalAddress)
 {
 
-	if (_x86_memio_map(X86_BUS_SPACE_MEM, PhysicalAddress, Length,
+	if (_x86_memio_map(x86_bus_space_mem, PhysicalAddress, Length,
 	    0, (bus_space_handle_t *) LogicalAddress) == 0)
 		return (AE_OK);
 
@@ -199,10 +204,10 @@ acpi_md_OsMapMemory(ACPI_PHYSICAL_ADDRESS PhysicalAddress,
 }
 
 void
-acpi_md_OsUnmapMemory(void *LogicalAddress, UINT32 Length)
+acpi_md_OsUnmapMemory(void *LogicalAddress, uint32_t Length)
 {
 
-	(void) _x86_memio_unmap(X86_BUS_SPACE_MEM,
+	(void) _x86_memio_unmap(x86_bus_space_mem,
 	    (bus_space_handle_t) LogicalAddress, Length, NULL);
 }
 
@@ -221,7 +226,7 @@ acpi_md_OsGetPhysicalAddress(void *LogicalAddress,
 }
 
 BOOLEAN
-acpi_md_OsReadable(void *Pointer, UINT32 Length)
+acpi_md_OsReadable(void *Pointer, uint32_t Length)
 {
 	BOOLEAN rv = TRUE;
 	vaddr_t sva, eva;
@@ -245,7 +250,7 @@ acpi_md_OsReadable(void *Pointer, UINT32 Length)
 }
 
 BOOLEAN
-acpi_md_OsWritable(void *Pointer, UINT32 Length)
+acpi_md_OsWritable(void *Pointer, uint32_t Length)
 {
 	BOOLEAN rv = FALSE;
 	vaddr_t sva, eva;
@@ -272,6 +277,18 @@ void
 acpi_md_OsDisableInterrupt(void)
 {
 	x86_disable_intr();
+}
+
+void
+acpi_md_OsEnableInterrupt(void)
+{
+	x86_enable_intr();
+}
+
+uint32_t
+acpi_md_ncpus(void)
+{
+	return popcount32(cpus_attached);
 }
 
 void

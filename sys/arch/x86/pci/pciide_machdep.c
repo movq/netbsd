@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_machdep.c,v 1.7 2007/12/01 06:05:40 jmcneill Exp $	*/
+/*	$NetBSD: pciide_machdep.c,v 1.11 2011/04/04 20:37:55 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.7 2007/12/01 06:05:40 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.11 2011/04/04 20:37:55 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,8 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: pciide_machdep.c,v 1.7 2007/12/01 06:05:40 jmcneill 
 #endif
 
 void *
-pciide_machdep_compat_intr_establish(struct device *dev,
-    struct pci_attach_args *pa, int chan, int (*func)(void *),
+pciide_machdep_compat_intr_establish(device_t dev,
+    const struct pci_attach_args *pa, int chan, int (*func)(void *),
     void *arg)
 {
 	int irq;
@@ -75,18 +75,25 @@ pciide_machdep_compat_intr_establish(struct device *dev,
 	irq = PCIIDE_COMPAT_IRQ(chan);
 	cookie = isa_intr_establish(NULL, irq, IST_EDGE, IPL_BIO, func, arg);
 	if (cookie == NULL)
-		return (NULL);
+		return NULL;
 #if NIOAPIC > 0
 	if (mp_busses != NULL &&
 	    (intr_find_mpmapping(mp_isa_bus, irq, &mpih) == 0 ||
 	     intr_find_mpmapping(mp_eisa_bus, irq, &mpih) == 0)) {
 		mpih |= irq;
-		aprint_normal("%s: %s channel interrupting at %s\n",
-		    dev->dv_xname, PCIIDE_CHANNEL_NAME(chan),
+		aprint_normal_dev(dev, "%s channel interrupting at %s\n",
+		    PCIIDE_CHANNEL_NAME(chan),
 		    intr_string(mpih));
 	} else
 #endif
-	aprint_normal("%s: %s channel interrupting at irq %d\n", dev->dv_xname,
+	aprint_normal_dev(dev, "%s channel interrupting at irq %d\n",
 	    PCIIDE_CHANNEL_NAME(chan), irq);
-	return (cookie);
+	return cookie;
+}
+
+void
+pciide_machdep_compat_intr_disestablish(device_t dev, pci_chipset_tag_t pc, int chan, void *cookie)
+{
+	isa_intr_disestablish(NULL, cookie);
+	return;
 }

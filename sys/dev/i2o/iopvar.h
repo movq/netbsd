@@ -1,4 +1,4 @@
-/*	$NetBSD: iopvar.h,v 1.20 2007/07/09 21:00:33 ad Exp $	*/
+/*	$NetBSD: iopvar.h,v 1.23 2009/05/12 14:23:47 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -83,9 +76,9 @@ struct iop_initiator {
 	LIST_ENTRY(iop_initiator) ii_list;
 	LIST_ENTRY(iop_initiator) ii_hash;
 
-	void	(*ii_intr)(struct device *, struct iop_msg *, void *);
-	int	(*ii_reconfig)(struct device *);
-	void	(*ii_adjqparam)(struct device *, int);
+	void	(*ii_intr)(device_t, struct iop_msg *, void *);
+	int	(*ii_reconfig)(device_t);
+	void	(*ii_adjqparam)(device_t, int);
 
 	struct	device *ii_dv;
 	kcondvar_t ii_cv;
@@ -106,7 +99,7 @@ struct iop_initiator {
 struct iop_pgop {
 	struct	i2o_param_op_list_header olh;
 	struct	i2o_param_op_all_template oat;
-} __attribute__ ((__packed__));
+} __packed;
 
 /*
  * Per-IOP context.

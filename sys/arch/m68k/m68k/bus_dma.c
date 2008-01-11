@@ -1,4 +1,4 @@
-/* $NetBSD: bus_dma.c,v 1.27 2007/10/17 19:55:11 garbled Exp $ */
+/* $NetBSD: bus_dma.c,v 1.31 2010/11/12 13:18:58 uebayasi Exp $ */
 
 /*
  * This file was taken from from alpha/common/bus_dma.c
@@ -23,13 +23,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,9 +37,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "opt_m68k_arch.h"
+
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.27 2007/10/17 19:55:11 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.31 2010/11/12 13:18:58 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.27 2007/10/17 19:55:11 garbled Exp $")
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
 #include <machine/cpu.h>
 
@@ -674,9 +669,9 @@ _bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 	curseg = 0;
 	lastaddr = segs[curseg].ds_addr = VM_PAGE_TO_PHYS(m);
 	segs[curseg].ds_len = PAGE_SIZE;
-	m = m->pageq.tqe_next;
+	m = m->pageq.queue.tqe_next;
 
-	for (; m != NULL; m = m->pageq.tqe_next) {
+	for (; m != NULL; m = m->pageq.queue.tqe_next) {
 		curaddr = VM_PAGE_TO_PHYS(m);
 #ifdef DIAGNOSTIC
 		if (curaddr < avail_start || curaddr >= high) {
@@ -721,7 +716,7 @@ _bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
 		    addr < (segs[curseg].ds_addr + segs[curseg].ds_len);
 		    addr += PAGE_SIZE) {
 			m = PHYS_TO_VM_PAGE(addr);
-			TAILQ_INSERT_TAIL(&mlist, m, pageq);
+			TAILQ_INSERT_TAIL(&mlist, m, pageq.queue);
 		}
 	}
 

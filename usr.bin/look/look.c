@@ -1,4 +1,4 @@
-/*	$NetBSD: look.c,v 1.11 2003/08/07 11:14:28 agc Exp $	*/
+/*	$NetBSD: look.c,v 1.14 2009/04/26 15:55:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)look.c	8.2 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: look.c,v 1.11 2003/08/07 11:14:28 agc Exp $");
+__RCSID("$NetBSD: look.c,v 1.14 2009/04/26 15:55:50 christos Exp $");
 #endif /* not lint */
 
 /*
@@ -101,7 +101,9 @@ main(argc, argv)
 {
 	struct stat sb;
 	int ch, fd, termchar;
-	char *back, *file, *front, *string, *p;
+	char *back, *front, *string, *p;
+	const char *file;
+	size_t len;
 
 	string = NULL;
 	file = _PATH_WORDS;
@@ -142,12 +144,15 @@ main(argc, argv)
 
 	if ((fd = open(file, O_RDONLY, 0)) < 0 || fstat(fd, &sb))
 		err(2, "%s", file);
-	if (sb.st_size > SIZE_T_MAX)
-		err(2, "%s: %s", file, strerror(EFBIG));
-	if ((front = mmap(NULL, (size_t)sb.st_size,
+	len = (size_t)sb.st_size;
+	if ((off_t)len != sb.st_size) {
+		errno = EFBIG;
+		err(2, "%s", file);
+	}
+	if ((front = mmap(NULL, len,
 	    PROT_READ, MAP_FILE|MAP_SHARED, fd, (off_t)0)) == NULL)
 		err(2, "%s", file);
-	back = front + sb.st_size;
+	back = front + len;
 	exit(look(string, front, back));
 }
 

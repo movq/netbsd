@@ -1,4 +1,4 @@
-/* $NetBSD: sci.c,v 1.49 2007/11/19 18:51:42 ad Exp $ */
+/* $NetBSD: sci.c,v 1.53 2011/04/24 16:26:57 rmind Exp $ */
 
 /*-
  * Copyright (C) 1999 T.Horiuchi and SAITOH Masanobu.  All rights reserved.
@@ -41,13 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -100,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sci.c,v 1.49 2007/11/19 18:51:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sci.c,v 1.53 2011/04/24 16:26:57 rmind Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_sci.h"
@@ -409,7 +402,7 @@ sci_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_si = softint_establish(SOFTINT_SERIAL, scisoft, sc);
 	SET(sc->sc_hwflags, SCI_HW_DEV_OK);
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	tp->t_oproc = scistart;
 	tp->t_param = sciparam;
 	tp->t_hwiflow = NULL;
@@ -432,7 +425,7 @@ sci_attach(struct device *parent, struct device *self, void *aux)
 static void
 scistart(struct tty *tp)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(tp->t_dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd,SCIUNIT(tp->t_dev));
 	int s;
 
 	s = spltty();
@@ -484,7 +477,7 @@ out:
 static int
 sciparam(struct tty *tp, struct termios *t)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(tp->t_dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(tp->t_dev));
 	int ospeed = t->c_ospeed;
 	int s;
 
@@ -615,15 +608,12 @@ sci_iflush(struct sci_softc *sc)
 int
 sciopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	int unit = SCIUNIT(dev);
 	struct sci_softc *sc;
 	struct tty *tp;
 	int s, s2;
 	int error;
 
-	if (unit >= sci_cd.cd_ndevs)
-		return (ENXIO);
-	sc = sci_cd.cd_devs[unit];
+	sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	if (sc == 0 || !ISSET(sc->sc_hwflags, SCI_HW_DEV_OK) ||
 	    sc->sc_rbuf == NULL)
 		return (ENXIO);
@@ -728,7 +718,7 @@ bad:
 int
 sciclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	/* XXX This is for cons.c. */
@@ -747,7 +737,7 @@ sciclose(dev_t dev, int flag, int mode, struct lwp *l)
 int
 sciread(dev_t dev, struct uio *uio, int flag)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return ((*tp->t_linesw->l_read)(tp, uio, flag));
@@ -756,7 +746,7 @@ sciread(dev_t dev, struct uio *uio, int flag)
 int
 sciwrite(dev_t dev, struct uio *uio, int flag)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return ((*tp->t_linesw->l_write)(tp, uio, flag));
@@ -765,7 +755,7 @@ sciwrite(dev_t dev, struct uio *uio, int flag)
 int
 scipoll(dev_t dev, int events, struct lwp *l)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return ((*tp->t_linesw->l_poll)(tp, events, l));
@@ -774,7 +764,7 @@ scipoll(dev_t dev, int events, struct lwp *l)
 struct tty *
 scitty(dev_t dev)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return (tp);
@@ -783,7 +773,7 @@ scitty(dev_t dev)
 int
 sciioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int error;
 	int s;
@@ -871,7 +861,7 @@ sci_break(struct sci_softc *sc, int onoff)
 void
 scistop(struct tty *tp, int flag)
 {
-	struct sci_softc *sc = sci_cd.cd_devs[SCIUNIT(tp->t_dev)];
+	struct sci_softc *sc = device_lookup_private(&sci_cd, SCIUNIT(tp->t_dev));
 	int s;
 
 	s = splserial();
@@ -991,9 +981,7 @@ sci_rxsoft(struct sci_softc *sc, struct tty *tp)
 }
 
 integrate void
-sci_txsoft(sc, tp)
-	struct sci_softc *sc;
-	struct tty *tp;
+sci_txsoft(struct sci_softc *sc, struct tty *tp)
 {
 
 	CLR(tp->t_state, TS_BUSY);
@@ -1283,8 +1271,7 @@ sciintr(void *arg)
 }
 
 void
-scicnprobe(cp)
-	struct consdev *cp;
+scicnprobe(struct consdev *cp)
 {
 	int maj;
 

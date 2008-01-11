@@ -1,4 +1,4 @@
-/* $NetBSD: cgdconfig.c,v 1.20 2007/11/06 10:44:23 martin Exp $ */
+/* $NetBSD: cgdconfig.c,v 1.32 2010/12/14 17:46:21 pooka Exp $ */
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,10 +31,9 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 2002, 2003\
-	The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: cgdconfig.c,v 1.20 2007/11/06 10:44:23 martin Exp $");
+__COPYRIGHT("@(#) Copyright (c) 2002, 2003\
+ The NetBSD Foundation, Inc.  All rights reserved.");
+__RCSID("$NetBSD: cgdconfig.c,v 1.32 2010/12/14 17:46:21 pooka Exp $");
 #endif
 
 #include <err.h>
@@ -67,6 +59,8 @@ __RCSID("$NetBSD: cgdconfig.c,v 1.20 2007/11/06 10:44:23 martin Exp $");
 #include "params.h"
 #include "pkcs5_pbkdf2.h"
 #include "utils.h"
+#include "cgdconfig.h"
+#include "prog_ops.h"
 
 #define CGDCONFIG_DIR		"/etc/cgd"
 #define CGDCONFIG_CFILE		CGDCONFIG_DIR "/cgd.conf"
@@ -86,6 +80,12 @@ enum action {
 
 int	nflag = 0;
 
+/* if pflag is set to PFLAG_STDIN read from stdin rather than getpass(3) */
+
+#define	PFLAG_GETPASS	0x01
+#define	PFLAG_STDIN	0x02
+int	pflag = PFLAG_GETPASS;
+
 static int	configure(int, char **, struct params *, int);
 static int	configure_stdin(struct params *, int argc, char **);
 static int	generate(struct params *, int, char **, const char *);
@@ -103,7 +103,10 @@ static void	 eliminate_cores(void);
 static bits_t	*getkey(const char *, struct keygen *, size_t);
 static bits_t	*getkey_storedkey(const char *, struct keygen *, size_t);
 static bits_t	*getkey_randomkey(const char *, struct keygen *, size_t, int);
-static bits_t	*getkey_pkcs5_pbkdf2(const char *, struct keygen *, size_t, int);
+static bits_t	*getkey_pkcs5_pbkdf2(const char *, struct keygen *, size_t,
+				     int);
+static bits_t	*getkey_shell_cmd(const char *, struct keygen *, size_t);
+static char	*maybe_getpass(char *);
 static int	 opendisk_werror(const char *, char *, size_t);
 static int	 unconfigure_fd(int);
 static int	 verify(struct params *, int);
@@ -185,7 +188,7 @@ main(int argc, char **argv)
 	p = params_new();
 	kg = NULL;
 
-	while ((ch = getopt(argc, argv, "CGUV:b:f:gi:k:no:usv")) != -1)
+	while ((ch = getopt(argc, argv, "CGUV:b:f:gi:k:no:spuv")) != -1)
 		switch (ch) {
 		case 'C':
 			set_action(&action, ACTION_CONFIGALL);
@@ -240,6 +243,9 @@ main(int argc, char **argv)
 				usage();
 			outfile = estrdup(optarg);
 			break;
+		case 'p':
+			pflag = PFLAG_STDIN;
+			break;
 		case 's':
 			set_action(&action, ACTION_CONFIGSTDIN);
 			break;
@@ -262,6 +268,9 @@ main(int argc, char **argv)
 		outfile = "";
 	if (!cfile)
 		cfile = "";
+
+	if (prog_init && prog_init() == -1)
+		err(1, "init failed");
 
 	/* validate the consistency of the arguments */
 
@@ -312,6 +321,9 @@ getkey(const char *dev, struct keygen *kg, size_t len)
 		case KEYGEN_PKCS5_PBKDF2_OLD:
 			tmp = getkey_pkcs5_pbkdf2(dev, kg, len, 1);
 			break;
+		case KEYGEN_SHELL_CMD:
+			tmp = getkey_shell_cmd(dev, kg, len);
+			break;
 		default:
 			warnx("unrecognised keygen method %d in getkey()",
 			    kg->kg_method);
@@ -343,8 +355,39 @@ getkey_randomkey(const char *target, struct keygen *kg, size_t keylen, int hard)
 	return bits_getrandombits(keylen, hard);
 }
 
+static char *
+maybe_getpass(char *prompt)
+{
+	char	 buf[1024];
+	char	*p = buf;
+	char	*tmp;
+
+	switch (pflag) {
+	case PFLAG_GETPASS:
+		p = getpass(prompt);
+		break;
+
+	case PFLAG_STDIN:
+		p = fgets(buf, sizeof(buf), stdin);
+		if (p) {
+			tmp = strchr(p, '\n');
+			if (tmp)
+				*tmp = '\0';
+		}
+		break;
+
+	default:
+		errx(EXIT_FAILURE, "pflag set inappropriately?");
+	}
+
+	if (!p)
+		err(EXIT_FAILURE, "failed to read passphrase");
+
+	return estrdup(p);
+}
+
 /*ARGSUSED*/
-/* 
+/*
  * XXX take, and pass through, a compat flag that indicates whether we
  * provide backwards compatibility with a previous bug.  The previous
  * behaviour is indicated by the keygen method pkcs5_pbkdf2, and a
@@ -357,13 +400,14 @@ getkey_pkcs5_pbkdf2(const char *target, struct keygen *kg, size_t keylen,
     int compat)
 {
 	bits_t		*ret;
-	const u_int8_t	*passp;
+	char		*passp;
 	char		 buf[1024];
 	u_int8_t	*tmp;
 
 	snprintf(buf, sizeof(buf), "%s's passphrase:", target);
-	passp = (const u_int8_t *)(void *)getpass(buf);
-	if (pkcs5_pbkdf2(&tmp, BITS2BYTES(keylen), passp, strlen(passp),
+	passp = maybe_getpass(buf);
+	if (pkcs5_pbkdf2(&tmp, BITS2BYTES(keylen), (uint8_t *)passp,
+	    strlen(passp),
 	    bits_getbuf(kg->kg_salt), BITS2BYTES(bits_len(kg->kg_salt)),
 	    kg->kg_iterations, compat)) {
 		warnx("failed to generate PKCS#5 PBKDF2 key");
@@ -372,7 +416,23 @@ getkey_pkcs5_pbkdf2(const char *target, struct keygen *kg, size_t keylen,
 
 	ret = bits_new(tmp, keylen);
 	kg->kg_key = bits_dup(ret);
+	memset(passp, 0, strlen(passp));
+	free(passp);
 	free(tmp);
+	return ret;
+}
+
+/*ARGSUSED*/
+static bits_t *
+getkey_shell_cmd(const char *target, struct keygen *kg, size_t keylen)
+{
+	FILE	*f;
+	bits_t	*ret;
+
+	f = popen(string_tocharstar(kg->kg_cmd), "r");
+	ret = bits_fget(f, keylen);
+	pclose(f);
+
 	return ret;
 }
 
@@ -392,7 +452,7 @@ unconfigure(int argc, char **argv, struct params *inparams, int flags)
 	if (flags == CONFIG_FLAGS_FROMALL && (argc < 2 || argc > 3))
 		return -1;
 
-	fd = opendisk(*argv, O_RDWR, buf, sizeof(buf), 1);
+	fd = opendisk1(*argv, O_RDWR, buf, sizeof(buf), 1, prog_open);
 	if (fd == -1) {
 		int saved_errno = errno;
 
@@ -409,7 +469,7 @@ unconfigure(int argc, char **argv, struct params *inparams, int flags)
 		return 0;
 
 	ret = unconfigure_fd(fd);
-	(void)close(fd);
+	(void)prog_close(fd);
 	return ret;
 }
 
@@ -418,7 +478,7 @@ unconfigure_fd(int fd)
 {
 	struct	cgd_ioctl ci;
 
-	if (ioctl(fd, CGDIOCCLR, &ci) == -1) {
+	if (prog_ioctl(fd, CGDIOCCLR, &ci) == -1) {
 		warn("ioctl");
 		return -1;
 	}
@@ -431,7 +491,9 @@ static int
 configure(int argc, char **argv, struct params *inparams, int flags)
 {
 	struct params	*p;
+	struct keygen	*kg;
 	int		 fd;
+	int		 loop = 0;
 	int		 ret;
 	char		 cgdname[PATH_MAX];
 
@@ -480,7 +542,17 @@ configure(int argc, char **argv, struct params *inparams, int flags)
 	 * verifies properly.  We open and close the disk device each
 	 * time, because if the user passes us the block device we
 	 * need to flush the buffer cache.
+	 *
+	 * We only loop if one of the verification methods prompts for
+	 * a password.
 	 */
+
+	for (kg = p->keygen; pflag == PFLAG_GETPASS && kg; kg = kg->next)
+		if ((kg->kg_method == KEYGEN_PKCS5_PBKDF2_SHA1) ||
+		    (kg->kg_method == KEYGEN_PKCS5_PBKDF2_OLD )) {
+			loop = 1;
+			break;
+		}
 
 	for (;;) {
 		fd = opendisk_werror(argv[0], cgdname, sizeof(cgdname));
@@ -504,18 +576,23 @@ configure(int argc, char **argv, struct params *inparams, int flags)
 		if (!ret)
 			break;
 
-		warnx("verification failed, please reenter passphrase");
-
 		(void)unconfigure_fd(fd);
-		(void)close(fd);
+		(void)prog_close(fd);
+
+		if (!loop) {
+			warnx("verification failed permanently");
+			goto bail_err;
+		}
+
+		warnx("verification failed, please reenter passphrase");
 	}
 
 	params_free(p);
-	(void)close(fd);
+	(void)prog_close(fd);
 	return 0;
 bail_err:
 	params_free(p);
-	(void)close(fd);
+	(void)prog_close(fd);
 	return -1;
 }
 
@@ -574,7 +651,7 @@ opendisk_werror(const char *cgd, char *buf, size_t buflen)
 		return 0;
 	}
 
-	fd = opendisk(cgd, O_RDWR, buf, buflen, 0);
+	fd = opendisk1(cgd, O_RDWR, buf, buflen, 0, prog_open);
 	if (fd == -1)
 		warnx("can't open cgd \"%s\", \"%s\"", cgd, buf);
 
@@ -608,7 +685,7 @@ configure_params(int fd, const char *cgd, const char *dev, struct params *p)
 	if (nflag)
 		return 0;
 
-	if (ioctl(fd, CGDIOCSET, &ci) == -1) {
+	if (prog_ioctl(fd, CGDIOCSET, &ci) == -1) {
 		int saved_errno = errno;
 		warn("ioctl");
 		return saved_errno;
@@ -656,7 +733,7 @@ verify_disklabel(int fd)
 	 * partition information.
 	 */
 
-	ret = pread(fd, buf, 8192, 0);
+	ret = prog_pread(fd, buf, 8192, 0);
 	if (ret < 0) {
 		warn("can't read disklabel area");
 		return -1;
@@ -681,7 +758,7 @@ verify_ffs(int fd)
 		} u;
 		ssize_t ret;
 
-		ret = pread(fd, &u, sizeof(u), sblock_try[i]);
+		ret = prog_pread(fd, &u, sizeof(u), sblock_try[i]);
 		if (ret < 0) {
 			warn("pread");
 			break;
@@ -712,7 +789,7 @@ verify_reenter(struct params *p)
 
 	ret = 0;
 	for (kg = p->keygen; kg && !ret; kg = kg->next) {
-		if ((kg->kg_method != KEYGEN_PKCS5_PBKDF2_SHA1) && 
+		if ((kg->kg_method != KEYGEN_PKCS5_PBKDF2_SHA1) &&
 		    (kg->kg_method != KEYGEN_PKCS5_PBKDF2_OLD ))
 			continue;
 
@@ -789,11 +866,17 @@ generate_convert(struct params *p, int argc, char **argv, const char *outfile)
 
 	/* for sanity, we ensure that none of the keygens are randomkey */
 	for (kg=p->keygen; kg; kg=kg->next)
-		if (kg->kg_method == KEYGEN_RANDOMKEY)
+		if ((kg->kg_method == KEYGEN_RANDOMKEY) ||
+		    (kg->kg_method == KEYGEN_URANDOMKEY)) {
+			warnx("can't preserve randomly generated key");
 			goto bail;
+		}
 	for (kg=oldp->keygen; kg; kg=kg->next)
-		if (kg->kg_method == KEYGEN_RANDOMKEY)
+		if ((kg->kg_method == KEYGEN_RANDOMKEY) ||
+		    (kg->kg_method == KEYGEN_URANDOMKEY)) {
+			warnx("can't preserve randomly generated key");
 			goto bail;
+		}
 
 	if (!params_verify(oldp)) {
 		warnx("invalid old parameters file \"%s\"", *argv);

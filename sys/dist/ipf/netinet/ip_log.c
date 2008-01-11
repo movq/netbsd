@@ -1,15 +1,15 @@
-/*	$NetBSD: ip_log.c,v 1.10 2007/09/17 18:02:21 martti Exp $	*/
+/*	$NetBSD: ip_log.c,v 1.14 2010/08/11 11:57:36 pgoyette Exp $	*/
 
 /*
  * Copyright (C) 1997-2003 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: ip_log.c,v 2.75.2.15 2007/02/03 00:49:30 darrenr Exp
+ * Id: ip_log.c,v 2.75.2.25 2009/07/22 01:46:43 darrenr Exp
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_log.c,v 1.10 2007/09/17 18:02:21 martti Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_log.c,v 1.14 2010/08/11 11:57:36 pgoyette Exp $");
 
 #include <sys/param.h>
 #if defined(KERNEL) || defined(_KERNEL)
@@ -55,7 +55,8 @@ struct file;
 # undef _KERNEL
 # undef KERNEL
 #endif
-#if __FreeBSD_version >= 220000 && defined(_KERNEL)
+#if (defined(__FreeBSD_version) && (__FreeBSD_version >= 220000)) && \
+    defined(_KERNEL)
 # include <sys/fcntl.h>
 # include <sys/filio.h>
 #else
@@ -64,12 +65,14 @@ struct file;
 #include <sys/time.h>
 #if defined(_KERNEL)
 # include <sys/systm.h>
-# if defined(NetBSD) && (__NetBSD_Version__ >= 104000000)
+# if (defined(NetBSD) && (__NetBSD_Version__ >= 104000000))
 #  include <sys/proc.h>
 # endif
 #endif /* _KERNEL */
 #if !SOLARIS && !defined(__hpux) && !defined(linux)
-# if (NetBSD > 199609) || (OpenBSD > 199603) || (__FreeBSD_version >= 300000)
+# if (defined(NetBSD) && (NetBSD > 199609)) || \
+     (defined(OpenBSD) && (OpenBSD > 199603)) || \
+     (defined(__FreeBSD_version) && (__FreeBSD_version >= 300000))
 #  include <sys/dirent.h>
 # else
 #  include <sys/dir.h>
@@ -104,7 +107,6 @@ struct file;
 #if __FreeBSD_version >= 300000
 # include <net/if_var.h>
 #endif
-#include <net/route.h>
 #include <netinet/in.h>
 #ifdef __sgi
 # include <sys/ddi.h>
@@ -149,7 +151,7 @@ struct file;
 #  include	<sys/kthread_iface.h>
 #  define	READ_COLLISION	0x001
 
-iplog_select_t	iplog_ss[IPL_LOGMAX+1];
+iplog_select_t	iplog_ss[IPL_LOGSIZE];
 
 extern int selwait;
 # endif /* IPL_SELECT */
@@ -262,7 +264,8 @@ u_int flags;
 	ipflog_t ipfl;
 	u_char p;
 	mb_t *m;
-# if (SOLARIS || defined(__hpux)) && defined(_KERNEL)
+# if (SOLARIS || defined(__hpux)) && defined(_KERNEL) && \
+  !defined(_INET_IP_STACK_H)
 	qif_t *ifp;
 # else
 	struct ifnet *ifp;
@@ -291,7 +294,7 @@ u_int flags;
 			struct icmp *icmp;
 
 			icmp = (struct icmp *)fin->fin_dp;
-	
+
 			/*
 			 * For ICMP, if the packet is an error packet, also
 			 * include the information about the packet which
@@ -338,14 +341,16 @@ u_int flags;
 	 * Get the interface number and name to which this packet is
 	 * currently associated.
 	 */
-# if (SOLARIS || defined(__hpux)) && defined(_KERNEL)
+# if (SOLARIS || defined(__hpux)) && defined(_KERNEL) && \
+     !defined(_INET_IP_STACK_H)
 	ipfl.fl_unit = (u_int)ifp->qf_ppa;
-	COPYIFNAME(ifp, ipfl.fl_ifname);
+	COPYIFNAME(fin->fin_v, ifp, ipfl.fl_ifname);
 # else
 #  if (defined(NetBSD) && (NetBSD <= 1991011) && (NetBSD >= 199603)) || \
       (defined(OpenBSD) && (OpenBSD >= 199603)) || defined(linux) || \
-      (defined(__FreeBSD__) && (__FreeBSD_version >= 501113))
-	COPYIFNAME(ifp, ipfl.fl_ifname);
+      (defined(__FreeBSD__) && (__FreeBSD_version >= 501113)) || \
+      (SOLARIS && defined(_INET_IP_STACK_H))
+	COPYIFNAME(fin->fin_v, ifp, ipfl.fl_ifname);
 #  else
 	ipfl.fl_unit = (u_int)ifp->if_unit;
 #   if defined(_KERNEL)
@@ -354,7 +359,7 @@ u_int flags;
 			if ((ipfl.fl_ifname[2] = ifp->if_name[2]))
 				ipfl.fl_ifname[3] = ifp->if_name[3];
 #   else
-	(void) strncpy(ipfl.fl_ifname, IFNAME(ifp), sizeof(ipfl.fl_ifname));
+	COPYIFNAME(fin->fin_v, ifp, ipfl.fl_ifname);
 	ipfl.fl_ifname[sizeof(ipfl.fl_ifname) - 1] = '\0';
 #   endif
 #  endif
@@ -437,27 +442,6 @@ int *types, cnt;
 	SPL_INT(s);
 
 	/*
-	 * Check to see if this log record has a CRC which matches the last
-	 * record logged.  If it does, just up the count on the previous one
-	 * rather than create a new one.
-	 */
-	if (ipl_suppress) {
-		MUTEX_ENTER(&ipl_mutex);
-		if ((fin != NULL) && (fin->fin_off == 0)) {
-			if ((ipll[dev] != NULL) &&
-			    bcmp((char *)fin, (char *)&iplcrc[dev],
-				 FI_LCSIZE) == 0) {
-				ipll[dev]->ipl_count++;
-				MUTEX_EXIT(&ipl_mutex);
-				return 0;
-			}
-			bcopy((char *)fin, (char *)&iplcrc[dev], FI_LCSIZE);
-		} else
-			bzero((char *)&iplcrc[dev], FI_CSIZE);
-		MUTEX_EXIT(&ipl_mutex);
-	}
-
-	/*
 	 * Get the total amount of data to be logged.
 	 */
 	for (i = 0, len = sizeof(iplog_t); i < cnt; i++)
@@ -467,25 +451,12 @@ int *types, cnt;
 	 * check that we have space to record this information and can
 	 * allocate that much.
 	 */
-	KMALLOCS(buf, void *, len);
+	if ((iplused[dev] + len) > ipl_logsize)
+		return -1;
+
+	KMALLOCS(buf, char *, len);
 	if (buf == NULL)
 		return -1;
-	SPL_NET(s);
-	MUTEX_ENTER(&ipl_mutex);
-	if ((iplused[dev] + len) > ipl_logsize) {
-		MUTEX_EXIT(&ipl_mutex);
-		SPL_X(s);
-		KFREES(buf, len);
-		return -1;
-	}
-	iplused[dev] += len;
-	MUTEX_EXIT(&ipl_mutex);
-	SPL_X(s);
-
-	/*
-	 * advance the log pointer to the next empty record and deduct the
-	 * amount of space we're going to use.
-	 */
 	ipl = (iplog_t *)buf;
 	ipl->ipl_magic = ipl_magic[dev];
 	ipl->ipl_count = 1;
@@ -506,15 +477,42 @@ int *types, cnt;
 		if (types[i] == 0) {
 			memcpy(ptr, items[i], itemsz[i]);
 		} else if (types[i] == 1) {
-			COPYDATA(items[i], 0, itemsz[i], ptr);
+			COPYDATA(items[i], 0, itemsz[i], (char *)ptr);
 		}
 		ptr += itemsz[i];
 	}
+
 	SPL_NET(s);
 	MUTEX_ENTER(&ipl_mutex);
+	/*
+	 * Check to see if this log record has a CRC which matches the last
+	 * record logged.  If it does, just up the count on the previous one
+	 * rather than create a new one.
+	 */
+	if (ipl_suppress) {
+		if ((fin != NULL) && (fin->fin_off == 0)) {
+			if ((ipll[dev] != NULL) &&
+			    bcmp((char *)fin, (char *)&iplcrc[dev],
+				 FI_LCSIZE) == 0) {
+				ipll[dev]->ipl_count++;
+				MUTEX_EXIT(&ipl_mutex);
+				SPL_X(s);
+				KFREES(buf, len);
+				return 0;
+			}
+			bcopy((char *)fin, (char *)&iplcrc[dev], FI_LCSIZE);
+		} else
+			bzero((char *)&iplcrc[dev], FI_CSIZE);
+	}
+
+	/*
+	 * advance the log pointer to the next empty record and deduct the
+	 * amount of space we're going to use.
+	 */
 	ipll[dev] = ipl;
 	*iplh[dev] = ipl;
 	iplh[dev] = &ipl->ipl_next;
+	iplused[dev] += len;
 
 	/*
 	 * Now that the log record has been completed and added to the queue,
@@ -616,7 +614,8 @@ struct uio *uio;
 # endif /* SOLARIS */
 	}
 
-# if (BSD >= 199101) || defined(__FreeBSD__) || defined(__osf__)
+# if (defined(BSD) && (BSD >= 199101)) || defined(__FreeBSD__) || \
+     defined(__osf__)
 	uio->uio_rw = UIO_READ;
 # endif
 

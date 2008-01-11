@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.13 2004/01/05 23:23:37 jmmv Exp $	*/
+/*	$NetBSD: main.c,v 1.15 2009/04/14 08:50:06 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.13 2004/01/05 23:23:37 jmmv Exp $");
+__RCSID("$NetBSD: main.c,v 1.15 2009/04/14 08:50:06 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -65,6 +65,7 @@ int
 main(int argc, char **argv)
 {
 	char *p;
+	const char *kp;
 	char fflag = 0;
 	char dflag = 0;
 	char xflag = 0;
@@ -105,9 +106,9 @@ main(int argc, char **argv)
 			usage();
 		}
 	}
-	if ((p = getenv("SHELL")) == 0)
-		p = _PATH_BSHELL;
-	if ((default_shellfile = str_cpy(p)) == 0)
+	if ((kp = getenv("SHELL")) == 0)
+		kp = _PATH_BSHELL;
+	if ((default_shellfile = str_cpy(kp)) == 0)
 		errx(1, "Out of memory.");
 	if ((p = strrchr(default_shellfile, '/')))
 		p++;

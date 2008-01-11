@@ -1,4 +1,4 @@
-/*	$NetBSD: mscp.c,v 1.28 2008/01/04 21:48:05 ad Exp $	*/
+/*	$NetBSD: mscp.c,v 1.34 2009/05/12 14:37:59 cegger Exp $	*/
 
 /*
  * Copyright (c) 1988 Regents of the University of California.
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mscp.c,v 1.28 2008/01/04 21:48:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mscp.c,v 1.34 2009/05/12 14:37:59 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -101,9 +101,7 @@ __KERNEL_RCSID(0, "$NetBSD: mscp.c,v 1.28 2008/01/04 21:48:05 ad Exp $");
  * we cannot wait.
  */
 struct mscp *
-mscp_getcp(mi, canwait)
-	struct mscp_softc *mi;
-	int canwait;
+mscp_getcp(struct mscp_softc *mi, int canwait)
 {
 #define mri	(&mi->mi_cmd)
 	struct mscp *mp;
@@ -165,10 +163,9 @@ int	mscp_aeb_xor = 0x8000bb80;
  * Handle a response ring transition.
  */
 void
-mscp_dorsp(mi)
-	struct mscp_softc *mi;
+mscp_dorsp(struct mscp_softc *mi)
 {
-	struct device *drive;
+	device_t drive;
 	struct mscp_device *me = mi->mi_me;
 	struct mscp_ctlr *mc = mi->mi_mc;
 	struct buf *bp;
@@ -205,7 +202,7 @@ loop:
 			mi->mi_flags |= MSC_READY;
 		} else {
 			printf("%s: SETCTLRC failed: %d ",
-			    mi->mi_dev.dv_xname, mp->mscp_status);
+			    device_xname(&mi->mi_dev), mp->mscp_status);
 			mscp_printevent(mp);
 		}
 		goto done;
@@ -217,7 +214,7 @@ loop:
 	 */
 	if (mp->mscp_unit >= mi->mi_driveno) { /* Must expand drive table */
 		int tmpno = (mp->mscp_unit + 32) & ~31;
-		struct device **tmp = (struct device **)
+		device_t *tmp = (device_t *)
 		    malloc(tmpno * sizeof(tmp[0]), M_DEVBUF, M_NOWAIT|M_ZERO);
 		/* XXX tmp should be checked for NULL */
 		if (mi->mi_driveno) {
@@ -245,7 +242,7 @@ loop:
 	case MSCPT_MAINTENANCE:
 	default:
 		printf("%s: unit %d: unknown message type 0x%x ignored\n",
-			mi->mi_dev.dv_xname, mp->mscp_unit,
+			device_xname(&mi->mi_dev), mp->mscp_unit,
 			MSCP_MSGTYPE(mp->mscp_msgtc));
 		goto done;
 	}
@@ -266,7 +263,7 @@ loop:
 		 * invalid commands), but that is the way of it.
 		 */
 		if (st == M_ST_INVALCMD && mp->mscp_cmdref != 0) {
-			printf("%s: bad lbn (%d)?\n", drive->dv_xname,
+			printf("%s: bad lbn (%d)?\n", device_xname(drive),
 				(int)mp->mscp_seq.seq_lbn);
 			error = EIO;
 			goto rwend;
@@ -291,17 +288,30 @@ loop:
 		 * status.
 		 */
 		if (cold)
-			bcopy(mp, &slavereply, sizeof(struct mscp));
+			memcpy(&slavereply, mp, sizeof(struct mscp));
 
 		if (mp->mscp_status == (M_ST_OFFLINE|M_OFFLINE_UNKNOWN))
 			break;
 
 		if (drive == 0) {
-			struct	drive_attach_args da;
+			struct mscp_work *mw;
 
-			da.da_mp = (struct mscp *)mp;
-			da.da_typ = mi->mi_type;
-			config_found(&mi->mi_dev, (void *)&da, mscp_print);
+			mutex_spin_enter(&mi->mi_mtx);
+
+			mw = SLIST_FIRST(&mi->mi_freelist);
+			if (mw == NULL) {
+				aprint_error_dev(&mi->mi_dev,
+				    "couldn't attach drive (no free items)\n");
+				mutex_spin_exit(&mi->mi_mtx);
+			} else {
+				SLIST_REMOVE_HEAD(&mi->mi_freelist, mw_list);
+				mutex_spin_exit(&mi->mi_mtx);
+
+				mw->mw_mi = mi;
+				mw->mw_mp = *mp;
+				workqueue_enqueue(mi->mi_wq,
+				    (struct work *)mw, NULL);
+			}
 		} else
 			/* Hack to avoid complaints */
 			if (!(((mp->mscp_event & M_ST_MASK) == M_ST_AVAILABLE)
@@ -350,7 +360,7 @@ rwend:
 			 * No buffer means there is a bug somewhere!
 			 */
 			printf("%s: io done, but bad xfer number?\n",
-			    drive->dv_xname);
+			    device_xname(drive));
 			mscp_hexdump(mp);
 			break;
 		}
@@ -417,7 +427,7 @@ out:
 		 * handle it (if it does replaces).
 		 */
 		if (me->me_replace == NULL)
-			printf("%s: bogus REPLACE end\n", drive->dv_xname);
+			printf("%s: bogus REPLACE end\n", device_xname(drive));
 		else
 			(*me->me_replace)(drive, mp);
 		break;
@@ -429,7 +439,7 @@ out:
 		 */
 unknown:
 		printf("%s: unknown opcode 0x%x status 0x%x ignored\n",
-			drive->dv_xname, mp->mscp_opcode, mp->mscp_status);
+			device_xname(drive), mp->mscp_opcode, mp->mscp_status);
 #ifdef DIAGNOSTIC
 		mscp_hexdump(mp);
 #endif
@@ -463,9 +473,27 @@ done:
  * info pending.
  */
 void
-mscp_requeue(mi)
-	struct mscp_softc *mi;
+mscp_requeue(struct mscp_softc *mi)
 {
 	panic("mscp_requeue");
 }
 
+void
+mscp_worker(struct work *wk, void *dummy)
+{
+	struct mscp_softc *mi;
+	struct mscp_work *mw;
+	struct	drive_attach_args da;
+
+	mw = (struct mscp_work *)wk;
+	mi = mw->mw_mi;
+
+	da.da_mp = &mw->mw_mp;
+	da.da_typ = mi->mi_type;
+
+	config_found(&mi->mi_dev, (void *)&da, mscp_print);
+
+	mutex_spin_enter(&mi->mi_mtx);
+	SLIST_INSERT_HEAD(&mw->mw_mi->mi_freelist, mw, mw_list);
+	mutex_spin_exit(&mi->mi_mtx);
+}

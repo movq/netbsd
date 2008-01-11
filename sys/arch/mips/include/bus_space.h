@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.h,v 1.3 2006/02/04 03:18:10 gdamore Exp $	*/
+/*	$NetBSD: bus_space.h,v 1.5 2009/12/14 00:46:04 matt Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -114,14 +107,17 @@ struct mips_bus_space_translation;
 /*
  * Addresses (in bus space).
  */
-typedef u_long bus_addr_t;
-typedef u_long bus_size_t;
+typedef paddr_t bus_addr_t;
+typedef psize_t bus_size_t;
+#define	PRIxBUSADDR	PRIxPADDR
+#define	PRIxBUSSIZE	PRIxPSIZE
 
 /*
  * Access methods for bus space.
  */
 typedef struct mips_bus_space *bus_space_tag_t;
-typedef u_long bus_space_handle_t;
+typedef intptr_t bus_space_handle_t;
+#define	PRIxBSH		PRIxPTR
 
 struct mips_bus_space {
 	/* cookie */

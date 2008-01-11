@@ -1,4 +1,4 @@
-/*	$NetBSD: init_field.c,v 1.8 2003/08/07 09:37:36 agc Exp $	*/
+/*	$NetBSD: init_field.c,v 1.12 2009/07/20 06:39:06 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,11 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)init_field.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: init_field.c,v 1.8 2003/08/07 09:37:36 agc Exp $");
+__RCSID("$NetBSD: init_field.c,v 1.12 2009/07/20 06:39:06 dholland Exp $");
 #endif
 #endif /* not lint */
 
-# include	"robots.h"
+#include <curses.h>
+#include "robots.h"
 
 static int telx = 0;
 static int tely = 0;
@@ -49,11 +50,11 @@ static int tely = 0;
  *	and initialize all the global variables.
  */
 void
-init_field()
+init_field(void)
 {
-	int		i;
-	static bool	first = TRUE;
-	static const char	*const desc[] = {
+	int i;
+	static bool first = true;
+	static const char *const desc[] = {
 				"Directions:",
 				"",
 				"y k u",
@@ -79,8 +80,8 @@ init_field()
 				NULL
 	};
 
-	Dead = FALSE;
-	Waiting = FALSE;
+	Dead = false;
+	Waiting = false;
 	Score = 0;
 
 	erase();
@@ -115,16 +116,15 @@ init_field()
 	tely = i;
 	if (first)
 		refresh();
-	first = FALSE;
-#ifdef	FANCY
+	first = false;
+#ifdef FANCY
 	if (Pattern_roll)
 		Next_move = &Move_list[-1];
 #endif
 }
 
 void
-telmsg(on)
-	int on;
+telmsg(int on)
 {
 	move(tely, telx);
 	addstr(on ? "Teleport!" : "         ");

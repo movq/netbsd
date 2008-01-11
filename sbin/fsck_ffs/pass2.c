@@ -1,4 +1,4 @@
-/*	$NetBSD: pass2.c,v 1.44 2006/11/14 21:01:46 apb Exp $	*/
+/*	$NetBSD: pass2.c,v 1.46 2011/03/06 17:08:16 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pass2.c	8.9 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: pass2.c,v 1.44 2006/11/14 21:01:46 apb Exp $");
+__RCSID("$NetBSD: pass2.c,v 1.46 2011/03/06 17:08:16 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,6 +53,7 @@ __RCSID("$NetBSD: pass2.c,v 1.44 2006/11/14 21:01:46 apb Exp $");
 #include "fsck.h"
 #include "fsutil.h"
 #include "extern.h"
+#include "exitvalues.h"
 
 #define MINDIRSIZE	(sizeof (struct dirtemplate))
 
@@ -79,10 +80,10 @@ pass2(void)
 		if (reply("ALLOCATE") == 0) {
 			markclean = 0;
 			ckfini();
-			exit(EEXIT);
+			exit(FSCK_EXIT_CHECK_FAILED);
 		}
 		if (allocdir(ROOTINO, ROOTINO, 0755) != ROOTINO)
-			errx(EEXIT, "CANNOT ALLOCATE ROOT INODE");
+			errexit("CANNOT ALLOCATE ROOT INODE");
 		break;
 
 	case DCLEAR:
@@ -90,13 +91,13 @@ pass2(void)
 		if (reply("REALLOCATE")) {
 			freeino(ROOTINO);
 			if (allocdir(ROOTINO, ROOTINO, 0755) != ROOTINO)
-				errx(EEXIT, "CANNOT ALLOCATE ROOT INODE");
+				errexit("CANNOT ALLOCATE ROOT INODE");
 			break;
 		}
 		markclean = 0;
 		if (reply("CONTINUE") == 0) {
 			ckfini();
-			exit(EEXIT);
+			exit(FSCK_EXIT_CHECK_FAILED);
 		}
 		break;
 
@@ -106,13 +107,13 @@ pass2(void)
 		if (reply("REALLOCATE")) {
 			freeino(ROOTINO);
 			if (allocdir(ROOTINO, ROOTINO, 0755) != ROOTINO)
-				errx(EEXIT, "CANNOT ALLOCATE ROOT INODE");
+				errexit("CANNOT ALLOCATE ROOT INODE");
 			break;
 		}
 		if (reply("FIX") == 0) {
 			markclean = 0;
 			ckfini();
-			exit(EEXIT);
+			exit(FSCK_EXIT_CHECK_FAILED);
 		}
 		dp = ginode(ROOTINO);
 		DIP_SET(dp, mode,
@@ -124,7 +125,7 @@ pass2(void)
 		break;
 
 	default:
-		errx(EEXIT, "BAD STATE %d FOR ROOT INODE", rinfo->ino_state);
+		errexit("BAD STATE %d FOR ROOT INODE", rinfo->ino_state);
 	}
 	if (newinofmt) {
 		info = inoinfo(WINO);
@@ -216,6 +217,8 @@ pass2(void)
 		}
 		curino.id_number = inp->i_number;
 		curino.id_parent = inp->i_parent;
+		curino.id_uid = iswap32(DIP(dp, uid));
+		curino.id_gid = iswap32(DIP(dp, gid));
 		(void)ckinode(&dino, &curino);
 	}
 
@@ -243,6 +246,8 @@ pass2(void)
 			}
 			curino.id_number = inp->i_number;
 			curino.id_parent = inp->i_parent;
+			curino.id_uid = iswap32(DIP(&dino, uid));
+			curino.id_gid = iswap32(DIP(&dino, gid));
 			(void)ckinode(&dino, &curino);
 		}
 	}
@@ -590,7 +595,7 @@ again:
 			break;
 
 		default:
-			errx(EEXIT, "BAD STATE %d FOR INODE I=%d",
+			errexit("BAD STATE %d FOR INODE I=%d",
 			    info->ino_state, iswap32(dirp->d_ino));
 		}
 	}

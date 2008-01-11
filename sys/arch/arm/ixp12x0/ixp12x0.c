@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp12x0.c,v 1.14 2005/12/11 12:16:50 christos Exp $ */
+/*	$NetBSD: ixp12x0.c,v 1.17 2011/05/17 17:34:48 dyoung Exp $ */
 /*
  * Copyright (c) 2002, 2003
  *	Ichiro FUKUHARA <ichiro@ichiro.org>.
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0.c,v 1.14 2005/12/11 12:16:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0.c,v 1.17 2011/05/17 17:34:48 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,8 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp12x0.c,v 1.14 2005/12/11 12:16:50 christos Exp $"
 static struct ixp12x0_softc *ixp12x0_softc;
 
 void
-ixp12x0_attach(sc)
-	struct ixp12x0_softc *sc;
+ixp12x0_attach(struct ixp12x0_softc *sc)
 {
 	struct pcibus_attach_args pba;
 	pcireg_t reg;
@@ -181,7 +174,7 @@ ixp12x0_attach(sc)
 	pba.pba_bus = 0;	/* bus number = 0 */
 	pba.pba_intrswiz = 0;	/* XXX */
 	pba.pba_intrtag = 0;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 		PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	(void) config_found_ia(&sc->sc_dev, "pcibus", &pba, pcibusprint);
 }

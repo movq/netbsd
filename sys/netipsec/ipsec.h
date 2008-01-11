@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec.h,v 1.21 2007/12/29 14:53:25 degroote Exp $	*/
+/*	$NetBSD: ipsec.h,v 1.26 2011/05/16 10:02:30 drochner Exp $	*/
 /*	$FreeBSD: /usr/local/www/cvsroot/FreeBSD/src/sys/netipsec/ipsec.h,v 1.2.4.2 2004/02/14 22:23:23 bms Exp $	*/
 /*	$KAME: ipsec.h,v 1.53 2001/11/20 08:32:38 itojun Exp $	*/
 
@@ -38,7 +38,7 @@
 #ifndef _NETIPSEC_IPSEC_H_
 #define _NETIPSEC_IPSEC_H_
 
-#if defined(_KERNEL) && !defined(_LKM) && !defined(KLD_MODULE)
+#if defined(_KERNEL_OPT)
 #include "opt_inet.h"
 #include "opt_ipsec.h"
 #endif
@@ -93,10 +93,10 @@ struct secpolicy {
 	 * "lifetime" is passed by sadb_lifetime.sadb_lifetime_addtime.
 	 * "validtime" is passed by sadb_lifetime.sadb_lifetime_usetime.
 	 */
-	long created;		/* time created the policy */
-	long lastused;		/* updated every when kernel sends a packet */
-	long lifetime;		/* duration of the lifetime of this policy */
-	long validtime;		/* duration this policy is valid without use */
+	time_t created;		/* time created the policy */
+	time_t lastused;	/* updated every when kernel sends a packet */
+	time_t lifetime;	/* duration of the lifetime of this policy */
+	time_t validtime;	/* duration this policy is valid without use */
 };
 
 /* Request for IPsec */
@@ -146,7 +146,7 @@ struct secspacq {
 
 	struct secpolicyindex spidx;
 
-	long created;		/* for lifetime */
+	time_t created;		/* for lifetime */
 	int count;		/* for lifetime */
 	/* XXX: here is mbuf place holder to be sent ? */
 };
@@ -224,7 +224,6 @@ extern int ipsec_replay;
 extern int ipsec_integrity;
 #endif
 
-extern struct newipsecstat newipsecstat;
 extern struct secpolicy ip4_def_policy;
 extern int ip4_esp_trans_deflev;
 extern int ip4_esp_net_deflev;
@@ -287,7 +286,7 @@ int ipsec_copy_policy
 u_int ipsec_get_reqlevel (struct ipsecrequest *);
 int ipsec_in_reject (struct secpolicy *, struct mbuf *);
 
-int ipsec4_set_policy (struct inpcb *, int, void *, size_t, int);
+int ipsec4_set_policy (struct inpcb *, int, void *, size_t, kauth_cred_t);
 int ipsec4_get_policy (struct inpcb *, void *, size_t, struct mbuf **);
 int ipsec4_delete_pcbpolicy (struct inpcb *);
 int ipsec4_in_reject (struct mbuf *, struct inpcb *);
@@ -300,8 +299,8 @@ int ipsec4_in_reject (struct mbuf *, struct inpcb *);
 
 struct secas;
 struct tcpcb;
-int ipsec_chkreplay (u_int32_t, struct secasvar *);
-int ipsec_updatereplay (u_int32_t, struct secasvar *);
+int ipsec_chkreplay (u_int32_t, const struct secasvar *);
+int ipsec_updatereplay (u_int32_t, const struct secasvar *);
 
 size_t ipsec4_hdrsiz (struct mbuf *, u_int, struct inpcb *);
 #ifdef __FreeBSD__
@@ -312,8 +311,8 @@ size_t ipsec4_hdrsiz_tcp (struct tcpcb *);
 #endif
 
 union sockaddr_union;
-const char *ipsec_address(union sockaddr_union* sa);
-const char *ipsec_logsastr (struct secasvar *);
+const char *ipsec_address(const union sockaddr_union* sa);
+const char *ipsec_logsastr (const struct secasvar *);
 
 void ipsec_dumpmbuf (struct mbuf *);
 

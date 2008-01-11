@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.46 2008/01/02 11:48:31 ad Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.52 2010/12/14 23:44:49 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,28 +32,26 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.46 2008/01/02 11:48:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.52 2010/12/14 23:44:49 matt Exp $");
+
+#include "opt_compat_ultrix.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/cpu.h>
 #include <sys/dkbad.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
 #include <sys/syslog.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/macros.h>
-#include <machine/pte.h>
-#include <machine/pcb.h>
-#include <machine/cpu.h>
 
 #include <dev/mscp/mscp.h> /* For disk encoding scheme */
 
-#include "opt_compat_ultrix.h"
 #ifdef COMPAT_ULTRIX
 #include <dev/dec/dec_boot.h>
 #include <ufs/ufs/dinode.h>	/* XXX for fs.h */
@@ -130,18 +128,16 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *),
  * putting the partition info into a native NetBSD label
  */
 const char *
-compat_label(dev, strat, lp, osdep)
-	dev_t dev;
-	void (*strat)(struct buf *bp);
-	struct disklabel *lp;
-	struct cpu_disklabel *osdep;
+compat_label(dev_t dev, void (*strat)(struct buf *bp), struct disklabel *lp,
+	struct cpu_disklabel *osdep)
 {
 	dec_disklabel *dlp;
 	struct buf *bp = NULL;
 	const char *msg = NULL;
-	uint8_t *dp = bp->b_data;
+	uint8_t *dp;
 
 	bp = geteblk((int)lp->d_secsize);
+	dp = bp->b_data;
 	bp->b_dev = dev;
 	bp->b_blkno = DEC_LABEL_SECTOR;
 	bp->b_bcount = lp->d_secsize;
@@ -262,7 +258,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *),
 	if ((error = biowait(bp)))
 		goto done;
 	dlp = (struct disklabel *)((char *)bp->b_data + LABELOFFSET);
-	bcopy(lp, dlp, sizeof(struct disklabel));
+	memcpy(dlp, lp, sizeof(struct disklabel));
 	bp->b_oflags &= ~(BO_DONE);
 	bp->b_flags &= ~(B_READ);
 	bp->b_flags |= B_WRITE;

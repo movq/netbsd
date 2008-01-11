@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.2 2007/10/17 19:56:44 garbled Exp $	*/
+/*	$NetBSD: pchb.c,v 1.4 2008/04/28 20:23:32 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.2 2007/10/17 19:56:44 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.4 2008/04/28 20:23:32 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -245,8 +238,10 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 #if NAGP > 0
 	struct agpbus_attach_args apa;
 #endif
-
-	printf("\n");
+	volatile unsigned char *python;
+	uint32_t v;
+	
+	aprint_normal("\n");
 
 	/*
 	 * All we do is print out a description.  Eventually, we
@@ -255,7 +250,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	 */
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
+	aprint_normal("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
 	    PCI_REVISION(pa->pa_class));
 
 	switch (PCI_VENDOR(pa->pa_id)) {
@@ -263,6 +258,13 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 		switch (PCI_PRODUCT(pa->pa_id)) {
 		case PCI_PRODUCT_IBM_82660:
 			ibm82660_print(pa, self);
+			break;
+		case PCI_PRODUCT_IBM_PYTHON:
+			python = mapiodev(0xfeff6000, 0x60);
+			v = 0x88b78e01; /* taken from linux */
+			out32rb(python+0x30, v);
+			v = in32rb(python+0x30);
+			aprint_debug("Reset python reg 30 to 0x%x\n", v);
 			break;
 		}
 		break;

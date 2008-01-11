@@ -34,7 +34,7 @@
  *	the "cx" driver for Cronyx's HDLC-in-hardware device).  This driver
  *	is only the glue between sppp and i4b.
  *
- *	$Id: i4b_isppp.c,v 1.22 2007/03/04 06:03:30 christos Exp $
+ *	$Id: i4b_isppp.c,v 1.27 2010/04/05 07:22:50 joerg Exp $
  *
  * $FreeBSD$
  *
@@ -43,7 +43,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_isppp.c,v 1.22 2007/03/04 06:03:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_isppp.c,v 1.27 2010/04/05 07:22:50 joerg Exp $");
 
 #ifndef __NetBSD__
 #define USE_ISPPP
@@ -99,7 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: i4b_isppp.c,v 1.22 2007/03/04 06:03:30 christos Exp 
 #if defined(__FreeBSD_version) &&  __FreeBSD_version >= 400008
 #include "bpf.h"
 #else
-#include "bpfilter.h"
+#define NBPFILTER 1
 #endif
 #if NBPFILTER > 0 || NBPF > 0
 #include <sys/time.h>
@@ -252,7 +252,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 ipppattach(void *dummy)
 #else
-ipppattach()
+ipppattach(void)
 #endif
 {
 	struct i4bisppp_softc *sc = i4bisppp_softc;
@@ -348,7 +348,7 @@ ipppattach()
 		CALLOUT_INIT(&sc->sc_ch);
 #endif /* __FreeBSD__ */
 #ifdef __NetBSD__
-		bpfattach(&sc->sc_sp.pp_if, DLT_PPP, sizeof(u_int));
+		bpf_attach(&sc->sc_sp.pp_if, DLT_PPP, sizeof(u_int));
 #endif
 #endif
 	}
@@ -358,31 +358,15 @@ ipppattach()
  *	process ioctl
  *---------------------------------------------------------------------------*/
 static int
-i4bisppp_ioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data)
+i4bisppp_ioctl(struct ifnet *ifp, unsigned long cmd, void *data)
 {
 	struct i4bisppp_softc *sc = ifp->if_softc;
-	int error;
 
 #ifndef USE_ISPPP
-	error = sppp_ioctl(&sc->sc_sp.pp_if, cmd, data);
+	return sppp_ioctl(&sc->sc_sp.pp_if, cmd, data);
 #else
-	error = isppp_ioctl(&sc->sc_sp.pp_if, cmd, data);
+	return isppp_ioctl(&sc->sc_sp.pp_if, cmd, data);
 #endif
-	if (error)
-		return error;
-
-	switch(cmd) {
-	case SIOCSIFFLAGS:
-#if 0 /* never used ??? */
-		x = splnet();
-		if ((ifp->if_flags & IFF_UP) == 0)
-			UNTIMEOUT(i4bisppp_timeout, (void *)sp, sc->sc_ch);
-		splx(x);
-#endif
-		break;
-	}
-
-	return 0;
 }
 
 /*---------------------------------------------------------------------------*
@@ -424,8 +408,7 @@ i4bisppp_start(struct ifnet *ifp)
 #endif /* __FreeBSD__ */
 
 #ifdef __NetBSD__
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
+		bpf_mtap(ifp, m);
 #endif
 #endif /* NBPFILTER > 0 || NBPF > 0 */
 
@@ -709,8 +692,7 @@ i4bisppp_rx_data_rdy(void *softc)
 #endif /* __FreeBSD__ */
 
 #ifdef __NetBSD__
-	if(sc->sc_sp.pp_if.if_bpf)
-		bpf_mtap(sc->sc_sp.pp_if.if_bpf, m);
+	bpf_mtap(&sc->sc_sp.pp_if, m);
 #endif
 
 #endif /* NBPFILTER > 0  || NBPF > 0 */

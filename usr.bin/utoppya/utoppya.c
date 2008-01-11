@@ -1,4 +1,4 @@
-/*	$NetBSD: utoppya.c,v 1.2 2006/04/03 13:30:24 martin Exp $	*/
+/*	$NetBSD: utoppya.c,v 1.4 2009/04/14 06:15:37 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -445,7 +438,7 @@ cmd_get(int argc, char **argv)
 
 		rv = fwrite(buf, 1, l, ofp);
 
-		if (rv != l) {
+		if (rv != (size_t)l) {
 			if (ofp != stdout)
 				fclose(ofp);
 			progressmeter(1);
@@ -559,7 +552,7 @@ cmd_put(int argc, char **argv)
 
 	while ((l = fread(buf, 1, TOPPY_IO_SIZE, ifp)) > 0) {
 		rv = write(toppy_fd, buf, l);
-		if (rv != l) {
+		if ((size_t)rv != l) {
 			fclose(ifp);
 			if (progbar)
 				progressmeter(1);

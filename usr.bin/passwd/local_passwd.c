@@ -1,4 +1,4 @@
-/*	$NetBSD: local_passwd.c,v 1.30 2005/02/26 07:19:25 thorpej Exp $	*/
+/*	$NetBSD: local_passwd.c,v 1.34 2010/03/02 16:19:13 gdt Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)local_passwd.c    8.3 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: local_passwd.c,v 1.30 2005/02/26 07:19:25 thorpej Exp $");
+__RCSID("$NetBSD: local_passwd.c,v 1.34 2010/03/02 16:19:13 gdt Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,6 +53,7 @@ __RCSID("$NetBSD: local_passwd.c,v 1.30 2005/02/26 07:19:25 thorpej Exp $");
 #include <unistd.h>
 #include <util.h>
 #include <login_cap.h>
+#include <syslog.h>
 
 #include "extern.h"
 
@@ -72,6 +73,10 @@ getnewpasswd(struct passwd *pw, int min_pw_len)
 	    strcmp(crypt(getpass("Old password:"), pw->pw_passwd),
 	    pw->pw_passwd)) {
 		errno = EACCES;
+		syslog(LOG_AUTH | LOG_NOTICE,
+		       "user %s (UID %lu) failed to change the "
+		       "local password of user %s: %m",
+		       pw->pw_name, (unsigned long)uid, pw->pw_name);
 		pw_error(NULL, 1, 1);
 	}
 
@@ -81,7 +86,7 @@ getnewpasswd(struct passwd *pw, int min_pw_len)
 			(void)printf("Password unchanged.\n");
 			pw_error(NULL, 0, 0);
 		}
-		if (min_pw_len > 0 && strlen(p) < min_pw_len) {
+		if (min_pw_len > 0 && (int)strlen(p) < min_pw_len) {
 			(void) printf("Password is too short.\n");
 			continue;
 		}
@@ -180,7 +185,7 @@ pwlocal_process(const char *username, int argc, char **argv)
 	 * Get class restrictions for this user, then get the new password. 
 	 */
 #ifdef LOGIN_CAP
-	if((lc = login_getclass(pw->pw_class))) {
+	if((lc = login_getclass(pw->pw_class)) != NULL) {
 		min_pw_len = (int) login_getcapnum(lc, "minpasswordlen", 0, 0);
 		pw_expiry  = (int) login_getcaptime(lc, "passwordtime", 0, 0);
 		login_close(lc);
@@ -213,6 +218,11 @@ pwlocal_process(const char *username, int argc, char **argv)
 
 	if (pw_mkdb(username, old_change == pw->pw_change) < 0)
 		pw_error((char *)NULL, 0, 1);
+
+	syslog(LOG_AUTH | LOG_INFO,
+	       "user %s (UID %lu) successfully changed "
+	       "the local password of user %s",
+	       uid ? username : "root", (unsigned long)uid, username);
 }
 
 #else /* ! USE_PAM */
@@ -228,9 +238,9 @@ local_init(progname)
 }
 
 int
-local_arg(char arg, const char *optarg)
+local_arg(char ch, const char *arg)
 {
-	switch (arg) {
+	switch (ch) {
 	case 'l':
 		force_local = 1;
 		break;
@@ -319,6 +329,12 @@ local_chpw(uname)
 
 	if (pw_mkdb(uname, old_change == pw->pw_change) < 0)
 		pw_error((char *)NULL, 0, 1);
+
+	syslog(LOG_AUTH | LOG_INFO,
+	       "user %s (UID %lu) successfully changed "
+	       "the local password of user %s",
+	       uid ? uname : "root", (unsigned long)uid, uname);
+
 	return (0);
 }
 

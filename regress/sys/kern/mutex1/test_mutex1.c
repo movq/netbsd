@@ -1,7 +1,7 @@
-/*	$NetBSD: test_mutex1.c,v 1.3 2007/02/05 22:48:01 ad Exp $	*/
+/*	$NetBSD: test_mutex1.c,v 1.5 2008/04/28 20:23:07 martin Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: test_mutex1.c,v 1.3 2007/02/05 22:48:01 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: test_mutex1.c,v 1.5 2008/04/28 20:23:07 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
@@ -53,37 +46,22 @@ int	testcall(struct lwp *, void *, register_t *);
 void	thread1(void *);
 void	thread2(void *);
 void	thread3(void *);
-void	thread_exit(int);
-void	thread_enter(int *);
+void	thread_exit(void);
 
-struct proc	*test_threads[NTHREADS];
+lwp_t		*test_threads[NTHREADS];
 kmutex_t	test_mutex;
 kcondvar_t	test_cv;
 int		test_count;
 int		test_exit;
 
 void
-thread_enter(int *nlocks)
-{
-	struct lwp *l = curlwp;
-
-	KERNEL_UNLOCK_ALL(l, nlocks);
-	lwp_lock(l);
-	l->l_usrpri = MAXPRI;
-	lwp_changepri(l, MAXPRI);
-	lwp_unlock(l);
-}
-
-void
-thread_exit(int nlocks)
+thread_exit(void)
 {
 
 	mutex_enter(&test_mutex);
 	if (--test_count == 0)
 		cv_signal(&test_cv);
 	mutex_exit(&test_mutex);
-
-	KERNEL_LOCK(nlocks, curlwp);
 	kthread_exit(0);
 }
 
@@ -93,9 +71,7 @@ thread_exit(int nlocks)
 void
 thread1(void *cookie)
 {
-	int count, nlocks;
-
-	thread_enter(&nlocks);
+	int count;
 
 	for (count = 0; !test_exit; count++) {
 		mutex_enter(&test_mutex);
@@ -108,7 +84,7 @@ thread1(void *cookie)
 			yield();
 	}
 
-	thread_exit(nlocks);
+	thread_exit();
 }
 
 /*
@@ -117,9 +93,7 @@ thread1(void *cookie)
 void
 thread2(void *cookie)
 {
-	int count, nlocks;
-
-	thread_enter(&nlocks);
+	int count;
 
 	for (count = 0; !test_exit; count++) {
 		KERNEL_LOCK(1, curlwp);
@@ -132,7 +106,7 @@ thread2(void *cookie)
 			yield();
 	}
 
-	thread_exit(nlocks);
+	thread_exit();
 }
 
 /*
@@ -141,9 +115,7 @@ thread2(void *cookie)
 void
 thread3(void *cookie)
 {
-	int count, nlocks;
-
-	thread_enter(&nlocks);
+	int count;
 
 	for (count = 0; !test_exit; count++) {
 		mutex_enter(&test_mutex);
@@ -155,7 +127,7 @@ thread3(void *cookie)
 			yield();
 	}
 
-	thread_exit(nlocks);
+	thread_exit();
 }
 
 int
@@ -184,7 +156,8 @@ testcall(struct lwp *l, void *uap, register_t *retval)
 			func = thread3;
 			break;
 		}
-		kthread_create1(func, NULL, &test_threads[i], "thread%d", i);
+		kthread_create(0, KTHREAD_MPSAFE, NULL, func, NULL,
+		    &test_threads[i], "thread%d", i);
 	}
 
 	printf("test: sleeping\n");
@@ -192,7 +165,7 @@ testcall(struct lwp *l, void *uap, register_t *retval)
 	mutex_enter(&test_mutex);
 	while (test_count != 0) {
 		(void)cv_timedwait(&test_cv, &test_mutex, hz * SECONDS);
-		test_exit = 1;
+		test_exit = NTHREADS;
 	}
 	mutex_exit(&test_mutex);
 

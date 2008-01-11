@@ -1,4 +1,4 @@
-/* $NetBSD: ar5312.c,v 1.4 2007/02/28 04:21:53 thorpej Exp $ */
+/* $NetBSD: ar5312.c,v 1.7 2010/12/15 00:06:47 matt Exp $ */
 
 /*
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -52,6 +52,7 @@
 #include "opt_memsize.h"
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/buf.h>
 
@@ -62,6 +63,8 @@
 #include <sys/socket.h>		/* these three just to get ETHER_ADDR_LEN(!) */
 #include <net/if.h>
 #include <net/if_ether.h>
+
+#include <prop/proplib.h>
 
 #include <mips/atheros/include/ar5312reg.h>
 #include <mips/atheros/include/ar531xvar.h>
@@ -262,7 +265,7 @@ ar531x_device_register(struct device *dev, void *aux)
 		else
 			return;
 
-		addprop_data(dev, "mac-addr", enet, ETHER_ADDR_LEN);
+		addprop_data(dev, "mac-address", enet, ETHER_ADDR_LEN);
 	}
 
 	if (device_is_a(dev, "ath")) {
@@ -275,7 +278,7 @@ ar531x_device_register(struct device *dev, void *aux)
 		else
 			return;
 
-		addprop_data(dev, "mac-addr", enet, ETHER_ADDR_LEN);
+		addprop_data(dev, "mac-address", enet, ETHER_ADDR_LEN);
 
 		addprop_integer(dev, "wmac-rev",
 		    AR5312_REVISION_WMAC(GETSYSREG(AR5312_SYSREG_REVISION)));

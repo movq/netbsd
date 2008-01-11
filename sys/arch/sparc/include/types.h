@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.49 2007/11/29 00:56:13 ad Exp $ */
+/*	$NetBSD: types.h,v 1.57 2011/03/30 09:23:26 martin Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -57,12 +57,16 @@
 
 /* The following are unsigned to prevent annoying sign extended pointers. */
 typedef unsigned long int	register_t;
+#define	PRIxREGISTER		"lx"
 typedef unsigned int		register32_t;
+#define	PRIxREGISTER32		"x"
 #ifdef __arch64__
 typedef unsigned long int	register64_t;
+#define	PRIxREGISTER64		"lx"
 #else
 /* LONGLONG */
 typedef unsigned long long int	register64_t;
+#define	PRIxREGISTER64		"llx"
 #endif
 
 #if defined(_KERNEL)
@@ -78,17 +82,27 @@ typedef struct label_t {
 #if defined(_NETBSD_SOURCE)
 typedef unsigned long int	vaddr_t;
 typedef vaddr_t			vsize_t;
+#define	PRIxVADDR		"lx"
+#define	PRIxVSIZE		"lx"
+#define	PRIuVSIZE		"lu"
 #ifdef SUN4U
 #ifdef __arch64__
 typedef unsigned long int	paddr_t;
+#define	PRIxPADDR		"lx"
+#define	PRIuPSIZE		"lu"
 #else
 /* LONGLONG */
 typedef unsigned long long int	paddr_t;
+#define	PRIxPADDR		"llx"
+#define	PRIuPSIZE		"llu"
 #endif /* __arch64__ */
 #else
 typedef unsigned long int	paddr_t;
+#define	PRIxPADDR		"lx"
+#define	PRIuPSIZE		"lu"
 #endif /* SUN4U */
 typedef paddr_t			psize_t;
+#define	PRIxPSIZE		PRIxPADDR
 #endif
 
 typedef	volatile unsigned char		__cpu_simple_lock_t;
@@ -102,10 +116,10 @@ typedef	volatile unsigned char		__cpu_simple_lock_t;
 #define	__HAVE_DEVICE_REGISTER
 #define	__HAVE_SYSCALL_INTERN
 #define	__GENERIC_SOFT_INTERRUPTS_ALL_LEVELS
-#define	__HAVE_TIMECOUNTER
-#define __HAVE_GENERIC_TODR
+#define __HAVE_CPU_DATA_FIRST
 
 #ifdef SUN4U
+#define __HAVE_DEVICE_REGISTER_POSTCONFIG
 #define	__HAVE_ATOMIC64_OPS
 #define __HAVE_CPU_COUNTER	/* sparc v9 CPUs have %tick */
 #if defined(_KERNEL)
@@ -113,5 +127,9 @@ typedef	volatile unsigned char		__cpu_simple_lock_t;
 #endif
 #endif
 
+#define	__HAVE_CPU_LWP_SETPRIVATE
+#define	__HAVE___LWP_GETPRIVATE_FAST
+#define	__HAVE_TLS_VARIANT_II
+#define	__HAVE_COMMON___TLS_GET_ADDR
 
 #endif	/* _MACHTYPES_H_ */

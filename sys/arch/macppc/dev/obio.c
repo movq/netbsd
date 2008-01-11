@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.27 2007/10/17 19:55:19 garbled Exp $	*/
+/*	$NetBSD: obio.c,v 1.32 2011/03/16 05:08:29 macallan Exp $	*/
 
 /*-
  * Copyright (C) 1998	Internet Research Institute, Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.27 2007/10/17 19:55:19 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.32 2011/03/16 05:08:29 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,6 +46,10 @@ __KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.27 2007/10/17 19:55:19 garbled Exp $");
 #include <dev/ofw/openfirm.h>
 
 #include <machine/autoconf.h>
+
+#include <macppc/dev/obiovar.h>
+
+#include <powerpc/cpu.h>
 
 #include "opt_obio.h"
 
@@ -67,14 +71,19 @@ struct obio_softc {
 #ifdef OBIO_SPEED_CONTROL
 	int sc_voltage;
 	int sc_busspeed;
+	int sc_spd_hi, sc_spd_lo;
 #endif
 };
+
+static struct obio_softc *obio0 = NULL;
 
 #ifdef OBIO_SPEED_CONTROL
 static void obio_setup_gpios(struct obio_softc *, int);
 static void obio_set_cpu_speed(struct obio_softc *, int);
 static int  obio_get_cpu_speed(struct obio_softc *);
 static int  sysctl_cpuspeed_temp(SYSCTLFN_ARGS);
+static int  sysctl_cpuspeed_cur(SYSCTLFN_ARGS);
+static int  sysctl_cpuspeed_available(SYSCTLFN_ARGS);
 
 static const char *keylargo[] = {"Keylargo",
 				 "AAPL,Keylargo",
@@ -125,6 +134,8 @@ obio_attach(struct device *parent, struct device *self, void *aux)
 #ifdef OBIO_SPEED_CONTROL
 	sc->sc_voltage = -1;
 	sc->sc_busspeed = -1;
+	sc->sc_spd_lo = 600;
+	sc->sc_spd_hi = 800;
 #endif
 
 	switch (PCI_PRODUCT(pa->pa_id)) {
@@ -164,6 +175,17 @@ obio_attach(struct device *parent, struct device *self, void *aux)
 	if (OF_getprop(node, "assigned-addresses", reg, sizeof(reg)) < 12)
 		return;
 #endif /* PMAC_G5 */
+
+	/*
+	 * XXX
+	 * This relies on the primary obio always attaching first which is
+	 * true on the PowerBook 3400c and similar machines but may or may
+	 * not work on others. We can't rely on the node name since Apple
+	 * didn't follow anything remotely resembling a consistent naming
+	 * scheme.
+	 */
+	if (obio0 == NULL)
+		obio0 = sc;
 
 	ca.ca_baseaddr = reg[2];
 	ca.ca_tag = pa->pa_memt;
@@ -261,9 +283,7 @@ static const char * const skiplist[] = {
 #define N_LIST (sizeof(skiplist) / sizeof(skiplist[0]))
 
 int
-obio_print(aux, obio)
-	void *aux;
-	const char *obio;
+obio_print(void *aux, const char *obio)
 {
 	struct confargs *ca = aux;
 	int i;
@@ -281,15 +301,43 @@ obio_print(aux, obio)
 	return UNCONF;
 }
 
+void obio_write_4(int offset, uint32_t value)
+{
+	if (obio0 == NULL)
+		return;
+	bus_space_write_4(obio0->sc_tag, obio0->sc_bh, offset, value);
+}
+
+void obio_write_1(int offset, uint8_t value)
+{
+	if (obio0 == NULL)
+		return;
+	bus_space_write_1(obio0->sc_tag, obio0->sc_bh, offset, value);
+}
+
+uint32_t obio_read_4(int offset)
+{
+	if (obio0 == NULL)
+		return 0xffffffff;
+	return bus_space_read_4(obio0->sc_tag, obio0->sc_bh, offset);
+}
+
+uint8_t obio_read_1(int offset)
+{
+	if (obio0 == NULL)
+		return 0xff;
+	return bus_space_read_1(obio0->sc_tag, obio0->sc_bh, offset);
+}
+
 #ifdef OBIO_SPEED_CONTROL
 
 static void
 obio_setup_gpios(struct obio_softc *sc, int node)
 {
-	uint32_t reg[6];
-	struct sysctlnode *sysctl_node = NULL;
+	uint32_t gpio_base, reg[6];
+	struct sysctlnode *sysctl_node, *me, *freq;
 	char name[32];
-	int gpio_base, child;
+	int child, use_dfs, cpunode, hiclock;
 
 	if (of_compatible(sc->sc_node, keylargo) == -1)
 		return;
@@ -301,6 +349,7 @@ obio_setup_gpios(struct obio_softc *sc, int node)
 	DPRINTF("gpio_base: %02x\n", gpio_base);
 
 	/* now look for voltage and bus speed gpios */
+	use_dfs = 0;
 	for (child = OF_child(node); child; child = OF_peer(child)) {
 
 		if (OF_getprop(child, "name", name, sizeof(name)) < 1)
@@ -308,6 +357,15 @@ obio_setup_gpios(struct obio_softc *sc, int node)
 
 		if (OF_getprop(child, "reg", reg, sizeof(reg)) < 4)
 			continue;
+
+		/*
+		 * These register offsets either have to be added to the obio
+		 * base address or to the gpio base address. This differs
+		 * even in the same OF-tree! So we guess the offset is
+		 * based on obio when it is larger than the gpio_base.
+		 */
+		if (reg[0] >= gpio_base)
+			reg[0] -= gpio_base;
 
 		if (strcmp(name, "frequency-gpio") == 0) {
 			DPRINTF("found frequency_gpio at %02x\n", reg[0]);
@@ -317,37 +375,109 @@ obio_setup_gpios(struct obio_softc *sc, int node)
 			DPRINTF("found voltage_gpio at %02x\n", reg[0]);
 			sc->sc_voltage = gpio_base + reg[0];
 		}
+		if (strcmp(name, "cpu-vcore-select") == 0) {
+			DPRINTF("found cpu-vcore-select at %02x\n", reg[0]);
+			sc->sc_voltage = gpio_base + reg[0];
+			/* frequency gpio is not needed, we use cpu's DFS */
+			use_dfs = 1;
+		}
 	}
 
-	if ((sc->sc_voltage < 0) || (sc->sc_busspeed < 0))
+	if ((sc->sc_voltage < 0) || (sc->sc_busspeed < 0 && !use_dfs))
 		return;
 
 	printf("%s: enabling Intrepid CPU speed control\n",
 	    sc->sc_dev.dv_xname);
 
-	sysctl_createv(NULL, 0, NULL, 
+	sc->sc_spd_lo = curcpu()->ci_khz / 1000;
+	hiclock = 0;
+	cpunode = OF_finddevice("/cpus/@0");
+	OF_getprop(cpunode, "clock-frequency", &hiclock, 4);
+	printf("hiclock: %d\n", (hiclock + 500000) / 1000000);
+	sysctl_node = NULL;
+
+	if (sysctl_createv(NULL, 0, NULL, 
+	    (const struct sysctlnode **)&me, 
+	    CTLFLAG_READWRITE, CTLTYPE_NODE, "intrepid", NULL, NULL,
+	    0, NULL, 0, CTL_MACHDEP, CTL_CREATE, CTL_EOL) != 0)
+		printf("couldn't create 'interpid' node\n");
+	
+	if (sysctl_createv(NULL, 0, NULL, 
+	    (const struct sysctlnode **)&freq, 
+	    CTLFLAG_READWRITE, CTLTYPE_NODE, "frequency", NULL, NULL,
+	    0, NULL, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, CTL_EOL) != 0)
+		printf("couldn't create 'frequency' node\n");
+
+	if (sysctl_createv(NULL, 0, NULL, 
 	    (const struct sysctlnode **)&sysctl_node, 
 	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC | CTLFLAG_IMMEDIATE,
-	    CTLTYPE_INT, "cpu_speed", "CPU speed", sysctl_cpuspeed_temp, 
-	    (unsigned long)sc, NULL, 0, CTL_MACHDEP, CTL_CREATE, CTL_EOL);
-	if (sysctl_node != NULL) {
+	    CTLTYPE_INT, "target", "CPU speed", sysctl_cpuspeed_temp, 
+	    0, NULL, 0, CTL_MACHDEP, me->sysctl_num, freq->sysctl_num, 
+	    CTL_CREATE, CTL_EOL) == 0) {
 		sysctl_node->sysctl_data = (void *)sc;
-	}
+	} else
+		printf("couldn't create 'target' node\n");
+
+	if (sysctl_createv(NULL, 0, NULL, 
+	    (const struct sysctlnode **)&sysctl_node, 
+	    CTLFLAG_READWRITE | CTLFLAG_IMMEDIATE,
+	    CTLTYPE_INT, "current", NULL, sysctl_cpuspeed_cur, 
+	    1, NULL, 0, CTL_MACHDEP, me->sysctl_num, freq->sysctl_num, 
+	    CTL_CREATE, CTL_EOL) == 0) {
+		sysctl_node->sysctl_data = (void *)sc;
+	} else
+		printf("couldn't create 'current' node\n");
+
+	if (sysctl_createv(NULL, 0, NULL, 
+	    (const struct sysctlnode **)&sysctl_node, 
+	    CTLFLAG_READWRITE,
+	    CTLTYPE_STRING, "available", NULL, sysctl_cpuspeed_available, 
+	    2, NULL, 0, CTL_MACHDEP, me->sysctl_num, freq->sysctl_num, 
+	    CTL_CREATE, CTL_EOL) == 0) {
+		sysctl_node->sysctl_data = (void *)sc;
+	} else
+		printf("couldn't create 'available' node\n");
+	printf("speed: %d\n", curcpu()->ci_khz);
 }
 
 static void
 obio_set_cpu_speed(struct obio_softc *sc, int fast)
 {
 
-	if ((sc->sc_voltage < 0) || (sc->sc_busspeed < 0))
+	if (sc->sc_voltage < 0)
 		return;
 
-	if (fast) {
-		bus_space_write_1(sc->sc_tag, sc->sc_bh, sc->sc_voltage, 5);
-		bus_space_write_1(sc->sc_tag, sc->sc_bh, sc->sc_busspeed, 5);
-	} else {
-		bus_space_write_1(sc->sc_tag, sc->sc_bh, sc->sc_busspeed, 4);
-		bus_space_write_1(sc->sc_tag, sc->sc_bh, sc->sc_voltage, 4);
+	if (sc->sc_busspeed >= 0) {
+		/* set voltage and speed via gpio */
+		if (fast) {
+			bus_space_write_1(sc->sc_tag, sc->sc_bh,
+			    sc->sc_voltage, 5);
+			bus_space_write_1(sc->sc_tag, sc->sc_bh,
+			    sc->sc_busspeed, 5);
+		} else {
+			bus_space_write_1(sc->sc_tag, sc->sc_bh,
+			    sc->sc_busspeed, 4);
+			bus_space_write_1(sc->sc_tag, sc->sc_bh,
+			    sc->sc_voltage, 4);
+		}
+	}
+	else {
+		/* set voltage via gpio and speed via the 7447A's DFS bit */
+		if (fast) {
+			bus_space_write_1(sc->sc_tag, sc->sc_bh,
+			    sc->sc_voltage, 5);
+			DELAY(1000);
+		}
+
+		/* set DFS for all cpus */
+		cpu_set_dfs(fast ? 1 : 2);
+		DELAY(100);
+
+		if (!fast) {
+			bus_space_write_1(sc->sc_tag, sc->sc_bh,
+			    sc->sc_voltage, 4);
+			DELAY(1000);
+		}
 	}
 }
 
@@ -355,11 +485,16 @@ static int
 obio_get_cpu_speed(struct obio_softc *sc)
 {
 	
-	if ((sc->sc_voltage < 0) || (sc->sc_busspeed < 0))
+	if (sc->sc_voltage < 0)
 		return 0;
 
-	if (bus_space_read_1(sc->sc_tag, sc->sc_bh, sc->sc_busspeed) & 1)
-		return 1;
+	if (sc->sc_busspeed >= 0) {
+		if (bus_space_read_1(sc->sc_tag, sc->sc_bh, sc->sc_busspeed)
+		    & 1)
+			return 1;
+	}
+	else
+		return cpu_get_dfs() == 1;
 
 	return 0;
 }
@@ -369,28 +504,83 @@ sysctl_cpuspeed_temp(SYSCTLFN_ARGS)
 {
 	struct sysctlnode node = *rnode;
 	struct obio_softc *sc = node.sysctl_data;
-	const int *np = newp;
-	int speed, nd = 0;
+	int speed, mhz;
 
 	speed = obio_get_cpu_speed(sc);	
-	node.sysctl_idata = speed;
-	if (np) {
-		/* we're asked to write */	
-		nd = *np;
-		node.sysctl_data = &speed;
-		if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
-			int new_reg;
-			
-			new_reg = (max(0, min(1, node.sysctl_idata)));
-			obio_set_cpu_speed(sc, new_reg);
-			return 0;
-		}
-		return EINVAL;
-	} else {
-		node.sysctl_size = 4;
-		return(sysctl_lookup(SYSCTLFN_CALL(&node)));
+	switch (speed) {
+		case 0:
+			mhz = sc->sc_spd_lo;
+			break;
+		case 1:
+			mhz = sc->sc_spd_hi;
+			break;
+		default:
+			speed = -1;
 	}
+	node.sysctl_idata = mhz;
+	node.sysctl_data = &mhz;
+	if (sysctl_lookup(SYSCTLFN_CALL(&node)) == 0) {
+		int new_reg;
+
+		new_reg = node.sysctl_idata;
+		if (new_reg == sc->sc_spd_lo) {
+			obio_set_cpu_speed(sc, 0);
+		} else if (new_reg == sc->sc_spd_hi) {
+			obio_set_cpu_speed(sc, 1);
+		} else {
+			printf("%s: new_reg %d\n", __func__, new_reg);
+			return EINVAL;
+		}
+		return 0;
+	}
+	return EINVAL;
+}
+
+static int
+sysctl_cpuspeed_cur(SYSCTLFN_ARGS)
+{
+	struct sysctlnode node = *rnode;
+	struct obio_softc *sc = node.sysctl_data;
+	int speed, mhz;
+
+	speed = obio_get_cpu_speed(sc);
+	switch (speed) {
+		case 0:
+			mhz = sc->sc_spd_lo;
+			break;
+		case 1:
+			mhz = sc->sc_spd_hi;
+			break;
+		default:
+			speed = -1;
+	}
+	node.sysctl_idata = mhz;
+	node.sysctl_data = &mhz;
+	return sysctl_lookup(SYSCTLFN_CALL(&node));
+}
+
+static int
+sysctl_cpuspeed_available(SYSCTLFN_ARGS)
+{
+	struct sysctlnode node = *rnode;
+	struct obio_softc *sc = node.sysctl_data;
+	char buf[128];
+	int speed;
+
+	speed = obio_get_cpu_speed(sc);
+	snprintf(buf, 128, "%d %d", sc->sc_spd_lo, sc->sc_spd_hi);	
+	node.sysctl_data = buf;
+	return(sysctl_lookup(SYSCTLFN_CALL(&node)));
+}
+
+SYSCTL_SETUP(sysctl_ams_setup, "sysctl obio subtree setup")
+{
+
+	sysctl_createv(NULL, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "machdep", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_MACHDEP, CTL_EOL);
 }
 
 #endif /* OBIO_SPEEDCONTROL */
-

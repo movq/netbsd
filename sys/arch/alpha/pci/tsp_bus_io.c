@@ -1,4 +1,4 @@
-/* $NetBSD: tsp_bus_io.c,v 1.5 2000/06/29 08:58:50 mrg Exp $ */
+/* $NetBSD: tsp_bus_io.c,v 1.7 2010/12/15 01:27:19 matt Exp $ */
 
 /*-
  * Copyright (c) 1999 by Ross Harvey.  All rights reserved.
@@ -33,15 +33,13 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: tsp_bus_io.c,v 1.5 2000/06/29 08:58:50 mrg Exp $");
+__KERNEL_RCSID(1, "$NetBSD: tsp_bus_io.c,v 1.7 2010/12/15 01:27:19 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/bus.h>
 #include <machine/autoconf.h>
@@ -58,6 +56,8 @@ typedef struct tsp_config *TSPCON;
 
 #define	CHIP_EX_MALLOC_SAFE(v)  (((TSPCON)(v))->pc_mallocsafe)
 #define CHIP_IO_EXTENT(v)       (((TSPCON)(v))->pc_io_ex)
+#define	CHIP_IO_EX_STORE(v)	(((TSPCON)(v))->pc_io_exstorage)
+#define	CHIP_IO_EX_STORE_SIZE(v) (sizeof (((TSPCON)(v))->pc_io_exstorage))
 
 #define CHIP_IO_SYS_START(v)    (((TSPCON)(v))->pc_iobase | P_PCI_IO)
 

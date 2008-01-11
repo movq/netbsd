@@ -1,4 +1,4 @@
-/*	$NetBSD: efifs.c,v 1.2 2006/04/22 07:58:53 cherry Exp $	*/
+/*	$NetBSD: efifs.c,v 1.4 2009/07/20 04:59:03 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 2001 Doug Rabson
@@ -31,6 +31,7 @@
 #include <sys/time.h>
 #include <sys/dirent.h>
 #include <lib/libsa/stand.h>
+#include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 #include <machine/stdarg.h>
 
@@ -231,7 +232,7 @@ efifs_stat(struct open_file *f, struct stat *sb)
 	static EFI_GUID infoid = EFI_FILE_INFO_ID;
 	EFI_FILE_INFO *info;
 
-	bzero(sb, sizeof(*sb));
+	memset(sb, 0, sizeof(*sb));
 
 	buf = alloc(1024);
 	sz = 1024;

@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.dep.mk,v 1.67 2004/04/18 04:34:27 lukem Exp $
+#	$NetBSD: bsd.dep.mk,v 1.72 2011/04/10 16:52:36 joerg Exp $
 
 ##### Basic targets
 cleandir:	cleandepend
@@ -15,8 +15,7 @@ MKDEP_SUFFIXES?=	.o
 # some of the rules involve .h sources, so remove them from mkdep line
 
 .if defined(SRCS)							# {
-_TRADITIONAL_CPP?=-traditional-cpp
-__acpp_flags=	${_TRADITIONAL_CPP}
+__acpp_flags=	${_ASM_TRADITIONAL_CPP}
 
 __DPSRCS.all=	${SRCS:C/\.(c|m|s|S|C|cc|cpp|cxx)$/.d/} \
 		${DPSRCS:C/\.(c|m|s|S|C|cc|cpp|cxx)$/.d/}
@@ -58,8 +57,6 @@ ${__DPSRCS.d}: ${__DPSRCS.notd} ${DPSRCS}
 	${_MKTARGET_CREATE}
 	${MKDEP} -f ${.TARGET} -- ${MKDEPFLAGS} \
 	    ${CXXFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
-	    ${DESTDIR:D-nostdinc++ ${CPPFLAG_ISYSTEMXX} \
-			${DESTDIR}/usr/include/g++} \
 	    ${CPPFLAGS} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC}
 
 .endif # defined(SRCS)							# }
@@ -74,7 +71,7 @@ cleandepend: .PHONY
 .if !target(tags)
 tags: ${SRCS}
 .if defined(SRCS)
-	-cd ${.CURDIR}; ctags -f /dev/stdout ${.ALLSRC:N*.h} | \
-	    sed "s;\${.CURDIR}/;;" > tags
+	-cd "${.CURDIR}"; ctags -f /dev/stdout ${.ALLSRC:N*.h} | \
+	    ${TOOL_SED} "s;\${.CURDIR}/;;" > tags
 .endif
 .endif

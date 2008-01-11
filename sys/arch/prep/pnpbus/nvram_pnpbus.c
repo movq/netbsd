@@ -1,4 +1,4 @@
-/* $NetBSD: nvram_pnpbus.c,v 1.11 2008/01/10 15:31:26 tsutsui Exp $ */
+/* $NetBSD: nvram_pnpbus.c,v 1.14 2008/04/28 20:23:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nvram_pnpbus.c,v 1.11 2008/01/10 15:31:26 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nvram_pnpbus.c,v 1.14 2008/04/28 20:23:33 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -222,12 +215,9 @@ prep_nvram_read_val(int addr)
 {
 	struct nvram_pnpbus_softc *sc;
 
-	if (nvram_cd.cd_devs == NULL || nvram_cd.cd_ndevs == 0
-            || nvram_cd.cd_devs[NVRAM_STD_DEV] == NULL) {
-                return 0;
-        }
-
-        sc = (struct nvram_pnpbus_softc *) nvram_cd.cd_devs[NVRAM_STD_DEV];
+        sc = device_lookup_private(&nvram_cd, NVRAM_STD_DEV);
+	if (sc == NULL)
+		return 0;
 
 	/* tell the NVRAM what we want */
 	bus_space_write_1(sc->sc_as, sc->sc_ash, 0, addr);
@@ -246,12 +236,9 @@ prep_nvram_write_val(int addr, uint8_t val)
 {
 	struct nvram_pnpbus_softc *sc;
 
-	if (nvram_cd.cd_devs == NULL || nvram_cd.cd_ndevs == 0
-            || nvram_cd.cd_devs[NVRAM_STD_DEV] == NULL) {
-                return;
-        }
-
-        sc = (struct nvram_pnpbus_softc *) nvram_cd.cd_devs[NVRAM_STD_DEV];
+        sc = device_lookup_private(&nvram_cd, NVRAM_STD_DEV);
+	if (sc == NULL)
+		return;
 
 	/* tell the NVRAM what we want */
 	bus_space_write_1(sc->sc_as, sc->sc_ash, 0, addr);
@@ -506,7 +493,7 @@ prep_nvramopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct nvram_pnpbus_softc *sc;
 
-	sc = device_lookup(&nvram_cd, NVRAM_STD_DEV);
+	sc = device_lookup_private(&nvram_cd, NVRAM_STD_DEV);
 	if (sc == NULL)
 		return ENODEV;
 
@@ -523,7 +510,7 @@ prep_nvramclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct nvram_pnpbus_softc *sc;
 
-	sc = device_lookup(&nvram_cd, NVRAM_STD_DEV);
+	sc = device_lookup_private(&nvram_cd, NVRAM_STD_DEV);
 	if (sc == NULL) 
 		return ENODEV;
 	sc->sc_open = 0;

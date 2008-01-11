@@ -1,4 +1,4 @@
-/* $NetBSD: ipifuncs.c,v 1.37 2007/10/17 19:52:55 garbled Exp $ */
+/* $NetBSD: ipifuncs.c,v 1.45 2010/12/17 02:36:35 joerg Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.37 2007/10/17 19:52:55 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.45 2010/12/17 02:36:35 joerg Exp $");
 
 /*
  * Interprocessor interrupt handlers.
@@ -50,15 +43,16 @@ __KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.37 2007/10/17 19:52:55 garbled Exp $"
 #include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/reboot.h>
+#include <sys/atomic.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
+#include <sys/xcall.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/atomic.h>
 #include <machine/alpha_cpu.h>
 #include <machine/alpha.h>
-#include <machine/cpu.h>
 #include <machine/cpuvar.h>
-#include <machine/intr.h>
 #include <machine/rpb.h>
 #include <machine/prom.h>
 
@@ -71,6 +65,7 @@ void	alpha_ipi_ast(struct cpu_info *, struct trapframe *);
 void	alpha_ipi_synch_fpu(struct cpu_info *, struct trapframe *);
 void	alpha_ipi_discard_fpu(struct cpu_info *, struct trapframe *);
 void	alpha_ipi_pause(struct cpu_info *, struct trapframe *);
+void	alpha_ipi_xcall(struct cpu_info *, struct trapframe *);
 
 /*
  * NOTE: This table must be kept in order with the bit definitions
@@ -85,7 +80,7 @@ ipifunc_t ipifuncs[ALPHA_NIPIS] = {
 	alpha_ipi_synch_fpu,
 	alpha_ipi_discard_fpu,
 	alpha_ipi_pause,
-	pmap_do_reactivate,
+	alpha_ipi_xcall
 };
 
 const char *ipinames[ALPHA_NIPIS] = {
@@ -97,7 +92,7 @@ const char *ipinames[ALPHA_NIPIS] = {
 	"synch fpu ipi",
 	"discard fpu ipi",
 	"pause ipi",
-	"pmap reactivate ipi",
+	"xcall ipi"
 };
 
 /*
@@ -138,7 +133,7 @@ alpha_ipi_process(struct cpu_info *ci, struct trapframe *framep)
 	}
 #endif
 
-	pending_ipis = atomic_loadlatch_ulong(&ci->ci_ipis, 0);
+	pending_ipis = atomic_swap_ulong(&ci->ci_ipis, 0);
 
 	/*
 	 * For various reasons, it is possible to have spurious calls
@@ -173,7 +168,7 @@ alpha_send_ipi(u_long cpu_id, u_long ipimask)
 		panic("alpha_send_ipi: CPU %ld not running", cpu_id);
 #endif
 
-	atomic_setbits_ulong(&cpu_info[cpu_id]->ci_ipis, ipimask);
+	atomic_or_ulong(&cpu_info[cpu_id]->ci_ipis, ipimask);
 	alpha_pal_wripir(cpu_id);
 }
 
@@ -239,8 +234,6 @@ alpha_ipi_halt(struct cpu_info *ci, struct trapframe *framep)
 	 * secondary CPUs to halt, then we can drop back to the
 	 * console.
 	 */
-	printf("%s: waiting for secondary CPUs to halt...\n",
-	    ci->ci_softc->sc_dev.dv_xname);
 	alpha_mb();
 	for (;;) {
 		alpha_mb();
@@ -304,14 +297,14 @@ alpha_ipi_pause(struct cpu_info *ci, struct trapframe *framep)
 	/* Point debuggers at our trapframe for register state. */
 	ci->ci_db_regs = framep;
 
-	atomic_setbits_ulong(&ci->ci_flags, CPUF_PAUSED);
+	atomic_or_ulong(&ci->ci_flags, CPUF_PAUSED);
 
 	/* Spin with interrupts disabled until we're resumed. */
 	do {
 		alpha_mb();
 	} while (cpus_paused & cpumask);
 
-	atomic_clearbits_ulong(&ci->ci_flags, CPUF_PAUSED);
+	atomic_and_ulong(&ci->ci_flags, ~CPUF_PAUSED);
 
 	ci->ci_db_regs = NULL;
 
@@ -319,4 +312,31 @@ alpha_ipi_pause(struct cpu_info *ci, struct trapframe *framep)
 
 	/* Do an IMB on the way out, in case the kernel text was changed. */
 	alpha_pal_imb();
+}
+
+/*
+ * MD support for xcall(9) interface.
+ */
+
+void
+alpha_ipi_xcall(struct cpu_info *ci, struct trapframe *framep)
+{
+
+	xc_ipi_handler();
+}
+
+void
+xc_send_ipi(struct cpu_info *ci)
+{
+
+	KASSERT(kpreempt_disabled());
+	KASSERT(curcpu() != ci);
+
+	if (ci) {
+		/* Unicast: remote CPU. */
+		alpha_send_ipi(ci->ci_cpuid, ALPHA_IPI_XCALL);
+	} else {
+		/* Broadcast: all, but local CPU (caller will handle it). */
+		alpha_broadcast_ipi(ALPHA_IPI_XCALL);
+	}
 }

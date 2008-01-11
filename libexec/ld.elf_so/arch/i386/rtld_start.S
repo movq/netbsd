@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld_start.S,v 1.9 2003/03/02 22:56:14 mycroft Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.11 2010/12/05 00:56:07 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,6 +34,7 @@
 	.text
 	.align	4
 	.globl	.rtld_start
+	.hidden	.rtld_start
 	.type	.rtld_start,@function
 .rtld_start:
 	subl	$8,%esp			# make room of obj_main and exit proc
@@ -55,12 +49,12 @@
 
 	pushl	%ebx			# relocbase
 	pushl	%ecx			# &_DYNAMIC
-	call	_rtld_relocate_nonplt_self@PLT
+	call	_rtld_relocate_nonplt_self
 
 	leal	12(%esp),%eax		# &cleanup
 	pushl	%ebx			# relocbase
 	pushl	%eax			# sp
-	call	_rtld@PLT		# _rtld(sp, relocbase)
+	call	_rtld			# _rtld(sp, relocbase)
 
 	addl	$16,%esp		# pop args
 
@@ -71,6 +65,7 @@
 
 	.align	4
 	.globl	_rtld_bind_start
+	.hidden	_rtld_bind_start
 	.type	_rtld_bind_start,@function
 _rtld_bind_start:	# (obj, reloff)
 	pushf				# save registers
@@ -80,7 +75,7 @@ _rtld_bind_start:	# (obj, reloff)
 
 	pushl	20(%esp)		# Copy of reloff
 	pushl	20(%esp)		# Copy of obj
-	call	_rtld_bind@PLT		# Call the binder
+	call	_rtld_bind		# Call the binder
 	addl	$8,%esp			# pop binder args
 	movl	%eax,20(%esp)		# Store function to be called in obj
 

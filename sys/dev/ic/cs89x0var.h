@@ -1,4 +1,4 @@
-/*	$NetBSD: cs89x0var.h,v 1.11 2006/02/16 20:17:16 perry Exp $	*/
+/*	$NetBSD: cs89x0var.h,v 1.14 2009/09/22 14:55:19 tsutsui Exp $	*/
 
 /*
  * Copyright 1997
@@ -66,12 +66,11 @@
  * its address, ...
  */
 struct cs_softc {
-	struct device sc_dev;		/* base device glue */
+	device_t sc_dev;		/* base device glue */
 	struct ethercom sc_ethercom;	/* Ethernet common */
 	struct ifmedia sc_media;	/* media control structures */
 
 	void	*sc_ih;			/* interrupt handler */
-	void 	*sc_sh;			/* shutdown hook */
 
 	bus_space_tag_t sc_iot;		/* bus space tag for IO */
 	bus_space_tag_t sc_memt;	/* bus space tag for memory mode */
@@ -112,7 +111,6 @@ struct cs_softc {
 	/* power management */
 	int (*sc_enable)(struct cs_softc *);
 	void (*sc_disable)(struct cs_softc *);
-	void *sc_powerhook;
 
 	/* DMA hooks */
 	void (*sc_dma_process_rx)(struct cs_softc *);
@@ -281,7 +279,7 @@ int	cs_detach(struct cs_softc *);
 int	cs_verify_eeprom(struct cs_softc *);
 int	cs_read_eeprom(struct cs_softc *, int, u_int16_t *);
 int	cs_intr(void *);
-int	cs_activate(struct device *, enum devact);
+int	cs_activate(device_t, enum devact);
 void	cs_ether_input(struct cs_softc *, struct mbuf *);
 void	cs_print_rx_errors(struct cs_softc *, u_int16_t);
 int	cs_init(struct ifnet *);

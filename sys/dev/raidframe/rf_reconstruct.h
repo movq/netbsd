@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_reconstruct.h,v 1.23 2007/03/04 06:02:39 christos Exp $	*/
+/*	$NetBSD: rf_reconstruct.h,v 1.28 2011/05/02 07:29:18 mrg Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -137,13 +137,13 @@ struct RF_ReconCtrl_s {
 	/* reconstruction event queue */
 	RF_ReconEvent_t *eventQueue;	/* queue of pending reconstruction
 					 * events */
-        RF_DECLARE_MUTEX(eq_mutex)	/* mutex for locking event
-					 * queue */
+	rf_declare_mutex2(eq_mutex);	/* mutex for locking event */
+	rf_declare_cond2(eq_cv);	/* queue */
 	int     eq_count;	/* debug only */
 
 	/* reconstruction buffer management */
-	RF_DECLARE_MUTEX(rb_mutex)	        /* mutex for messing around
-						 * with recon buffers */
+	rf_declare_mutex2(rb_mutex);	        /* mutex/cv for messing */
+	rf_declare_cond2(rb_cv);		/* around with recon buffers */
 	int rb_lock;                            /* 1 if someone is mucking
 						   with recon buffers,
 						   0 otherwise */
@@ -184,6 +184,7 @@ int rf_ForceOrBlockRecon(RF_Raid_t *, RF_AccessStripeMap_t *,
 			 void (*cbFunc) (RF_Raid_t *, void *),
 			 void *);
 int rf_UnblockRecon(RF_Raid_t *, RF_AccessStripeMap_t *);
+void rf_WakeupHeadSepCBWaiters(RF_Raid_t *);
 
 extern struct pool rf_reconbuffer_pool;
 

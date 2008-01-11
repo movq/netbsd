@@ -1,4 +1,4 @@
-/*	$NetBSD: neo.c,v 1.37 2007/12/09 20:28:11 jmcneill Exp $	*/
+/*	$NetBSD: neo.c,v 1.45 2010/02/24 22:38:01 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1999 Cameron Grant <gandalf@vilnya.demon.co.uk>
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: neo.c,v 1.37 2007/12/09 20:28:11 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: neo.c,v 1.45 2010/02/24 22:38:01 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -174,8 +174,8 @@ static int	nm_waitcd(struct neo_softc *);
 static int	nm_loadcoeff(struct neo_softc *, int, int);
 static int	nm_init(struct neo_softc *);
 
-static int	neo_match(struct device *, struct cfdata *, void *);
-static void	neo_attach(struct device *, struct device *, void *);
+static int	neo_match(device_t, cfdata_t, void *);
+static void	neo_attach(device_t, device_t, void *);
 static int	neo_intr(void *);
 
 static int	neo_query_encoding(void *, struct audio_encoding *);
@@ -402,7 +402,7 @@ neo_intr(void *p)
 		nm_ackint(sc, sc->misc1int);
 		x = nm_rd_1(sc, 0x400);
 		nm_wr_1(sc, 0x400, x | 2);
-		printf("%s: misc int 1\n", sc->dev.dv_xname);
+		printf("%s: misc int 1\n", device_xname(&sc->dev));
 		rv = 1;
 	}
 	if (status & sc->misc2int) {
@@ -410,13 +410,13 @@ neo_intr(void *p)
 		nm_ackint(sc, sc->misc2int);
 		x = nm_rd_1(sc, 0x400);
 		nm_wr_1(sc, 0x400, x & ~2);
-		printf("%s: misc int 2\n", sc->dev.dv_xname);
+		printf("%s: misc int 2\n", device_xname(&sc->dev));
 		rv = 1;
 	}
 	if (status) {
 		status &= ~sc->misc2int;
 		nm_ackint(sc, sc->misc2int);
-		printf("%s: unknown int\n", sc->dev.dv_xname);
+		printf("%s: unknown int\n", device_xname(&sc->dev));
 		rv = 1;
 	}
 
@@ -498,8 +498,7 @@ nm_init(struct neo_softc *sc)
 }
 
 static int
-neo_match(struct device *parent, struct cfdata *match,
-    void *aux)
+neo_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa;
 	pcireg_t subdev;
@@ -550,7 +549,7 @@ neo_match(struct device *parent, struct cfdata *match,
 }
 
 static bool
-neo_resume(device_t dv)
+neo_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct neo_softc *sc = device_private(dv);
 
@@ -561,7 +560,7 @@ neo_resume(device_t dv)
 }
 
 static void
-neo_attach(struct device *parent, struct device *self, void *aux)
+neo_attach(device_t parent, device_t self, void *aux)
 {
 	struct neo_softc *sc;
 	struct pci_attach_args *pa;
@@ -570,7 +569,7 @@ neo_attach(struct device *parent, struct device *self, void *aux)
 	pci_intr_handle_t ih;
 	pcireg_t csr;
 
-	sc = (struct neo_softc *)self;
+	sc = device_private(self);
 	pa = (struct pci_attach_args *)aux;
 	pc = pa->pa_pc;
 
@@ -582,19 +581,19 @@ neo_attach(struct device *parent, struct device *self, void *aux)
 	/* Map I/O register */
 	if (pci_mapreg_map(pa, PCI_MAPREG_START, PCI_MAPREG_TYPE_MEM, 0,
 			   &sc->bufiot, &sc->bufioh, &sc->buf_pciaddr, NULL)) {
-		printf("%s: can't map buffer\n", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "can't map buffer\n");
 		return;
 	}
 
 	if (pci_mapreg_map(pa, PCI_MAPREG_START + 4, PCI_MAPREG_TYPE_MEM,
 	    BUS_SPACE_MAP_LINEAR, &sc->regiot, &sc->regioh, NULL, NULL)) {
-		printf("%s: can't map registers\n", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "can't map registers\n");
 		return;
 	}
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "couldn't map interrupt\n");
 		return;
 	}
 
@@ -602,14 +601,13 @@ neo_attach(struct device *parent, struct device *self, void *aux)
 	sc->ih = pci_intr_establish(pc, ih, IPL_AUDIO, neo_intr, sc);
 
 	if (sc->ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		       sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->dev.dv_xname, intrstr);
+	aprint_normal_dev(&sc->dev, "interrupting at %s\n", intrstr);
 
 	if (nm_init(sc) != 0)
 		return;

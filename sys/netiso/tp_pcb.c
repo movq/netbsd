@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_pcb.c,v 1.35 2007/11/09 21:00:06 plunky Exp $	*/
+/*	$NetBSD: tp_pcb.c,v 1.41 2009/04/18 14:58:06 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -68,7 +68,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_pcb.c,v 1.35 2007/11/09 21:00:06 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_pcb.c,v 1.41 2009/04/18 14:58:06 tsutsui Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -256,9 +256,6 @@ struct inpcbtable tp_inpcb;
 #ifdef ISO
 struct isopcb   tp_isopcb;
 #endif				/* ISO */
-#ifdef TPCONS
-struct isopcb   tp_isopcb;
-#endif				/* TPCONS */
 
 struct tp_stat tp_stat;
 u_int tp_start_win;
@@ -293,19 +290,7 @@ struct nl_protosw nl_protosw[] = {
 	{ .nlp_afamily = 0, },
 #endif				/* INET */
 	/* ISO_CONS */
-#if defined(ISO) && defined(TPCONS)
-	{AF_ISO, iso_putnetaddr, iso_getnetaddr, iso_cmpnetaddr,
-		iso_putsufx, iso_getsufx,
-		iso_recycle_tsuffix,
-		tpclnp_mtu, iso_pcbbind, tpcons_pcbconnect,
-		iso_pcbdisconnect, iso_pcbdetach,
-		iso_pcballoc,
-		tpcons_output, tpcons_output, iso_nlctloutput,
-		(void *) & tp_isopcb,
-	},
-#else
 	{ .nlp_afamily = 0, },
-#endif				/* ISO_CONS */
 	/* End of protosw marker */
 	{ .nlp_afamily = 0, },
 };
@@ -348,7 +333,7 @@ tp_init(void)
 	tp_start_win = 2;
 
 	tp_timerinit();
-	bzero((void *) & tp_stat, sizeof(struct tp_stat));
+	memset((void *) & tp_stat, 0, sizeof(struct tp_stat));
 }
 
 /*
@@ -382,9 +367,9 @@ tp_soisdisconnecting(struct socket *so)
 		u_int           fsufx, lsufx;
 		struct timeval	now;
 
-		bcopy((void *) tpcb->tp_fsuffix, (void *) &fsufx,
+		memcpy((void *) &fsufx, (void *) tpcb->tp_fsuffix,
 		      sizeof(u_int));
-		bcopy((void *) tpcb->tp_lsuffix, (void *) &lsufx,
+		memcpy((void *) &lsufx, (void *) tpcb->tp_lsuffix,
 		      sizeof(u_int));
 
 		getmicrotime(&now);
@@ -433,9 +418,9 @@ tp_soisdisconnected(struct tp_pcb *tpcb)
 		struct timeval	now;
 
 		/* CHOKE */
-		bcopy((void *) ttpcb->tp_fsuffix, (void *) &fsufx,
+		memcpy((void *) &fsufx, (void *) ttpcb->tp_fsuffix,
 		      sizeof(u_int));
-		bcopy((void *) ttpcb->tp_lsuffix, (void *) &lsufx,
+		memcpy((void *) &lsufx, (void *) ttpcb->tp_lsuffix,
 		      sizeof(u_int));
 
 		getmicrotime(&now);
@@ -553,7 +538,7 @@ tp_getref(struct tp_pcb *tpcb)
 	memcpy(r, obase, size);
 	free(obase, M_PCB);
 	r = (struct tp_ref *)(size + (char *)r);
-	bzero((void *) r, size);
+	memset((void *) r, 0, size);
 
 got_one:
 	r->tpr_pcb = tpcb;
@@ -648,7 +633,7 @@ tp_attach(struct socket *so, int protocol)
 	if (error)
 		goto bad2;
 
-	MALLOC(tpcb, struct tp_pcb *, sizeof(*tpcb), M_PCB, M_NOWAIT|M_ZERO);
+	tpcb = malloc(sizeof(*tpcb), M_PCB, M_NOWAIT|M_ZERO);
 	if (tpcb == NULL) {
 		error = ENOBUFS;
 		goto bad2;
@@ -912,7 +897,7 @@ tp_tselinuse(int tlen, const char *tsel, struct sockaddr_iso *siso,
 			l = t->tp_nextlisten;
 		} else
 			break;
-		if (tlen == t->tp_lsuffixlen && bcmp(tsel, t->tp_lsuffix, tlen) == 0) {
+		if (tlen == t->tp_lsuffixlen && memcmp(tsel, t->tp_lsuffix, tlen) == 0) {
 			if (t->tp_flags & TPF_GENERAL_ADDR) {
 				if (siso == 0 || reuseaddr == 0)
 					return 1;
@@ -995,7 +980,7 @@ tp_pcbbind(void *v, struct mbuf *nam, struct lwp *l)
 #endif
 				}
 		}
-		bcopy(tsel, tpcb->tp_lsuffix, (tpcb->tp_lsuffixlen = tlen));
+		memcpy(tpcb->tp_lsuffix, tsel, (tpcb->tp_lsuffixlen = tlen));
 		iso_insque(tpcb, &tp_bound_pcbs);
 	} else {
 		if (tlen || siso == 0)

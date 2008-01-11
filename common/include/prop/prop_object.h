@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_object.h,v 1.6 2007/08/30 12:23:53 joerg Exp $	*/
+/*	$NetBSD: prop_object.h,v 1.8 2008/12/05 13:11:41 ad Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,6 +42,7 @@ typedef void *prop_object_t;
 
 typedef enum {
 	PROP_TYPE_UNKNOWN	=	0x00000000,
+#ifndef _PROPLIB_ZFS_CONFLICT
 	PROP_TYPE_BOOL		=	0x626f6f6c,	/* 'bool' */
 	PROP_TYPE_NUMBER	=	0x6e6d6272,	/* 'nmbr' */
 	PROP_TYPE_STRING	=	0x73746e67,	/* 'stng' */
@@ -56,6 +50,7 @@ typedef enum {
 	PROP_TYPE_ARRAY		=	0x61726179,	/* 'aray' */
 	PROP_TYPE_DICTIONARY	=	0x64696374,	/* 'dict' */
 	PROP_TYPE_DICT_KEYSYM	=	0x646b6579	/* 'dkey' */
+#endif	/* !_PROPLIB_ZFS_CONFLICT */
 } prop_type_t;
 
 __BEGIN_DECLS

@@ -1,4 +1,4 @@
-/*	$NetBSD: ttgeneric.c,v 1.9 2003/08/07 11:17:30 agc Exp $	*/
+/*	$NetBSD: ttgeneric.c,v 1.11 2009/06/12 15:19:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)ttgeneric.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: ttgeneric.c,v 1.9 2003/08/07 11:17:30 agc Exp $");
+__RCSID("$NetBSD: ttgeneric.c,v 1.11 2009/06/12 15:19:52 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -142,7 +142,7 @@ void	gen_setinsert(char);
 void	gen_setmodes(int);
 void	gen_setscroll(int, int);
 void	gen_start(void);
-void	gen_write(char *, int);
+void	gen_write(const char *, int);
 
 void
 gen_setinsert(char new)
@@ -169,8 +169,8 @@ gen_setmodes(int new)
 		} else
 			if (gen_SE) {
 				ttxputs(gen_SE);
-				if (!strcmp(gen_SE->ts_str, gen_UE->ts_str) &&
-				    gen_UE && gen_US && new & WWM_UL)
+				if (gen_UE && gen_US && new & WWM_UL &&
+				    !strcmp(gen_SE->ts_str, gen_UE->ts_str))
 					ttxputs(gen_US);
 			}
 	}
@@ -181,8 +181,8 @@ gen_setmodes(int new)
 		} else
 			if (gen_UE) {
 				ttxputs(gen_UE);
-				if (!strcmp(gen_UE->ts_str, gen_SE->ts_str) &&
-				    gen_SE && gen_SO && new & WWM_REV)
+				if (gen_SE && gen_SO && new & WWM_REV &&
+				    !strcmp(gen_UE->ts_str, gen_SE->ts_str))
 					ttxputs(gen_SO);
 			}
 	}
@@ -248,7 +248,7 @@ gen_putc(char c)
 }
 
 void
-gen_write(char *p, int n)
+gen_write(const char *p, int n)
 {
 	if (tt.tt_insert)
 		gen_setinsert(0);
@@ -526,8 +526,8 @@ tt_generic(void)
 	 */
 	if (gen_SF == 0 && !gen_NS)
 		gen_SF = gen_NL;
-	BC = gen_LE ? gen_LE->ts_str : 0;
-	UP = gen_UP ? gen_UP->ts_str : 0;
+	BC = gen_LE ? __UNCONST(gen_LE->ts_str) : 0;
+	UP = gen_UP ? __UNCONST(gen_UP->ts_str) : 0;
 	/*
 	 * Fix up display attributes that we can't handle, or don't
 	 * really exist.

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.11 2007/12/05 12:31:25 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.16 2009/05/12 06:56:59 cegger Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.11 2007/12/05 12:31:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2009/05/12 06:56:59 cegger Exp $");
 
 #include "opt_md.h"
 
@@ -65,24 +65,23 @@ extern char *booted_kernel;
 
 extern dev_t dumpdev;
 
-void dumpconf __P((void));
-void isa_intr_init __P((void));
+void dumpconf(void);
+void isa_intr_init(void);
 
 #ifndef MEMORY_DISK_IS_ROOT
-static void get_device __P((char *name));
-static void set_root_device __P((void));
+static void get_device(char *name);
+static void set_root_device(void);
 #endif
 
 #ifndef MEMORY_DISK_IS_ROOT
 /* Decode a device name to a major and minor number */
 
 static void
-get_device(name)
-	char *name;
+get_device(char *name)
 {
 	int unit, part;
-	char devname[16], buf[32], *cp;
-	struct device *dv;
+	char devname[16], *cp;
+	device_t dv;
 
 	if (strncmp(name, "/dev/", 5) == 0)
 		name += 5;
@@ -103,14 +102,10 @@ get_device(name)
 		part = *cp - 'a';
 	else if (*cp != '\0' && *cp != ' ')
 		return;
-	sprintf(buf, "%s%d", devname, unit);
-	for (dv = TAILQ_FIRST(&alldevs); dv != NULL;
-	    dv = TAILQ_NEXT(dv, dv_list)) {
-		if (strcmp(buf, dv->dv_xname) == 0) {
-			booted_device = dv;
-			booted_partition = part;
-			return;
-		}
+
+	if ((dv = device_find_by_driver_unit(devname, unit)) != NULL) {
+		booted_device = dv;
+		booted_partition = part;
 	}
 }
 
@@ -118,7 +113,7 @@ get_device(name)
 /* Set the rootdev variable from the root specifier in the boot args */
 
 static void
-set_root_device()
+set_root_device(void)
 {
 	char *ptr;
             
@@ -134,13 +129,13 @@ set_root_device()
  * Set up the root device from the boot args
  */
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
 #ifndef MEMORY_DISK_IS_ROOT
 	set_root_device();
 
 	printf("boot device: %s\n",
-	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
+	    booted_device != NULL ? device_xname(booted_device) : "<unknown>");
 #endif
 	setroot(booted_device, booted_partition);
 }
@@ -154,7 +149,7 @@ cpu_rootconf()
  */
 
 void
-cpu_configure()
+cpu_configure(void)
 {
 	/*
 	 * Configure all the roots.

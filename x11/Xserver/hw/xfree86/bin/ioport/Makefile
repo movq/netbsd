@@ -1,9 +1,10 @@
-#	$NetBSD: Makefile,v 1.4 2004/03/27 15:30:03 soren Exp $
+#	$NetBSD: Makefile,v 1.6 2009/02/14 13:48:17 abs Exp $
+
+NOMAN=# defined (must come before bsd.own.mk)
 
 .include <bsd.own.mk>
 
 PROG=	ioport
-MKMAN=	no
 .PATH:	${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/etc
 
 SRCS=	ioport.c
@@ -24,7 +25,7 @@ CPPFLAGS+=	-I${X11SRCDIR.xc}/programs/Xserver/hw/xfree86/etc \
 LDADD=	-L${XF86OSOBJDIR} -lxf86_os \
 	-L${DUMMYOBJDIR} -ldummy -lm
 
-.if ${MACHINE} == "i386"
+.if ${MACHINE_ARCH} == "i386"
 LDADD+=	-li386
 DPADD+=	${LIBI386}
 .else

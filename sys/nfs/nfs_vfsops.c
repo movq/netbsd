@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_vfsops.c,v 1.191 2008/01/03 01:26:30 pooka Exp $	*/
+/*	$NetBSD: nfs_vfsops.c,v 1.217 2010/08/12 09:41:10 pooka Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1995
@@ -35,10 +35,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.191 2008/01/03 01:26:30 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.217 2010/08/12 09:41:10 pooka Exp $");
 
 #if defined(_KERNEL_OPT)
-#include "opt_compat_netbsd.h"
 #include "opt_nfs.h"
 #endif
 
@@ -60,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.191 2008/01/03 01:26:30 pooka Exp $
 #include <sys/systm.h>
 #include <sys/timetc.h>
 #include <sys/kauth.h>
+#include <sys/module.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -75,6 +75,8 @@ __KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.191 2008/01/03 01:26:30 pooka Exp $
 #include <nfs/nfsdiskless.h>
 #include <nfs/nfs_var.h>
 
+MODULE(MODULE_CLASS_VFS, nfs, NULL);
+
 extern struct nfsstats nfsstats;
 extern int nfs_ticks;
 
@@ -83,6 +85,8 @@ extern int nfs_ticks;
  * for the per drive stats.
  */
 unsigned int nfs_mount_count = 0;
+
+int nfs_commitsize;
 
 /*
  * nfs vfs operations.
@@ -113,31 +117,57 @@ struct vfsops nfs_vfsops = {
 	nfs_fhtovp,
 	nfs_vptofh,
 	nfs_vfs_init,
-	nfs_vfs_reinit,
+	NULL,
 	nfs_vfs_done,
 	nfs_mountroot,
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
 	(void *)eopnotsupp,	/* vfs_suspendctl */
+	genfs_renamelock_enter,
+	genfs_renamelock_exit,
+	(void *)eopnotsupp,
 	nfs_vnodeopv_descs,
 	0,
 	{ NULL, NULL },
 };
-VFS_ATTACH(nfs_vfsops);
 
 extern u_int32_t nfs_procids[NFS_NPROCS];
 extern u_int32_t nfs_prog, nfs_vers;
+static struct sysctllog *nfs_clog;
 
-static int nfs_mount_diskless __P((struct nfs_dlmount *, const char *,
-    struct mount **, struct vnode **, struct lwp *));
+static int nfs_mount_diskless(struct nfs_dlmount *, const char *,
+    struct mount **, struct vnode **, struct lwp *);
+static void nfs_sysctl_init(void);
+static void nfs_sysctl_fini(void);
+
+static int
+nfs_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&nfs_vfsops);
+		if (error == 0) {
+			nfs_sysctl_init();
+		}
+		return error;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&nfs_vfsops);
+		if (error == 0) {
+			nfs_sysctl_fini();
+		}
+		return error;
+	default:
+		return ENOTTY;
+	}
+}
 
 /*
  * nfs statvfs call
  */
 int
-nfs_statvfs(mp, sbp)
-	struct mount *mp;
-	struct statvfs *sbp;
+nfs_statvfs(struct mount *mp, struct statvfs *sbp)
 {
 	struct lwp *l = curlwp;
 	struct vnode *vp;
@@ -195,18 +225,16 @@ nfs_statvfs(mp, sbp)
 		tquad = ((quad_t)tquad / (quad_t)NFS_FABLKSIZE);
 		sbp->f_bresvd = sbp->f_bfree - tquad;
 		sbp->f_bavail = tquad;
-#ifdef COMPAT_20
 		/* Handle older NFS servers returning negative values */
 		if ((quad_t)sbp->f_bavail < 0)
 			sbp->f_bavail = 0;
-#endif
 		tquad = fxdr_hyper(&sfp->sf_tfiles);
 		sbp->f_files = tquad;
 		tquad = fxdr_hyper(&sfp->sf_ffiles);
 		sbp->f_ffree = tquad;
 		sbp->f_favail = tquad;
 		sbp->f_fresvd = 0;
-		sbp->f_namemax = MAXNAMLEN;
+		sbp->f_namemax = NFS_MAXNAMLEN;
 	} else {
 		sbp->f_bsize = NFS_FABLKSIZE;
 		sbp->f_frsize = fxdr_unsigned(int32_t, sfp->sf_bsize);
@@ -218,7 +246,7 @@ nfs_statvfs(mp, sbp)
 		sbp->f_ffree = 0;
 		sbp->f_favail = 0;
 		sbp->f_fresvd = 0;
-		sbp->f_namemax = MAXNAMLEN;
+		sbp->f_namemax = NFS_MAXNAMLEN;
 	}
 	copy_statvfs_info(sbp, mp);
 	nfsm_reqdone;
@@ -231,11 +259,7 @@ nfs_statvfs(mp, sbp)
  * nfs version 3 fsinfo rpc call
  */
 int
-nfs_fsinfo(nmp, vp, cred, l)
-	struct nfsmount *nmp;
-	struct vnode *vp;
-	kauth_cred_t cred;
-	struct lwp *l;
+nfs_fsinfo(struct nfsmount *nmp, struct vnode *vp, kauth_cred_t cred, struct lwp *l)
 {
 	struct nfsv3_fsinfo *fsp;
 	char *cp;
@@ -305,11 +329,9 @@ nfs_fsinfo(nmp, vp, cred, l)
  * - build the rootfs mount point and call mountnfs() to do the rest.
  */
 int
-nfs_mountroot()
+nfs_mountroot(void)
 {
-#ifdef __HAVE_TIMECOUNTER
 	struct timespec ts;
-#endif
 	struct nfs_diskless *nd;
 	struct vattr attr;
 	struct mount *mp;
@@ -330,21 +352,16 @@ nfs_mountroot()
 	 * current time < nfs_attrtimeo(nmp, np) so keep this in for now.
 	 */
 	if (time_second < NFS_MAXATTRTIMO) {
-#ifdef __HAVE_TIMECOUNTER
 		ts.tv_sec = NFS_MAXATTRTIMO;
 		ts.tv_nsec = 0;
 		tc_setclock(&ts);
-#else /* !__HAVE_TIMECOUNTER */
-		time.tv_sec = NFS_MAXATTRTIMO;
-#endif /* !__HAVE_TIMECOUNTER */
 	}
 
 	/*
 	 * Call nfs_boot_init() to fill in the nfs_diskless struct.
 	 * Side effect:  Finds and configures a network interface.
 	 */
-	nd = kmem_alloc(sizeof(*nd), KM_SLEEP);
-	memset(nd, 0, sizeof(*nd));
+	nd = kmem_zalloc(sizeof(*nd), KM_SLEEP);
 	error = nfs_boot_init(nd, l);
 	if (error) {
 		kmem_free(nd, sizeof(*nd));
@@ -367,7 +384,7 @@ nfs_mountroot()
 	mutex_exit(&mountlist_lock);
 	rootvp = vp;
 	mp->mnt_vnodecovered = NULLVP;
-	vfs_unbusy(mp);
+	vfs_unbusy(mp, false, NULL);
 
 	/* Get root attributes (for the time). */
 	error = VOP_GETATTR(vp, &attr, l->l_cred);
@@ -392,12 +409,8 @@ out:
  * (once for root and once for swap)
  */
 static int
-nfs_mount_diskless(ndmntp, mntname, mpp, vpp, l)
-	struct nfs_dlmount *ndmntp;
-	const char *mntname;	/* mount point name */
-	struct mount **mpp;
-	struct vnode **vpp;
-	struct lwp *l;
+nfs_mount_diskless(struct nfs_dlmount *ndmntp, const char *mntname, struct mount **mpp, struct vnode **vpp, struct lwp *l)
+	/* mntname:	 mount point name */
 {
 	struct mount *mp;
 	struct mbuf *m;
@@ -424,11 +437,10 @@ nfs_mount_diskless(ndmntp, mntname, mpp, vpp, l)
 	error = mountnfs(&ndmntp->ndm_args, mp, m, mntname,
 			 ndmntp->ndm_args.hostname, vpp, l);
 	if (error) {
-		mp->mnt_op->vfs_refcount--;
-		vfs_unbusy(mp);
+		vfs_unbusy(mp, false, NULL);
+		vfs_destroy(mp);
 		printf("nfs_mountroot: mount %s failed: %d\n",
 		       mntname, error);
-		free(mp, M_MOUNT);
 	} else
 		*mpp = mp;
 
@@ -436,10 +448,7 @@ nfs_mount_diskless(ndmntp, mntname, mpp, vpp, l)
 }
 
 void
-nfs_decode_args(nmp, argp, l)
-	struct nfsmount *nmp;
-	struct nfs_args *argp;
-	struct lwp *l;
+nfs_decode_args(struct nfsmount *nmp, struct nfs_args *argp, struct lwp *l)
 {
 	int s;
 	int adjsock;
@@ -648,16 +657,16 @@ nfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	}
 	if (args->fhsize < 0 || args->fhsize > NFSX_V3FHMAX)
 		return (EINVAL);
-	MALLOC(nfh, u_char *, NFSX_V3FHMAX, M_TEMP, M_WAITOK);
+	nfh = malloc(NFSX_V3FHMAX, M_TEMP, M_WAITOK);
 	error = copyin(args->fh, nfh, args->fhsize);
 	if (error)
 		goto free_nfh;
-	MALLOC(pth, char *, MNAMELEN, M_TEMP, M_WAITOK);
+	pth = malloc(MNAMELEN, M_TEMP, M_WAITOK);
 	error = copyinstr(path, pth, MNAMELEN - 1, &len);
 	if (error)
 		goto free_pth;
 	memset(&pth[len], 0, MNAMELEN - len);
-	MALLOC(hst, char *, MNAMELEN, M_TEMP, M_WAITOK);
+	hst = malloc(MNAMELEN, M_TEMP, M_WAITOK);
 	error = copyinstr(args->hostname, hst, MNAMELEN - 1, &len);
 	if (error)
 		goto free_hst;
@@ -671,11 +680,11 @@ nfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	error = mountnfs(args, mp, nam, pth, hst, &vp, l);
 
 free_hst:
-	FREE(hst, M_TEMP);
+	free(hst, M_TEMP);
 free_pth:
-	FREE(pth, M_TEMP);
+	free(pth, M_TEMP);
 free_nfh:
-	FREE(nfh, M_TEMP);
+	free(nfh, M_TEMP);
 
 	return (error);
 }
@@ -684,16 +693,11 @@ free_nfh:
  * Common code for mount and mountroot
  */
 int
-mountnfs(argp, mp, nam, pth, hst, vpp, l)
-	struct nfs_args *argp;
-	struct mount *mp;
-	struct mbuf *nam;
-	const char *pth, *hst;
-	struct vnode **vpp;
-	struct lwp *l;
+mountnfs(struct nfs_args *argp, struct mount *mp, struct mbuf *nam, const char *pth, const char *hst, struct vnode **vpp, struct lwp *l)
 {
 	struct nfsmount *nmp;
 	struct nfsnode *np;
+	struct vnode *vp;
 	int error;
 	struct vattr *attrs;
 	kauth_cred_t cr;
@@ -720,10 +724,12 @@ mountnfs(argp, mp, nam, pth, hst, vpp, l)
 		TAILQ_INIT(&nmp->nm_bufq);
 		rw_init(&nmp->nm_writeverflock);
 		mutex_init(&nmp->nm_lock, MUTEX_DEFAULT, IPL_NONE);
+		rw_init(&nmp->nm_rbtlock);
 		cv_init(&nmp->nm_rcvcv, "nfsrcv");
 		cv_init(&nmp->nm_sndcv, "nfssnd");
 		cv_init(&nmp->nm_aiocv, "nfsaio");
 		cv_init(&nmp->nm_disconcv, "nfsdis");
+		nfs_rbtinit(nmp);
 	}
 	vfs_getnewfsid(mp);
 	nmp->nm_mountp = mp;
@@ -732,15 +738,16 @@ mountnfs(argp, mp, nam, pth, hst, vpp, l)
 	if ((argp->flags & NFSMNT_NFSV3) == 0)
 #endif
 	{
-		/*
-		 * V2 can only handle 32 bit filesizes. For v3, nfs_fsinfo
-		 * will fill this in.
-		 */
-		nmp->nm_maxfilesize = 0xffffffffLL;
 		if (argp->fhsize != NFSX_V2FH) {
 			return EINVAL;
 		}
 	}
+
+	/*
+	 * V2 can only handle 32 bit filesizes. For v3, nfs_fsinfo
+	 * will overwrite this.
+	 */
+	nmp->nm_maxfilesize = 0xffffffffLL;
 
 	nmp->nm_timeo = NFS_TIMEO;
 	nmp->nm_retry = NFS_RETRANS;
@@ -783,10 +790,10 @@ mountnfs(argp, mp, nam, pth, hst, vpp, l)
 	error = nfs_nget(mp, (nfsfh_t *)argp->fh, argp->fhsize, &np);
 	if (error)
 		goto bad;
-	*vpp = NFSTOV(np);
-	MALLOC(attrs, struct vattr *, sizeof(struct vattr), M_TEMP, M_WAITOK);
-	VOP_GETATTR(*vpp, attrs, l->l_cred);
-	if ((nmp->nm_flag & NFSMNT_NFSV3) && ((*vpp)->v_type == VDIR)) {
+	vp = NFSTOV(np);
+	attrs = malloc(sizeof(struct vattr), M_TEMP, M_WAITOK);
+	VOP_GETATTR(vp, attrs, l->l_cred);
+	if ((nmp->nm_flag & NFSMNT_NFSV3) && (vp->v_type == VDIR)) {
 		cr = kauth_cred_alloc();
 		kauth_cred_setuid(cr, attrs->va_uid);
 		kauth_cred_seteuid(cr, attrs->va_uid);
@@ -794,10 +801,10 @@ mountnfs(argp, mp, nam, pth, hst, vpp, l)
 		kauth_cred_setgid(cr, attrs->va_gid);
 		kauth_cred_setegid(cr, attrs->va_gid);
 		kauth_cred_setsvgid(cr, attrs->va_gid);
-		nfs_cookieheuristic(*vpp, &nmp->nm_iflag, l, cr);
+		nfs_cookieheuristic(vp, &nmp->nm_iflag, l, cr);
 		kauth_cred_free(cr);
 	}
-	FREE(attrs, M_TEMP);
+	free(attrs, M_TEMP);
 
 	/*
 	 * A reference count is needed on the nfsnode representing the
@@ -808,8 +815,12 @@ mountnfs(argp, mp, nam, pth, hst, vpp, l)
 	 * number == ROOTINO (2). So, just unlock, but no rele.
 	 */
 
-	nmp->nm_vnode = *vpp;
-	VOP_UNLOCK(*vpp, 0);
+	nmp->nm_vnode = vp;
+	if (vp->v_type == VNON)
+		vp->v_type = VDIR;
+	vp->v_vflag |= VV_ROOT;
+	VOP_UNLOCK(vp);
+	*vpp = vp;
 
 	snprintf(iosname, sizeof(iosname), "nfs%u", nfs_mount_count++);
 	nmp->nm_stats = iostat_alloc(IOSTAT_NFS, nmp, iosname);
@@ -818,6 +829,7 @@ mountnfs(argp, mp, nam, pth, hst, vpp, l)
 bad:
 	nfs_disconnect(nmp);
 	rw_destroy(&nmp->nm_writeverflock);
+	rw_destroy(&nmp->nm_rbtlock);
 	mutex_destroy(&nmp->nm_lock);
 	cv_destroy(&nmp->nm_rcvcv);
 	cv_destroy(&nmp->nm_sndcv);
@@ -852,22 +864,21 @@ nfs_unmount(struct mount *mp, int mntflags)
 	 */
 	/*
 	 * We need to decrement the ref. count on the nfsnode representing
-	 * the remote root.  See comment in mountnfs().  The VFS unmount()
-	 * has done vput on this vnode, otherwise we would get deadlock!
+	 * the remote root.  See comment in mountnfs().
 	 */
 	vp = nmp->nm_vnode;
-	error = vget(vp, LK_EXCLUSIVE | LK_RETRY);
+	error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	if (error != 0)
 		return error;
 
-	if ((mntflags & MNT_FORCE) == 0 && vp->v_usecount > 2) {
-		vput(vp);
+	if ((mntflags & MNT_FORCE) == 0 && vp->v_usecount > 1) {
+		VOP_UNLOCK(vp);
 		return (EBUSY);
 	}
 
 	error = vflush(mp, vp, flags);
 	if (error) {
-		vput(vp);
+		VOP_UNLOCK(vp);
 		return (error);
 	}
 
@@ -886,15 +897,16 @@ nfs_unmount(struct mount *mp, int mntflags)
 	iostat_free(nmp->nm_stats);
 
 	/*
-	 * There are two reference counts to get rid of here
+	 * There is one reference count to get rid of here
 	 * (see comment in mountnfs()).
 	 */
-	vput(vp);
+	VOP_UNLOCK(vp);
 	vgone(vp);
 	nfs_disconnect(nmp);
 	m_freem(nmp->nm_nam);
 
 	rw_destroy(&nmp->nm_writeverflock);
+	rw_destroy(&nmp->nm_rbtlock);
 	mutex_destroy(&nmp->nm_lock);
 	cv_destroy(&nmp->nm_rcvcv);
 	cv_destroy(&nmp->nm_sndcv);
@@ -908,9 +920,7 @@ nfs_unmount(struct mount *mp, int mntflags)
  * Return root of a filesystem
  */
 int
-nfs_root(mp, vpp)
-	struct mount *mp;
-	struct vnode **vpp;
+nfs_root(struct mount *mp, struct vnode **vpp)
 {
 	struct vnode *vp;
 	struct nfsmount *nmp;
@@ -918,12 +928,12 @@ nfs_root(mp, vpp)
 
 	nmp = VFSTONFS(mp);
 	vp = nmp->nm_vnode;
-	error = vget(vp, LK_EXCLUSIVE | LK_RETRY);
-	if (error != 0)
+	vref(vp);
+	error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	if (error != 0) {
+		vrele(vp);
 		return error;
-	if (vp->v_type == VNON)
-		vp->v_type = VDIR;
-	vp->v_vflag = VV_ROOT;
+	}
 	*vpp = vp;
 	return (0);
 }
@@ -935,10 +945,7 @@ extern int syncprt;
  */
 /* ARGSUSED */
 int
-nfs_sync(mp, waitfor, cred)
-	struct mount *mp;
-	int waitfor;
-	kauth_cred_t cred;
+nfs_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 {
 	struct vnode *vp, *mvp;
 	int error, allerror = 0;
@@ -960,14 +967,19 @@ loop:
 			continue;
 		mutex_enter(&vp->v_interlock);
 		/* XXX MNT_LAZY cannot be right? */
-		if (waitfor == MNT_LAZY || VOP_ISLOCKED(vp) ||
+		if (waitfor == MNT_LAZY ||
 		    (LIST_EMPTY(&vp->v_dirtyblkhd) &&
 		     UVM_OBJ_IS_CLEAN(&vp->v_uobj))) {
 			mutex_exit(&vp->v_interlock);
 			continue;
 		}
 		mutex_exit(&mntvnode_lock);
-		if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK)) {
+		error = vget(vp, LK_EXCLUSIVE | LK_NOWAIT);
+		if (error != 0) {
+			if (error != ENOENT) {
+				mutex_enter(&mntvnode_lock);
+				continue;
+			}
 			(void)vunmark(mvp);
 			goto loop;
 		}
@@ -1015,15 +1027,16 @@ sysctl_vfs_nfs_iothreads(SYSCTLFN_ARGS)
 	return nfs_set_niothreads(val);
 }
 
-SYSCTL_SETUP(sysctl_vfs_nfs_setup, "sysctl vfs.nfs subtree setup")
+static void
+nfs_sysctl_init(void)
 {
 
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&nfs_clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "vfs", NULL,
 		       NULL, 0, NULL, 0,
 		       CTL_VFS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&nfs_clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_NODE, "nfs",
 		       SYSCTL_DESCR("NFS vfs options"),
@@ -1035,18 +1048,25 @@ SYSCTL_SETUP(sysctl_vfs_nfs_setup, "sysctl vfs.nfs subtree setup")
 	 * "2" is the order as taken from sys/mount.h
 	 */
 
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&nfs_clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_STRUCT, "nfsstats",
 		       SYSCTL_DESCR("NFS operation statistics"),
 		       NULL, 0, &nfsstats, sizeof(nfsstats),
 		       CTL_VFS, 2, NFS_NFSSTATS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
+	sysctl_createv(&nfs_clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "iothreads",
 		       SYSCTL_DESCR("Number of NFS client processes desired"),
 		       sysctl_vfs_nfs_iothreads, 0, NULL, 0,
 		       CTL_VFS, 2, NFS_IOTHREADS, CTL_EOL);
+}
+
+static void
+nfs_sysctl_fini(void)
+{
+
+	sysctl_teardown(&nfs_clog);
 }
 
 /* ARGSUSED */
@@ -1084,6 +1104,7 @@ nfs_fhtovp(struct mount *mp, struct fid *fid, struct vnode **vpp)
 	error = VOP_GETATTR(*vpp, &va, kauth_cred_get());
 	if (error != 0) {
 		vput(*vpp);
+		*vpp = NULLVP;
 	}
 	return error;
 }
@@ -1124,4 +1145,32 @@ nfs_start(struct mount *mp, int flags)
 {
 
 	return (0);
+}
+
+/*
+ * Called once at VFS init to initialize client-specific data structures.
+ */
+void
+nfs_vfs_init(void)
+{
+
+	/* Initialize NFS server / client shared data. */
+	nfs_init();
+	nfs_node_init();
+
+	/* Initialize the kqueue structures */
+	nfs_kqinit();
+	/* Initialize the iod structures */
+	nfs_iodinit();
+
+	nfs_commitsize = uvmexp.npages << (PAGE_SHIFT - 4);
+}
+
+void
+nfs_vfs_done(void)
+{
+
+	nfs_node_done();
+	nfs_kqfini();
+	nfs_iodfini();
 }

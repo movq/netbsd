@@ -1,4 +1,4 @@
-/*	$NetBSD: mk48txxreg.h,v 1.9 2005/12/11 12:21:27 christos Exp $ */
+/*	$NetBSD: mk48txxreg.h,v 1.11 2011/01/04 01:28:15 matt Exp $ */
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,7 +57,7 @@
 #define MK48TXX_IADAY	5	/* alarm day (1..31; BCD) */
 #define MK48TXX_IINTR	6	/* interrupts */
 #define MK48TXX_IWDOG	7	/* watchdog */
-#define MK48TXX_ICSR	8	/* control register */
+#define MK48TXX_ICSR	8	/* control register / century (DS1553) */
 #define MK48TXX_ISEC	9	/* seconds (0..59; BCD) */
 #define MK48TXX_IMIN	10	/* minutes (0..59; BCD) */
 #define MK48TXX_IHOUR	11	/* hour (0..23; BCD) */
@@ -95,6 +88,7 @@
 /* Bits in the control register */
 #define MK48TXX_CSR_WRITE	0x80	/* want to write */
 #define MK48TXX_CSR_READ	0x40	/* want to read (freeze clock) */
+#define MK48TXX_CSR_CENT_MASK	0x3f	/* century mask */
 
 /* Bit in the weekday register */
 #define MK48TXX_WDAY_FT		0x40	/* freq test: toggle sec[0] at 512Hz */
@@ -116,3 +110,6 @@
 
 #define MK48T59_CLKSZ		8192
 #define MK48T59_CLKOFF		0x1ff0
+
+#define	DS1553_CLKSZ		8192
+#define	DS1553_CLKOFF		0x1ff0

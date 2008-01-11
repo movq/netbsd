@@ -1,7 +1,7 @@
-/*	$NetBSD: psshfs.c,v 1.47 2007/12/14 10:56:22 jmmv Exp $	*/
+/*	$NetBSD: psshfs.c,v 1.63 2011/05/19 15:07:16 riastradh Exp $	*/
 
 /*
- * Copyright (c) 2006  Antti Kantee.  All Rights Reserved.
+ * Copyright (c) 2006-2009  Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,10 +41,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: psshfs.c,v 1.47 2007/12/14 10:56:22 jmmv Exp $");
+__RCSID("$NetBSD: psshfs.c,v 1.63 2011/05/19 15:07:16 riastradh Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
+#include <sys/wait.h>
 
 #include <assert.h>
 #include <err.h>
@@ -60,10 +61,11 @@ __RCSID("$NetBSD: psshfs.c,v 1.47 2007/12/14 10:56:22 jmmv Exp $");
 
 #include "psshfs.h"
 
-static void	pssh_connect(struct psshfs_ctx *, char **);
+static int	pssh_connect(struct puffs_usermount *, int);
 static void	psshfs_loopfn(struct puffs_usermount *);
 static void	usage(void);
-static void	add_ssharg(char ***, int *, char *);
+static void	add_ssharg(char ***, int *, const char *);
+static void	psshfs_notify(struct puffs_usermount *, int, int);
 
 #define SSH_PATH "/usr/bin/ssh"
 
@@ -71,13 +73,13 @@ unsigned int max_reads;
 static int sighup;
 
 static void
-add_ssharg(char ***sshargs, int *nargs, char *arg)
+add_ssharg(char ***sshargs, int *nargs, const char *arg)
 {
 	
 	*sshargs = realloc(*sshargs, (*nargs + 2) * sizeof(char*));
 	if (!*sshargs)
 		err(1, "realloc");
-	(*sshargs)[(*nargs)++] = arg;
+	(*sshargs)[(*nargs)++] = estrdup(arg);
 	(*sshargs)[*nargs] = NULL;
 }
 
@@ -86,7 +88,7 @@ usage()
 {
 
 	fprintf(stderr, "usage: %s "
-	    "[-es] [-F configfile] [-O sshopt=value] [-o opts] "
+	    "[-ceprst] [-F configfile] [-O sshopt=value] [-o opts] "
 	    "user@host:path mountpath\n",
 	    getprogname());
 	exit(1);
@@ -105,36 +107,61 @@ main(int argc, char *argv[])
 	struct psshfs_ctx pctx;
 	struct puffs_usermount *pu;
 	struct puffs_ops *pops;
+	struct psshfs_node *root = &pctx.psn_root;
+	struct puffs_node *pn_root;
+	puffs_framev_fdnotify_fn notfn;
+	struct vattr *rva;
 	mntoptparse_t mp;
 	char **sshargs;
 	char *userhost;
 	char *hostpath;
 	int mntflags, pflags, ch;
 	int detach;
-	int exportfs, refreshival;
-	int nargs, x;
+	int exportfs, refreshival, numconnections;
+	int nargs;
 
 	setprogname(argv[0]);
+	puffs_unmountonsignal(SIGINT, true);
+	puffs_unmountonsignal(SIGTERM, true);
 
 	if (argc < 3)
 		usage();
 
+	memset(&pctx, 0, sizeof(pctx));
 	mntflags = pflags = exportfs = nargs = 0;
+	numconnections = 1;
 	detach = 1;
 	refreshival = DEFAULTREFRESH;
+	notfn = puffs_framev_unmountonclose;
 	sshargs = NULL;
 	add_ssharg(&sshargs, &nargs, SSH_PATH);
 	add_ssharg(&sshargs, &nargs, "-axs");
 	add_ssharg(&sshargs, &nargs, "-oClearAllForwardings=yes");
 
-	while ((ch = getopt(argc, argv, "eF:o:O:r:st:")) != -1) {
+	while ((ch = getopt(argc, argv, "c:eF:g:o:O:pr:st:u:")) != -1) {
 		switch (ch) {
+		case 'c':
+			numconnections = atoi(optarg);
+			if (numconnections < 1 || numconnections > 2) {
+				fprintf(stderr, "%s: only 1 or 2 connections "
+				    "permitted currently\n", getprogname());
+				usage();
+				/*NOTREACHED*/
+			}
+			break;
 		case 'e':
 			exportfs = 1;
 			break;
 		case 'F':
 			add_ssharg(&sshargs, &nargs, "-F");
 			add_ssharg(&sshargs, &nargs, optarg);
+			break;
+		case 'g':
+			pctx.domanglegid = 1;
+			pctx.manglegid = atoi(optarg);
+			if (pctx.manglegid == (gid_t)-1)
+				errx(1, "-1 not allowed for -g");
+			pctx.mygid = getegid();
 			break;
 		case 'O':
 			add_ssharg(&sshargs, &nargs, "-o");
@@ -146,6 +173,9 @@ main(int argc, char *argv[])
 				err(1, "getmntopts");
 			freemntopts(mp);
 			break;
+		case 'p':
+			notfn = psshfs_notify;
+			break;
 		case 'r':
 			max_reads = atoi(optarg);
 			break;
@@ -156,6 +186,13 @@ main(int argc, char *argv[])
 			refreshival = atoi(optarg);
 			if (refreshival < 0 && refreshival != -1)
 				errx(1, "invalid timeout %d", refreshival);
+			break;
+		case 'u':
+			pctx.domangleuid = 1;
+			pctx.mangleuid = atoi(optarg);
+			if (pctx.mangleuid == (uid_t)-1)
+				errx(1, "-1 not allowed for -u");
+			pctx.myuid = geteuid();
 			break;
 		default:
 			usage();
@@ -177,7 +214,7 @@ main(int argc, char *argv[])
 
 	PUFFSOP_SET(pops, psshfs, fs, unmount);
 	PUFFSOP_SETFSNOP(pops, sync); /* XXX */
-	PUFFSOP_SETFSNOP(pops, statvfs);
+	PUFFSOP_SET(pops, psshfs, fs, statvfs);
 	PUFFSOP_SET(pops, psshfs, fs, nodetofh);
 	PUFFSOP_SET(pops, psshfs, fs, fhtonode);
 
@@ -202,9 +239,9 @@ main(int argc, char *argv[])
 	if (pu == NULL)
 		err(1, "puffs_init");
 
-	memset(&pctx, 0, sizeof(pctx));
 	pctx.mounttime = time(NULL);
 	pctx.refreshival = refreshival;
+	pctx.numconnections = numconnections;
 
 	userhost = argv[0];
 	hostpath = strchr(userhost, ':');
@@ -216,27 +253,50 @@ main(int argc, char *argv[])
 
 	add_ssharg(&sshargs, &nargs, argv[0]);
 	add_ssharg(&sshargs, &nargs, "sftp");
+	pctx.sshargs = sshargs;
+
+	pctx.nextino = 2;
+	memset(root, 0, sizeof(struct psshfs_node));
+	TAILQ_INIT(&root->pw);
+	pn_root = puffs_pn_new(pu, root);
+	if (pn_root == NULL)
+		return errno;
+	puffs_setroot(pu, pn_root);
+
+	puffs_framev_init(pu, psbuf_read, psbuf_write, psbuf_cmp, NULL, notfn);
 
 	signal(SIGHUP, takehup);
 	puffs_ml_setloopfn(pu, psshfs_loopfn);
-
-	pssh_connect(&pctx, sshargs);
+	if (pssh_connect(pu, PSSHFD_META) == -1)
+		err(1, "can't connect meta");
+	if (puffs_framev_addfd(pu, pctx.sshfd,
+	    PUFFS_FBIO_READ | PUFFS_FBIO_WRITE) == -1)
+		err(1, "framebuf addfd meta");
+	if (numconnections == 2) {
+		if (pssh_connect(pu, PSSHFD_DATA) == -1)
+			err(1, "can't connect data");
+		if (puffs_framev_addfd(pu, pctx.sshfd_data,
+		    PUFFS_FBIO_READ | PUFFS_FBIO_WRITE) == -1)
+			err(1, "framebuf addfd data");
+	} else {
+		pctx.sshfd_data = pctx.sshfd;
+	}
 
 	if (exportfs)
 		puffs_setfhsize(pu, sizeof(struct psshfs_fid),
 		    PUFFS_FHFLAG_NFSV2 | PUFFS_FHFLAG_NFSV3);
 
-	if (psshfs_domount(pu) != 0)
-		errx(1, "psshfs_domount");
-	x = 1;
-	if (ioctl(pctx.sshfd, FIONBIO, &x) == -1)
-		err(1, "nonblocking descriptor");
+	rva = &pn_root->pn_va;
+	rva->va_fileid = pctx.nextino++;
 
-	puffs_framev_init(pu, psbuf_read, psbuf_write, psbuf_cmp, NULL,
-	    puffs_framev_unmountonclose);
-	if (puffs_framev_addfd(pu, pctx.sshfd,
-	    PUFFS_FBIO_READ | PUFFS_FBIO_WRITE) == -1)
-		err(1, "framebuf addfd");
+	/*
+	 * For root link count, just guess something ridiculously high.
+	 * Guessing too high has no known adverse effects, but fts(3)
+	 * doesn't like too low values.  This guess will be replaced
+	 * with the real value when readdir is first called for
+	 * the root directory.
+	 */
+	rva->va_nlink = 8811;
 
 	if (detach)
 		if (puffs_daemon(pu, 1, 1) == -1)
@@ -249,24 +309,89 @@ main(int argc, char *argv[])
 
 	if (puffs_mainloop(pu) == -1)
 		err(1, "mainloop");
+	puffs_exit(pu, 1);
 
 	return 0;
 }
 
-static void
-pssh_connect(struct psshfs_ctx *pctx, char **sshargs)
+#define RETRY_MAX 100
+
+void
+psshfs_notify(struct puffs_usermount *pu, int fd, int what)
 {
+	struct psshfs_ctx *pctx = puffs_getspecific(pu);
+	int nretry, which, newfd, dummy;
+
+	if (fd == pctx->sshfd) {
+		which = PSSHFD_META;
+	} else {
+		assert(fd == pctx->sshfd_data);
+		which = PSSHFD_DATA;
+	}
+
+	if (puffs_getstate(pu) != PUFFS_STATE_RUNNING)
+		return;
+
+	if (what != (PUFFS_FBIO_READ | PUFFS_FBIO_WRITE)) {
+		puffs_framev_removefd(pu, fd, ECONNRESET);
+		return;
+	}
+	close(fd);
+
+	/* deal with zmobies, beware of half-eaten brain */
+	while (waitpid(-1, &dummy, WNOHANG) > 0)
+		continue;
+
+	for (nretry = 0;;nretry++) {
+		if ((newfd = pssh_connect(pu, which)) == -1)
+			goto retry2;
+
+		if (puffs_framev_addfd(pu, newfd,
+		    PUFFS_FBIO_READ | PUFFS_FBIO_WRITE) == -1)
+			goto retry1;
+
+		break;
+ retry1:
+		fprintf(stderr, "reconnect failed... ");
+		close(newfd);
+ retry2:
+		if (nretry < RETRY_MAX) {
+			fprintf(stderr, "retry (%d left)\n", RETRY_MAX-nretry);
+			sleep(nretry);
+		} else {
+			fprintf(stderr, "retry count exceeded, going south\n");
+			exit(1); /* XXXXXXX */
+		}
+	}
+}
+
+static int
+pssh_connect(struct puffs_usermount *pu, int which)
+{
+	struct psshfs_ctx *pctx = puffs_getspecific(pu);
+	char * const *sshargs = pctx->sshargs;
 	int fds[2];
 	pid_t pid;
-	int dnfd;
+	int dnfd, x;
+	int *sshfd;
+	pid_t *sshpid;
+
+	if (which == PSSHFD_META) {
+		sshfd = &pctx->sshfd;
+		sshpid = &pctx->sshpid;
+	} else {
+		assert(which == PSSHFD_DATA);
+		sshfd = &pctx->sshfd_data;
+		sshpid = &pctx->sshpid_data;
+	}
 
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == -1)
-		err(1, "socketpair");
+		return -1;
 
 	pid = fork();
 	switch (pid) {
 	case -1:
-		err(1, "fork");
+		return -1;
 		/*NOTREACHED*/
 	case 0: /* child */
 		if (dup2(fds[0], STDIN_FILENO) == -1)
@@ -281,13 +406,22 @@ pssh_connect(struct psshfs_ctx *pctx, char **sshargs)
 			dup2(dnfd, STDERR_FILENO);
 
 		execvp(sshargs[0], sshargs);
+		/*NOTREACHED*/
 		break;
 	default:
-		pctx->sshpid = pid;
-		pctx->sshfd = fds[1];
+		*sshpid = pid;
+		*sshfd = fds[1];
 		close(fds[0]);
 		break;
 	}
+
+	if (psshfs_handshake(pu, *sshfd) != 0)
+		errx(1, "handshake failed, server does not support sftp?");
+	x = 1;
+	if (ioctl(*sshfd, FIONBIO, &x) == -1)
+		err(1, "nonblocking descriptor %d", which);
+
+	return *sshfd;
 }
 
 static void *

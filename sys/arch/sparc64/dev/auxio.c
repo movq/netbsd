@@ -1,4 +1,4 @@
-/*	$NetBSD: auxio.c,v 1.18 2007/10/17 19:57:28 garbled Exp $	*/
+/*	$NetBSD: auxio.c,v 1.21 2011/03/12 11:43:38 nakayama Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auxio.c,v 1.18 2007/10/17 19:57:28 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auxio.c,v 1.21 2011/03/12 11:43:38 nakayama Exp $");
 
 #include "opt_auxio.h"
 
@@ -51,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: auxio.c,v 1.18 2007/10/17 19:57:28 garbled Exp $");
 
 #include <dev/ebus/ebusreg.h>
 #include <dev/ebus/ebusvar.h>
-#include <sparc64/dev/sbusvar.h>
+#include <dev/sbus/sbusvar.h>
 #include <sparc64/dev/auxioreg.h>
 #include <sparc64/dev/auxiovar.h>
 
@@ -267,7 +265,7 @@ auxio_fd_control(u_int32_t bits)
 	 * XXX This does not handle > 1 auxio correctly.
 	 * We'll assume the floppy drive is tied to first auxio found.
 	 */
-	sc = (struct auxio_softc *)auxio_cd.cd_devs[0];
+	sc = device_lookup_private(&auxio_cd, 0);
 	if (sc->sc_flags & AUXIO_EBUS)
 		led = le32toh(bus_space_read_4(sc->sc_tag, sc->sc_led, 0));
 	else

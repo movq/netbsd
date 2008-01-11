@@ -1,4 +1,4 @@
-/*	$NetBSD: rpcb_clnt.c,v 1.21 2006/03/19 03:00:49 christos Exp $	*/
+/*	$NetBSD: rpcb_clnt.c,v 1.25 2010/03/23 20:28:58 drochner Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)rpcb_clnt.c 1.30 89/06/21 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: rpcb_clnt.c,v 1.21 2006/03/19 03:00:49 christos Exp $");
+__RCSID("$NetBSD: rpcb_clnt.c,v 1.25 2010/03/23 20:28:58 drochner Exp $");
 #endif
 #endif
 
@@ -79,8 +79,6 @@ __RCSID("$NetBSD: rpcb_clnt.c,v 1.21 2006/03/19 03:00:49 christos Exp $");
 __weak_alias(rpcb_set,_rpcb_set)
 __weak_alias(rpcb_unset,_rpcb_unset)
 __weak_alias(rpcb_getmaps,_rpcb_getmaps)
-__weak_alias(rpcb_rmtcall,_rpcb_rmtcall)
-__weak_alias(rpcb_gettime,_rpcb_gettime)
 __weak_alias(rpcb_taddr2uaddr,_rpcb_taddr2uaddr)
 __weak_alias(rpcb_uaddr2taddr,_rpcb_uaddr2taddr)
 #endif
@@ -193,7 +191,7 @@ check_cache(host, netid)
 			return (cptr);
 		}
 	}
-	return ((struct address_cache *) NULL);
+	return NULL;
 }
 
 static void
@@ -238,21 +236,20 @@ add_cache(host, netid, taddr, uaddr)
 	/* uaddr may be NULL */
 	/* taddr may be NULL ??? */
 
-	ad_cache = (struct address_cache *)
-			malloc(sizeof (struct address_cache));
+	ad_cache = malloc(sizeof(*ad_cache));
 	if (!ad_cache) {
 		return;
 	}
 	ad_cache->ac_host = strdup(host);
 	ad_cache->ac_netid = strdup(netid);
 	ad_cache->ac_uaddr = uaddr ? strdup(uaddr) : NULL;
-	ad_cache->ac_taddr = (struct netbuf *)malloc(sizeof (struct netbuf));
+	ad_cache->ac_taddr = malloc(sizeof(*ad_cache->ac_taddr));
 	if (!ad_cache->ac_host || !ad_cache->ac_netid || !ad_cache->ac_taddr ||
 		(uaddr && !ad_cache->ac_uaddr)) {
 		goto out;
 	}
 	ad_cache->ac_taddr->len = ad_cache->ac_taddr->maxlen = taddr->len;
-	ad_cache->ac_taddr->buf = (char *) malloc(taddr->len);
+	ad_cache->ac_taddr->buf = malloc(taddr->len);
 	if (ad_cache->ac_taddr->buf == NULL) {
 out:
 		if (ad_cache->ac_host)
@@ -338,6 +335,7 @@ getclnthandle(host, nconf, targaddr)
 	/* Get the address of the rpcbind.  Check cache first */
 	client = NULL;
 	addr_to_delete.len = 0;
+	addr_to_delete.buf = NULL;
 	rwlock_rdlock(&rpcbaddr_cache_lock);
 	ad_cache = check_cache(host, nconf->nc_netid);
 	if (ad_cache != NULL) {
@@ -351,7 +349,7 @@ getclnthandle(host, nconf, targaddr)
 			return (client);
 		}
 		addr_to_delete.len = addr->len;
-		addr_to_delete.buf = (char *)malloc(addr->len);
+		addr_to_delete.buf = malloc(addr->len);
 		if (addr_to_delete.buf == NULL) {
 			addr_to_delete.len = 0;
 		} else {
@@ -772,10 +770,8 @@ __rpcb_findaddr(program, version, nconf, host, clpp)
 		}
 		port = htons(port);
 		CLNT_CONTROL(client, CLGET_SVC_ADDR, (char *)(void *)&remote);
-		if (((address = (struct netbuf *)
-			malloc(sizeof (struct netbuf))) == NULL) ||
-		    ((address->buf = (char *)
-			malloc(remote.len)) == NULL)) {
+		if (((address = malloc(sizeof(struct netbuf))) == NULL) ||
+		    ((address->buf = malloc(remote.len)) == NULL)) {
 			rpc_createerr.cf_stat = RPC_SYSTEMERROR;
 			clnt_geterr(client, &rpc_createerr.cf_error);
 			if (address) {
@@ -1011,7 +1007,7 @@ rpcb_getaddr(program, version, nconf, address, host)
 	_DIAGASSERT(address != NULL);
 
 	if ((na = __rpcb_findaddr(program, version, nconf,
-				host, (CLIENT **) NULL)) == NULL)
+				host, NULL)) == NULL)
 		return (FALSE);
 
 	if (na->len > address->maxlen) {
@@ -1198,7 +1194,7 @@ rpcb_gettime(host, timep)
 			break;
 	}
 	__rpc_endconf(handle);
-	if (client == (CLIENT *) NULL) {
+	if (client == NULL) {
 		return (FALSE);
 	}
 

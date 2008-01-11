@@ -1,4 +1,4 @@
-/*	$NetBSD: dead_vnops.c,v 1.46 2008/01/02 11:48:58 ad Exp $	*/
+/*	$NetBSD: dead_vnops.c,v 1.50 2010/12/17 22:03:00 yamt Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dead_vnops.c,v 1.46 2008/01/02 11:48:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dead_vnops.c,v 1.50 2010/12/17 22:03:00 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,7 +52,6 @@ int	dead_open(void *);
 #define dead_close	genfs_nullop
 int	dead_read(void *);
 int	dead_write(void *);
-#define dead_lease_check genfs_nullop
 #define dead_fcntl	genfs_nullop
 int	dead_ioctl(void *);
 int	dead_poll(void *);
@@ -61,17 +60,17 @@ int	dead_poll(void *);
 #define dead_inactive	genfs_nullop
 #define dead_reclaim	genfs_nullop
 int	dead_lock(void *);
-#define dead_unlock	genfs_nullop
+#define dead_unlock	genfs_unlock
 int	dead_bmap(void *);
 int	dead_strategy(void *);
 int	dead_print(void *);
-#define dead_islocked	genfs_nullop
+#define dead_islocked	genfs_islocked
 #define dead_bwrite	genfs_nullop
 #define dead_revoke	genfs_nullop
 int	dead_getpages(void *);
 #define dead_putpages	genfs_null_putpages
 
-int	chkvnlock(struct vnode *, bool);
+int	chkvnlock(struct vnode *);
 int	dead_default_error(void *);
 
 int (**dead_vnodeop_p)(void *);
@@ -82,7 +81,6 @@ const struct vnodeopv_entry_desc dead_vnodeop_entries[] = {
 	{ &vop_close_desc, dead_close },		/* close */
 	{ &vop_read_desc, dead_read },			/* read */
 	{ &vop_write_desc, dead_write },		/* write */
-	{ &vop_lease_desc, dead_lease_check },		/* lease */
 	{ &vop_fcntl_desc, dead_fcntl },		/* fcntl */
 	{ &vop_ioctl_desc, dead_ioctl },		/* ioctl */
 	{ &vop_poll_desc, dead_poll },			/* poll */
@@ -128,8 +126,7 @@ dead_open(void *v)
  */
 /* ARGSUSED */
 int
-dead_read(v)
-	void *v;
+dead_read(void *v)
 {
 	struct vop_read_args /* {
 		struct vnode *a_vp;
@@ -138,7 +135,7 @@ dead_read(v)
 		kauth_cred_t a_cred;
 	} */ *ap = v;
 
-	if (chkvnlock(ap->a_vp, false))
+	if (chkvnlock(ap->a_vp))
 		panic("dead_read: lock");
 	/*
 	 * Return EOF for tty devices, EIO for others
@@ -153,8 +150,7 @@ dead_read(v)
  */
 /* ARGSUSED */
 int
-dead_write(v)
-	void *v;
+dead_write(void *v)
 {
 	struct vop_write_args /* {
 		struct vnode *a_vp;
@@ -163,7 +159,7 @@ dead_write(v)
 		kauth_cred_t a_cred;
 	} */ *ap = v;
 
-	if (chkvnlock(ap->a_vp, false))
+	if (chkvnlock(ap->a_vp))
 		panic("dead_write: lock");
 	return (EIO);
 }
@@ -173,8 +169,7 @@ dead_write(v)
  */
 /* ARGSUSED */
 int
-dead_ioctl(v)
-	void *v;
+dead_ioctl(void *v)
 {
 	struct vop_ioctl_args /* {
 		struct vnode *a_vp;
@@ -185,15 +180,14 @@ dead_ioctl(v)
 		struct lwp *a_l;
 	} */ *ap = v;
 
-	if (!chkvnlock(ap->a_vp, false))
+	if (!chkvnlock(ap->a_vp))
 		return (EBADF);
 	return (VCALL(ap->a_vp, VOFFSET(vop_ioctl), ap));
 }
 
 /* ARGSUSED */
 int
-dead_poll(v)
-	void *v;
+dead_poll(void *v)
 {
 	struct vop_poll_args /* {
 		struct vnode *a_vp;
@@ -211,8 +205,7 @@ dead_poll(v)
  * Just call the device strategy routine
  */
 int
-dead_strategy(v)
-	void *v;
+dead_strategy(void *v)
 {
 
 	struct vop_strategy_args /* {
@@ -220,7 +213,7 @@ dead_strategy(v)
 		struct buf *a_bp;
 	} */ *ap = v;
 	struct buf *bp;
-	if (ap->a_vp == NULL || !chkvnlock(ap->a_vp, false)) {
+	if (ap->a_vp == NULL || !chkvnlock(ap->a_vp)) {
 		bp = ap->a_bp;
 		bp->b_error = EIO;
 		bp->b_resid = bp->b_bcount;
@@ -234,23 +227,17 @@ dead_strategy(v)
  * Wait until the vnode has finished changing state.
  */
 int
-dead_lock(v)
-	void *v;
+dead_lock(void *v)
 {
 	struct vop_lock_args /* {
 		struct vnode *a_vp;
 		int a_flags;
 		struct proc *a_p;
 	} */ *ap = v;
-	bool interlock;
 
-	if (ap->a_flags & LK_INTERLOCK) {
-		interlock = true;
-		ap->a_flags &= ~LK_INTERLOCK;
-	} else
-		interlock = false;
-	if (!chkvnlock(ap->a_vp, interlock))
-		return (0);
+	if (!chkvnlock(ap->a_vp)) {
+		return genfs_lock(v);
+	}
 	return (VCALL(ap->a_vp, VOFFSET(vop_lock), ap));
 }
 
@@ -258,8 +245,7 @@ dead_lock(v)
  * Wait until the vnode has finished changing state.
  */
 int
-dead_bmap(v)
-	void *v;
+dead_bmap(void *v)
 {
 	struct vop_bmap_args /* {
 		struct vnode *a_vp;
@@ -269,7 +255,7 @@ dead_bmap(v)
 		int *a_runp;
 	} */ *ap = v;
 
-	if (!chkvnlock(ap->a_vp, false))
+	if (!chkvnlock(ap->a_vp))
 		return (EIO);
 	return (VOP_BMAP(ap->a_vp, ap->a_bn, ap->a_vpp, ap->a_bnp, ap->a_runp));
 }
@@ -310,14 +296,11 @@ dead_getpages(void *v)
  * in a state of change.
  */
 int
-chkvnlock(vp, interlock)
-	struct vnode *vp;
-	bool interlock;
+chkvnlock(struct vnode *vp)
 {
 	int locked = 0;
 
-	if (!interlock)
-		mutex_enter(&vp->v_interlock);
+	mutex_enter(&vp->v_interlock);
 	while (vp->v_iflag & VI_XLOCK) {
 		vwait(vp, VI_XLOCK);
 		locked = 1;

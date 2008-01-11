@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.h,v 1.9 2005/12/11 12:17:37 christos Exp $	*/
+/*	$NetBSD: machdep.h,v 1.15 2011/01/23 21:53:40 skrll Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,7 +44,10 @@
 
 #ifdef _KERNEL
 
-/*      
+/* The primary (aka monarch) CPU HPA */
+extern hppa_hpa_t hppa_mcpuhpa;
+
+/*
  * cache configuration, for most machines is the same
  * numbers, so it makes sense to do defines w/ numbers depending
  * on configured CPU types in the kernel.
@@ -66,6 +62,7 @@ extern vaddr_t virtual_start, virtual_end;
 
 /* Total physical pages, and low reserved physical pages. */
 extern int totalphysmem;
+extern int availphysmem;
 extern int resvmem;
 
 /* BTLB minimum and maximum sizes, in pages. */
@@ -76,17 +73,14 @@ extern u_int hppa_btlb_size_max;
 extern int fpu_present;
 extern u_int fpu_version;
 extern u_int fpu_csw;
-extern paddr_t fpu_cur_uspace;
 void hppa_fpu_bootstrap(u_int);
 void hppa_fpu_flush(struct lwp *);
 void hppa_fpu_emulate(struct trapframe *, struct lwp *, u_int);
 
 /* Interrupt dispatching. */
-extern u_int hppa_intr_depth;
 void hppa_intr(struct trapframe *);
 
 /* Special pmap functions. */
-void pmap_bootstrap(vaddr_t *, vaddr_t *);
 void pmap_redzone(vaddr_t, vaddr_t, int);
 
 /* Functions to write low memory and the kernel text. */

@@ -1,4 +1,4 @@
-/*	$NetBSD: sl811hs.c,v 1.19 2008/01/07 01:55:15 ad Exp $	*/
+/*	$NetBSD: sl811hs.c,v 1.28 2011/05/17 04:18:06 mrg Exp $	*/
 
 /*
  * Not (c) 2007 Matthew Orgass
@@ -59,9 +59,7 @@
  * This driver does fine grained locking for its own data structures, however 
  * the general USB code does not yet have locks, some of which would need to 
  * be used in this driver.  This is mostly for debug use on single processor 
- * systems.  Actual MP use of this driver would be unreliable on ports where 
- * splipi is above splhigh unless splipi can be safely blocked when 
- * calculating remaining bus time prior to transfers.
+ * systems.
  *
  * The theory of the wait lock is that start is the only function that would 
  * be frequently called from arbitrary processors, so it should not need to 
@@ -86,7 +84,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sl811hs.c,v 1.19 2008/01/07 01:55:15 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sl811hs.c,v 1.28 2011/05/17 04:18:06 mrg Exp $");
+
+#include "opt_slhci.h"
 
 #include <sys/cdefs.h>
 #include <sys/param.h>
@@ -107,6 +107,7 @@ __KERNEL_RCSID(0, "$NetBSD: sl811hs.c,v 1.19 2008/01/07 01:55:15 ad Exp $");
 #include <dev/usb/usbdivar.h>
 #include <dev/usb/usb_mem.h>
 #include <dev/usb/usbdevs.h>
+#include <dev/usb/usbroothub_subr.h>
 
 #include <dev/ic/sl811hsreg.h>
 #include <dev/ic/sl811hsvar.h>
@@ -519,7 +520,6 @@ static int slhci_reserve_bustime(struct slhci_softc *, struct slhci_pipe *,
     int);
 static void slhci_insert(struct slhci_softc *);
 
-static int slhci_str(usb_string_descriptor_t *, unsigned int, const char *);
 static usbd_status slhci_clear_feature(struct slhci_softc *, unsigned int);
 static usbd_status slhci_set_feature(struct slhci_softc *, unsigned int);
 static void slhci_get_status(struct slhci_softc *, usb_port_status_t *);
@@ -561,35 +561,42 @@ struct slhci_softc *ssc;
 int slhci_usbdebug = -1; /* value to set usbdebug on attach, -1 = leave alone */
 #endif
 
-/* Add UVMHIST history for debugging: 
- *
- *   Before uvm_hist in sys/uvm/uvm_stat.c add:
- *      UVMHIST_DECL(slhcihist);
- *
- *   In uvm_hist add:
- *      if ((bitmask & UVMHIST_SLHCI))
- *              hists[i++] = &slhcihist;
- *
- *   In sys/uvm/uvm_stat.h add UVMHIST_SLHCI define.
+/*
+ * XXXMRG the SLHCI UVMHIST code has been converted to KERNHIST, but it has
+ * not been tested.  the extra instructions to enable it can probably be
+ * commited to the kernhist code, and these instructions reduced to simply
+ * enabling SLHCI_DEBUG.
  */
 
-#include <uvm/uvm_stat.h>
-UVMHIST_DECL(slhcihist);
+/* Add KERNHIST history for debugging: 
+ *
+ *   Before kern_hist in sys/kern/subr_kernhist.c add:
+ *      KERNHIST_DECL(slhcihist);
+ *
+ *   In kern_hist add:
+ *      if ((bitmask & KERNHIST_SLHCI))
+ *              hists[i++] = &slhcihist;
+ *
+ *   In sys/sys/kernhist.h add KERNHIST_SLHCI define.
+ */
 
-#if !defined(UVMHIST) || !defined(UVMHIST_SLHCI)
-#error "SLHCI_DEBUG requires UVMHIST (with modifications, see sys/dev/ic/sl81hs.c)"
+#include <sys/kernhist.h>
+KERNHIST_DECL(slhcihist);
+
+#if !defined(KERNHIST) || !defined(KERNHIST_SLHCI)
+#error "SLHCI_DEBUG requires KERNHIST (with modifications, see sys/dev/ic/sl81hs.c)"
 #endif
 
 #ifndef SLHCI_NHIST
 #define SLHCI_NHIST 409600
 #endif
-const unsigned int SLHCI_HISTMASK = UVMHIST_SLHCI;
-struct uvm_history_ent slhci_he[SLHCI_NHIST];
+const unsigned int SLHCI_HISTMASK = KERNHIST_SLHCI;
+struct kern_history_ent slhci_he[SLHCI_NHIST];
 
 #define SLHCI_DEXEC(x, y) do { if ((slhci_debug & SLHCI_ ## x)) { y; } \
 } while (/*CONSTCOND*/ 0)
-#define DDOLOG(f, a, b, c, d) do { const char *_uvmhist_name = __func__; \
-    u_long _uvmhist_call = 0; UVMHIST_LOG(slhcihist, f, a, b, c, d);	     \
+#define DDOLOG(f, a, b, c, d) do { const char *_kernhist_name = __func__; \
+    u_long _kernhist_call = 0; KERNHIST_LOG(slhcihist, f, a, b, c, d);	     \
 } while (/*CONSTCOND*/0)
 #define DLOG(x, f, a, b, c, d) SLHCI_DEXEC(x, DDOLOG(f, a, b, c, d))
 /* DLOGFLAG8 is a macro not a function so that flag name expressions are not 
@@ -597,10 +604,10 @@ struct uvm_history_ent slhci_he[SLHCI_NHIST];
  * x is debug mask, y is flag identifier, z is flag variable, 
  * a-h are flag names (must evaluate to string constants, msb first). */
 #define DDOLOGFLAG8(y, z, a, b, c, d, e, f, g, h) do { uint8_t _DLF8 = (z);   \
-    const char *_uvmhist_name = __func__; u_long _uvmhist_call = 0;	      \
-    if (_DLF8 & 0xf0) UVMHIST_LOG(slhcihist, y " %s %s %s %s", _DLF8 & 0x80 ?  \
+    const char *_kernhist_name = __func__; u_long _kernhist_call = 0;	      \
+    if (_DLF8 & 0xf0) KERNHIST_LOG(slhcihist, y " %s %s %s %s", _DLF8 & 0x80 ?  \
     (a) : "", _DLF8 & 0x40 ? (b) : "", _DLF8 & 0x20 ? (c) : "", _DLF8 & 0x10 ? \
-    (d) : ""); if (_DLF8 & 0x0f) UVMHIST_LOG(slhcihist, y " %s %s %s %s",      \
+    (d) : ""); if (_DLF8 & 0x0f) KERNHIST_LOG(slhcihist, y " %s %s %s %s",      \
     _DLF8 & 0x08 ? (e) : "", _DLF8 & 0x04 ? (f) : "", _DLF8 & 0x02 ? (g) : "", \
     _DLF8 & 0x01 ? (h) : "");		      				       \
 } while (/*CONSTCOND*/ 0)
@@ -837,7 +844,7 @@ slhci_freex(struct usbd_bus *bus, struct usbd_xfer *xfer)
 #endif
 #ifdef DIAGNOSTIC
 	if (xfer->busy_free != XFER_BUSY) {
-		struct slhci_softc *sc = (struct slhci_softc *)bus;
+		struct slhci_softc *sc = bus->hci_private;
 		printf("%s: slhci_freex: xfer=%p not busy, %#08x halted\n", 
 		    SC_NAME(sc), xfer, xfer->busy_free);
 		DDOLOG("%s: slhci_freex: xfer=%p not busy, %#08x halted\n", 
@@ -895,7 +902,7 @@ slhci_start(struct usbd_xfer *xfer)
 	unsigned int max_packet;
 
 	pipe = xfer->pipe;
-	sc = (struct slhci_softc *)pipe->device->bus;
+	sc = pipe->device->bus->hci_private;
 	spipe = (struct slhci_pipe *)xfer->pipe;
 	t = &sc->sc_transfers;
 	ed = pipe->endpoint->edesc;
@@ -1019,7 +1026,7 @@ slhci_root_start(struct usbd_xfer *xfer)
 	struct slhci_pipe *spipe;
 
 	spipe = (struct slhci_pipe *)xfer->pipe;
-	sc = (struct slhci_softc *)xfer->pipe->device->bus;
+	sc = xfer->pipe->device->bus->hci_private;
 
 	return slhci_lock_call(sc, &slhci_root, spipe, xfer);
 }
@@ -1035,7 +1042,7 @@ slhci_open(struct usbd_pipe *pipe)
 	unsigned int max_packet, pmaxpkt;
 
 	dev = pipe->device;
-	sc = (struct slhci_softc *)dev->bus;
+	sc = dev->bus->hci_private;
 	spipe = (struct slhci_pipe *)pipe;
 	ed = pipe->endpoint->edesc;
 	t = &sc->sc_transfers;
@@ -1143,7 +1150,7 @@ slhci_preinit(struct slhci_softc *sc, PowerFunc pow, bus_space_tag_t iot,
 	t = &sc->sc_transfers;
 
 #ifdef SLHCI_DEBUG
-	UVMHIST_INIT_STATIC(slhcihist, slhci_he);
+	KERNHIST_INIT_STATIC(slhcihist, slhci_he);
 #endif
 	simple_lock_init(&sc->sc_lock);
 #ifdef SLHCI_WAITLOCK
@@ -1229,21 +1236,17 @@ slhci_detach(struct slhci_softc *sc, int flags)
 }
 
 int
-slhci_activate(struct device *self, enum devact act)
+slhci_activate(device_t self, enum devact act)
 {
-	struct slhci_softc *sc;
+	struct slhci_softc *sc = device_private(self);
 
-	sc = (void *)self;
-
-	if (act != DVACT_DEACTIVATE)
-		return EOPNOTSUPP;
-
-	slhci_lock_call(sc, &slhci_halt, NULL, NULL);
-
-	if (sc->sc_child)
-		return config_deactivate(sc->sc_child);
-	else
+	switch (act) {
+	case DVACT_DEACTIVATE:
+		slhci_lock_call(sc, &slhci_halt, NULL, NULL);
 		return 0;
+	default:
+		return EOPNOTSUPP;
+	}
 }
 
 void
@@ -1257,7 +1260,7 @@ slhci_abort(struct usbd_xfer *xfer)
 	if (spipe == NULL)
 		goto callback;
 
-	sc = (struct slhci_softc *)spipe->pipe.device->bus;
+	sc = spipe->pipe.device->bus->hci_private;
 
 	DLOG(D_TRACE, "%s abort xfer %p spipe %p spipe->xfer %p", 
 	    pnames(spipe->ptype), xfer, spipe, spipe->xfer);
@@ -1277,7 +1280,7 @@ slhci_close(struct usbd_pipe *pipe)
 	struct slhci_pipe *spipe;
 	struct slhci_transfers *t;
 
-	sc = (struct slhci_softc *)pipe->device->bus;
+	sc = pipe->device->bus->hci_private;
 	spipe = (struct slhci_pipe *)pipe;
 	t = &sc->sc_transfers;
 
@@ -1318,7 +1321,7 @@ slhci_poll(struct usbd_bus *bus) /* XXX necessary? */
 {
 	struct slhci_softc *sc;
 
-	sc = (struct slhci_softc *)bus;
+	sc = bus->hci_private;
 
 	DLOG(D_TRACE, "slhci_poll", 0,0,0,0);
 
@@ -1340,7 +1343,7 @@ slhci_void(void *v) {}
 void
 slhci_mem_use(struct usbd_bus *bus, int val)
 {
-	struct slhci_softc *sc = (struct slhci_softc *)bus;
+	struct slhci_softc *sc = bus->hci_private;
 	int s;
 
 	s = splhardusb();
@@ -2208,8 +2211,8 @@ slhci_tstart(struct slhci_softc *sc)
 	/* We have about 6 us to get from the bus time check to 
 	 * starting the transfer or we might babble or the chip might fail to 
 	 * signal transfer complete.  This leaves no time for any other 
-	 * interrupts.  Some ports have splipi (MP only) higher than splhigh 
-	 * which might cause longer delays. */
+	 * interrupts.
+	 */
 	s = splhigh();
 	remaining_bustime = (int)(slhci_read(sc, SL811_CSOF)) << 6;
 	remaining_bustime -= SLHCI_END_BUSTIME;
@@ -2805,7 +2808,7 @@ slhci_drain(struct slhci_softc *sc)
 	/* Cancel all pipes.  Note that not all of these may be on the 
 	 * callback queue yet; some could be in slhci_start, for example. */
 	FOREACH_AP(q, t, spipe) {
-		spipe->pflags = PF_GONE;
+		spipe->pflags |= PF_GONE;
 		spipe->pipe.repeat = 0;
 		spipe->pipe.aborting = 1;
 		if (spipe->xfer != NULL)
@@ -2832,6 +2835,8 @@ void
 slhci_reset(struct slhci_softc *sc)
 {
 	struct slhci_transfers *t;
+	struct slhci_pipe *spipe;
+	struct gcq *q;
 	uint8_t r, pol, ctrl;
 
 	t = &sc->sc_transfers;
@@ -2918,6 +2923,10 @@ slhci_reset(struct slhci_softc *sc)
 
 	t->flags &= ~(F_UDISABLED|F_RESET);
 	t->flags |= F_CRESET|F_ROOTINTR;
+	FOREACH_AP(q, t, spipe) {
+		spipe->pflags &= ~PF_GONE;
+		spipe->pipe.aborting = 0;
+	}
 	DLOG(D_MSG, "RESET done flags %#x", t->flags, 0,0,0);
 }
 
@@ -3066,23 +3075,6 @@ static const usb_hub_descriptor_t slhci_hubd = {
 	{ 0x00 },		/* port is removable */
 	{ 0x00 }		/* port power control mask */
 };
-
-static int
-slhci_str(usb_string_descriptor_t *p, unsigned int l, const char *s)
-{
-	int i;
-
-	if (l == 0)
-		return 0;
-	p->bLength = 2 * strlen(s) + 2;
-	if (l == 1) 
-		return 1;
-	p->bDescriptorType = UDESC_STRING;
-	l -= 2;
-	for (i = 0; s[i] && l > 1; i++, l -= 2)
-		USETW2(p->bString[i], 0, s[i]);
-	return 2 * i + 2;
-}
 
 static usbd_status
 slhci_clear_feature(struct slhci_softc *sc, unsigned int what)
@@ -3420,12 +3412,12 @@ slhci_root(struct slhci_softc *sc, struct slhci_pipe *spipe, struct usbd_xfer
 				/* language table XXX */
 			} else if (value == ((UDESC_STRING<<8)|1)) {
 				/* Vendor */
-				actlen = slhci_str((usb_string_descriptor_t *)
+				actlen = usb_makestrdesc((usb_string_descriptor_t *)
 				    buf, len, "ScanLogic/Cypress");
 				error = USBD_NORMAL_COMPLETION;
 			} else if (value == ((UDESC_STRING<<8)|2)) {
 				/* Product */
-				actlen = slhci_str((usb_string_descriptor_t *)
+				actlen = usb_makestrdesc((usb_string_descriptor_t *)
 				    buf, len, "SL811HS/T root hub");
 				error = USBD_NORMAL_COMPLETION;
 			} else
@@ -3649,7 +3641,7 @@ slhci_print_intr(void)
 
 #if 0
 void
-slhci_log_sc()
+slhci_log_sc(void)
 {
 	struct slhci_transfers *t;
 	int i;

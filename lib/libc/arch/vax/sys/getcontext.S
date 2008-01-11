@@ -1,4 +1,4 @@
-/*	$NetBSD: getcontext.S,v 1.3 2003/01/23 23:56:13 matt Exp $	*/
+/*	$NetBSD: getcontext.S,v 1.5 2011/01/25 02:38:15 matt Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,10 @@
  */
 
 #include "SYS.h"
+
+#ifdef SYSLIBC_SCCS
+RCSID("$NetBSD: getcontext.S,v 1.5 2011/01/25 02:38:15 matt Exp $")
+#endif
 
 #ifdef WEAK_ALIAS
 WEAK_ALIAS(getcontext, _getcontext)
@@ -66,3 +63,4 @@ ENTRY(_getcontext, 0)
 	movl	%fp,(36+14*4)(%r2)	/* adjust FP */
 	movl	%r3,(36+15*4)(%r2)	/* adjust PC */
 	jmp	(%r3)			/* and return */
+END(_getcontext)

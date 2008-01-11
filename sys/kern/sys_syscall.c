@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_syscall.c,v 1.7 2008/01/05 12:53:56 dsl Exp $	*/
+/*	$NetBSD: sys_syscall.c,v 1.9 2008/04/29 06:53:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_syscall.c,v 1.7 2008/01/05 12:53:56 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_syscall.c,v 1.9 2008/04/29 06:53:03 martin Exp $");
 
 #include <sys/syscall_stats.h>
 
@@ -58,9 +55,10 @@ SYS_SYSCALL(struct lwp *l, const struct CONCAT(SYS_SYSCALL, _args) *uap,
 	struct proc *p = l->l_proc;
 	int code;
 	int error;
+	int narg;
 #ifdef NETBSD32_SYSCALL
 	register_t args64[SYS_MAXSYSARGS];
-	int i, narg;
+	int i;
 	#define TRACE_ARGS args64
 #else
 	#define TRACE_ARGS &SCARG(uap, args[0])
@@ -78,17 +76,17 @@ SYS_SYSCALL(struct lwp *l, const struct CONCAT(SYS_SYSCALL, _args) *uap,
 	if (__predict_true(!p->p_trace_enabled))
 		return callp->sy_call(l, &uap->args, rval);
 
+	narg = callp->sy_narg;
 #ifdef NETBSD32_SYSCALL
-	narg = callp->sy_argsize >> 2;
 	for (i = 0; i < narg; i++)
 		args64[i] = SCARG(uap, args[i]);
 #endif
 
-	error = trace_enter(code, code, NULL, TRACE_ARGS);
+	error = trace_enter(code, TRACE_ARGS, narg);
 	if (__predict_false(error != 0))
 		return error;
 	error = callp->sy_call(l, &uap->args, rval);
-	trace_exit(code, TRACE_ARGS, rval, error);
+	trace_exit(code, rval, error);
 	return error;
 
 	#undef TRACE_ARGS

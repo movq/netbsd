@@ -1,4 +1,4 @@
-/*	$NetBSD: xen.h,v 1.25 2007/11/22 16:16:58 bouyer Exp $	*/
+/*	$NetBSD: xen.h,v 1.33 2011/04/17 09:50:33 mrg Exp $	*/
 
 /*
  *
@@ -28,9 +28,14 @@
 #ifndef _XEN_H
 #define _XEN_H
 
+#ifdef _KERNEL_OPT
 #include "opt_xen.h"
+#endif
+
 
 #ifndef _LOCORE
+
+#include <machine/cpufunc.h>
 
 struct xen_netinfo {
 	uint32_t xi_ifno;
@@ -42,12 +47,14 @@ union xen_cmdline_parseinfo {
 	char			xcp_bootdev[16]; /* sizeof(dv_xname) */
 	struct xen_netinfo	xcp_netinfo;
 	char			xcp_console[16];
+	char			xcp_pcidevs[64];
 };
 
 #define	XEN_PARSE_BOOTDEV	0
 #define	XEN_PARSE_NETINFO	1
 #define	XEN_PARSE_CONSOLE	2
 #define	XEN_PARSE_BOOTFLAGS	3
+#define	XEN_PARSE_PCIBACK	4
 
 void	xen_parse_cmdline(int, union xen_cmdline_parseinfo *);
 
@@ -60,6 +67,7 @@ void	xennetback_init(void);
 void	xen_shm_init(void);
 
 void	xenevt_event(int);
+void	xenevt_setipending(int, int);
 void	xenevt_notify(void);
 
 void	idle_block(void);
@@ -98,7 +106,6 @@ void vprintk(const char *, _BSD_VA_LIST_);
  * a bit more...
  */
 
-#ifdef XEN3
 #ifndef FLAT_RING1_CS
 #define FLAT_RING1_CS 0xe019    /* GDT index 259 */
 #define FLAT_RING1_DS 0xe021    /* GDT index 260 */
@@ -107,14 +114,6 @@ void vprintk(const char *, _BSD_VA_LIST_);
 #define FLAT_RING3_DS 0xe033    /* GDT index 262 */
 #define FLAT_RING3_SS 0xe033    /* GDT index 262 */
 #endif
-#else /* XEN3 */
-#ifndef FLAT_RING1_CS
-#define FLAT_RING1_CS		0x0819
-#define FLAT_RING1_DS		0x0821
-#define FLAT_RING3_CS		0x082b
-#define FLAT_RING3_DS		0x0833
-#endif
-#endif /* XEN3 */
 
 #define __KERNEL_CS        FLAT_RING1_CS
 #define __KERNEL_DS        FLAT_RING1_DS
@@ -126,6 +125,8 @@ void vprintk(const char *, _BSD_VA_LIST_);
 void trap_init(void);
 void xpq_flush_cache(void);
 
+#define xendomain_is_dom0()		(xen_start_info.flags & SIF_INITDOMAIN)
+#define xendomain_is_privileged()	(xen_start_info.flags & SIF_PRIVILEGED)
 
 /*
  * STI/CLI equivalents. These basically set and clear the virtual
@@ -136,33 +137,33 @@ void xpq_flush_cache(void);
 
 #define __save_flags(x)							\
 do {									\
-	(x) = HYPERVISOR_shared_info->vcpu_info[0].evtchn_upcall_mask;	\
+	(x) = curcpu()->ci_vcpu->evtchn_upcall_mask;			\
 } while (0)
 
 #define __restore_flags(x)						\
 do {									\
-	volatile shared_info_t *_shared = HYPERVISOR_shared_info;	\
+	volatile struct vcpu_info *_vci = curcpu()->ci_vcpu;		\
 	__insn_barrier();						\
-	if ((_shared->vcpu_info[0].evtchn_upcall_mask = (x)) == 0) {	\
-		x86_lfence();					\
-		if (__predict_false(_shared->vcpu_info[0].evtchn_upcall_pending)) \
+	if ((_vci->evtchn_upcall_mask = (x)) == 0) {			\
+		x86_lfence();						\
+		if (__predict_false(_vci->evtchn_upcall_pending))	\
 			hypervisor_force_callback();			\
 	}								\
 } while (0)
 
 #define __cli()								\
 do {									\
-	HYPERVISOR_shared_info->vcpu_info[0].evtchn_upcall_mask = 1;	\
-	x86_lfence();						\
+	curcpu()->ci_vcpu->evtchn_upcall_mask = 1;			\
+	x86_lfence();							\
 } while (0)
 
 #define __sti()								\
 do {									\
-	volatile shared_info_t *_shared = HYPERVISOR_shared_info;	\
+	volatile struct vcpu_info *_vci = curcpu()->ci_vcpu;		\
 	__insn_barrier();						\
-	_shared->vcpu_info[0].evtchn_upcall_mask = 0;			\
+	_vci->evtchn_upcall_mask = 0;					\
 	x86_lfence(); /* unmask then check (avoid races) */		\
-	if (__predict_false(_shared->vcpu_info[0].evtchn_upcall_pending)) \
+	if (__predict_false(_vci->evtchn_upcall_pending))		\
 		hypervisor_force_callback();				\
 } while (0)
 
@@ -182,11 +183,17 @@ do {									\
  */
 #define __LOCK_PREFIX "lock; "
 
-#ifdef XEN3
-#define XATOMIC_T long
-#else
-#define XATOMIC_T uint32_t
-#endif
+#define XATOMIC_T u_long
+#ifdef __x86_64__
+#define LONG_SHIFT 6
+#define LONG_MASK 63
+#else /* __x86_64__ */
+#define LONG_SHIFT 5
+#define LONG_MASK 31
+#endif /* __x86_64__ */
+
+#define xen_ffs __builtin_ffsl
+
 static __inline XATOMIC_T
 xen_atomic_xchg(volatile XATOMIC_T *ptr, unsigned long val)
 {
@@ -276,8 +283,8 @@ xen_atomic_test_and_set_bit(volatile void *ptr, unsigned long bitno)
 static __inline int
 xen_constant_test_bit(const volatile void *ptr, unsigned long bitno)
 {
-	return ((1UL << (bitno & 31)) &
-	    (((const volatile XATOMIC_T *) ptr)[bitno >> 5])) != 0;
+	return ((1UL << (bitno & LONG_MASK)) &
+	    (((const volatile XATOMIC_T *) ptr)[bitno >> LONG_SHIFT])) != 0;
 }
 
 static __inline XATOMIC_T

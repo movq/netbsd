@@ -26,16 +26,20 @@
 
 #include "defs.h"
 #include "inferior.h"
+#include "regcache.h"
 
 #include "sh-tdep.h"
 #include "shnbsd-tdep.h"
+#include "inf-ptrace.h"
+
+#include "nbsd-nat.h"
 
 /* Determine if PT_GETREGS fetches this register. */
 #define GETREGS_SUPPLIES(regno) \
   (((regno) >= R0_REGNUM && (regno) <= (R0_REGNUM + 15)) \
 || (regno) == PC_REGNUM || (regno) == PR_REGNUM \
 || (regno) == MACH_REGNUM || (regno) == MACL_REGNUM \
-|| (regno) == SR_REGNUM)
+|| (regno) == SR_REGNUM || (regno) == GBR_REGNUM)
 
 void
 fetch_inferior_registers (int regno)
@@ -45,11 +49,10 @@ fetch_inferior_registers (int regno)
       struct reg inferior_registers;
 
       if (ptrace (PT_GETREGS, PIDGET (inferior_ptid),
-		  (PTRACE_TYPE_ARG3) &inferior_registers,
-		  TIDGET (inferior_ptid)) == -1)
+		  (PTRACE_TYPE_ARG3) &inferior_registers, TIDGET (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't get registers"));
 
-      shnbsd_supply_reg ((char *) &inferior_registers, regno);
+      shnbsd_supply_reg (current_regcache, (char *) &inferior_registers, regno);
 
       if (regno != -1)
 	return;
@@ -64,18 +67,31 @@ store_inferior_registers (int regno)
       struct reg inferior_registers;
 
       if (ptrace (PT_GETREGS, PIDGET (inferior_ptid),
-		  (PTRACE_TYPE_ARG3) &inferior_registers,
-		  TIDGET (inferior_ptid)) == -1)
+		  (PTRACE_TYPE_ARG3) &inferior_registers, TIDGET (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't get registers"));
 
-      shnbsd_fill_reg ((char *) &inferior_registers, regno);
+      shnbsd_fill_reg (current_regcache, (char *) &inferior_registers, regno);
 
       if (ptrace (PT_SETREGS, PIDGET (inferior_ptid),
-		  (PTRACE_TYPE_ARG3) &inferior_registers,
-		  TIDGET (inferior_ptid)) == -1)
+		  (PTRACE_TYPE_ARG3) &inferior_registers, TIDGET (inferior_ptid)) == -1)
 	perror_with_name (_("Couldn't set registers"));
 
       if (regno != -1)
 	return;
     }
+}
+
+/* Provide a prototype to silence -Wmissing-prototypes.  */
+void _initialize_shnbsd_nat (void);
+
+void
+_initialize_shnbsd_nat (void)
+{
+  struct target_ops *t;
+
+  t = inf_ptrace_target ();
+  t->to_fetch_registers = fetch_inferior_registers;
+  t->to_store_registers = store_inferior_registers;
+  t->to_pid_to_exec_file = nbsd_pid_to_exec_file;
+  add_target (t);
 }

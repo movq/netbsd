@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.155 2007/10/17 19:57:46 garbled Exp $	*/
+/*	$NetBSD: pmap.c,v 1.165 2010/10/15 15:55:53 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -87,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.155 2007/10/17 19:57:46 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.165 2010/10/15 15:55:53 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pmap_debug.h"
@@ -97,7 +90,6 @@ __KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.155 2007/10/17 19:57:46 garbled Exp $");
 #include <sys/proc.h>
 #include <sys/malloc.h>
 #include <sys/pool.h>
-#include <sys/user.h>
 #include <sys/queue.h>
 #include <sys/kcore.h>
 
@@ -140,7 +132,7 @@ __KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.155 2007/10/17 19:57:46 garbled Exp $");
 #define DVMA_MAP_END	(DVMA_MAP_BASE + DVMA_MAP_AVAIL)
 
 /* User segments from 0 to KERNBASE */
-#define	NUSEG	(KERNBASE / NBSG)
+#define	NUSEG	(KERNBASE3 / NBSG)
 /* The remainder are kernel segments. */
 #define	NKSEG	(NSEGMAP - NUSEG)
 
@@ -233,8 +225,9 @@ vaddr_t tmp_vpages[2] = {
 int tmp_vpages_inuse;
 
 static int pmap_version = 1;
-struct pmap kernel_pmap_store;
-#define kernel_pmap (&kernel_pmap_store)
+static struct pmap kernel_pmap_store;
+struct pmap *const kernel_pmap_ptr  = &kernel_pmap_store;
+#define kernel_pmap (kernel_pmap_ptr)
 static u_char kernel_segmap[NSEGMAP];
 
 /* memory pool for pmap structures */
@@ -416,7 +409,7 @@ void	_pmap_switch(pmap_t);
 
 #ifdef	PMAP_DEBUG
 void pmap_print(pmap_t);
-void pv_print(struct vm_page *);
+void pv_print(paddr_t);
 void pmeg_print(pmeg_t);
 static void pmeg_verify_empty(vaddr_t);
 #endif	/* PMAP_DEBUG */
@@ -1523,14 +1516,14 @@ pmap_bootstrap(vaddr_t nextva)
 	 * Determine the range of kernel virtual space available.
 	 * It is segment-aligned to simplify PMEG management.
 	 */
-	virtual_avail = m68k_round_seg(nextva);
+	virtual_avail = sun3_round_seg(nextva);
 	virtual_end = VM_MAX_KERNEL_ADDRESS;
 
 	/*
 	 * Determine the range of physical memory available.
 	 * Physical memory at zero was remapped to KERNBASE.
 	 */
-	avail_start = nextva - KERNBASE;
+	avail_start = nextva - KERNBASE3;
 	if (rvec->romvecVersion < 1) {
 		mon_printf("Warning: ancient PROM version=%d\n",
 			   rvec->romvecVersion);
@@ -1582,7 +1575,7 @@ pmap_bootstrap(vaddr_t nextva)
 	 * Unmap user virtual segments.
 	 * VA range: [0 .. KERNBASE]
 	 */
-	for (va = 0; va < KERNBASE; va += NBSG)
+	for (va = 0; va < KERNBASE3; va += NBSG)
 		set_segmap(va, SEGINV);
 
 	/*
@@ -1648,7 +1641,7 @@ pmap_bootstrap(vaddr_t nextva)
 	 * (physical address zero) so its contents will be
 	 * preserved through a reboot.
 	 */
-	va = KERNBASE;
+	va = KERNBASE3;
 	pte = get_pte(va);
 	pte |= (PG_SYSTEM | PG_WRITE | PG_NC);
 	set_pte(va, pte);
@@ -1974,7 +1967,7 @@ pmap_reference(pmap_t pmap)
  *	insert this page into the given map NOW.
  */
 int 
-pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
+pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 {
 	int new_pte, s;
 	bool wired = (flags & PMAP_WIRED) != 0;
@@ -2063,7 +2056,7 @@ pmap_enter_kernel(vaddr_t pgva, int new_pte, bool wired)
 		new_pte |= PG_NC;
 	}
 
-	segva = m68k_trunc_seg(pgva);
+	segva = sun3_trunc_seg(pgva);
 	do_pv = true;
 
 	/* Do we have a PMEG? */
@@ -2206,7 +2199,7 @@ pmap_enter_user(pmap_t pmap, vaddr_t pgva, int new_pte, bool wired)
 		return;
 	}
 
-	segva = m68k_trunc_seg(pgva);
+	segva = sun3_trunc_seg(pgva);
 	do_pv = true;
 
 	/*
@@ -2340,7 +2333,7 @@ pmap_enter_user(pmap_t pmap, vaddr_t pgva, int new_pte, bool wired)
 }
 
 void 
-pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
+pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 {
 	int new_pte, s;
 	pmap_t pmap = kernel_pmap;
@@ -2395,7 +2388,7 @@ pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
 		new_pte |= PG_NC;
 	}
 
-	segva = m68k_trunc_seg(va);
+	segva = sun3_trunc_seg(va);
 
 	s = splvm();
 
@@ -2438,8 +2431,8 @@ pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
 	}
 #ifdef	PMAP_DEBUG
 	if ((pmap_debug & PMD_SETPTE) || (va == pmap_db_watchva)) {
-		printf("pmap: set_pte pmap=%p va=0x%lx old=0x%x new=0x%x "
-		       "(ek)\n", pmap, va, old_pte, new_pte);
+		printf("pmap: set_pte pmap=%p va=0x%lx new=0x%x "
+		       "(ek)\n", pmap, va, new_pte);
 	}
 #endif
 	/* cache flush done above */
@@ -2463,7 +2456,7 @@ pmap_kremove(vaddr_t va, vsize_t len)
 	s = splvm();
 	segnum = VA_SEGNUM(va);
 	for (eva = va + len; va < eva; va = neva, segnum++) {
-		neva = m68k_trunc_seg(va) + NBSG;
+		neva = sun3_trunc_seg(va) + NBSG;
 		if (neva > eva) {
 			neva = eva;
 		}
@@ -2471,7 +2464,7 @@ pmap_kremove(vaddr_t va, vsize_t len)
 			continue;
 		}
 
-		segva = m68k_trunc_seg(va);
+		segva = sun3_trunc_seg(va);
 		sme = get_segmap(segva);
 		pmegp = pmeg_p(sme);
 
@@ -2619,7 +2612,7 @@ pmap_fault_reload(pmap_t pmap, vaddr_t pgva, vm_prot_t ftype)
 	if (pmap->pm_segmap[VA_SEGNUM(pgva)] == SEGINV)
 		return (0);
 
-	segva = m68k_trunc_seg(pgva);
+	segva = sun3_trunc_seg(pgva);
 	chkpte = PG_VALID;
 	if (ftype & VM_PROT_WRITE)
 		chkpte |= PG_WRITE;
@@ -2929,7 +2922,7 @@ pmap_page_protect(struct vm_page *pg, vm_prot_t prot)
 	s = splvm();
 #ifdef PMAP_DEBUG
 	if (pmap_debug & PMD_PROTECT)
-		printf("pmap_page_protect(0x%lx, 0x%lx)\n", pa, prot);
+		printf("pmap_page_protect(0x%lx, 0x%x)\n", pa, prot);
 #endif
 	switch (prot) {
 	case VM_PROT_ALL:
@@ -2990,7 +2983,7 @@ pmap_protect(pmap_t pmap, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
 	va = sva;
 	segnum = VA_SEGNUM(va);
 	while (va < eva) {
-		neva = m68k_trunc_seg(va) + NBSG;
+		neva = sun3_trunc_seg(va) + NBSG;
 		if (neva > eva)
 			neva = eva;
 		if (pmap->pm_segmap[segnum] != SEGINV)
@@ -3014,7 +3007,7 @@ pmap_protect1(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 	s = splvm();
 
 #ifdef	DIAGNOSTIC
-	if (m68k_trunc_seg(sva) != m68k_trunc_seg(eva-1))
+	if (sun3_trunc_seg(sva) != sun3_trunc_seg(eva-1))
 		panic("pmap_protect1: bad range!");
 #endif
 
@@ -3076,7 +3069,7 @@ pmap_protect_mmu(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 	}
 #endif
 
-	segva = m68k_trunc_seg(sva);
+	segva = sun3_trunc_seg(sva);
 	sme = get_segmap(segva);
 
 #ifdef	DIAGNOSTIC
@@ -3157,7 +3150,7 @@ pmap_protect_noctx(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 		panic("pmap_protect_noctx: null segmap");
 #endif
 
-	segva = m68k_trunc_seg(sva);
+	segva = sun3_trunc_seg(sva);
 	segnum = VA_SEGNUM(segva);
 	sme = pmap->pm_segmap[segnum];
 	if (sme == SEGINV)
@@ -3218,7 +3211,7 @@ pmap_remove(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 	va = sva;
 	segnum = VA_SEGNUM(va);
 	while (va < eva) {
-		neva = m68k_trunc_seg(va) + NBSG;
+		neva = sun3_trunc_seg(va) + NBSG;
 		if (neva > eva)
 			neva = eva;
 		if (pmap->pm_segmap[segnum] != SEGINV)
@@ -3240,7 +3233,7 @@ pmap_remove1(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 	s = splvm();
 
 #ifdef	DIAGNOSTIC
-	if (m68k_trunc_seg(sva) != m68k_trunc_seg(eva-1))
+	if (sun3_trunc_seg(sva) != sun3_trunc_seg(eva-1))
 		panic("pmap_remove1: bad range!");
 #endif
 
@@ -3303,7 +3296,7 @@ pmap_remove_mmu(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 	}
 #endif
 
-	segva = m68k_trunc_seg(sva);
+	segva = sun3_trunc_seg(sva);
 	sme = get_segmap(segva);
 
 #ifdef	DIAGNOSTIC
@@ -3432,7 +3425,7 @@ pmap_remove_noctx(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 		panic("pmap_remove_noctx: null segmap");
 #endif
 
-	segva = m68k_trunc_seg(sva);
+	segva = sun3_trunc_seg(sva);
 	segnum = VA_SEGNUM(segva);
 	sme = pmap->pm_segmap[segnum];
 	if (sme == SEGINV)
@@ -3632,22 +3625,6 @@ pmap_zero_page(paddr_t pa)
 }
 
 /*
- *	Routine:	pmap_collect
- *	Function:
- *		Garbage collects the physical map system for
- *		pages which are no longer used.
- *		Success need not be guaranteed -- that is, there
- *		may well be pages which are not referenced, but
- *		others may be collected.
- *	Usage:
- *		Called by the pageout daemon when pages are scarce.
- */
-void 
-pmap_collect(pmap_t pmap)
-{
-}
-
-/*
  * Find first virtual address >= *va that is
  * least likely to cause cache aliases.
  * (This will just seg-align mappings.)
@@ -3677,7 +3654,7 @@ pmap_kcore_hdr(struct sun3_kcore_hdr *sh)
 	sh->pg_valid = PG_VALID;
 
 	/* Copy the kernel segmap (256 bytes). */
-	va = KERNBASE;
+	va = KERNBASE3;
 	cp = sh->ksegmap;
 	ep = cp + sizeof(sh->ksegmap);
 	do {
@@ -3801,7 +3778,7 @@ pmeg_print(pmeg_t pmegp)
 {
 	db_printf("link_next=%p  link_prev=%p\n",
 		  TAILQ_NEXT(pmegp, pmeg_link),
-		  TAILQ_PREV(pmegp, pmeg_link));
+		  TAILQ_PREV(pmegp, pmeg_tailq, pmeg_link));
 	db_printf("index=0x%x owner=%p own_vers=0x%x\n",
 		  pmegp->pmeg_index, pmegp->pmeg_owner, pmegp->pmeg_version);
 	db_printf("va=0x%lx wired=0x%x reserved=0x%x vpgs=0x%x qstate=0x%x\n",

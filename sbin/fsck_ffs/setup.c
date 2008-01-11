@@ -1,4 +1,4 @@
-/*	$NetBSD: setup.c,v 1.81 2007/08/22 16:30:28 christos Exp $	*/
+/*	$NetBSD: setup.c,v 1.92 2011/03/20 11:41:24 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)setup.c	8.10 (Berkeley) 5/9/95";
 #else
-__RCSID("$NetBSD: setup.c,v 1.81 2007/08/22 16:30:28 christos Exp $");
+__RCSID("$NetBSD: setup.c,v 1.92 2011/03/20 11:41:24 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,6 +48,7 @@ __RCSID("$NetBSD: setup.c,v 1.81 2007/08/22 16:30:28 christos Exp $");
 #include <ufs/ufs/dinode.h>
 #include <ufs/ufs/dir.h>
 #include <ufs/ufs/ufs_bswap.h>
+#include <ufs/ufs/quota2.h>
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 
@@ -62,6 +63,7 @@ __RCSID("$NetBSD: setup.c,v 1.81 2007/08/22 16:30:28 christos Exp $");
 #include "extern.h"
 #include "fsutil.h"
 #include "partutil.h"
+#include "exitvalues.h"
 
 #define POWEROF2(num)	(((num) & ((num) - 1)) == 0)
 
@@ -78,7 +80,7 @@ int16_t sblkpostbl[256];
  * is already clean (preen mode only).
  */
 int
-setup(const char *dev)
+setup(const char *dev, const char *origdev)
 {
 	long cg, size, asked, i, j;
 	long bmapsize;
@@ -90,6 +92,7 @@ setup(const char *dev)
 	int doskipclean;
 	u_int64_t maxfilesize;
 	struct csum *ccsp;
+	int fd;
 
 	havesb = 0;
 	fswritefd = -1;
@@ -126,8 +129,21 @@ setup(const char *dev)
 	altsblock = malloc(SBLOCKSIZE);
 	if (sblk.b_un.b_buf == NULL || asblk.b_un.b_buf == NULL ||
 		sblock == NULL || altsblock == NULL)
-		errx(EEXIT, "cannot allocate space for superblock");
-	if (!forceimage && getdiskinfo(dev, fsreadfd, NULL, &geo, &dkw) != -1)
+		errexit("Cannot allocate space for superblock");
+	if (strcmp(dev, origdev) && !forceimage) {
+		/*
+		 * dev isn't the original fs (for example it's a snapshot)
+		 * do getdiskinfo on the original device
+		 */
+		 fd = open(origdev, O_RDONLY);
+		 if (fd < 0) {
+			warn("Can't open %s", origdev);
+			return (0);
+		}
+	} else {
+		fd = fsreadfd;
+	}
+	if (!forceimage && getdiskinfo(origdev, fd, NULL, &geo, &dkw) != -1)
 		dev_bsize = secsize = geo.dg_secsize;
 	else
 		dev_bsize = secsize = DEV_BSIZE;
@@ -158,10 +174,46 @@ setup(const char *dev)
 		doskipclean = 0;
 		pwarn("USING ALTERNATE SUPERBLOCK AT %d\n", bflag);
 	}
+
+	if (!quota2_check_doquota())
+		doskipclean = 0;
+		
+	/* ffs_superblock_layout() == 2 */
+	if (sblock->fs_magic != FS_UFS1_MAGIC ||
+	    (sblock->fs_old_flags & FS_FLAGS_UPDATED) != 0) {
+		/* can have WAPBL */
+		if (check_wapbl() != 0) {
+			doskipclean = 0;
+		}
+		if (sblock->fs_flags & FS_DOWAPBL) {
+			if (preen && doskipclean) {
+				if (!quiet)
+					pwarn("file system is journaled; "
+					    "not checking\n");
+				return (-1);
+			}
+			if (!quiet)
+				pwarn("** File system is journaled; "
+				    "replaying journal\n");
+			replay_wapbl();
+			doskipclean = 0;
+			sblock->fs_flags &= ~FS_DOWAPBL;
+			sbdirty();
+			/* Although we may have updated the superblock from
+			 * the journal, we are still going to do a full check,
+			 * so we don't bother to re-read the superblock from
+			 * the journal.
+			 * XXX, instead we could re-read the superblock and
+			 * then not force doskipclean = 0 
+			 */
+		}
+	}
 	if (debug)
 		printf("clean = %d\n", sblock->fs_clean);
+
 	if (doswap)
 		doskipclean = 0;
+
 	if (sblock->fs_clean & FS_ISCLEAN) {
 		if (doskipclean) {
 			if (!quiet)
@@ -217,6 +269,13 @@ setup(const char *dev)
 	/*
 	 * Check and potentially fix certain fields in the super block.
 	 */
+	if (sblock->fs_flags & ~(FS_KNOWN_FLAGS)) {
+		pfatal("UNKNOWN FLAGS=0x%08x IN SUPERBLOCK", sblock->fs_flags);
+		if (reply("CLEAR") == 1) {
+			sblock->fs_flags &= FS_KNOWN_FLAGS;
+			sbdirty();
+		}
+	}
 	if (sblock->fs_optim != FS_OPTTIME && sblock->fs_optim != FS_OPTSPACE) {
 		pfatal("UNDEFINED OPTIMIZATION IN SUPERBLOCK");
 		if (reply("SET TO DEFAULT") == 1) {
@@ -404,7 +463,7 @@ setup(const char *dev)
 			pfatal("BAD SUMMARY INFORMATION");
 			if (reply("CONTINUE") == 0) {
 				markclean = 0;
-				exit(EEXIT);
+				exit(FSCK_EXIT_CHECK_FAILED);
 			}
 			asked++;
 		}
@@ -484,8 +543,38 @@ setup(const char *dev)
 	if (debug)
 		printf("isappleufs = %d, dirblksiz = %d\n", isappleufs, dirblksiz);
 
+	if (sblock->fs_flags & FS_DOQUOTA2) {
+		/* allocate the quota hash table */
+		/*
+		 * first compute the size of the hash table
+		 * We know the smallest block size is 4k, so we can use 2k
+		 * for the hash table; as an entry is 8 bytes we can store
+		 * 256 entries. So let start q2h_hash_shift at 8
+		 */
+		for (q2h_hash_shift = 8;
+		    q2h_hash_shift < 15;
+		    q2h_hash_shift++) {
+			if ((sizeof(uint64_t) << (q2h_hash_shift + 1)) +
+			    sizeof(struct quota2_header) > sblock->fs_bsize)
+				break;
+		}
+		q2h_hash_mask = (1 << q2h_hash_shift) - 1;
+		if (debug) {
+			printf("quota hash shift %d, %d entries, mask 0x%x\n",
+			    q2h_hash_shift, (1 << q2h_hash_shift),
+			    q2h_hash_mask);
+		}
+		uquot_user_hash =
+		    calloc((1 << q2h_hash_shift), sizeof(struct uquot_hash));
+		uquot_group_hash =
+		    calloc((1 << q2h_hash_shift), sizeof(struct uquot_hash));
+		if (uquot_user_hash == NULL || uquot_group_hash == NULL)
+			errexit("Cannot allocate space for quotas hash\n");
+	} else {
+		uquot_user_hash = uquot_group_hash = NULL;
+		q2h_hash_shift = q2h_hash_mask = 0;
+	}
 	return (1);
-
 badsblabel:
 	markclean=0;
 	ckfini();
@@ -502,6 +591,8 @@ readappleufs(void)
 	/* XXX do we have to deal with APPLEUFS_LABEL_OFFSET not
 	 * being block aligned (CD's?)
 	 */
+	if (APPLEUFS_LABEL_SIZE % dev_bsize != 0)
+		return 0;
 	if (bread(fsreadfd, (char *)appleufsblk.b_un.b_fs, label,
 	    (long)APPLEUFS_LABEL_SIZE) != 0)
 		return 0;
@@ -670,9 +761,11 @@ readsb(int listerr)
 	}
 	if (doswap) {
 		if (preen)
-			errx(EEXIT, "incompatible options -B and -p");
+			errx(FSCK_EXIT_USAGE,
+			    "Incompatible options -B and -p");
 		if (nflag)
-			errx(EEXIT, "incompatible options -B and -n");
+			errx(FSCK_EXIT_USAGE,
+			    "Incompatible options -B and -n");
 		if (endian == LITTLE_ENDIAN) {
 			if (!reply("CONVERT TO LITTLE ENDIAN"))
 				return 0;
@@ -961,7 +1054,7 @@ calcsb(const char *dev, int devfd, struct fs *fs)
 		pfatal("%s: CANNOT FIGURE OUT OLD CYLINDERS PER GROUP\n", dev);
 		return 0;
 	}
-	memcpy(fs, &sblk.b_un.b_fs, sizeof(struct fs));
+	memcpy(fs, sblk.b_un.b_fs, sizeof(struct fs));
 	nspf = fs->fs_fsize / geo.dg_secsize;
 	fs->fs_old_nspf = nspf;
 	for (fs->fs_fsbtodb = 0, i = nspf; i > 1; i >>= 1)

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlp_eisa.c,v 1.19 2007/10/19 11:59:42 ad Exp $	*/
+/*	$NetBSD: if_tlp_eisa.c,v 1.24 2010/01/18 19:00:58 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,10 +36,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.19 2007/10/19 11:59:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.24 2010/01/18 19:00:58 pooka Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,10 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.19 2007/10/19 11:59:42 ad Exp $");
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
-
-#if NBPFILTER > 0
-#include <net/bpf.h>
-#endif
 
 #ifdef INET
 #include <netinet/in.h>
@@ -113,10 +101,10 @@ struct tulip_eisa_softc {
 	void	*sc_ih;			/* interrupt handle */
 };
 
-static int	tlp_eisa_match(struct device *, struct cfdata *, void *);
-static void	tlp_eisa_attach(struct device *, struct device *, void *);
+static int	tlp_eisa_match(device_t, cfdata_t, void *);
+static void	tlp_eisa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(tlp_eisa, sizeof(struct tulip_eisa_softc),
+CFATTACH_DECL_NEW(tlp_eisa, sizeof(struct tulip_eisa_softc),
     tlp_eisa_match, tlp_eisa_attach, NULL, NULL);
 
 static const int tlp_eisa_irqs[] = { 5, 9, 10, 11 };
@@ -146,7 +134,7 @@ tlp_eisa_lookup(const struct eisa_attach_args *ea)
 }
 
 static int
-tlp_eisa_match(struct device *parent, struct cfdata *match,
+tlp_eisa_match(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct eisa_attach_args *ea = aux;
@@ -158,7 +146,7 @@ tlp_eisa_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-tlp_eisa_attach(struct device *parent, struct device *self, void *aux)
+tlp_eisa_attach(device_t parent, device_t self, void *aux)
 {
 	static const u_int8_t testpat[] =
 	    { 0xff, 0, 0x55, 0xaa, 0xff, 0, 0x55, 0xaa };
@@ -184,6 +172,7 @@ tlp_eisa_attach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
+	sc->sc_dev = self;
 	sc->sc_st = iot;
 	sc->sc_sh = ioh;
 
@@ -251,8 +240,7 @@ tlp_eisa_attach(struct device *parent, struct device *self, void *aux)
 	 * None of the DE425 boards have the new-style SROMs.
 	 */
 	if (tlp_parse_old_srom(sc, enaddr) == 0) {
-		printf("%s: unable to decode old-style SROM\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to decode old-style SROM\n");
 		return;
 	}
 
@@ -272,24 +260,22 @@ tlp_eisa_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (eisa_intr_map(ec, irq, &ih)) {
-		printf("%s: unable to map interrupt (%u)\n",
-		    sc->sc_dev.dv_xname, irq);
+		aprint_error_dev(self, "unable to map interrupt (%u)\n",
+		    irq);
 		return;
 	}
 	intrstr = eisa_intr_string(ec, ih);
 	esc->sc_ih = eisa_intr_establish(ec, ih,
 	    (val & 0x01) ? IST_EDGE : IST_LEVEL, IPL_NET, tlp_intr, sc);
 	if (esc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 	if (intrstr != NULL)
-		printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname,
-		    intrstr);
+		aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Finish off the attach.

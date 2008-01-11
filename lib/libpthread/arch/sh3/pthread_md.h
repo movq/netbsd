@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_md.h,v 1.3 2005/12/24 21:11:17 perry Exp $ */
+/*	$NetBSD: pthread_md.h,v 1.8 2011/01/25 19:12:06 christos Exp $ */
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -38,17 +38,16 @@
 #ifndef _LIB_PTHREAD_SH3_MD_H
 #define _LIB_PTHREAD_SH3_MD_H
 
-static inline long
+static inline unsigned long
 pthread__sp(void)
 {
-	long ret;
+	unsigned long ret;
 	__asm("mov r15, %0" : "=r" (ret));
 
 	return ret;
 }
 
 #define pthread__uc_sp(ucp) ((ucp)->uc_mcontext.__gregs[_REG_R15])
-#define pthread__uc_pc(ucp) ((ucp)->uc_mcontext.__gregs[_REG_PC])
 
 /*
  * Set initial, sane values for registers whose values aren't just
@@ -57,37 +56,7 @@ pthread__sp(void)
 #define _INITCONTEXT_U_MD(ucp)						\
 	(ucp)->uc_mcontext.__gregs[_REG_SR] = 0;
 
-/*
- * SH3 requires no extra stack space
- */
-#define STACKSPACE	0
-
-
-/*
- * Conversions between struct reg and struct mcontext. Used by
- * libpthread_dbg.
- */
-
-#define PTHREAD_UCONTEXT_TO_REG(reg, uc)				\
-	memcpy((reg), &(uc)->uc_mcontext.__gregs[0], sizeof(*(reg)))
-
-#define PTHREAD_REG_TO_UCONTEXT(uc, reg) do {				\
-	memcpy(&(uc)->uc_mcontext.__gregs[0], (reg), sizeof(*(reg)));	\
-	(uc)->uc_flags = ((uc)->uc_flags | _UC_CPU) & ~_UC_USER;	\
-	} while (/*CONSTCOND*/0)
-
-#if 0 /* no struct fpreg!!! */
-#define PTHREAD_UCONTEXT_TO_FPREG(freg, uc)       			\
-	memcpy((freg), &(uc)->uc_mcontext.__fpregs, sizeof(*(freg)));
-
-#define PTHREAD_FPREG_TO_UCONTEXT(uc, freg) do {       	       		\
-	memcpy(&(uc)->uc_mcontext.__fpregs, (freg), sizeof(*(freg)));	\
-	(uc)->uc_flags = ((uc)->uc_flags | _UC_FPU) & ~_UC_USER;       	\
-	} while (/*CONSTCOND*/0)
-
-#else  /* SBUBS */
-#define PTHREAD_UCONTEXT_TO_FPREG(freg, uc)
-#define PTHREAD_FPREG_TO_UCONTEXT(uc, freg)
-#endif
+/* sh3 will not go SMP */
+#define	PTHREAD__ATOMIC_IS_MEMBAR
 
 #endif /* _LIB_PTHREAD_SH3_MD_H */

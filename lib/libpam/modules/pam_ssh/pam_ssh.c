@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_ssh.c,v 1.14 2007/09/15 14:30:56 ragge Exp $	*/
+/*	$NetBSD: pam_ssh.c,v 1.17 2011/05/06 17:22:09 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2003 Networks Associates Technology, Inc.
@@ -38,7 +38,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_ssh/pam_ssh.c,v 1.40 2004/02/10 10:13:21 des Exp $");
 #else
-__RCSID("$NetBSD: pam_ssh.c,v 1.14 2007/09/15 14:30:56 ragge Exp $");
+__RCSID("$NetBSD: pam_ssh.c,v 1.17 2011/05/06 17:22:09 drochner Exp $");
 #endif
 
 #include <sys/param.h>
@@ -107,13 +107,13 @@ pam_ssh_load_key(struct passwd *pwd, const char *kfn, const char *passphrase)
 	comment = NULL;
 	key = key_load_private(fn, passphrase, &comment);
 	if (key == NULL) {
-		openpam_log(PAM_LOG_DEBUG, "failed to load key from %s\n", fn);
+		openpam_log(PAM_LOG_DEBUG, "failed to load key from %s", fn);
 		if (comment != NULL)
 			free(comment);
 		return (NULL);
 	}
 
-	openpam_log(PAM_LOG_DEBUG, "loaded '%s' from %s\n", comment, fn);
+	openpam_log(PAM_LOG_DEBUG, "loaded '%s' from %s", comment, fn);
 	if ((psk = malloc(sizeof(*psk))) == NULL) {
 		key_free(key);
 		free(comment);
@@ -347,7 +347,7 @@ static int
 pam_ssh_add_keys_to_agent(pam_handle_t *pamh)
 {
 	AuthenticationConnection *ac;
-	struct pam_ssh_key *psk;
+	const struct pam_ssh_key *psk;
 	const char **kfn;
 	char **envlist, **env;
 	int pam_err;
@@ -372,9 +372,11 @@ pam_ssh_add_keys_to_agent(pam_handle_t *pamh)
 
 	/* look for keys to add to it */
 	for (kfn = pam_ssh_keyfiles; *kfn != NULL; ++kfn) {
-		pam_err = pam_get_data(pamh, *kfn, (void **)__UNCONST(&psk));
+		const void *vp;
+		pam_err = pam_get_data(pamh, *kfn, &vp);
+		psk = vp;
 		if (pam_err == PAM_SUCCESS && psk != NULL) {
-			if (ssh_add_identity(ac, psk->key, psk->comment))
+			if (ssh_add_identity_constrained(ac, psk->key, psk->comment, 0, 0))
 				openpam_log(PAM_LOG_DEBUG,
 				    "added %s to ssh agent", psk->comment);
 			else
@@ -405,7 +407,7 @@ pam_sm_open_session(pam_handle_t *pamh, int flags __unused,
 {
 	struct passwd *pwd, pwres;
 	const char *user;
-	void *data;
+	const void *data;
 	int pam_err = PAM_SUCCESS;
 	char pwbuf[1024];
 

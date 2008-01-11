@@ -1,4 +1,4 @@
-/* $NetBSD: dkvar.h,v 1.11 2007/06/26 15:22:24 cube Exp $ */
+/* $NetBSD: dkvar.h,v 1.15 2010/11/19 06:44:39 dholland Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+struct pathbuf; /* from namei.h */
+
 
 struct dk_geom {
 	u_int32_t	pdg_secsize;
@@ -92,15 +88,15 @@ struct dk_intf {
 };
 
 #define DK_BUSY(_dksc, _pmask)				\
-	((_dksc)->sc_dkdev.dk_openmask & ~(_pmask)) ||	\
+	(((_dksc)->sc_dkdev.dk_openmask & ~(_pmask)) ||	\
 	((_dksc)->sc_dkdev.dk_bopenmask & (_pmask)  &&	\
-	((_dksc)->sc_dkdev.dk_copenmask & (_pmask)))
+	((_dksc)->sc_dkdev.dk_copenmask & (_pmask))))
 
 /*
  * Functions that are exported to the pseudo disk implementations:
  */
 
-void	dk_sc_init(struct dk_softc *, void *, char *);
+void	dk_sc_init(struct dk_softc *, void *, const char *);
 
 int	dk_open(struct dk_intf *, struct dk_softc *, dev_t,
 		int, int, struct lwp *);
@@ -118,4 +114,4 @@ void	dk_getdisklabel(struct dk_intf *, struct dk_softc *, dev_t);
 void	dk_getdefaultlabel(struct dk_intf *, struct dk_softc *,
 			   struct disklabel *);
 
-int	dk_lookup(const char *, struct lwp *, struct vnode **, enum uio_seg);
+int	dk_lookup(struct pathbuf *, struct lwp *, struct vnode **);

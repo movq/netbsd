@@ -1,4 +1,4 @@
-/*	$NetBSD: shpcic_machdep.c,v 1.1 2006/09/01 21:26:18 uwe Exp $	*/
+/*	$NetBSD: shpcic_machdep.c,v 1.3 2011/04/06 01:32:06 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: shpcic_machdep.c,v 1.1 2006/09/01 21:26:18 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shpcic_machdep.c,v 1.3 2011/04/06 01:32:06 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -89,7 +89,7 @@ landisk_pci_attach_hook(struct device *parent, struct device *self,
 }
 
 int
-landisk_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+landisk_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int pin = pa->pa_intrpin;
 	int line = pa->pa_intrline;
@@ -189,6 +189,8 @@ struct _bus_space landisk_pci_bus_io =
 	.bs_alloc = shpcic_iomem_alloc,
 	.bs_free = shpcic_iomem_free,
 
+	.bs_mmap = shpcic_iomem_mmap,
+
 	.bs_r_1 = shpcic_io_read_1,
 	.bs_r_2 = shpcic_io_read_2,
 	.bs_r_4 = shpcic_io_read_4,
@@ -236,6 +238,8 @@ struct _bus_space landisk_pci_bus_mem =
 
 	.bs_alloc = shpcic_iomem_alloc,
 	.bs_free = shpcic_iomem_free,
+
+	.bs_mmap = shpcic_iomem_mmap,
 
 	.bs_r_1 = shpcic_mem_read_1,
 	.bs_r_2 = shpcic_mem_read_2,

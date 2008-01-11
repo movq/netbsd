@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.25 2007/10/17 19:57:04 garbled Exp $	*/
+/*	$NetBSD: bus.h,v 1.28 2009/02/10 06:10:50 rumble Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,11 +59,12 @@ typedef u_long	bus_space_handle_t;
  * Values for sgimips bus space tag, not to be used directly by MI code.
  */
 #define	SGIMIPS_BUS_SPACE_NORMAL	0
-#define	SGIMIPS_BUS_SPACE_HPC		1
-#define	SGIMIPS_BUS_SPACE_MEM		2
-#define	SGIMIPS_BUS_SPACE_MACE		3
-#define	SGIMIPS_BUS_SPACE_IO		4
-#define SGIMIPS_BUS_SPACE_CRIME		5
+#define	SGIMIPS_BUS_SPACE_IP6_DPCLOCK	1
+#define	SGIMIPS_BUS_SPACE_HPC		2
+#define	SGIMIPS_BUS_SPACE_MEM		3
+#define	SGIMIPS_BUS_SPACE_MACE		4
+#define	SGIMIPS_BUS_SPACE_IO		5
+#define	SGIMIPS_BUS_SPACE_CRIME		6
 
 /* Initialization for bus_dmamap_sync, which differs from MIPS1 to MIPS3 */
 
@@ -89,6 +83,8 @@ void	sgimips_bus_dma_init(void);
 
 int	bus_space_map(bus_space_tag_t, bus_addr_t, bus_size_t,
 	    int, bus_space_handle_t *);
+
+paddr_t	bus_space_mmap(bus_space_tag_t, bus_addr_t, off_t, int, int);
 
 /*
  *	void bus_space_unmap(bus_space_tag_t t,

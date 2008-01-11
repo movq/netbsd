@@ -1,4 +1,4 @@
-/*	$NetBSD: tempnam.c,v 1.19 2005/07/27 13:23:07 drochner Exp $	*/
+/*	$NetBSD: tempnam.c,v 1.21 2009/10/25 20:44:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tempnam.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: tempnam.c,v 1.19 2005/07/27 13:23:07 drochner Exp $");
+__RCSID("$NetBSD: tempnam.c,v 1.21 2009/10/25 20:44:13 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

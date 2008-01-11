@@ -1,4 +1,4 @@
-/*	$NetBSD: wdvar.h,v 1.33 2007/12/09 20:27:55 jmcneill Exp $	*/
+/*	$NetBSD: wdvar.h,v 1.38 2009/12/17 21:03:10 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -38,7 +33,7 @@
 
 struct wd_softc {
 	/* General disk infos */
-	struct device sc_dev;
+	device_t sc_dev;
 	struct disk sc_dk;
 	struct bufq_state *sc_q;
 	struct callout sc_restart_ch;
@@ -62,7 +57,8 @@ struct wd_softc {
 #define WDF_LBA		0x040 /* using LBA mode */
 #define WDF_KLABEL	0x080 /* retain label after 'full' close */
 #define WDF_LBA48	0x100 /* using 48-bit LBA mode */
-	u_int64_t sc_capacity;
+	u_int64_t sc_capacity; /* full capacity of the device */
+	u_int32_t sc_capacity28; /* capacity accessible with LBA28 commands */
 
 	int retries; /* number of xfer retry */
 

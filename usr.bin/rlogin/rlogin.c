@@ -1,4 +1,4 @@
-/*	$NetBSD: rlogin.c,v 1.38 2007/01/17 00:21:44 hubertf Exp $	*/
+/*	$NetBSD: rlogin.c,v 1.40 2009/04/13 04:37:53 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1990, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)rlogin.c	8.4 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: rlogin.c,v 1.38 2007/01/17 00:21:44 hubertf Exp $");
+__RCSID("$NetBSD: rlogin.c,v 1.40 2009/04/13 04:37:53 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -229,12 +229,12 @@ main(int argc, char *argv[])
 	if ((p = getenv("TERM")) != NULL)
 		(void)strlcpy(term, p, sizeof(term));
 	len = strlen(term);
-	if (len < (sizeof(term) - 1) && tcgetattr(0, &tty) == 0) {
+	if (len < (int)(sizeof(term) - 1) && tcgetattr(0, &tty) == 0) {
 		/* start at 2 to include the / */
 		for (ospeed = i = cfgetospeed(&tty), len2 = 2; i > 9; len2++)
 			i /= 10;
 
-		if (len + len2 < sizeof(term))
+		if (len + len2 < (int)sizeof(term))
 			(void)snprintf(term + len, len2 + 1, "/%d", ospeed);
 	}
 
@@ -590,7 +590,7 @@ oob(int signo)
 			 * to send it yet if we are blocked for output and
 			 * our input buffer is full.
 			 */
-			if (rcvcnt < sizeof(rcvbuf)) {
+			if (rcvcnt < (int)sizeof(rcvbuf)) {
 				n = read(rem, rcvbuf + rcvcnt,
 				    sizeof(rcvbuf) - rcvcnt);
 				if (n <= 0)

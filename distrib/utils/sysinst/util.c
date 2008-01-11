@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.149 2007/11/12 15:07:33 jmmv Exp $	*/
+/*	$NetBSD: util.c,v 1.169 2011/04/04 08:30:14 mbalmer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,24 +14,20 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY PIERMONT INFORMATION SYSTEMS INC. ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * ARE DISCLAIMED. IN NO EVENT SHALL PIERMONT INFORMATION SYSTEMS INC. BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
@@ -40,12 +36,20 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 #include <unistd.h>
+#include <sys/mount.h>
+#include <sys/disklabel.h>
+#include <sys/dkio.h>
+#include <sys/ioctl.h>
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/sysctl.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <isofs/cd9660/iso.h>
 #include <curses.h>
+#include <err.h>
 #include <errno.h>
 #include <dirent.h>
 #include <util.h>
@@ -60,9 +64,15 @@
 #ifndef MD_SETS_SELECTED_MINIMAL
 #define MD_SETS_SELECTED_MINIMAL SET_KERNEL_1, SET_CORE
 #endif
+#ifndef MD_SETS_SELECTED_NOX
+#define MD_SETS_SELECTED_NOX SET_KERNEL_1, SET_SYSTEM, SET_MD
+#endif
 #ifndef MD_SETS_VALID
 #define MD_SETS_VALID SET_KERNEL, SET_SYSTEM, SET_X11, SET_MD
 #endif
+
+#define MAX_CD_DEVS	256	/* how many cd drives do we expect to attach */
+#define ISO_BLKSIZE	ISO_DEFAULT_BLOCK_SIZE
 
 static const char *msg_yes, *msg_no, *msg_all, *msg_some, *msg_none;
 static const char *msg_cur_distsets_row;
@@ -109,6 +119,7 @@ distinfo dist_list[] = {
 	{SET_KERNEL_8_NAME,	SET_KERNEL_8,		MSG_set_kernel_8, NULL},
 #endif
 
+	{"modules",		SET_MODULES,		MSG_set_modules, NULL},
 	{"base",		SET_BASE,		MSG_set_base, NULL},
 	{"etc",			SET_ETC,		MSG_set_system, NULL},
 	{"comp",		SET_COMPILER,		MSG_set_compiler, NULL},
@@ -142,26 +153,39 @@ distinfo dist_list[] = {
 	{NULL,			SET_LAST,		NULL, NULL},
 };
 
+#define MAX_CD_INFOS	16	/* how many media can be found? */
+struct cd_info {
+	char device_name[16];
+	char menu[100];
+};
+static struct cd_info cds[MAX_CD_INFOS];
+
 /*
- * local prototypes 
+ * local prototypes
  */
 
 static int check_for(unsigned int mode, const char *pathname);
+static int get_iso9660_volname(int dev, int sess, char *volname);
+static int get_available_cds(void);
 
 void
-init_set_status(int minimal)
+init_set_status(int flags)
 {
 	static const uint8_t sets_valid[] = {MD_SETS_VALID};
 	static const uint8_t sets_selected_full[] = {MD_SETS_SELECTED};
 	static const uint8_t sets_selected_minimal[] = {MD_SETS_SELECTED_MINIMAL};
+	static const uint8_t sets_selected_nox[] = {MD_SETS_SELECTED_NOX};
 	static const uint8_t *sets_selected;
-	int nelem_selected;
+	unsigned int nelem_selected;
 	unsigned int i, len;
 	const char *longest;
 
-	if (minimal) {
+	if (flags & SFLAG_MINIMAL) {
 		sets_selected = sets_selected_minimal;
 		nelem_selected = nelem(sets_selected_minimal);
+	} else if (flags & SFLAG_NOX) {
+		sets_selected = sets_selected_nox;
+		nelem_selected = nelem(sets_selected_nox);
 	} else {
 		sets_selected = sets_selected_full;
 		nelem_selected = nelem(sets_selected_full);
@@ -189,6 +213,9 @@ init_set_status(int minimal)
 	i = strlen(msg_some); if (i > len) {len = i; longest = msg_some; }
 	i = strlen(msg_none); if (i > len) {len = i; longest = msg_none; }
 	select_menu_width = snprintf(NULL, 0, msg_cur_distsets_row, "",longest);
+
+	/* Give the md code a chance to choose the right kernel, etc. */
+	md_init_set_status(flags);
 }
 
 int
@@ -219,7 +246,7 @@ get_ramsize(void)
 	uint64_t ramsize;
 	size_t len = sizeof ramsize;
 	int mib[2] = {CTL_HW, HW_PHYSMEM64};
-	
+
 	sysctl(mib, 2, &ramsize, &len, NULL, 0);
 
 	/* Find out how many Megs ... round up. */
@@ -243,6 +270,32 @@ run_makedev(void)
 
 	chdir(owd);
 	free(owd);
+}
+
+/*
+ * Performs in-place replacement of a set of patterns in a file that lives
+ * inside the installed system.  The patterns must be separated by a semicolon.
+ * For example:
+ *
+ * replace("/etc/some-file.conf", "s/prop1=NO/prop1=YES/;s/foo/bar/");
+ */
+static
+void
+replace(const char *path, const char *patterns, ...)
+{
+	char *spatterns;
+	va_list ap;
+
+	va_start(ap, patterns);
+	vasprintf(&spatterns, patterns, ap);
+	va_end(ap);
+	if (spatterns == NULL)
+		err(1, "vasprintf(&spatterns, \"%s\", ...)", patterns);
+
+	run_program(RUN_CHROOT, "sed -an -e '%s;H;$!d;g;w %s' %s", spatterns,
+	    path, path);
+
+	free(spatterns);
 }
 
 static int
@@ -310,31 +363,221 @@ get_via_floppy(void)
 }
 
 /*
+ * Get the volume name of a ISO9660 file system
+ */
+static int
+get_iso9660_volname(int dev, int sess, char *volname)
+{
+	int blkno, error, last;
+	char buf[ISO_BLKSIZE];
+	struct iso_volume_descriptor *vd = NULL;
+	struct iso_primary_descriptor *pd = NULL;
+
+	for (blkno = sess+16; blkno < sess+16+100; blkno++) {
+		error = pread(dev, buf, ISO_BLKSIZE, blkno*ISO_BLKSIZE);
+		if (error == -1)
+			return -1;
+		vd = (struct iso_volume_descriptor *)&buf;
+		if (memcmp(vd->id, ISO_STANDARD_ID, sizeof(vd->id)) != 0)
+			return -1;
+		if (isonum_711((const unsigned char *)&vd->type)
+		     == ISO_VD_PRIMARY) {
+			pd = (struct iso_primary_descriptor*)buf;
+			strncpy(volname, pd->volume_id, sizeof pd->volume_id);
+			last = sizeof pd->volume_id-1;
+			while (last >= 0
+			    && (volname[last] == ' ' || volname[last] == 0))
+				last--;
+			volname[last+1] = 0;
+			return 0;
+		}
+	}
+	return -1;
+}
+
+/*
+ * Get a list of all available CD media (not drives!), return
+ * the number of entries collected.
+ */
+static int
+get_available_cds()
+{
+	char dname[16], volname[80];
+	struct cd_info *info = cds;
+	struct disklabel label;
+	int i, part, dev, error, sess, ready, count = 0;
+
+	for (i = 0; i < MAX_CD_DEVS; i++) {
+		sprintf(dname, "/dev/rcd%d%c", i, 'a'+RAW_PART);
+		dev = open(dname, O_RDONLY, 0);
+		if (dev == -1)
+			break;
+		ready = 0;
+		error = ioctl(dev, DIOCTUR, &ready);
+		if (error != 0 || ready == 0) {
+			close(dev);
+			continue;
+		}
+		error = ioctl(dev, DIOCGDINFO, &label);
+		close(dev);
+		if (error == 0) {
+			for (part = 0; part < label.d_npartitions; part++) {
+				if (label.d_partitions[part].p_fstype
+				    != FS_ISO9660)
+					continue;
+				if (label.d_partitions[part].p_fstype
+				    == FS_ISO9660) {
+					sess = label.d_partitions[part]
+					    .p_cdsession;
+					sprintf(dname, "/dev/rcd%d%c", i,
+					    'a'+part);
+					dev = open(dname, O_RDONLY, 0);
+					if (dev == -1)
+						continue;
+					error = get_iso9660_volname(dev, sess,
+					    volname);
+					close(dev);
+					if (error) continue;
+					sprintf(info->device_name, "cd%d%c",
+						i, 'a'+part);
+					sprintf(info->menu, "%s (%s)",
+						info->device_name,
+						volname);
+				} else {
+					/*
+					 * All install CDs use partition
+					 * a for the sets.
+					 */
+					if (part > 0)
+						continue;
+					sprintf(info->device_name, "cd%d%c",
+						i, 'a'+part);
+					strcpy(info->menu, info->device_name);
+				}
+				info++;
+				if (++count >= MAX_CD_INFOS)
+					break;
+			}
+		}
+	}
+	return count;
+}
+
+static int
+cd_has_sets(void)
+{
+	/* Mount it */
+	if (run_program(RUN_SILENT, "/sbin/mount -rt cd9660 /dev/%s /mnt2",
+	    cdrom_dev) != 0)
+		return 0;
+
+	mnt2_mounted = 1;
+
+	snprintf(ext_dir, sizeof ext_dir, "%s/%s", "/mnt2", set_dir);
+	return dir_exists_p(ext_dir);
+}
+
+
+static int
+set_cd_select(menudesc *m, void *arg)
+{
+	*(int *)arg = m->cursel;
+	return 1;
+}
+
+/*
+ * Check wether we can remove the boot media.
+ * If it is not a local filesystem, return -1.
+ * If we can not decide for sure (can not tell MD content from plain ffs
+ * on hard disk, for example), return 0.
+ * If it is a CD/DVD, return 1.
+ */
+int
+boot_media_still_needed(void)
+{
+	struct statvfs sb;
+
+	if (statvfs("/", &sb) == 0) {
+		if (!(sb.f_flag & ST_LOCAL))
+			return -1;
+		if (strcmp(sb.f_fstypename, MOUNT_CD9660) == 0
+			   || strcmp(sb.f_fstypename, MOUNT_UDF) == 0)
+			return 1;
+	}
+
+	return 0;
+}
+
+/*
  * Get from a CDROM distribution.
  */
 int
 get_via_cdrom(void)
 {
+	menu_ent cd_menu[MAX_CD_INFOS];
+	struct statvfs sb;
+	int num_cds, menu_cd, i, selected_cd = 0;
+	bool silent = false;
 
-	/* Get CD-rom device name and path within CD-rom */
+	/* If root is a CD-ROM and we have sets, skip this step. */
+	if (statvfs(set_dir, &sb) == 0 &&
+	    (strcmp(sb.f_fstypename, MOUNT_CD9660) == 0
+		    || strcmp(sb.f_fstypename, MOUNT_UDF) == 0)) {
+	    	strlcpy(ext_dir, set_dir, sizeof ext_dir);
+		return SET_OK;
+	}
+
+	num_cds = get_available_cds();
+	if (num_cds <= 0) {
+		silent = true;
+	} else if (num_cds == 1) {
+		/* single CD found, check for sets on it */
+		strcpy(cdrom_dev, cds[0].device_name);
+		if (cd_has_sets())
+			return SET_OK;
+	} else {
+		for (i = 0; i< num_cds; i++) {
+			cd_menu[i].opt_name = cds[i].menu;
+			cd_menu[i].opt_menu = OPT_NOMENU;
+			cd_menu[i].opt_flags = OPT_EXIT;
+			cd_menu[i].opt_action = set_cd_select;
+		}
+		/* create a menu offering available choices */
+		menu_cd = new_menu(MSG_Available_cds,
+			cd_menu, num_cds, -1, 4, 0, 0,
+			MC_SCROLL | MC_NOEXITOPT,
+			NULL, NULL, NULL, NULL, NULL);
+		if (menu_cd == -1)
+			return SET_RETRY;
+		msg_display(MSG_ask_cd);
+		process_menu(menu_cd, &selected_cd);
+		free_menu(menu_cd);
+		strcpy(cdrom_dev, cds[selected_cd].device_name);
+		if (cd_has_sets())
+			return SET_OK;
+	}
+
+	if (silent)
+		msg_display("");
+	else {
+		umount_mnt2();
+		msg_display(MSG_cd_path_not_found);
+		msg_display_add("\r\n\r\n");
+	}
+
+	/* ask for paths on the CD */
 	process_menu(MENU_cdromsource, NULL);
 
-	/* Mount it */
-	if (run_program(0, "/sbin/mount -rt cd9660 /dev/%s /mnt2",
-	    cdrom_dev) != 0)
-		return SET_RETRY;
+	if (cd_has_sets())
+		return SET_OK;
 
-	mnt2_mounted = 1;
-
-	snprintf(ext_dir, sizeof ext_dir, "%s/%s", "/mnt2", set_dir);
-
-	return SET_OK;
+	return SET_RETRY;
 }
 
 
 /*
  * Get from a pathname inside an unmounted local filesystem
- * (e.g., where sets were preloaded onto a local DOS partition) 
+ * (e.g., where sets were preloaded onto a local DOS partition)
  */
 int
 get_via_localfs(void)
@@ -595,31 +838,14 @@ customise_sets(void)
 	free_menu(menu_no);
 }
 
-static int
-ask_verbose_dist(msg setup_done)
-{
-	int verbose = 0;
-
-	wclear(stdscr);
-	wrefresh(stdscr);
-	if (setup_done != NULL)
-		msg_display(setup_done);
-	msg_display_add(MSG_verboseextract);
-	process_menu(MENU_extract, &verbose);
-	wclear(stdscr);
-	wrefresh(stdscr);
-
-	return verbose;
-}
-
 /*
  * Extract_file **REQUIRES** an absolute path in ext_dir.  Any code
  * that sets up xfer_dir for use by extract_file needs to put in the
- * full path name to the directory. 
+ * full path name to the directory.
  */
 
 static int
-extract_file(distinfo *dist, int update, int verbose)
+extract_file(distinfo *dist, int update)
 {
 	char path[STRSIZE];
 	char *owd;
@@ -631,7 +857,7 @@ extract_file(distinfo *dist, int update, int verbose)
 
 	(void)snprintf(path, sizeof path, "%s/%s%s",
 	    ext_dir, dist->name, dist_postfix);
-	
+
 	owd = getcwd(NULL, 0);
 
 	/* Do we need to fetch the file now? */
@@ -643,31 +869,46 @@ extract_file(distinfo *dist, int update, int verbose)
 
 	/* check tarfile exists */
 	if (!file_exists_p(path)) {
+
+#ifdef SUPPORT_8_3_SOURCE_FILESYSTEM
+	/*
+	 * Update path to use dist->name tuncated to the first eight
+	 * characters and check again
+	 */
+	(void)snprintf(path, sizeof path, "%s/%.8s%.4s", /* 4 as includes '.' */
+	    ext_dir, dist->name, dist_postfix);
+		if (!file_exists_p(path)) {
+#endif /* SUPPORT_8_3_SOURCE_FILESYSTEM */
+
 		tarstats.nnotfound++;
 
 		msg_display(MSG_notarfile, path);
 		process_menu(MENU_ok, NULL);
 		return SET_RETRY;
 	}
+#ifdef SUPPORT_8_3_SOURCE_FILESYSTEM
+	}
+#endif /* SUPPORT_8_3_SOURCE_FILESYSTEM */
 
-	tarstats.nfound++;	
+	tarstats.nfound++;
 	/* cd to the target root. */
-	if (update && dist->set == SET_ETC) {
+	if (update && (dist->set == SET_ETC || dist->set == SET_X11_ETC)) {
 		make_target_dir("/.sysinst");
 		target_chdir_or_die("/.sysinst");
 	} else
 		target_chdir_or_die("/");
 
+	/*
+	 * /usr/X11R7/lib/X11/xkb/symbols/pc was a directory in 5.0
+	 * but is a file in 5.1 and beyond, so on upgrades we need to
+	 * delete it before extracting the xbase set.
+	 */
+	if (update && dist->set == SET_X11_BASE)
+		run_program(0, "rm -rf usr/X11R7/lib/X11/xkb/symbols/pc");
+
 	/* now extract set files into "./". */
-	if (verbose == 0)
-		rval = run_program(RUN_DISPLAY | RUN_PROGRESS, 
-				"progress -zf %s tar --chroot -xhepf -", path);
-	else if (verbose == 1)
-		rval = run_program(RUN_DISPLAY, 
-				"tar --chroot -zxhepf %s", path);
-	else
-		rval = run_program(RUN_DISPLAY | RUN_PROGRESS, 
-				"tar --chroot -zxhvepf %s", path);
+	rval = run_program(RUN_DISPLAY | RUN_PROGRESS,
+			"progress -zf %s tar --chroot -xhepf -", path);
 
 	chdir(owd);
 	free(owd);
@@ -683,23 +924,6 @@ extract_file(distinfo *dist, int update, int verbose)
 	if (fetch_fn != NULL && clean_xfer_dir) {
 		run_program(0, "rm %s", path);
 		/* Plausibly we should unlink an empty xfer_dir as well */
-	}
-
-	if (update && dist->set == SET_ETC) {
-		int oldsendmail;
-		oldsendmail = run_program(RUN_DISPLAY | RUN_CHROOT |
-					  RUN_ERROR_OK | RUN_PROGRESS,
-					  "/usr/sbin/postinstall -s /.sysinst -d / check mailerconf");
-		if (oldsendmail == 1) {
-			msg_display(MSG_oldsendmail);
-			process_menu(MENU_yesno, NULL);
-			if (yesno) {
-				run_program(RUN_DISPLAY | RUN_CHROOT,
-					    "/usr/sbin/postinstall -s /.sysinst -d / fix mailerconf");
-			}
-		}
-		run_program(RUN_DISPLAY | RUN_CHROOT,
-			"/usr/sbin/postinstall -s /.sysinst -d / fix");
 	}
 
 	set_status[dist->set] |= SET_INSTALLED;
@@ -739,7 +963,6 @@ get_and_unpack_sets(int update, msg setupdone_msg, msg success_msg, msg failure_
 {
 	distinfo *dist;
 	int status;
-	int verbose;
 	int set;
 
 	/* Ensure mountpoint for distribution files exists in current root. */
@@ -751,9 +974,6 @@ get_and_unpack_sets(int update, msg setupdone_msg, msg success_msg, msg failure_
 	memset(&tarstats, 0, sizeof(tarstats));
 
 	/* Find out which files to "get" if we get files. */
-
-	/* ask user whether to do normal or verbose extraction */
-	verbose = ask_verbose_dist(setupdone_msg);
 
 	/* Accurately count selected sets */
 	for (dist = dist_list; (set = dist->set) != SET_LAST; dist++) {
@@ -804,7 +1024,7 @@ get_and_unpack_sets(int update, msg setupdone_msg, msg success_msg, msg failure_
 		}
 
 		/* Try to extract this set */
-		status = extract_file(dist, update, verbose);
+		status = extract_file(dist, update);
 		if (status == SET_RETRY)
 			dist--;
 	}
@@ -820,6 +1040,28 @@ get_and_unpack_sets(int update, msg setupdone_msg, msg success_msg, msg failure_
 		    tarstats.nfound, tarstats.nsuccess, tarstats.nerror);
 		process_menu(MENU_ok, NULL);
 		msg_clear();
+	}
+
+	/*
+	 * postinstall needs to be run after extracting all sets, because
+	 * otherwise /var/db/obsolete will only have current information
+	 * from the base, comp, and etc sets.
+	 */
+	if (update && (set_status[SET_ETC] & SET_INSTALLED)) {
+		int oldsendmail;
+		oldsendmail = run_program(RUN_DISPLAY | RUN_CHROOT |
+					  RUN_ERROR_OK | RUN_PROGRESS,
+					  "/usr/sbin/postinstall -s /.sysinst -d / check mailerconf");
+		if (oldsendmail == 1) {
+			msg_display(MSG_oldsendmail);
+			process_menu(MENU_yesno, NULL);
+			if (yesno) {
+				run_program(RUN_DISPLAY | RUN_CHROOT,
+					    "/usr/sbin/postinstall -s /.sysinst -d / fix mailerconf");
+			}
+		}
+		run_program(RUN_DISPLAY | RUN_CHROOT,
+			"/usr/sbin/postinstall -s /.sysinst -d / fix");
 	}
 
 	/* Configure the system */
@@ -880,7 +1122,7 @@ struct check_table { unsigned int mode; const char *path;} checks[] = {
   { S_IFREG, "/foo/bar" },		/* bad entry to exercise warning */
 #endif
   { 0, 0 }
-  
+
 };
 
 /*
@@ -889,10 +1131,10 @@ struct check_table { unsigned int mode; const char *path;} checks[] = {
 static int
 check_for(unsigned int mode, const char *pathname)
 {
-	int found; 
+	int found;
 
 	found = (target_test(mode, pathname) == 0);
-	if (found == 0) 
+	if (found == 0)
 		msg_display(MSG_rootmissing, pathname);
 	return found;
 }
@@ -911,7 +1153,7 @@ sanity_check(void)
 		target_ok = target_ok && check_for(p->mode, p->path);
 	}
 	if (target_ok)
-		return 0;	    
+		return 0;
 
 	/* Uh, oh. Something's missing. */
 	msg_display(MSG_badroot);
@@ -955,7 +1197,7 @@ set_tz_select(menudesc *m, void *arg)
 
 	/* Update displayed time */
 	t = time(NULL);
-	msg_display(MSG_choose_timezone, 
+	msg_display(MSG_choose_timezone,
 		    tz_default, tz_selected, ctime(&t), localtime(&t)->tm_zone);
 	return 0;
 }
@@ -1023,7 +1265,7 @@ tzm_set_names(menudesc *m, void *arg)
 		return;	/* error - skip timezone setting */
 	while (nfiles > 0)
 		free(tz_names[--nfiles]);
-	
+
 	dir = opendir(zoneinfo_dir);
 	fp = strchr(zoneinfo_dir, 0);
 	if (fp != zoneinfo_dir + zonerootlen) {
@@ -1087,7 +1329,7 @@ set_timezone(void)
 	int rc;
 	time_t t;
 	int menu_no;
-       
+
 	strlcpy(zoneinfo_dir, target_expand("/usr/share/zoneinfo/"),
 	    sizeof zoneinfo_dir - 1);
 	zonerootlen = strlen(zoneinfo_dir);
@@ -1112,19 +1354,19 @@ set_timezone(void)
 	snprintf(tz_env, sizeof(tz_env), "%s%s", zoneinfo_dir, tz_selected);
 	setenv("TZ", tz_env, 1);
 	t = time(NULL);
-	msg_display(MSG_choose_timezone, 
+	msg_display(MSG_choose_timezone,
 		    tz_default, tz_selected, ctime(&t), localtime(&t)->tm_zone);
 
 	signal(SIGALRM, timezone_sig);
 	alarm(60);
-	
+
 	menu_no = new_menu(NULL, NULL, 14, 23, 9,
 			   12, 32, MC_ALWAYS_SCROLL | MC_NOSHORTCUT,
 			   tzm_set_names, NULL, NULL,
 			   "\nPlease consult the install documents.", NULL);
 	if (menu_no < 0)
 		goto done;	/* error - skip timezone setting */
-	
+
 	process_menu(menu_no, NULL);
 
 	free_menu(menu_no);
@@ -1135,57 +1377,9 @@ set_timezone(void)
 		 "/usr/share/zoneinfo/%s", tz_selected);
 	unlink(localtime_link);
 	symlink(localtime_target, localtime_link);
-	
+
 done:
 	return 1;
-}
-
-int
-set_crypt_type(void)
-{
-	FILE *pwc;
-	char *fn;
-
-	msg_display(MSG_choose_crypt);
-	process_menu(MENU_crypttype, NULL);
-	fn = strdup(target_expand("/etc/passwd.conf"));
-	if (fn == NULL)
-		return -1;
-
-	switch (yesno) {
-	case 0:
-		break;
-	case 1:	/* DES */
-		rename(fn, target_expand("/etc/passwd.conf.pre-sysinst"));
-		pwc = fopen(fn, "w");
-		fprintf(pwc,
-		    "default:\n"
-		    "  localcipher = old\n"
-		    "  ypcipher = old\n");
-		fclose(pwc);
-		break;
-	case 2:	/* MD5 */
-		rename(fn, target_expand("/etc/passwd.conf.pre-sysinst"));
-		pwc = fopen(fn, "w");
-		fprintf(pwc,
-		    "default:\n"
-		    "  localcipher = md5\n"
-		    "  ypcipher = md5\n");
-		fclose(pwc);
-		break;
-	case 3:	/* blowfish 2^7 */
-		rename(fn, target_expand("/etc/passwd.conf.pre-sysinst"));
-		pwc = fopen(fn, "w");
-		fprintf(pwc,
-		    "default:\n"
-		    "  localcipher = blowfish,7\n"
-		    "  ypcipher = blowfish,7\n");
-		fclose(pwc);
-		break;
-	}
-
-	free(fn);
-	return (0);
 }
 
 int
@@ -1250,18 +1444,39 @@ add_rc_conf(const char *fmt, ...)
 }
 
 void
+add_sysctl_conf(const char *fmt, ...)
+{
+	FILE *f;
+	va_list ap;
+
+	va_start(ap, fmt);
+	f = target_fopen("/etc/sysctl.conf", "a");
+	if (f != 0) {
+		scripting_fprintf(NULL, "cat <<EOF >>%s/etc/sysctl.conf\n",
+		    target_prefix());
+		scripting_vfprintf(f, fmt, ap);
+		fclose(f);
+		scripting_fprintf(NULL, "EOF\n");
+	}
+	va_end(ap);
+}
+
+void
 enable_rc_conf(void)
 {
-	run_program(RUN_CHROOT,
-		    "sed -an -e 's/^rc_configured=NO/rc_configured=YES/;"
-				    "H;$!d;g;w /etc/rc.conf' /etc/rc.conf");
+
+	replace("/etc/rc.conf", "s/^rc_configured=NO/rc_configured=YES/");
 }
 
 int
 check_lfs_progs(void)
 {
 
+#ifndef NO_LFS
 	return (access("/sbin/fsck_lfs", X_OK) == 0 &&
 		access("/sbin/mount_lfs", X_OK) == 0 &&
 		access("/sbin/newfs_lfs", X_OK) == 0);
+#else
+	return 0;
+#endif
 }

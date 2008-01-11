@@ -1,4 +1,4 @@
-/*	$NetBSD: swapctl.c,v 1.32 2006/08/27 21:07:39 martin Exp $	*/
+/*	$NetBSD: swapctl.c,v 1.35 2009/09/24 16:15:20 apb Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997, 1999 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -66,7 +64,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: swapctl.c,v 1.32 2006/08/27 21:07:39 martin Exp $");
+__RCSID("$NetBSD: swapctl.c,v 1.35 2009/09/24 16:15:20 apb Exp $");
 #endif
 
 
@@ -525,7 +523,9 @@ get_dumpdev(void)
 		if (name)
 			printf("%s\n", name);
 		else
-			printf("major %d minor %d\n", major(dev), minor(dev));
+			printf("major %llu minor %llu\n",
+			    (unsigned long long)major(dev),
+			    (unsigned long long)minor(dev));
 	}
 	return 1;
 }
@@ -679,7 +679,8 @@ do_fstab(int add)
 	long	priority;
 	struct	stat st;
 	int	isblk;
-	int	gotone = 0;
+	int	success = 0;	/* set to 1 after a successful operation */
+	int	error = 0;	/* set to 1 after an error */
 
 #ifdef RESCUEDIR
 #define PATH_MOUNT	RESCUEDIR "/mount_nfs"
@@ -779,21 +780,32 @@ do_fstab(int add)
 
 		if (add) {
 			if (add_swap(spec, (int)priority)) {
-				gotone = 1;
+				success = 1;
 				printf(
 			    	"%s: adding %s as swap device at priority %d\n",
 				    getprogname(), fp->fs_spec, (int)priority);
+			} else {
+				error = 1;
+				fprintf(stderr,
+				    "%s: failed to add %s as swap device\n",
+				    getprogname(), fp->fs_spec);
 			}
 		} else {
 			if (delete_swap(spec)) {
-				gotone = 1;
+				success = 1;
 				printf(
 				    "%s: removing %s as swap device\n",
+				    getprogname(), fp->fs_spec);
+			} else {
+				error = 1;
+				fprintf(stderr,
+				    "%s: failed to remove %s as swap device\n",
 				    getprogname(), fp->fs_spec);
 			}
 			if (cmd[0]) {
 				if (system(cmd) != 0) {
 					warnx("%s: umount failed", fp->fs_spec);
+					error = 1;
 					continue;
 				}
 			}
@@ -802,8 +814,12 @@ do_fstab(int add)
 		if (spec != fp->fs_spec)
 			free(spec);
 	}
-	if (gotone == 0)
+	if (error)
 		exit(1);
+	else if (success)
+		exit(0);
+	else
+		exit(2); /* not really an error, but no swap devices found */
 }
 
 static void

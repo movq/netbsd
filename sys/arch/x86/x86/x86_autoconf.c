@@ -1,4 +1,4 @@
-/*	$NetBSD: x86_autoconf.c,v 1.31 2007/11/26 19:01:26 pooka Exp $	*/
+/*	$NetBSD: x86_autoconf.c,v 1.59 2011/03/08 02:57:00 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -35,16 +35,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: x86_autoconf.c,v 1.31 2007/11/26 19:01:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: x86_autoconf.c,v 1.59 2011/03/08 02:57:00 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/disklabel.h>
 #include <sys/conf.h>
-#ifdef COMPAT_OLDBOOT
-#include <sys/reboot.h>
-#endif
 #include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/fcntl.h>
@@ -54,19 +51,120 @@ __KERNEL_RCSID(0, "$NetBSD: x86_autoconf.c,v 1.31 2007/11/26 19:01:26 pooka Exp 
 #include <sys/kauth.h>
 
 #include <machine/bootinfo.h>
+#include <machine/pio.h>
 
+#include "acpica.h"
 #include "pci.h"
+#include "isa.h"
+#include "genfb.h"
+#include "wsdisplay.h"
+#include "opt_vga.h"
+#include "opt_ddb.h"
 
+#ifdef DDB
+#include <machine/db_machdep.h>
+#include <ddb/db_sym.h>
+#include <ddb/db_extern.h>
+#endif
+
+#if NACPICA > 0
+#include <dev/acpi/acpivar.h>
+#endif
+
+#ifdef VGA_POST
+#include <x86/vga_post.h>
+#endif
 #include <dev/isa/isavar.h>
 #if NPCI > 0
 #include <dev/pci/pcivar.h>
+#endif
+#include <dev/wsfb/genfbvar.h>
+#include <arch/x86/include/genfb_machdep.h>
+#if NPCI > 0
+#include <dev/pci/genfb_pcivar.h>
+#endif
+#include <dev/ic/vgareg.h>
+
+#if NPCI > 0
+static struct genfb_colormap_callback gfb_cb;
+static struct genfb_pmf_callback pmf_cb;
+static struct genfb_mode_callback mode_cb;
+#ifdef VGA_POST
+static struct vga_post *vga_posth = NULL;
+#endif
+#endif
+#if NGENFB > 0 && NACPICA > 0 && defined(VGA_POST)
+extern int acpi_md_vbios_reset;
+extern int acpi_md_vesa_modenum;
 #endif
 
 struct disklist *x86_alldisks;
 int x86_ndisks;
 
+#if NPCI > 0
 static void
-handle_wedges(struct device *dv, int par)
+x86_genfb_set_mapreg(void *opaque, int index, int r, int g, int b)
+{
+	outb(0x3c0 + VGA_DAC_ADDRW, index);
+	outb(0x3c0 + VGA_DAC_PALETTE, (uint8_t)r >> 2);
+	outb(0x3c0 + VGA_DAC_PALETTE, (uint8_t)g >> 2);
+	outb(0x3c0 + VGA_DAC_PALETTE, (uint8_t)b >> 2);
+}
+
+static bool
+x86_genfb_setmode(struct genfb_softc *sc, int newmode)
+{
+#if NGENFB > 0
+	static int curmode = WSDISPLAYIO_MODE_EMUL;
+
+	switch (newmode) {
+	case WSDISPLAYIO_MODE_EMUL:
+		x86_genfb_mtrr_init(sc->sc_fboffset,
+		    sc->sc_height * sc->sc_stride);
+#if NACPICA > 0 && defined(VGA_POST)
+		if (curmode != newmode) {
+			if (vga_posth != NULL && acpi_md_vesa_modenum != 0) {
+				vga_post_set_vbe(vga_posth,
+				    acpi_md_vesa_modenum);
+			}
+		}
+#endif
+		break;
+	}
+
+	curmode = newmode;
+#endif
+	return true;
+}
+
+static bool
+x86_genfb_suspend(device_t dev, const pmf_qual_t *qual)
+{
+	return true;
+}
+
+static bool
+x86_genfb_resume(device_t dev, const pmf_qual_t *qual)
+{
+#if NGENFB > 0
+	struct pci_genfb_softc *psc = device_private(dev);
+
+#if NACPICA > 0 && defined(VGA_POST)
+	if (vga_posth != NULL && acpi_md_vbios_reset == 2) {
+		vga_post_call(vga_posth);
+		if (acpi_md_vesa_modenum != 0)
+			vga_post_set_vbe(vga_posth, acpi_md_vesa_modenum);
+	}
+#endif
+	genfb_restore_palette(&psc->sc_gen);
+#endif
+
+	return true;
+}
+#endif
+
+static void
+handle_wedges(device_t dv, int par)
 {
 	if (config_handle_wedges(dv, par) == 0)
 		return;
@@ -75,7 +173,7 @@ handle_wedges(struct device *dv, int par)
 }
 
 static int
-is_valid_disk(struct device *dv)
+is_valid_disk(device_t dv)
 {
 
 	if (device_class(dv) != DV_DISK)
@@ -97,7 +195,8 @@ matchbiosdisks(void)
 {
 	struct btinfo_biosgeom *big;
 	struct bi_biosgeom_entry *be;
-	struct device *dv;
+	device_t dv;
+	deviter_t di;
 	int i, ck, error, m, n;
 	struct vnode *tv;
 	char mbr[DEV_BSIZE];
@@ -109,10 +208,12 @@ matchbiosdisks(void)
 	numbig = big ? big->num : 0;
 
 	/* First, count all native disks. */
-	TAILQ_FOREACH(dv, &alldevs, dv_list) {
+	for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST); dv != NULL;
+	     dv = deviter_next(&di)) {
 		if (is_valid_disk(dv))
 			x86_ndisks++;
 	}
+	deviter_release(&di);
 
 	dklist_size = sizeof(struct disklist) + (x86_ndisks - 1) *
 	    sizeof(struct nativedisk_info);
@@ -142,19 +243,19 @@ matchbiosdisks(void)
 
 	/* XXX Code duplication from findroot(). */
 	n = -1;
-	TAILQ_FOREACH(dv, &alldevs, dv_list) {
+	for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST); dv != NULL;
+	     dv = deviter_next(&di)) {
 		if (device_class(dv) != DV_DISK)
 			continue;
 #ifdef GEOM_DEBUG
 		printf("matchbiosdisks: trying to match (%s) %s\n",
-		    dv->dv_xname, device_cfdata(dv)->cf_name);
+		    device_xname(dv), device_cfdata(dv)->cf_name);
 #endif
 		if (is_valid_disk(dv)) {
 			n++;
-			/* XXXJRT why not just dv_xname?? */
 			snprintf(x86_alldisks->dl_nativedisks[n].ni_devname,
 			    sizeof(x86_alldisks->dl_nativedisks[n].ni_devname),
-			    "%s", dv->dv_xname);
+			    "%s", device_xname(dv));
 
 			if ((tv = opendisk(dv)) == NULL)
 				continue;
@@ -165,7 +266,7 @@ matchbiosdisks(void)
 			if (error) {
 #ifdef GEOM_DEBUG
 				printf("matchbiosdisks: %s: MBR read failure\n",
-				    dv->dv_xname);
+				    device_xname(dv));
 #endif
 				continue;
 			}
@@ -176,7 +277,7 @@ matchbiosdisks(void)
 				be = &big->disk[i];
 #ifdef GEOM_DEBUG
 				printf("match %s with %d "
-				    "dev ck %x bios ck %x\n", dv->dv_xname, i,
+				    "dev ck %x bios ck %x\n", device_xname(dv), i,
 				    ck, be->cksum);
 #endif
 				if (be->flags & BI_GEOM_INVALID)
@@ -187,7 +288,7 @@ matchbiosdisks(void)
 					  sizeof(struct mbr_partition)) == 0) {
 #ifdef GEOM_DEBUG
 					printf("matched BIOS disk %x with %s\n",
-					    be->dev, dv->dv_xname);
+					    be->dev, device_xname(dv));
 #endif
 					x86_alldisks->dl_nativedisks[n].
 					    ni_biosmatches[m++] = i;
@@ -197,6 +298,7 @@ matchbiosdisks(void)
 			vput(tv);
 		}
 	}
+	deviter_release(&di);
 }
 
 /*
@@ -204,7 +306,7 @@ matchbiosdisks(void)
  * Return non-zero if wedge device matches bootinfo.
  */
 static int
-match_bootwedge(struct device *dv, struct btinfo_bootwedge *biw)
+match_bootwedge(device_t dv, struct btinfo_bootwedge *biw)
 {
 	MD5_CTX ctx;
 	struct vnode *tmpvn;
@@ -231,8 +333,8 @@ match_bootwedge(struct device *dv, struct btinfo_bootwedge *biw)
 		    sizeof(bf), blk * DEV_BSIZE, UIO_SYSSPACE,
 		    0, NOCRED, NULL, NULL);
 		if (error) {
-			printf("findroot: unable to read block %" PRIu64 "\n",
-			    blk);
+			printf("findroot: unable to read block %" PRId64 " "
+			    "of dev %s (%d)\n", blk, device_xname(dv), error);
 			goto closeout;
 		}
 		MD5Update(&ctx, bf, sizeof(bf));
@@ -253,7 +355,7 @@ match_bootwedge(struct device *dv, struct btinfo_bootwedge *biw)
  * Return non-zero if disk device matches bootinfo.
  */
 static int
-match_bootdisk(struct device *dv, struct btinfo_bootdisk *bid)
+match_bootdisk(device_t dv, struct btinfo_bootdisk *bid)
 {
 	struct vnode *tmpvn;
 	int error;
@@ -281,7 +383,7 @@ match_bootdisk(struct device *dv, struct btinfo_bootdisk *bid)
 		 * or faked one up.
 		 */
 		printf("findroot: can't get label for dev %s (%d)\n",
-		    dv->dv_xname, error);
+		    device_xname(dv), error);
 		goto closeout;
 	}
 
@@ -297,15 +399,6 @@ match_bootdisk(struct device *dv, struct btinfo_bootdisk *bid)
 	return (found);
 }
 
-#ifdef __x86_64__
-/* Old style bootdev never existed on amd64. */
-#undef COMPAT_OLDBOOT
-#endif
-
-#ifdef COMPAT_OLDBOOT
-uint32_t bootdev = 0;
-#endif
-
 /*
  * Attempt to find the device from which we were booted.  If we can do so,
  * and not instructed not to do so, change rootdev to correspond to the
@@ -317,12 +410,9 @@ findroot(void)
 	struct btinfo_rootdevice *biv;
 	struct btinfo_bootdisk *bid;
 	struct btinfo_bootwedge *biw;
-	struct device *dv;
-#ifdef COMPAT_OLDBOOT
-	const char *name;
-	int majdev, unit, part;
-	char bf[32];
-#endif
+	struct btinfo_biosgeom *big;
+	device_t dv;
+	deviter_t di;
 
 	if (booted_device)
 		return;
@@ -339,8 +429,10 @@ findroot(void)
 	}
 
 	if ((biv = lookup_bootinfo(BTINFO_ROOTDEVICE)) != NULL) {
-		TAILQ_FOREACH(dv, &alldevs, dv_list) {
-			struct cfdata *cd;
+		for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
+		     dv != NULL;
+		     dv = deviter_next(&di)) {
+			cfdata_t cd;
 			size_t len;
 
 			if (device_class(dv) != DV_DISK)
@@ -352,9 +444,12 @@ findroot(void)
 			if (strncmp(cd->cf_name, biv->devname, len) == 0 &&
 			    biv->devname[len] - '0' == cd->cf_unit) {
 				handle_wedges(dv, biv->devname[len + 1] - 'a');
-				return;
+				break;
 			}
 		}
+		deviter_release(&di);
+		if (dv != NULL)
+			return;
 	}
 
 	if ((biw = lookup_bootinfo(BTINFO_BOOTWEDGE)) != NULL) {
@@ -365,7 +460,9 @@ findroot(void)
 		 * because lower devices numbers are more likely to be the
 		 * boot device.
 		 */
-		TAILQ_FOREACH(dv, &alldevs, dv_list) {
+		for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
+		     dv != NULL;
+		     dv = deviter_next(&di)) {
 			if (device_class(dv) != DV_DISK)
 				continue;
 
@@ -386,11 +483,13 @@ findroot(void)
 			if (booted_device) {
 				printf("WARNING: double match for boot "
 				    "device (%s, %s)\n",
-				    booted_device->dv_xname, dv->dv_xname);
+				    device_xname(booted_device),
+				    device_xname(dv));
 				continue;
 			}
 			dkwedge_set_bootwedge(dv, biw->startblk, biw->nblks);
 		}
+		deviter_release(&di);
 
 		if (booted_wedge)
 			return;
@@ -404,7 +503,9 @@ findroot(void)
 		 * because lower device numbers are more likely to be the
 		 * boot device.
 		 */
-		TAILQ_FOREACH(dv, &alldevs, dv_list) {
+		for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
+		     dv != NULL;
+		     dv = deviter_next(&di)) {
 			if (device_class(dv) != DV_DISK)
 				continue;
 
@@ -439,41 +540,48 @@ findroot(void)
 			if (booted_device) {
 				printf("WARNING: double match for boot "
 				    "device (%s, %s)\n",
-				    booted_device->dv_xname, dv->dv_xname);
+				    device_xname(booted_device),
+				    device_xname(dv));
 				continue;
 			}
 			handle_wedges(dv, bid->partition);
 		}
+		deviter_release(&di);
 
 		if (booted_device)
 			return;
-	}
 
-#ifdef COMPAT_OLDBOOT
-#if 0
-	printf("findroot: howto %x bootdev %x\n", boothowto, bootdev);
-#endif
-	
-	if ((bootdev & B_MAGICMASK) != B_DEVMAGIC)
-		return;
-	
-	majdev = (bootdev >> B_TYPESHIFT) & B_TYPEMASK;
-	name = devsw_blk2name(majdev);
-	if (name == NULL)
-		return;
-	
-	part = (bootdev >> B_PARTITIONSHIFT) & B_PARTITIONMASK;
-	unit = (bootdev >> B_UNITSHIFT) & B_UNITMASK;
-
-	snprintf(bf, sizeof(bf), "%s%d", name, unit);
-	TAILQ_FOREACH(dv, &alldevs, dv_list) {
-		if (strcmp(bf, dv->dv_xname) == 0) {
-			booted_device = dv;
-			booted_partition = part;
-			return;
+		/*
+		 * No booted device found; check CD-ROM boot at last.
+		 *
+		 * Our bootloader assumes CD-ROM boot if biosdev is larger
+		 * than the number of hard drives recognized by the BIOS.
+		 * The number of drives can be found in BTINFO_BIOSGEOM here.
+		 *
+		 * See src/sys/arch/i386/stand/boot/devopen.c and
+		 * src/sys/arch/i386/stand/lib/bootinfo_biosgeom.c .
+		 */
+		if ((big = lookup_bootinfo(BTINFO_BIOSGEOM)) != NULL &&
+		    bid->biosdev > 0x80 + big->num) {
+			/*
+			 * XXX
+			 * There is no proper way to detect which unit is
+			 * recognized as a bootable CD-ROM drive by the BIOS.
+			 * Assume the first unit is the one.
+			 */
+			for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
+			     dv != NULL;
+			     dv = deviter_next(&di)) {
+				if (device_class(dv) == DV_DISK &&
+				    device_is_a(dv, "cd")) {
+					booted_device = dv;
+					booted_partition = 0;
+					break;
+				}
+			}
+			deviter_release(&di);
 		}
 	}
-#endif /* COMPAT_OLDBOOT */
 }
 
 void
@@ -485,19 +593,22 @@ cpu_rootconf(void)
 
 	if (booted_wedge) {
 		KASSERT(booted_device != NULL);
-		printf("boot device: %s (%s)\n",
-		    booted_wedge->dv_xname, booted_device->dv_xname);
+		aprint_normal("boot device: %s (%s)\n",
+		    device_xname(booted_wedge), device_xname(booted_device));
 		setroot(booted_wedge, 0);
 	} else {
-		printf("boot device: %s\n",
-		    booted_device ? booted_device->dv_xname : "<unknown>");
+		aprint_normal("boot device: %s\n",
+		    booted_device ? device_xname(booted_device) : "<unknown>");
 		setroot(booted_device, booted_partition);
 	}
 }
 
 void
-device_register(struct device *dev, void *aux)
+device_register(device_t dev, void *aux)
 {
+#if NPCI > 0
+	static bool found_console = false;
+#endif
 
 	/*
 	 * Handle network interfaces here, the attachment information is
@@ -546,13 +657,116 @@ device_register(struct device *dev, void *aux)
 		}
 #endif /* NPCI > 0 */
 	}
+#if NISA > 0 && NACPICA > 0
+#if notyet
+	if (device_is_a(dev, "isa") && acpi_active) {
+		if (!(AcpiGbl_FADT.BootFlags & ACPI_FADT_LEGACY_DEVICES))
+			prop_dictionary_set_bool(device_properties(dev),
+			    "no-legacy-devices", true);
+	}
+#endif
+#endif /* NISA > 0 && NACPICA > 0 */
+#if NPCI > 0
+	if (device_parent(dev) && device_is_a(device_parent(dev), "pci") &&
+	    found_console == false) {
+		struct btinfo_framebuffer *fbinfo;
+		struct pci_attach_args *pa = aux;
+		prop_dictionary_t dict;
+
+		if (PCI_CLASS(pa->pa_class) == PCI_CLASS_DISPLAY) {
+#if NWSDISPLAY > 0 && NGENFB > 0
+			extern struct vcons_screen x86_genfb_console_screen;
+			struct rasops_info *ri;
+
+			ri = &x86_genfb_console_screen.scr_ri;
+#endif
+
+			fbinfo = lookup_bootinfo(BTINFO_FRAMEBUFFER);
+			dict = device_properties(dev);
+			/*
+			 * framebuffer drivers other than genfb can work
+			 * without the address property
+			 */
+			if (fbinfo != NULL) {
+				if (fbinfo->physaddr != 0) {
+				prop_dictionary_set_uint32(dict, "width",
+				    fbinfo->width);
+				prop_dictionary_set_uint32(dict, "height",
+				    fbinfo->height);
+				prop_dictionary_set_uint8(dict, "depth",
+				    fbinfo->depth);
+				prop_dictionary_set_uint16(dict, "linebytes",
+				    fbinfo->stride);
+
+				prop_dictionary_set_uint64(dict, "address",
+				    fbinfo->physaddr);
+#if NWSDISPLAY > 0 && NGENFB > 0
+				if (ri->ri_bits != NULL) {
+					prop_dictionary_set_uint64(dict,
+					    "virtual_address",
+					    (vaddr_t)ri->ri_bits);
+				}
+#endif
+				}
+#if notyet
+				prop_dictionary_set_bool(dict, "splash",
+				    fbinfo->flags & BI_FB_SPLASH ?
+				     true : false);
+#endif
+				if (fbinfo->depth == 8) {
+					gfb_cb.gcc_cookie = NULL;
+					gfb_cb.gcc_set_mapreg = 
+					    x86_genfb_set_mapreg;
+					prop_dictionary_set_uint64(dict,
+					    "cmap_callback", (uint64_t)&gfb_cb);
+				}
+				if (fbinfo->physaddr != 0) {
+					mode_cb.gmc_setmode = x86_genfb_setmode;
+					prop_dictionary_set_uint64(dict,
+					    "mode_callback",
+					    (uint64_t)&mode_cb);
+				}
+
+#if NWSDISPLAY > 0 && NGENFB > 0
+				if (device_is_a(dev, "genfb")) {
+					x86_genfb_set_console_dev(dev);
+#ifdef DDB
+					db_trap_callback =
+					    x86_genfb_ddb_trap_callback;
+#endif
+				}
+#endif
+			}
+			prop_dictionary_set_bool(dict, "is_console", true);
+			prop_dictionary_set_bool(dict, "clear-screen", false);
+#if NWSDISPLAY > 0 && NGENFB > 0
+			prop_dictionary_set_uint16(dict, "cursor-row",
+			    x86_genfb_console_screen.scr_ri.ri_crow);
+#endif
+#if notyet
+			prop_dictionary_set_bool(dict, "splash",
+			    fbinfo->flags & BI_FB_SPLASH ? true : false);
+#endif
+			pmf_cb.gpc_suspend = x86_genfb_suspend;
+			pmf_cb.gpc_resume = x86_genfb_resume;
+			prop_dictionary_set_uint64(dict,
+			    "pmf_callback", (uint64_t)&pmf_cb);
+#ifdef VGA_POST
+			vga_posth = vga_post_init(pa->pa_bus, pa->pa_device,
+			    pa->pa_function);
+#endif
+			found_console = true;
+			return;
+		}
+	}
+#endif
 	return;
 
  found:
 	if (booted_device) {
 		/* XXX should be a panic() */
 		printf("WARNING: double match for boot device (%s, %s)\n",
-		    booted_device->dv_xname, dev->dv_xname);
+		    device_xname(booted_device), device_xname(dev));
 		return;
 	}
 	booted_device = dev;

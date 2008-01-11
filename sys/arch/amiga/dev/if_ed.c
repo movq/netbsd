@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ed.c,v 1.55 2007/10/17 19:53:16 garbled Exp $ */
+/*	$NetBSD: if_ed.c,v 1.62 2010/04/05 07:19:29 joerg Exp $ */
 
 /*
  * Device driver for National Semiconductor DS8390/WD83C690 based ethernet
@@ -19,9 +19,8 @@
 #include "opt_ns.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ed.c,v 1.55 2007/10/17 19:53:16 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ed.c,v 1.62 2010/04/05 07:19:29 joerg Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,13 +49,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_ed.c,v 1.55 2007/10/17 19:53:16 garbled Exp $");
 #include <netns/ns_if.h>
 #endif
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <machine/cpu.h>
-#include <machine/mtpr.h>
 
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/isr.h>
@@ -263,7 +259,7 @@ ed_zbus_attach(struct device *parent, struct device *self, void *aux)
 	ed_stop(sc);
 
 	/* Initialize ifnet structure. */
-	bcopy(sc->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = ed_start;
 	ifp->if_ioctl = ed_ioctl;
@@ -550,11 +546,8 @@ outloop:
 	if (sc->xmit_busy == 0)
 		ed_xmit(sc);
 
-#if NBPFILTER > 0
 	/* Tap off here if there is a BPF listener. */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m0);
-#endif
+	bpf_mtap(ifp, m0);
 
 	m_freem(m0);
 
@@ -865,7 +858,7 @@ ed_ioctl(register struct ifnet *ifp, u_long cmd, void *data)
 
 	switch (cmd) {
 
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP;
 
 		switch (ifa->ifa_addr->sa_family) {
@@ -899,6 +892,11 @@ ed_ioctl(register struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFFLAGS:
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
+		/* XXX if ed_init() would ed_stop(, 0), first, perhaps we
+		 * can re-use the code in ether_ioctl().
+		 */
 		if ((ifp->if_flags & IFF_UP) == 0 &&
 		    (ifp->if_flags & IFF_RUNNING) != 0) {
 			/*
@@ -941,7 +939,8 @@ ed_ioctl(register struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	default:
-		error = EINVAL;
+		error = ether_ioctl(ifp, cmd, data);
+		break;
 	}
 
 	splx(s);
@@ -992,14 +991,7 @@ ed_get_packet(struct ed_softc *sc, void *buf, u_short len)
 		return;
 	}
 
-#if NBPFILTER > 0
-	/*
-	 * Check if there's a BPF listener on this interface.  If so, hand off
-	 * the raw packet to bpf.
-	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, m);
-#endif
+	bpf_mtap(ifp, m);
 
 	(*ifp->if_input)(ifp, m);
 }
@@ -1121,7 +1113,7 @@ ed_getmcaf(struct ethercom *ac, u_long *af)
 	af[0] = af[1] = 0;
 	ETHER_FIRST_MULTI(step, ac, enm);
 	while (enm != NULL) {
-		if (bcmp(enm->enm_addrlo, enm->enm_addrhi,
+		if (memcmp(enm->enm_addrlo, enm->enm_addrhi,
 		    sizeof(enm->enm_addrlo)) != 0) {
 			/*
 			 * We must listen to a range of multicast addresses.

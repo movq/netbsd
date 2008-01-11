@@ -1,7 +1,6 @@
-/*	$NetBSD: natm_proto.c,v 1.12 2007/12/07 19:46:19 elad Exp $	*/
+/*	$NetBSD: natm_proto.c,v 1.14 2011/02/01 19:40:24 chuck Exp $	*/
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: natm_proto.c,v 1.12 2007/12/07 19:46:19 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: natm_proto.c,v 1.14 2011/02/01 19:40:24 chuck Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,6 +56,10 @@ static void natm_init(void);
 struct npcblist natm_pcbs = LIST_HEAD_INITIALIZER(natm_pcbs);
 struct	ifqueue natmintrq;       	/* natm packet input queue */
 int	natmqmaxlen = IFQ_MAXLEN;	/* max # of packets on queue */
+
+PR_WRAP_USRREQ(natm_usrreq)
+
+#define	natm_usrreq	natm_usrreq_wrapper
 
 const struct protosw natmsw[] = {
 { .pr_type = SOCK_STREAM,

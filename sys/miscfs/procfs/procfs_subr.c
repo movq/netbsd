@@ -1,7 +1,7 @@
-/*	$NetBSD: procfs_subr.c,v 1.83 2008/01/02 11:49:01 ad Exp $	*/
+/*	$NetBSD: procfs_subr.c,v 1.98 2010/07/21 17:52:12 hannken Exp $	*/
 
 /*-
- * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -109,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_subr.c,v 1.83 2008/01/02 11:49:01 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_subr.c,v 1.98 2010/07/21 17:52:12 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -165,13 +158,7 @@ kmutex_t pfs_ihash_lock;
  * the vnode free list.
  */
 int
-procfs_allocvp(mp, vpp, pid, pfs_type, fd, p)
-	struct mount *mp;
-	struct vnode **vpp;
-	pid_t pid;
-	pfstype pfs_type;
-	int fd;
-	struct proc *p;
+procfs_allocvp(struct mount *mp, struct vnode **vpp, pid_t pid, pfstype pfs_type, int fd, struct proc *p)
 {
 	struct pfsnode *pfs;
 	struct vnode *vp;
@@ -186,13 +173,13 @@ procfs_allocvp(mp, vpp, pid, pfs_type, fd, p)
 		*vpp = NULL;
 		return (error);
 	}
-	MALLOC(pfs, void *, sizeof(struct pfsnode), M_TEMP, M_WAITOK);
+	pfs = malloc(sizeof(struct pfsnode), M_TEMP, M_WAITOK);
 
 	mutex_enter(&pfs_hashlock);
 	if ((*vpp = procfs_hashget(pid, pfs_type, fd, mp, 0)) != NULL) {
 		mutex_exit(&pfs_hashlock);
 		ungetnewvnode(vp);
-		FREE(pfs, M_TEMP);
+		free(pfs, M_TEMP);
 		goto retry;
 	}
 
@@ -227,20 +214,18 @@ procfs_allocvp(mp, vpp, pid, pfs_type, fd, p)
 			pfs->pfs_mode = S_IRUSR|S_IXUSR;
 			vp->v_type = VDIR;
 		} else {	/* /proc/N/fd/M = [ps-]rw------- */
-			struct file *fp;
-			struct vnode *vxp;
+			file_t *fp;
+			vnode_t *vxp;
 
-			fp = fd_getfile(p->p_fd, pfs->pfs_fd);
-			if (fp == NULL) {
+			if ((fp = fd_getfile2(p, pfs->pfs_fd)) == NULL) {
 				error = EBADF;
 				goto bad;
 			}
-			FILE_USE(fp);
 
 			pfs->pfs_mode = S_IRUSR|S_IWUSR;
 			switch (fp->f_type) {
 			case DTYPE_VNODE:
-				vxp = (struct vnode *)fp->f_data;
+				vxp = fp->f_data;
 
 				/*
 				 * We make symlinks for directories
@@ -265,10 +250,10 @@ procfs_allocvp(mp, vpp, pid, pfs_type, fd, p)
 				break;
 			default:
 				error = EOPNOTSUPP;
-				FILE_UNUSE(fp, curlwp);
+				closef(fp);
 				goto bad;
 			}
-			FILE_UNUSE(fp, curlwp);
+			closef(fp);
 		}
 		break;
 
@@ -324,28 +309,26 @@ procfs_allocvp(mp, vpp, pid, pfs_type, fd, p)
 
  bad:
 	mutex_exit(&pfs_hashlock);
-	FREE(pfs, M_TEMP);
+	free(pfs, M_TEMP);
 	vp->v_data = NULL;
 	ungetnewvnode(vp);
 	return (error);
 }
 
 int
-procfs_freevp(vp)
-	struct vnode *vp;
+procfs_freevp(struct vnode *vp)
 {
 	struct pfsnode *pfs = VTOPFS(vp);
 
 	procfs_hashrem(pfs);
 
-	FREE(vp->v_data, M_TEMP);
-	vp->v_data = 0;
+	free(vp->v_data, M_TEMP);
+	vp->v_data = NULL;
 	return (0);
 }
 
 int
-procfs_rw(v)
-	void *v;
+procfs_rw(void *v)
 {
 	struct vop_read_args *ap = v;
 	struct vnode *vp = ap->a_vp;
@@ -368,22 +351,32 @@ procfs_rw(v)
 	 * Do not allow init to be modified while in secure mode; it
 	 * could be duped into changing the security level.
 	 */
-#define	M2K(m)	((m) == UIO_READ ? KAUTH_REQ_PROCESS_CANPROCFS_READ : \
-		 KAUTH_REQ_PROCESS_CANPROCFS_WRITE)
-	mutex_enter(&p->p_mutex);
-	error = kauth_authorize_process(curl->l_cred, KAUTH_PROCESS_CANPROCFS,
+#define	M2K(m)	((m) == UIO_READ ? KAUTH_REQ_PROCESS_PROCFS_READ : \
+		 KAUTH_REQ_PROCESS_PROCFS_WRITE)
+	mutex_enter(p->p_lock);
+	error = kauth_authorize_process(curl->l_cred, KAUTH_PROCESS_PROCFS,
 	    p, pfs, KAUTH_ARG(M2K(uio->uio_rw)), NULL);
-	mutex_exit(&p->p_mutex);
+	mutex_exit(p->p_lock);
 	if (error) {
 		procfs_proc_unlock(p);
 		return (error);
 	}
 #undef	M2K
 
-	mutex_enter(&p->p_smutex);
-	l = proc_representative_lwp(p, NULL, 1);
+	mutex_enter(p->p_lock);
+	LIST_FOREACH(l, &p->p_lwps, l_sibling) {
+		if (l->l_stat != LSZOMB)
+			break;
+	}
+	/* Process is exiting if no-LWPS or all LWPs are LSZOMB */
+	if (l == NULL) {
+		mutex_exit(p->p_lock);
+		procfs_proc_unlock(p);
+		return ESRCH;
+	}
+
 	lwp_addref(l);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	switch (pfs->pfs_type) {
 	case PFSnote:
@@ -500,10 +493,7 @@ procfs_rw(v)
  * EFAULT:    user i/o buffer is not addressable
  */
 int
-vfs_getuserstr(uio, bf, buflenp)
-	struct uio *uio;
-	char *bf;
-	int *buflenp;
+vfs_getuserstr(struct uio *uio, char *bf, int *buflenp)
 {
 	int xlen;
 	int error;
@@ -535,10 +525,7 @@ vfs_getuserstr(uio, bf, buflenp)
 }
 
 const vfs_namemap_t *
-vfs_findname(nm, bf, buflen)
-	const vfs_namemap_t *nm;
-	const char *bf;
-	int buflen;
+vfs_findname(const vfs_namemap_t *nm, const char *bf, int buflen)
 {
 
 	for (; nm->nm_name; nm++)
@@ -552,23 +539,21 @@ vfs_findname(nm, bf, buflen)
  * Initialize pfsnode hash table.
  */
 void
-procfs_hashinit()
+procfs_hashinit(void)
 {
 	mutex_init(&pfs_hashlock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&pfs_ihash_lock, MUTEX_DEFAULT, IPL_NONE);
-	pfs_hashtbl = hashinit(desiredvnodes / 4, HASH_LIST, M_UFSMNT,
-	    M_WAITOK, &pfs_ihash);
+	pfs_hashtbl = hashinit(desiredvnodes / 4, HASH_LIST, true, &pfs_ihash);
 }
 
 void
-procfs_hashreinit()
+procfs_hashreinit(void)
 {
 	struct pfsnode *pp;
 	struct pfs_hashhead *oldhash, *hash;
 	u_long i, oldmask, mask, val;
 
-	hash = hashinit(desiredvnodes / 4, HASH_LIST, M_UFSMNT, M_WAITOK,
-	    &mask);
+	hash = hashinit(desiredvnodes / 4, HASH_LIST, true, &mask);
 
 	mutex_enter(&pfs_ihash_lock);
 	oldhash = pfs_hashtbl;
@@ -583,27 +568,22 @@ procfs_hashreinit()
 		}
 	}
 	mutex_exit(&pfs_ihash_lock);
-	hashdone(oldhash, M_UFSMNT);
+	hashdone(oldhash, HASH_LIST, oldmask);
 }
 
 /*
  * Free pfsnode hash table.
  */
 void
-procfs_hashdone()
+procfs_hashdone(void)
 {
-	hashdone(pfs_hashtbl, M_UFSMNT);
+	hashdone(pfs_hashtbl, HASH_LIST, pfs_ihash);
 	mutex_destroy(&pfs_hashlock);
 	mutex_destroy(&pfs_ihash_lock);
 }
 
 struct vnode *
-procfs_hashget(pid, type, fd, mp, flags)
-	pid_t pid;
-	pfstype type;
-	int fd;
-	struct mount *mp;
-	int flags;
+procfs_hashget(pid_t pid, pfstype type, int fd, struct mount *mp, int flags)
 {
 	struct pfs_hashhead *ppp;
 	struct pfsnode *pp;
@@ -621,7 +601,7 @@ loop:
 			} else {
 				mutex_enter(&vp->v_interlock);
 				mutex_exit(&pfs_ihash_lock);
-				if (vget(vp, flags | LK_INTERLOCK))
+				if (vget(vp, flags))
 					goto loop;
 			}
 			return (vp);
@@ -635,13 +615,12 @@ loop:
  * Insert the pfsnode into the hash table and lock it.
  */
 void
-procfs_hashins(pp)
-	struct pfsnode *pp;
+procfs_hashins(struct pfsnode *pp)
 {
 	struct pfs_hashhead *ppp;
 
 	/* lock the pfsnode, then put it on the appropriate hash list */
-	lockmgr(&pp->pfs_vnode->v_lock, LK_EXCLUSIVE, NULL);
+	VOP_LOCK(PFSTOV(pp), LK_EXCLUSIVE);
 
 	mutex_enter(&pfs_ihash_lock);
 	ppp = &pfs_hashtbl[PFSPIDHASH(pp->pfs_pid)];
@@ -653,8 +632,7 @@ procfs_hashins(pp)
  * Remove the pfsnode from the hash table.
  */
 void
-procfs_hashrem(pp)
-	struct pfsnode *pp;
+procfs_hashrem(struct pfsnode *pp)
 {
 	mutex_enter(&pfs_ihash_lock);
 	LIST_REMOVE(pp, pfs_hash);
@@ -662,9 +640,7 @@ procfs_hashrem(pp)
 }
 
 void
-procfs_revoke_vnodes(p, arg)
-	struct proc *p;
-	void *arg;
+procfs_revoke_vnodes(struct proc *p, void *arg)
 {
 	struct pfsnode *pfs, *pnext;
 	struct vnode *vp;
@@ -701,16 +677,16 @@ procfs_proc_lock(int pid, struct proc **bunghole, int notfound)
 	struct proc *tp;
 	int error = 0;
 
-	mutex_enter(&proclist_lock);
+	mutex_enter(proc_lock);
 
 	if (pid == 0)
 		tp = &proc0;
-	else if ((tp = p_find(pid, PFIND_LOCKED)) == NULL)
+	else if ((tp = proc_find(pid)) == NULL)
 		error = notfound;
 	if (tp != NULL && !rw_tryenter(&tp->p_reflock, RW_READER))
 		error = EBUSY;
 
-	mutex_exit(&proclist_lock);
+	mutex_exit(proc_lock);
 
 	*bunghole = tp;
 	return error;

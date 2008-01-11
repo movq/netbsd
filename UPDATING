@@ -1,4 +1,4 @@
-$NetBSD: UPDATING,v 1.169 2007/12/17 23:59:41 wiz Exp $
+$NetBSD: UPDATING,v 1.224 2011/04/10 22:46:09 dholland Exp $
 
 This file (UPDATING) is intended to be a brief reference to recent
 changes that might cause problems in the build process, and a guide for
@@ -15,6 +15,265 @@ See also: BUILDING, build.sh, Makefile.
 
 Recent changes:
 ^^^^^^^^^^^^^^^
+20110410:
+	The configuration of src/tools/gcc has changed. To do an
+	update build you have to clean both tools/binutils and
+	tools/gcc by hand.
+
+20110328:
+	Building the Xorg binary was moved into a subdirectory to fix
+	ordering issues with "make all". It may be necessary to remove
+	the OBJDIR for external/mit/xorg/server/xorg-server/hw/xfree86
+	if your update build fails, as the "Xorg" entry there is now a
+	directory.
+
+20110121:
+	Assembler files no longer use -traditional-cpp.  This can break
+	the build of individual parts of the tree.  This is handled
+	correctly by build.sh.  Manual builds have to update /usr/share/mk
+	and re-run config(1) for any kernel configurations as needed.
+
+20101217:
+	The tcpdump(8) program was changed to drop privileges and chroot(2)
+	by default. It may be necessary to manually update passwd(5) and
+	group(5) in order to make the program work with existing setups.
+
+20101125:
+	The latest changes to setenv(3) dissallow setting environment
+	variables with names that contain '='. Revision 1.18 of env.c
+	assumed that this was allowed. Installing a new libc with an
+	old copy of /usr/bin/env causes env x=1 printenv | grep x= to
+	break which affects the autoconf tests for dependency finding,
+	so building gcc will end up printing:
+	    checking dependency style of gcc... none
+	    configure: error: no usable dependency style found
+	Fix it by rebuilding and re-installing env.
+
+20101119:
+	Recent Xorg updates in xsrc/external/mit/ may cause various build
+	or run-time problems.  Delete your entire DESTDIR and OBJDIR if you
+	have any build problems with xsrc, or problems with mismatched
+	versions between xorg-server and drivers.
+
+20100604:
+	The update of ATF to 0.9 causes old tests written in shell to fail
+	unless they are rebuilt.  If you are building with MKUPDATE=yes,
+	you need to clean the src/external/bsd/atf/tests/ and the src/tests/
+	trees by hand.
+
+20100522:
+	Recent Xorg updates in xsrc/external/mit/ will cause various build
+	problems.  Delete your entire DESTDIR and OBJDIR if you have any
+	build problems with xsrc.
+
+20100522:
+	private section of <ctype.h> was splitted, and now mklocale(1)
+	include ctype_local.h, so you have to make cleandir in tools/mklocale.
+
+20100520:
+	The location of the xkb compiled descriptions has changed. Please
+	remove usr/X11R7/lib/X11/xkb/compiled from your $DESTDIR.
+
+20100222:
+	The shared objects file extension has been changed from .so to
+	.pico, in order to avoid conflicts with shared libraries names
+	libXX.so.  All now stale regular .so files can be removed from
+	your object directories.
+
+20100204:
+	The termcap database has been removed from the sources,
+	but has not been marked obsolete so it is not removed
+	from the system when upgrading.
+	As such, you will need to remove them from your object
+	and destination directories.
+
+20091101:
+        After updating, it may be necessary to make the 'cleandir'
+        target in src/tools/yacc/ and in src/usr.bin/yacc/ before a
+        'build.sh -u tools' or 'build.sh -u distribution'.  Ditto
+        src/tools/lex/ and src/usr.bin/lex/.
+
+20091001:
+	On amd64 you must rebuild tools (to get the new binutils)
+	before building a kernel, or the build fails on cpufunc.S.
+
+20091001:
+	An error will create a ./usr/X11R7/lib/X11/xkb/compiled/xkb
+	symlink, failing the build.  Delete the link, and the subdir
+	it is in, and retry your build.
+
+20090718:
+	libc build changed so that strchr() provides the extra entry
+	point for index(). Update build of libc.a (and libc_pic.a)
+	may fail because the archive contains the unwanted index.o.
+	(Similarly for strrchr() and rindex().)
+
+20090709:
+	Native Xorg was upgraded again.  Builds will probably fail again
+	without a clean objdir, at least for src/external/mit/xorg.
+
+20090616:
+	Native Xorg was upgraded.  Builds will need a clean objdir for
+	src/external/mit/xorg.  Upgrading a system from sets will not
+	work properly yet as the /usr/X11R7/lib/X11/xkb/symbols/pc
+	subdirectory has been changed into a file, and this needs to
+	be manually "rm -r"'ed before installing xbase.tgz.
+
+20090501:
+	Several new functions were added to string.h/libc, and this
+	can cause autoconf problems during the tool build for people
+	who fail to clean out their tools objects properly. If you
+	note messages about stpcpy, stpncpy or strnlen accompanying a
+	failure during the tool build, clean out all your tools
+	objects and start again.
+
+20090325:
+	The i386 port was switched to i486 default toolchain.  This requires
+	cleaning your src/tools directory and $TOOLDIR and rebuilding them.
+
+20090126:
+	The __posix_fadvise50 system call changed assembly stub type. You
+	need to 'rm -f __posix_fadvise50.*' in the libc build directory
+	to avoid using the old assembly stub.
+
+20090202:
+	pkg_install now depends on the pkgdb cache for automatic conflict
+	detection.  It is recommented to rebuild the cache with
+	``pkg_admin rebuild''.
+
+20090110:
+	time_t and dev_t have been bumped to 64 bit quantities. To upgrade:
+	1. Make sure your kernel has COMPAT_50 in it. Build and install.
+	   This is needed even in the MODULAR kernel because there is
+	   conditionally compiled code in rtsock.c.
+	2. make sure build.sh completes and the binaries in a chroot work
+	   before installing.
+	3. If you don't use build.sh and you build directly to root, and
+	   your build breaks in the middle, don't despair. Make sure headers
+	   are installed properly, and start building libraries first libc
+	   and libutil, install them and then continue building all the
+	   libraries in src/lib and src/gnu/lib and install them. Once
+	   the new libraries are installed, you can restart the build.
+	4. If you compile packages and you notice link time warnings,
+	   rebuild the required packages to update their shared libraries.
+	   Any package you rebuild will require rebuilding all the packages
+	   that depend on it.
+	5. Next time you run pwd_mkdb with the new binary, the file
+	   will be upgraded and it will not be backwards compatible.
+	6. The utmpx/wtmpx files (/var/run/utmpx and /var/log/wtmpx, see
+	   lastlogx(5)) have been versioned, and there is a heuristic
+	   for utmp. You are better off removing the old files after
+	   upgrading.  The automated clearing of /var/run during
+	   boot, and the automated rotating of files in /var/log by
+	   newsyslog(8), may mean that you do not have to remove the
+	   files manually.
+	7. The optional accounting file (/var/account/acct, see
+	   accton(8)) has not been versioned, and will need to be
+	   removed.  The automatic rotation of the accounting file by
+	   /etc/daily limits the bad consequences of failure to remove
+	   the file.
+	8. Application software that writes time_t to binary files on
+	   disk will break or need attention. Most notably: if you are
+	   using PostgreSQL < 8.4, you need to dump your databases,
+	   rebuild PostgreSQL with the new time_t, then restore.
+
+20081219:
+	config(1) has been updated, and one of the files it creates -
+	swapnetbsd.o - has changed format.  You need to rebuild config
+	(done automatically by build.sh) and then you need to rerun
+	config on all kernel configuration files before rebuilding those
+	kernels.
+
+20081205:
+	If you build with MKX11=no, you should remove /etc/rc.d/xdm and
+	/etc/rc.d/xfs from DESTDIR because those files were moved to the xetc
+	set and will appear as extra files for MKX11=no update builds.
+
+20081122:
+	On i386, various kernel options(4) in GENERIC including
+	file systems have been disabled and moved into kernel modules.
+	Before trying a new GENERIC kernel, you have to prepare the
+	following files as well as a new GENERIC kernel:
+
+	- build and install kernel modules from src/sys/modules
+
+	- install the latest bootloader, which will load a module
+	  for the file system from which the kernel is loaded automatically
+
+	If you have to load your kernel from a file system which is not of
+	the same type as the root file system, you have to load the necessary
+	file system module manually on the boot prompt or in the boot.cfg file.
+
+20080827:
+	If you built and installed a libc from sources between
+	2008/08/20 and 2008/08/26 you got a broken strtouq(3)
+	which results in false errors reported by lint(1).
+	Since this breaks the libc build itself, manual help is
+	needed -- lint must be disabled temporarily, e.g.:
+	  $ (cd lib/libc && make MKLINT=no dependall install)
+
+20080813:
+	MKDEBUG build was broken because the .depend files did not know
+	about .go files. You need to remove all .depend files and rebuild.
+
+20080802:
+	A regression in binary compatibility for pthread_mutex_t has
+	been fixed. Unfortunately, the price is breaking compatibility
+	for -current.
+
+	Threaded programs (using libpthread) and C++ programs (using
+	libstdc++) compiled after 20070907 and before 20080802 need to
+	be recompiled.
+
+	One way to find affected pkgsrc packages:
+
+	  $ grep REQUIRES=/usr/lib/libpthread /var/db/pkg/*/+BUILD_INFO
+	  $ grep REQUIRES=/usr/lib/libstdc++ /var/db/pkg/*/+BUILD_INFO
+
+20080731:
+	WAPBL (metadata journaling support) has been added, but at this
+	time isn't backwards compatible with pre-WAPBL aware kernels
+	and userland (fsck_ffs in particular).  Please make sure you
+	don't use a journaled filesystem with an older kernel/userland,
+	especially an uncleanly mounted journaled filesystem.  WAPBL
+	also requires the super block to be in the UFS2 format.  You
+	can use fsck_ffs -c 4 to update the superblock format.
+
+20080721:
+	Assembler warnings are now fatal if $WARNS>0 and $NOGCCERROR
+	isn't defined.
+
+20080531:
+	The ioctl number of DRVSUSPENDDEV command on /dev/drvctl changed 
+	from 125 (conflicted with DRVCTLCOMMAND) to 129. The drvctl(8)
+	utility needs to be rebuilt and reinstalled as older binaries
+	won't work correctly. The following sequence of commands:
+
+	  $ (cd sys/sys/ && nbmake-$arch includes)
+	  $ (cd sbin/drvctl/ && nbmake-$arch clean)
+	  $ (cd sbin/drvctl/ && nbmake-$arch all)
+
+	leaves new drvctl utility in sbin/drvctl build directory.
+
+20080503:
+	The <bsd.lib.mk> variable MKPRIVATELIB was renamed to LIBISPRIVATE.
+
+20080521:
+	For a while, unprivileged UPDATE builds would fail to
+	succeed at the checkflist stage, complaining that
+	${DESTDIR}/stand/<arch>/ did not exist.  A fix for this
+	problem was committed to share/mk/bsd.kmodule.mk, revision 1.9.
+	If you already hit this problem, update the .mk file,
+	remove ${DESTDIR}/stand/<arch>, and re-run the build.
+
+20080303:
+	Linker warnings are now fatal if $WARNS>0.
+
+20080126:
+	The posix_fadvise system call has been changed from an assembly
+	stub, to a c file that calls an assembly stub. You need to
+	'rm -f posix_fadvise.* .depend' in the libc build directory to
+	avoid using the old assembly stub.
 
 20071209:
 	The acpiec(4) driver has been split into two attachments. If you
@@ -47,9 +306,10 @@ Recent changes:
 	and userland are from after 20070913.
 
 20070703:
-	nbinstall has been renamed as it calls the target specific and
-	the logic to pass down STRIP from mk been removed.  This forces
-	a re-installation of tools.
+	nbinstall has been renamed ${MACHINE_GNU_ARCH}-install. It
+	calls the target-specific strip program, and the logic to pass
+	down STRIP from make has been removed.  This requires a
+	re-installation of tools.
 
 20070422:
 	The way OS emulations lookup filenames inside the emulation root
@@ -267,7 +527,8 @@ Fix:	Try the following sequence of commands in the directory in question.
 	(If you built the tree without "make obj" in the past, obsolete files
 	may remain.  The command tries to clean everything up)
 
-Symptom:.../sysinst/run.c:xx: warning: initialization from incompatible pointer type
+Symptom:.../sysinst/run.c:xx: warning: initialization from incompatible
+	pointer type
 Fix:	Rebuild and install usr.bin/menuc
 
 Symptom:mklocale not found during build in share/locale/ctype
@@ -284,3 +545,7 @@ Fix:    Rebuild and install lib/libc
 
 Symptom:lint does not understand the '-X' option
 Fix:    May need to build & install libs with NOLINT=1 before rebuilding lint
+
+Symptom:Update build fails in src/tools/gcc complaining that a variable
+	(e.g. CPPFLAGS) has changed since the previous run.
+Fix:    Run "nbmake-${ARCH} clean" in src/tools/gcc or do a clean build.

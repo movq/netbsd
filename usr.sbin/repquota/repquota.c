@@ -1,3 +1,5 @@
+/*	$NetBSD: repquota.c,v 1.31 2011/03/27 17:15:17 bouyer Exp $	*/
+
 /*
  * Copyright (c) 1980, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)repquota.c	8.2 (Berkeley) 11/22/94";
 #else
-__RCSID("$NetBSD: repquota.c,v 1.22 2005/03/05 14:46:29 jdolecek Exp $");
+__RCSID("$NetBSD: repquota.c,v 1.31 2011/03/27 17:15:17 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,9 +51,11 @@ __RCSID("$NetBSD: repquota.c,v 1.22 2005/03/05 14:46:29 jdolecek Exp $");
  */
 #include <sys/param.h>
 #include <sys/stat.h>
-#include <sys/queue.h>
-#include <ufs/ufs/quota.h>
+#include <sys/types.h>
+#include <sys/statvfs.h>
+
 #include <errno.h>
+#include <err.h>
 #include <fstab.h>
 #include <grp.h>
 #include <pwd.h>
@@ -60,46 +64,54 @@ __RCSID("$NetBSD: repquota.c,v 1.22 2005/03/05 14:46:29 jdolecek Exp $");
 #include <string.h>
 #include <unistd.h>
 
-char *qfname = QUOTAFILENAME;
-char *qfextension[] = INITQFNAMES;
+#include <quota/quotaprop.h>
+#include <quota/quota.h>
+#include <ufs/ufs/quota1.h>
+#include <sys/quota.h>
+
+#include "printquota.h"
+#include "quotautil.h"
 
 struct fileusage {
 	struct	fileusage *fu_next;
-	struct	dqblk fu_dqblk;
-	u_long	fu_id;
+	struct	ufs_quota_entry fu_qe[QUOTA_NLIMITS];
+	uint32_t	fu_id;
 	char	fu_name[1];
 	/* actually bigger */
 };
 #define FUHASH 1024	/* must be power of two */
-struct fileusage *fuhead[MAXQUOTAS][FUHASH];
-u_long highid[MAXQUOTAS];	/* highest addid()'ed identifier per type */
+static struct fileusage *fuhead[QUOTA_NCLASS][FUHASH];
+static uint32_t highid[QUOTA_NCLASS];	/* highest addid()'ed identifier per class */
+int valid[QUOTA_NCLASS];
+static struct ufs_quota_entry defaultqe[QUOTA_NCLASS][QUOTA_NLIMITS];
 
-int	vflag;			/* verbose */
-int	aflag;			/* all file systems */
+static int	vflag = 0;		/* verbose */
+static int	aflag = 0;		/* all file systems */
+static int	Dflag = 0;		/* debug */
+static int	hflag = 0;		/* humanize */
+static int	xflag = 0;		/* export */
 
-struct fileusage *addid __P((u_long, int, const char *));
-int	hasquota __P((struct fstab *, int, char **));
-struct fileusage *lookup __P((u_long, int));
-int	main __P((int, char **));
-int	oneof __P((const char *, char **, int));
-int	repquota __P((struct fstab *, int, char *));
-char   *timeprt __P((time_t));
-void	usage __P((void));
+
+static struct fileusage *addid(uint32_t, int, const char *);
+static struct fileusage *lookup(uint32_t, int);
+static struct fileusage *qremove(uint32_t, int);
+static int	repquota(const struct statvfs *, int);
+static int	repquota2(const struct statvfs *, int);
+static int	repquota1(const struct statvfs *, int);
+static void	usage(void) __attribute__((__noreturn__));
+static void	printquotas(int, const struct statvfs *, int);
+static void	exportquotas(void);
 
 int
-main(argc, argv)
-	int argc;
-	char **argv;
+main(int argc, char **argv)
 {
-	struct fstab *fs;
-	struct passwd *pw;
-	struct group *gr;
 	int gflag = 0, uflag = 0, errs = 0;
 	long i, argnum, done = 0;
-	char *qfnp;
 	int ch;
+	struct statvfs *fst;
+	int nfst;
 
-	while ((ch = getopt(argc, argv, "aguv")) != -1) {
+	while ((ch = getopt(argc, argv, "Daguhvx")) != -1) {
 		switch(ch) {
 		case 'a':
 			aflag++;
@@ -110,8 +122,17 @@ main(argc, argv)
 		case 'u':
 			uflag++;
 			break;
+		case 'h':
+			hflag++;
+			break;
 		case 'v':
 			vflag++;
+			break;
+		case 'D':
+			Dflag++;
+			break;
+		case 'x':
+			xflag++;
 			break;
 		default:
 			usage();
@@ -119,6 +140,8 @@ main(argc, argv)
 	}
 	argc -= optind;
 	argv += optind;
+	if (xflag && (argc != 1 || aflag))
+		usage();
 	if (argc == 0 && !aflag)
 		usage();
 	if (!gflag && !uflag) {
@@ -126,272 +149,495 @@ main(argc, argv)
 			gflag++;
 		uflag++;
 	}
-	if (gflag) {
-		setgrent();
-		while ((gr = getgrent()) != 0)
-			(void) addid((u_long)gr->gr_gid, GRPQUOTA, gr->gr_name);
-		endgrent();
-	}
-	if (uflag) {
-		setpwent();
-		while ((pw = getpwent()) != 0)
-			(void) addid((u_long)pw->pw_uid, USRQUOTA, pw->pw_name);
-		endpwent();
-	}
-	setfsent();
-	while ((fs = getfsent()) != NULL) {
-		if (strcmp(fs->fs_vfstype, "ffs"))
+
+	nfst = getmntinfo(&fst, MNT_WAIT);
+	if (nfst == 0)
+		errx(1, "no filesystems mounted!");
+	for (i = 0; i < nfst; i++) {
+		if ((fst[i].f_flag & ST_QUOTA) == 0)
 			continue;
 		if (aflag) {
-			if (gflag && hasquota(fs, GRPQUOTA, &qfnp))
-				errs += repquota(fs, GRPQUOTA, qfnp);
-			if (uflag && hasquota(fs, USRQUOTA, &qfnp))
-				errs += repquota(fs, USRQUOTA, qfnp);
+			if (gflag)
+				errs += repquota(&fst[i], QUOTA_CLASS_GROUP);
+			if (uflag)
+				errs += repquota(&fst[i], QUOTA_CLASS_USER);
 			continue;
 		}
-		if ((argnum = oneof(fs->fs_file, argv, argc)) >= 0 ||
-		    (argnum = oneof(fs->fs_spec, argv, argc)) >= 0) {
-			done |= 1 << argnum;
-			if (gflag && hasquota(fs, GRPQUOTA, &qfnp))
-				errs += repquota(fs, GRPQUOTA, qfnp);
-			if (uflag && hasquota(fs, USRQUOTA, &qfnp))
-				errs += repquota(fs, USRQUOTA, qfnp);
+		if ((argnum = oneof(fst[i].f_mntonname, argv, argc)) >= 0 ||
+		    (argnum = oneof(fst[i].f_mntfromname, argv, argc)) >= 0) {
+			done |= 1U << argnum;
+			if (gflag)
+				errs += repquota(&fst[i], QUOTA_CLASS_GROUP);
+			if (uflag)
+				errs += repquota(&fst[i], QUOTA_CLASS_USER);
 		}
 	}
-	endfsent();
+	if (xflag)
+		exportquotas();
 	for (i = 0; i < argc; i++)
-		if ((done & (1 << i)) == 0)
-			fprintf(stderr, "%s not found in fstab\n", argv[i]);
-	exit(errs);
+		if ((done & (1U << i)) == 0)
+			warnx("%s not mounted", argv[i]);
+	return errs;
 }
 
-void
-usage()
+static void
+usage(void)
 {
-	fprintf(stderr, "usage:\n\t%s\n\t%s\n",
-		"repquota [-v] [-g] [-u] -a",
-		"repquota [-v] [-g] [-u] filesys ...");
+	const char *p = getprogname();
+	fprintf(stderr, "usage: %s [-D] [-v] [-g] [-u] -a\n"
+		"\t%s [-D] [-v] [-g] [-u] filesys ...\n"
+		"\t%s -x [-D] [-g] [-u] filesys\n", p, p, p);
 	exit(1);
 }
 
-int
-repquota(fs, type, qfpathname)
-	struct fstab *fs;
-	int type;
-	char *qfpathname;
+static int
+repquota(const struct statvfs *vfs, int class)
 {
+	if (repquota2(vfs, class) != 0)
+		return repquota1(vfs, class);
+	return 0;
+}
+
+static int
+repquota2(const struct statvfs *vfs, int class)
+{
+	prop_dictionary_t dict, data, cmd;
+	prop_array_t cmds, datas;
+	struct plistref pref;
+	int8_t error8, version = 0;
+	prop_object_iterator_t cmditer, dataiter;
+	struct ufs_quota_entry *qep;
+	struct fileusage *fup;
+	const char *strid;
+	uint32_t id;
+	uint64_t *values[QUOTA_NLIMITS];
+
+	dict = quota_prop_create();
+	cmds = prop_array_create();
+	datas = prop_array_create();
+
+	if (dict == NULL || cmds == NULL || datas == NULL)
+		errx(1, "can't allocate proplist");
+	if (!quota_prop_add_command(cmds, "getall",
+	    ufs_quota_class_names[class], datas))
+		err(1, "prop_add_command");
+	if (!quota_prop_add_command(cmds, "get version",
+	    ufs_quota_class_names[class], prop_array_create()))
+		err(1, "prop_add_command");
+	if (!prop_dictionary_set(dict, "commands", cmds))
+		err(1, "prop_dictionary_set(command)");
+	if (Dflag)
+		printf("message to kernel:\n%s\n",
+		    prop_dictionary_externalize(dict));
+	if (!prop_dictionary_send_syscall(dict, &pref))
+		err(1, "prop_dictionary_send_syscall");
+	prop_object_release(dict);
+
+	if (quotactl(vfs->f_mntonname, &pref) != 0)
+		err(1, "quotactl");
+
+	if ((errno = prop_dictionary_recv_syscall(&pref, &dict)) != 0) {
+		err(1, "prop_dictionary_recv_syscall");
+	}
+	if (Dflag)
+		printf("reply from kernel:\n%s\n",
+		    prop_dictionary_externalize(dict));
+	if ((errno = quota_get_cmds(dict, &cmds)) != 0) {
+		err(1, "quota_get_cmds");
+	}
+	cmditer = prop_array_iterator(cmds);
+	if (cmditer == NULL)
+		err(1, "prop_array_iterator(cmds)");
+
+	while ((cmd = prop_object_iterator_next(cmditer)) != NULL) {
+		const char *cmdstr;
+		if (!prop_dictionary_get_cstring_nocopy(cmd, "command",
+		    &cmdstr))
+			err(1, "prop_get(command)");
+
+		if (!prop_dictionary_get_int8(cmd, "return", &error8))
+			err(1, "prop_get(return)");
+
+		if (error8) {
+			prop_object_release(dict);
+			if (error8 != EOPNOTSUPP) {
+				errno = error8;
+				warn("get %s quotas",
+				    ufs_quota_class_names[class]);
+			}
+			return error8;
+		}
+		datas = prop_dictionary_get(cmd, "data");
+		if (datas == NULL)
+			err(1, "prop_dict_get(datas)");
+
+		if (strcmp("get version", cmdstr) == 0) {
+			data = prop_array_get(datas, 0);
+			if (data == NULL)
+				err(1, "prop_array_get(version)");
+			if (!prop_dictionary_get_int8(data, "version",
+			    &version))
+				err(1, "prop_get_int8(version)");
+			continue;
+		}
+		dataiter = prop_array_iterator(datas);
+		if (dataiter == NULL)
+			err(1, "prop_array_iterator");
+
+		valid[class] = 0;
+		while ((data = prop_object_iterator_next(dataiter)) != NULL) {
+			valid[class] = 1;
+			strid = NULL;
+			if (!prop_dictionary_get_uint32(data, "id", &id)) {
+				if (!prop_dictionary_get_cstring_nocopy(data,
+				    "id", &strid))
+					errx(1, "can't find id in quota entry");
+				if (strcmp(strid, "default") != 0) {
+					errx(1,
+					    "wrong id string %s in quota entry",
+					    strid);
+				}
+				qep = defaultqe[class];
+			} else {
+				if ((fup = lookup(id, class)) == 0)
+					fup = addid(id, class, (char *)0);
+				qep = fup->fu_qe;
+			}
+			values[QUOTA_LIMIT_BLOCK] =
+			    &qep[QUOTA_LIMIT_BLOCK].ufsqe_hardlimit;
+			values[QUOTA_LIMIT_FILE] =
+			    &qep[QUOTA_LIMIT_FILE].ufsqe_hardlimit;
+				
+			errno = proptoquota64(data, values,
+			    ufs_quota_entry_names, UFS_QUOTA_NENTRIES,
+			    ufs_quota_limit_names, QUOTA_NLIMITS);
+			if (errno)
+				err(1, "proptoquota64");
+		}
+		prop_object_iterator_release(dataiter);
+	}
+	prop_object_iterator_release(cmditer);
+	prop_object_release(dict);
+	if (xflag == 0 && valid[class])
+		printquotas(class, vfs, version);
+	return 0;
+}
+
+static int
+repquota1(const struct statvfs *vfs, int class)
+{
+	char qfpathname[MAXPATHLEN];
+	struct fstab *fs;
 	struct fileusage *fup;
 	FILE *qf;
-	u_long id;
+	uint32_t id;
 	struct dqblk dqbuf;
-	static struct dqblk zerodqblk;
-	static int warned = 0;
-	static int multiple = 0;
+	time_t bgrace = MAX_DQ_TIME, igrace = MAX_DQ_TIME;
+	int type = ufsclass2qtype(class);
 
-	if (quotactl(fs->fs_file, QCMD(Q_SYNC, type), 0, 0) < 0 &&
-	    errno == EOPNOTSUPP && !warned && vflag) {
-		warned++;
-		fprintf(stdout,
-		    "*** Warning: Quotas are not compiled into this kernel\n");
+	setfsent();
+	while ((fs = getfsent()) != NULL) {
+		if (strcmp(fs->fs_vfstype, "ffs") == 0 &&
+		   strcmp(fs->fs_file, vfs->f_mntonname) == 0)
+			break;
 	}
-	if (multiple++)
-		printf("\n");
-	if (vflag)
-		fprintf(stdout, "*** Report for %s quotas on %s (%s)\n",
-		    qfextension[type], fs->fs_file, fs->fs_spec);
+	endfsent();
+	if (fs == NULL) {
+		warnx("%s not found in fstab", vfs->f_mntonname);
+		return 1;
+	}
+	if (!hasquota(qfpathname, sizeof(qfpathname), fs, type))
+		return 0;
+		
 	if ((qf = fopen(qfpathname, "r")) == NULL) {
-		perror(qfpathname);
-		return (1);
+		warn("Cannot open `%s'", qfpathname);
+		return 1;
 	}
 	for (id = 0; ; id++) {
 		fread(&dqbuf, sizeof(struct dqblk), 1, qf);
 		if (feof(qf))
 			break;
-		if (dqbuf.dqb_curinodes == 0 && dqbuf.dqb_curblocks == 0)
+		if (id == 0) {
+			if (dqbuf.dqb_btime > 0)
+				bgrace = dqbuf.dqb_btime;
+			if (dqbuf.dqb_itime > 0)
+				igrace = dqbuf.dqb_itime;
+		}
+		if (dqbuf.dqb_curinodes == 0 && dqbuf.dqb_curblocks == 0 &&
+		    dqbuf.dqb_bsoftlimit == 0 && dqbuf.dqb_bhardlimit == 0 &&
+		    dqbuf.dqb_isoftlimit == 0 && dqbuf.dqb_ihardlimit == 0)
 			continue;
-		if ((fup = lookup(id, type)) == 0)
-			fup = addid(id, type, (char *)0);
-		fup->fu_dqblk = dqbuf;
+		if ((fup = lookup(id, class)) == 0)
+			fup = addid(id, class, (char *)0);
+		dqblk2ufsqe(&dqbuf, fup->fu_qe);
+		fup->fu_qe[QUOTA_LIMIT_BLOCK].ufsqe_grace = bgrace;
+		fup->fu_qe[QUOTA_LIMIT_FILE].ufsqe_grace = igrace;
 	}
+	defaultqe[class][QUOTA_LIMIT_BLOCK].ufsqe_grace = bgrace;
+	defaultqe[class][QUOTA_LIMIT_FILE].ufsqe_grace = igrace;
+	defaultqe[class][QUOTA_LIMIT_BLOCK].ufsqe_softlimit = 
+	    defaultqe[class][QUOTA_LIMIT_BLOCK].ufsqe_hardlimit = 
+	    defaultqe[class][QUOTA_LIMIT_FILE].ufsqe_softlimit = 
+	    defaultqe[class][QUOTA_LIMIT_FILE].ufsqe_hardlimit = UQUAD_MAX;
 	fclose(qf);
-	printf("                        Block limits               File limits\n");
-	printf(type == USRQUOTA ? "User " : "Group");
-	printf("           used    soft    hard  grace      used    soft    hard  grace\n");
-	for (id = 0; id <= highid[type]; id++) {
-		fup = lookup(id, type);
+	valid[class] = 1;
+	if (xflag == 0)
+		printquotas(class, vfs, 1);
+	return 0;
+}
+
+static void
+printquotas(int class, const struct statvfs *vfs, int version)
+{
+	static int multiple = 0;
+	uint32_t id;
+	int i;
+	struct fileusage *fup;
+	struct ufs_quota_entry *q;
+	const char *timemsg[QUOTA_NLIMITS];
+	char overchar[QUOTA_NLIMITS];
+	time_t now;
+	char b0[2][20], b1[20], b2[20], b3[20];
+
+	switch(class) {
+	case  QUOTA_CLASS_GROUP:
+		{
+		struct group *gr;
+		setgrent();
+		while ((gr = getgrent()) != 0)
+			(void)addid(gr->gr_gid, QUOTA_CLASS_GROUP, gr->gr_name);
+		endgrent();
+		break;
+		}
+	case QUOTA_CLASS_USER:
+		{
+		struct passwd *pw;
+		setpwent();
+		while ((pw = getpwent()) != 0)
+			(void)addid(pw->pw_uid, QUOTA_CLASS_USER, pw->pw_name);
+		endpwent();
+		break;
+		}
+	default:
+		errx(1, "unknown quota class %d", class);
+	}
+
+	time(&now);
+
+	if (multiple++)
+		printf("\n");
+	if (vflag)
+		printf("*** Report for %s quotas on %s (%s, version %d)\n",
+		    ufs_quota_class_names[class], vfs->f_mntonname,
+		    vfs->f_mntfromname, version);
+	printf("                        Block limits               "
+	    "File limits\n");
+	printf(class == QUOTA_CLASS_USER ? "User " : "Group");
+	printf("            used     soft     hard  grace      used"
+	    "soft    hard  grace\n");
+	for (id = 0; id <= highid[class]; id++) {
+		fup = qremove(id, class);
+		q = fup->fu_qe;
 		if (fup == 0)
 			continue;
-		if (fup->fu_dqblk.dqb_curinodes == 0 &&
-		    fup->fu_dqblk.dqb_curblocks == 0)
+		for (i = 0; i < QUOTA_NLIMITS; i++) {
+			switch (QL_STATUS(quota_check_limit(q[i].ufsqe_cur, 1,
+			    q[i].ufsqe_softlimit, q[i].ufsqe_hardlimit,
+			    q[i].ufsqe_time, now))) {
+			case QL_S_DENY_HARD:
+			case QL_S_DENY_GRACE:
+			case QL_S_ALLOW_SOFT:
+				timemsg[i] = timeprt(b0[i], 8, now,
+				    q[i].ufsqe_time);
+				overchar[i] = '+';
+				break;
+			default:
+				timemsg[i] =  (vflag && version == 2) ?
+				    timeprt(b0[i], 8, 0, q[i].ufsqe_grace) : "";
+				overchar[i] = '-';
+				break;
+			}
+		}
+
+		if (q[QUOTA_LIMIT_BLOCK].ufsqe_cur == 0 &&
+		    q[QUOTA_LIMIT_FILE].ufsqe_cur == 0 && vflag == 0 &&
+		    overchar[QUOTA_LIMIT_BLOCK] == '-' &&
+		    overchar[QUOTA_LIMIT_FILE] == '-')
 			continue;
 		if (strlen(fup->fu_name) > 9)
 			printf("%s ", fup->fu_name);
 		else
 			printf("%-10s", fup->fu_name);
-		printf("%c%c%8d%8d%8d%7s",
-			fup->fu_dqblk.dqb_bsoftlimit && 
-			    fup->fu_dqblk.dqb_curblocks >= 
-			    fup->fu_dqblk.dqb_bsoftlimit ? '+' : '-',
-			fup->fu_dqblk.dqb_isoftlimit &&
-			    fup->fu_dqblk.dqb_curinodes >=
-			    fup->fu_dqblk.dqb_isoftlimit ? '+' : '-',
-			(int)(dbtob((u_quad_t)fup->fu_dqblk.dqb_curblocks) / 1024),
-			(int)(dbtob((u_quad_t)fup->fu_dqblk.dqb_bsoftlimit) / 1024),
-			(int)(dbtob((u_quad_t)fup->fu_dqblk.dqb_bhardlimit) / 1024),
-			fup->fu_dqblk.dqb_bsoftlimit && 
-			    fup->fu_dqblk.dqb_curblocks >= 
-			    fup->fu_dqblk.dqb_bsoftlimit ?
-			    timeprt(fup->fu_dqblk.dqb_btime) : "");
-		printf("  %8d%8d%8d%7s\n",
-			fup->fu_dqblk.dqb_curinodes,
-			fup->fu_dqblk.dqb_isoftlimit,
-			fup->fu_dqblk.dqb_ihardlimit,
-			fup->fu_dqblk.dqb_isoftlimit &&
-			    fup->fu_dqblk.dqb_curinodes >=
-			    fup->fu_dqblk.dqb_isoftlimit ?
-			    timeprt(fup->fu_dqblk.dqb_itime) : "");
-		fup->fu_dqblk = zerodqblk;
+		printf("%c%c%9s%9s%9s%7s",
+			overchar[QUOTA_LIMIT_BLOCK], overchar[QUOTA_LIMIT_FILE],
+			intprt(b1, 10, q[QUOTA_LIMIT_BLOCK].ufsqe_cur,
+			  HN_B, hflag),
+			intprt(b2, 10, q[QUOTA_LIMIT_BLOCK].ufsqe_softlimit,
+			  HN_B, hflag),
+			intprt(b3, 10, q[QUOTA_LIMIT_BLOCK].ufsqe_hardlimit,
+			  HN_B, hflag),
+			timemsg[QUOTA_LIMIT_BLOCK]);
+		printf("  %8s%8s%8s%7s\n",
+			intprt(b1, 9, q[QUOTA_LIMIT_FILE].ufsqe_cur, 0, hflag),
+			intprt(b2, 9, q[QUOTA_LIMIT_FILE].ufsqe_softlimit,
+			  0, hflag),
+			intprt(b3, 9, q[QUOTA_LIMIT_FILE].ufsqe_hardlimit,
+			  0, hflag),
+			timemsg[QUOTA_LIMIT_FILE]);
+		free(fup);
 	}
-	return (0);
 }
 
-/*
- * Check to see if target appears in list of size cnt.
- */
-int
-oneof(target, list, cnt)
-	const char *target;
-	char *list[];
-	int cnt;
+static void
+exportquotas(void)
 {
-	int i;
+	uint32_t id;
+	struct fileusage *fup;
+	prop_dictionary_t dict, data;
+	prop_array_t cmds, datas;
+	int class;
+	uint64_t *valuesp[QUOTA_NLIMITS];
 
-	for (i = 0; i < cnt; i++)
-		if (strcmp(target, list[i]) == 0)
-			return (i);
-	return (-1);
-}
+	dict = quota_prop_create();
+	cmds = prop_array_create();
 
-/*
- * Check to see if a particular quota is to be enabled.
- */
-int
-hasquota(fs, type, qfnamep)
-	struct fstab *fs;
-	int type;
-	char **qfnamep;
-{
-	char *opt;
-	char *cp = NULL;
-	static char initname, usrname[100], grpname[100];
-	static char buf[BUFSIZ];
+	if (dict == NULL || cmds == NULL) {
+		errx(1, "can't allocate proplist");
+	}
 
-	if (!initname) {
-		sprintf(usrname, "%s%s", qfextension[USRQUOTA], qfname);
-		sprintf(grpname, "%s%s", qfextension[GRPQUOTA], qfname);
-		initname = 1;
+
+	for (class = 0; class < QUOTA_NCLASS; class++) {
+		if (valid[class] == 0)
+			continue;
+		datas = prop_array_create();
+		if (datas == NULL)
+			errx(1, "can't allocate proplist");
+		valuesp[QUOTA_LIMIT_BLOCK] =
+		    &defaultqe[class][QUOTA_LIMIT_BLOCK].ufsqe_hardlimit;
+		valuesp[QUOTA_LIMIT_FILE] =
+		    &defaultqe[class][QUOTA_LIMIT_FILE].ufsqe_hardlimit;
+		data = quota64toprop(0, 1, valuesp,
+		    ufs_quota_entry_names, UFS_QUOTA_NENTRIES,
+		    ufs_quota_limit_names, QUOTA_NLIMITS);
+		if (data == NULL)
+			err(1, "quota64toprop(default)");
+		if (!prop_array_add_and_rel(datas, data))
+			err(1, "prop_array_add(data)");
+
+		for (id = 0; id <= highid[class]; id++) {
+			fup = qremove(id, class);
+			if (fup == 0)
+				continue;
+			valuesp[QUOTA_LIMIT_BLOCK] =
+			    &fup->fu_qe[QUOTA_LIMIT_BLOCK].ufsqe_hardlimit;
+			valuesp[QUOTA_LIMIT_FILE] =
+			    &fup->fu_qe[QUOTA_LIMIT_FILE].ufsqe_hardlimit;
+			data = quota64toprop(id, 0, valuesp,
+			    ufs_quota_entry_names, UFS_QUOTA_NENTRIES,
+			    ufs_quota_limit_names, QUOTA_NLIMITS);
+			if (data == NULL)
+				err(1, "quota64toprop(id)");
+			if (!prop_array_add_and_rel(datas, data))
+				err(1, "prop_array_add(data)");
+			free(fup);
+		}
+
+		if (!quota_prop_add_command(cmds, "set",
+		    ufs_quota_class_names[class], datas))
+			err(1, "prop_add_command");
 	}
-	strcpy(buf, fs->fs_mntops);
-	for (opt = strtok(buf, ","); opt; opt = strtok(NULL, ",")) {
-		if ((cp = strchr(opt, '=')) != NULL)
-			*cp++ = '\0';
-		if (type == USRQUOTA && strcmp(opt, usrname) == 0)
-			break;
-		if (type == GRPQUOTA && strcmp(opt, grpname) == 0)
-			break;
-	}
-	if (!opt)
-		return (0);
-	if (cp) {
-		*qfnamep = cp;
-		return (1);
-	}
-	(void) sprintf(buf, "%s/%s.%s", fs->fs_file, qfname, qfextension[type]);
-	*qfnamep = buf;
-	return (1);
+
+	if (!prop_dictionary_set(dict, "commands", cmds))
+		err(1, "prop_dictionary_set(command)");
+
+	printf("%s\n", prop_dictionary_externalize(dict));
+	return;
 }
 
 /*
  * Routines to manage the file usage table.
  *
- * Lookup an id of a specific type.
+ * Lookup an id of a specific class.
  */
 struct fileusage *
-lookup(id, type)
-	u_long id;
-	int type;
+lookup(uint32_t id, int class)
 {
 	struct fileusage *fup;
 
-	for (fup = fuhead[type][id & (FUHASH-1)]; fup != 0; fup = fup->fu_next)
+	for (fup = fuhead[class][id & (FUHASH-1)]; fup != 0; fup = fup->fu_next)
 		if (fup->fu_id == id)
-			return (fup);
-	return ((struct fileusage *)0);
+			return fup;
+	return NULL;
+}
+/*
+ * Lookup and remove an id of a specific class.
+ */
+static struct fileusage *
+qremove(uint32_t id, int class)
+{
+	struct fileusage *fup, **fupp;
+
+	for (fupp = &fuhead[class][id & (FUHASH-1)]; *fupp != 0;) {
+		fup = *fupp;
+		if (fup->fu_id == id) {
+			*fupp = fup->fu_next;
+			return fup;
+		}
+		fupp = &fup->fu_next;
+	}
+	return NULL;
 }
 
 /*
  * Add a new file usage id if it does not already exist.
  */
-struct fileusage *
-addid(id, type, name)
-	u_long id;
-	int type;
-	const char *name;
+static struct fileusage *
+addid(uint32_t id, int class, const char *name)
 {
 	struct fileusage *fup, **fhp;
-	int len;
+	struct group *gr = NULL;
+	struct passwd *pw = NULL;
+	size_t len;
 
-	if ((fup = lookup(id, type)) != NULL)
-		return (fup);
+	if ((fup = lookup(id, class)) != NULL) {
+		return fup;
+	}
+	if (name == NULL) {
+		switch(class) {
+		case  QUOTA_CLASS_GROUP:
+			gr = getgrgid(id);
+			
+			if (gr != NULL)
+				name = gr->gr_name;
+			break;
+		case QUOTA_CLASS_USER:
+			pw = getpwuid(id);
+			if (pw)
+				name = pw->pw_name;
+			break;
+		default:
+			errx(1, "unknown quota class %d\n", class);
+		}
+	}
+
 	if (name)
 		len = strlen(name);
 	else
 		len = 10;
-	if ((fup = (struct fileusage *)calloc(1, sizeof(*fup) + len)) == NULL) {
-		fprintf(stderr, "out of memory for fileusage structures\n");
-		exit(1);
-	}
-	fhp = &fuhead[type][id & (FUHASH - 1)];
+	if ((fup = calloc(1, sizeof(*fup) + len)) == NULL)
+		err(1, "out of memory for fileusage structures");
+	fhp = &fuhead[class][id & (FUHASH - 1)];
 	fup->fu_next = *fhp;
 	*fhp = fup;
 	fup->fu_id = id;
-	if (id > highid[type])
-		highid[type] = id;
+	if (id > highid[class])
+		highid[class] = id;
 	if (name) {
 		memmove(fup->fu_name, name, len + 1);
 	} else {
-		sprintf(fup->fu_name, "%lu", (u_long)id);
+		snprintf(fup->fu_name, len + 1, "%u", id);
 	}
-	return (fup);
-}
-
-/*
- * Calculate the grace period and return a printable string for it.
- */
-char *
-timeprt(seconds)
-	time_t seconds;
-{
-	time_t hours, minutes;
-	static char buf[20];
-	static time_t now;
-
-	if (now == 0)
-		time(&now);
-	if (now > seconds)
-		return ("none");
-	seconds -= now;
-	minutes = (seconds + 30) / 60;
-	hours = (minutes + 30) / 60;
-	if (hours >= 36) {
-		sprintf(buf, "%lddays", (long)((hours + 12) / 24));
-		return (buf);
-	}
-	if (minutes >= 60) {
-		sprintf(buf, "%2ld:%ld", (long)(minutes / 60),
-		    (long)(minutes % 60));
-		return (buf);
-	}
-	sprintf(buf, "%2ld", (long)minutes);
-	return (buf);
+	fup->fu_qe[QUOTA_LIMIT_BLOCK] = defaultqe[class][QUOTA_LIMIT_BLOCK];
+	fup->fu_qe[QUOTA_LIMIT_FILE] = defaultqe[class][QUOTA_LIMIT_FILE];
+	return fup;
 }

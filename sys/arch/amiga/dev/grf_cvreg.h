@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_cvreg.h,v 1.12 2007/03/05 19:48:19 he Exp $	*/
+/*	$NetBSD: grf_cvreg.h,v 1.17 2011/05/21 14:49:35 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Michael Teske
@@ -34,6 +34,8 @@
 #ifndef _GRF_CVREG_H
 #define _GRF_CVREG_H
 
+#include <machine/cpu.h>
+
 /*
  * This is derived from ciruss driver source
  */
@@ -59,13 +61,15 @@ struct grfcvtext_mode {
 #define MAXROWS 200
 #define MAXCOLS 200
 
+
 /* read VGA register */
-#define vgar(ba, reg) (*(((volatile char *)ba)+reg))
+#define vgar(ba, reg) \
+	(*(((volatile char *)ba)+reg))
 
 /* write VGA register */
 #define vgaw(ba, reg, val) \
-	*(((volatile char *)ba)+reg) = ((val) & 0xff)
-
+	*(((volatile char *)ba)+reg) = ((val) & 0xff); \
+	amiga_membarrier()
 
 /* read 32 Bit VGA register */
 #define vgar32(ba, reg) \
@@ -73,7 +77,8 @@ struct grfcvtext_mode {
 
 /* write 32 Bit VGA register */
 #define vgaw32(ba, reg, val) \
-	*((unsigned long *)  (((volatile char *)ba)+reg)) = val
+	*((unsigned long *)  (((volatile char *)ba)+reg)) = val; \
+	amiga_membarrier()
 
 /* read 16 Bit VGA register */
 #define vgar16(ba, reg) \
@@ -81,8 +86,10 @@ struct grfcvtext_mode {
 
 /* write 16 Bit VGA register */
 #define vgaw16(ba, reg, val) \
-	*((volatile unsigned short *)  (((volatile char *)ba)+reg)) = val
+	*((volatile unsigned short *) (((volatile char *)ba)+reg)) = val; \
+	amiga_membarrier()
 
+#ifdef _KERNEL
 int grfcv_cnprobe(void);
 void grfcv_iteinit(struct grf_softc *);
 static inline void GfxBusyWait(volatile void *);
@@ -91,6 +98,7 @@ static inline unsigned char RAttr(volatile void *, short);
 static inline unsigned char RSeq(volatile void *, short);
 static inline unsigned char RCrt(volatile void *, short);
 static inline unsigned char RGfx(volatile void *, short);
+#endif
 
 
 /*
@@ -363,7 +371,7 @@ static inline unsigned char RGfx(volatile void *, short);
 
 
 /* Gfx engine busy wait */
-
+#ifdef _KERNEL
 static inline void
 GfxBusyWait (ba)
 	volatile void *ba;
@@ -372,7 +380,7 @@ GfxBusyWait (ba)
 
 	do {
 		test = vgar16 (ba, ECR_GP_STAT);
-		__asm volatile ("nop");
+		amiga_cpu_sync();
 	} while (test & (1 << 9));
 }
 
@@ -433,5 +441,6 @@ RGfx(ba, idx)
 	vgaw(ba, GCT_ADDRESS, idx);
 	return vgar(ba, GCT_ADDRESS_R);
 }
+#endif
 
 #endif /* _GRF_RHREG_H */

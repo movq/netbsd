@@ -1,4 +1,4 @@
-/*	$NetBSD: sysvbfs_vfsops.c,v 1.21 2008/01/02 11:48:46 ad Exp $	*/
+/*	$NetBSD: sysvbfs_vfsops.c,v 1.35 2010/07/25 10:00:48 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysvbfs_vfsops.c,v 1.21 2008/01/02 11:48:46 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysvbfs_vfsops.c,v 1.35 2010/07/25 10:00:48 hannken Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -77,7 +70,6 @@ int
 sysvbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
-	struct nameidata nd;
 	struct sysvbfs_args *args = data;
 	struct sysvbfs_mount *bmp = NULL;
 	struct vnode *devvp = NULL;
@@ -107,10 +99,10 @@ sysvbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 
 	if (args->fspec != NULL) {
 		/* Look up the name and verify that it's sane. */
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec);
-		if ((error = namei(&nd)) != 0)
+		error = namei_simple_user(args->fspec,
+					NSM_FOLLOW_NOEMULROOT, &devvp);
+		if (error != 0)
 			return (error);
-		devvp = nd.ni_vp;
 
 		if (!update) {
 			/*
@@ -118,8 +110,7 @@ sysvbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			 */
 			if (devvp->v_type != VBLK)
 				error = ENOTBLK;
-			else if (bdevsw_lookup(devvp->v_specinfo->si_rdev) ==
-			    NULL)
+			else if (bdevsw_lookup(devvp->v_rdev) == NULL)
 				error = ENXIO;
 		} else {
 			/*
@@ -134,17 +125,19 @@ sysvbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	/*
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
+	 *
+	 * Permission to update a mount is checked higher, so here we presume
+	 * updating the mount is okay (for example, as far as securelevel goes)
+	 * which leaves us with the normal check.
 	 */
-	if (error == 0 && kauth_authorize_generic(l->l_cred,
-	    KAUTH_GENERIC_ISSUSER, NULL)) {
+	if (error == 0) {
 		int accessmode = VREAD;
 		if (update ?
 		    (mp->mnt_iflag & IMNT_WANTRDWR) != 0 :
 		    (mp->mnt_flag & MNT_RDONLY) == 0)
 			accessmode |= VWRITE;
-		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-		error = VOP_ACCESS(devvp, accessmode, l->l_cred);
-		VOP_UNLOCK(devvp, 0);
+		
+		error = genfs_can_mount(devvp, accessmode, l->l_cred);
 	}
 
 	if (error) {
@@ -171,34 +164,37 @@ sysvbfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	kauth_cred_t cred = l->l_cred;
 	struct sysvbfs_mount *bmp;
 	struct partinfo dpart;
-	int error;
+	int error, oflags;
+	bool devopen = false;
 
-	if ((error = vfs_mountedon(devvp)) != 0)
-		return error;	/* Already mounted */
-	if (vcount(devvp) > 1)
-		return EBUSY;	/* Opened by other */
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = vinvalbuf(devvp, V_SAVE, cred, l, 0, 0);
-	VOP_UNLOCK(devvp, 0);
 	if (error)
-		return error;
+		goto out;
 
 	/* Open block device */
-	if ((error = VOP_OPEN(devvp, FREAD, NOCRED)) != 0)
-		return error;
+	oflags = FREAD;
+	if ((mp->mnt_flag & MNT_RDONLY) == 0)
+		oflags |= FWRITE;
+	if ((error = VOP_OPEN(devvp, oflags, NOCRED)) != 0)
+		goto out;
+	devopen = true;
 
 	/* Get partition information */
-	if ((error = VOP_IOCTL(devvp, DIOCGPART, &dpart, FREAD, cred)) != 0)
-		return error;
+	if ((error = VOP_IOCTL(devvp, DIOCGPART, &dpart, FREAD, cred)) != 0) {
+		goto out;
+	}
 
 	bmp = malloc(sizeof(struct sysvbfs_mount), M_SYSVBFS_VFS, M_WAITOK);
-	if (bmp == NULL)
-		return ENOMEM;
+	if (bmp == NULL) {
+		error = ENOMEM;
+		goto out;
+	}
 	bmp->devvp = devvp;
 	bmp->mountp = mp;
 	if ((error = sysvbfs_bfs_init(&bmp->bfs, devvp)) != 0) {
 		free(bmp, M_SYSVBFS_VFS);
-		return error;
+		goto out;
 	}
 	LIST_INIT(&bmp->bnode_head);
 
@@ -206,6 +202,7 @@ sysvbfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)devvp->v_rdev;
 	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_SYSVBFS);
 	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
+	mp->mnt_stat.f_namemax = BFS_FILENAME_MAXLEN;
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_dev_bshift = BFS_BSHIFT;
 	mp->mnt_fs_bshift = BFS_BSHIFT;
@@ -213,7 +210,11 @@ sysvbfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	DPRINTF("fstype=%d dtype=%d bsize=%d\n", dpart.part->p_fstype,
 	    dpart.disklab->d_type, dpart.disklab->d_secsize);
 
-	return 0;
+ out:
+	if (devopen && error)
+		VOP_CLOSE(devvp, oflags, NOCRED);
+	VOP_UNLOCK(devvp);
+	return error;
 }
 
 int
@@ -313,7 +314,7 @@ sysvbfs_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 		v = bnode->vnode;
 	    	mutex_enter(&v->v_interlock);
 		mutex_exit(&mntvnode_lock);
-		err = vget(v, LK_EXCLUSIVE | LK_NOWAIT | LK_INTERLOCK);
+		err = vget(v, LK_EXCLUSIVE | LK_NOWAIT);
 		if (err == 0) {
 			err = VOP_FSYNC(v, cred, FSYNC_WAIT, 0, 0);
 			vput(v);
@@ -337,18 +338,30 @@ sysvbfs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 	struct bfs_inode *inode;
 	int error;
 
-	DPRINTF("%s: i-node=%d\n", __func__, ino);
+	DPRINTF("%s: i-node=%lld\n", __func__, (long long)ino);
 	/* Lookup requested i-node */
 	if (!bfs_inode_lookup(bfs, ino, &inode)) {
 		DPRINTF("bfs_inode_lookup failed.\n");
 		return ENOENT;
 	}
+
+ retry:
+	mutex_enter(&mntvnode_lock);
 	for (bnode = LIST_FIRST(&bmp->bnode_head); bnode != NULL;
 	    bnode = LIST_NEXT(bnode, link)) {
 		if (bnode->inode->number == ino) {
-			*vpp = bnode->vnode;
+			vp = bnode->vnode;
+			mutex_enter(&vp->v_interlock);
+			mutex_exit(&mntvnode_lock);
+			if (vget(vp, LK_EXCLUSIVE) == 0) {
+				*vpp = vp;
+				return 0;
+			} else {
+				goto retry;
+			}
 		}
 	}
+	mutex_exit(&mntvnode_lock);
 
 	/* Allocate v-node. */
 	if ((error = getnewvnode(VT_SYSVBFS, mp, sysvbfs_vnodeop_p, &vp)) !=

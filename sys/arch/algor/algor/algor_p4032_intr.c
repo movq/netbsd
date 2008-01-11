@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p4032_intr.c,v 1.17 2008/01/10 14:57:34 tsutsui Exp $	*/
+/*	$NetBSD: algor_p4032_intr.c,v 1.22 2011/04/07 04:01:40 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,9 +38,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: algor_p4032_intr.c,v 1.17 2008/01/10 14:57:34 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: algor_p4032_intr.c,v 1.22 2011/04/07 04:01:40 dyoung Exp $");
 
 #include "opt_ddb.h"
+#define	__INTR_PRIVATE
 
 #include <sys/param.h>
 #include <sys/queue.h>
@@ -106,7 +100,7 @@ struct p4032_irqreg p4032_irqsteer[NSTEERREG] = {
 #define	IRQMAP_8BITBASE		NPCIIRQS
 #define	NIRQMAPS		(IRQMAP_8BITBASE + N8BITIRQS)
 
-const char *p4032_intrnames[NIRQMAPS] = {
+const char * const p4032_intrnames[NIRQMAPS] = {
 	/*
 	 * PCI INTERRUPTS
 	 */
@@ -212,12 +206,12 @@ struct p4032_cpuintr {
 };
 
 struct p4032_cpuintr p4032_cpuintrs[NINTRS];
-const char *p4032_cpuintrnames[NINTRS] = {
+const char * const p4032_cpuintrnames[NINTRS] = {
 	"int 0 (pci)",
 	"int 1 (8-bit)",
 };
 
-const char *p4032_intrgroups[NINTRS] = {
+const char * const p4032_intrgroups[NINTRS] = {
 	"pci",
 	"8-bit",
 };
@@ -225,7 +219,8 @@ const char *p4032_intrgroups[NINTRS] = {
 void	*algor_p4032_intr_establish(int, int (*)(void *), void *);
 void	algor_p4032_intr_disestablish(void *);
 
-int	algor_p4032_pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
+int	algor_p4032_pci_intr_map(const struct pci_attach_args *,
+	    pci_intr_handle_t *);
 const char *algor_p4032_pci_intr_string(void *, pci_intr_handle_t);
 const struct evcnt *algor_p4032_pci_intr_evcnt(void *, pci_intr_handle_t);
 void	*algor_p4032_pci_intr_establish(void *, pci_intr_handle_t, int,
@@ -233,7 +228,7 @@ void	*algor_p4032_pci_intr_establish(void *, pci_intr_handle_t, int,
 void	algor_p4032_pci_intr_disestablish(void *, void *);
 void	algor_p4032_pci_conf_interrupt(void *, int, int, int, int, int *);
 
-void	algor_p4032_iointr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+void	algor_p4032_iointr(int, vaddr_t, uint32_t);
 
 void
 algor_p4032_intr_init(struct p4032_config *acp)
@@ -249,7 +244,6 @@ algor_p4032_intr_init(struct p4032_config *acp)
 		evcnt_attach_dynamic(&p4032_cpuintrs[i].cintr_count,
 		    EVCNT_TYPE_INTR, NULL, "mips", p4032_cpuintrnames[i]);
 	}
-	evcnt_attach_static(&mips_int5_evcnt);
 
 	for (i = 0; i < NIRQMAPS; i++) {
 		irqmap = &p4032_irqmap[i];
@@ -298,7 +292,7 @@ algor_p4032_cal_timer(bus_space_tag_t st, bus_space_handle_t sh)
 	REGVAL(P4032_IRR0) = IRR0_RTC;
 
 	/* Run the loop an extra time to prime the cache. */
-	for (cps = 0, i = 0; i < 4; i++) {
+	for (i = 0; i < 4; i++) {
 		led_display('h', 'z', '0' + i, ' ');
 
 		/* Enable the interrupt. */
@@ -337,7 +331,6 @@ algor_p4032_cal_timer(bus_space_tag_t st, bus_space_handle_t sh)
 	/* XXX assume CPU_MIPS_DOUBLE_COUNT */
 	curcpu()->ci_cycles_per_hz /= 2;
 	curcpu()->ci_divisor_delay /= 2;
-	MIPS_SET_CI_RECIPROCAL(curcpu());
 
 	printf("Timer calibration: %lu cycles/sec [(%lu, %lu) * 16]\n",
 	    cps, ctrdiff[2], ctrdiff[3]);
@@ -422,8 +415,7 @@ algor_p4032_intr_disestablish(void *cookie)
 }
 
 void
-algor_p4032_iointr(u_int32_t status, u_int32_t cause, u_int32_t pc,
-    u_int32_t ipending)
+algor_p4032_iointr(int ipl, vaddr_t pc, u_int32_t ipending)
 {
 	const struct p4032_irqmap *irqmap;
 	struct algor_intrhand *ih;
@@ -460,9 +452,6 @@ algor_p4032_iointr(u_int32_t status, u_int32_t cause, u_int32_t pc,
 		 * XXX the floppy interrupt here.
 		 */
 
-		cause &= ~MIPS_INT_MASK_3;
-		_splset(MIPS_SR_INT_IE |
-		    ((status & ~cause) & MIPS_HARD_INT_MASK));
 	}
 
 	/*
@@ -489,11 +478,7 @@ algor_p4032_iointr(u_int32_t status, u_int32_t cause, u_int32_t pc,
 				(*ih->ih_func)(ih->ih_arg);
 			}
 		}
-		cause &= ~(MIPS_INT_MASK_0 << level);
 	}
-
-	/* Re-enable anything that we have processed. */
-	_splset(MIPS_SR_INT_IE | ((status & ~cause) & MIPS_HARD_INT_MASK));
 }
 
 /*****************************************************************************
@@ -501,7 +486,7 @@ algor_p4032_iointr(u_int32_t status, u_int32_t cause, u_int32_t pc,
  *****************************************************************************/
 
 int
-algor_p4032_pci_intr_map(struct pci_attach_args *pa,
+algor_p4032_pci_intr_map(const struct pci_attach_args *pa,
     pci_intr_handle_t *ihp)
 {
 	static const int pciirqmap[6/*device*/][4/*pin*/] = {

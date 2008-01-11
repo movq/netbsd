@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.103 2007/12/31 15:31:24 ad Exp $	*/
+/*	$NetBSD: print.c,v 1.117 2011/01/22 21:09:51 christos Exp $	*/
 
 /*
  * Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -70,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.6 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.103 2007/12/31 15:31:24 ad Exp $");
+__RCSID("$NetBSD: print.c,v 1.117 2011/01/22 21:09:51 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -388,10 +381,8 @@ groups(void *arg, VARENT *ve, int mode)
 	} else
 		left = -1;
 
-	if (ki->p_ngroups == 0) {
+	if (ki->p_ngroups == 0)
 		fmt_putc('-', &left);
-		return;
-	}
 
 	for (i = 0; i < ki->p_ngroups; i++) {
 		(void)snprintf(buf, sizeof(buf), "%d", ki->p_groups[i]);
@@ -428,10 +419,8 @@ groupnames(void *arg, VARENT *ve, int mode)
 	} else
 		left = -1;
 
-	if (ki->p_ngroups == 0) {
+	if (ki->p_ngroups == 0)
 		fmt_putc('-', &left);
-		return;
-	}
 
 	for (i = 0; i < ki->p_ngroups; i++) {
 		if (i)
@@ -492,6 +481,16 @@ state(void *arg, VARENT *ve, int mode)
 	flag = k->p_flag;
 	cp = buf;
 
+	/*
+	 * NOTE: There are historical letters, which are no longer used:
+	 *
+	 * - W: indicated that process is swapped out.
+	 * - L: indicated non-zero l_holdcnt (i.e. that process was
+	 *   prevented from swapping-out.
+	 *
+	 * These letters should not be used for new states to avoid
+	 * conflicts with old applications which might depend on them.
+	 */
 	switch (k->p_stat) {
 
 	case LSSTOP:
@@ -500,15 +499,18 @@ state(void *arg, VARENT *ve, int mode)
 
 	case LSSLEEP:
 		if (flag & L_SINTR)	/* interruptable (long) */
-			*cp = k->p_slptime >= maxslp ? 'I' : 'S';
+			*cp = (int)k->p_slptime >= maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
 
 	case LSRUN:
 	case LSIDL:
-	case LSONPROC:
 		*cp = 'R';
+		break;
+
+	case LSONPROC:
+		*cp = 'O';
 		break;
 
 	case LSZOMB:
@@ -524,9 +526,6 @@ state(void *arg, VARENT *ve, int mode)
 		*cp = '?';
 	}
 	cp++;
-	if (flag & L_INMEM) {
-	} else
-		*cp++ = 'W';
 	if (k->p_nice < NZERO)
 		*cp++ = '<';
 	else if (k->p_nice > NZERO)
@@ -539,9 +538,6 @@ state(void *arg, VARENT *ve, int mode)
 		*cp++ = 'V';
 	if (flag & P_SYSTEM)
 		*cp++ = 'K';
-	/* system process might have this too, don't need to double up */
-	else if (k->p_holdcnt)
-		*cp++ = 'L';
 	if (k->p_eflag & EPROC_SLEADER)
 		*cp++ = 's';
 	if (flag & P_SA)
@@ -577,15 +573,18 @@ lstate(void *arg, VARENT *ve, int mode)
 
 	case LSSLEEP:
 		if (flag & L_SINTR)	/* interruptible (long) */
-			*cp = k->l_slptime >= maxslp ? 'I' : 'S';
+			*cp = (int)k->l_slptime >= maxslp ? 'I' : 'S';
 		else
 			*cp = 'D';
 		break;
 
 	case LSRUN:
 	case LSIDL:
-	case LSONPROC:
 		*cp = 'R';
+		break;
+
+	case LSONPROC:
+		*cp = 'O';
 		break;
 
 	case LSZOMB:
@@ -602,11 +601,10 @@ lstate(void *arg, VARENT *ve, int mode)
 		*cp = '?';
 	}
 	cp++;
-	if (flag & L_INMEM) {
-	} else
-		*cp++ = 'W';
-	if (k->l_holdcnt)
-		*cp++ = 'L';
+	if (flag & L_SYSTEM)
+		*cp++ = 'K';
+	if (flag & L_SA)
+		*cp++ = 'a';
 	if (flag & L_DETACHED)
 		*cp++ = '-';
 	*cp = '\0';
@@ -720,7 +718,7 @@ tdev(void *arg, VARENT *ve, int mode)
 				v->width = 2;
 	} else {
 		(void)snprintf(buff, sizeof(buff),
-		    "%d/%d", major(dev), minor(dev));
+		    "%lld/%lld", (long long)major(dev), (long long)minor(dev));
 		strprintorsetwidth(v, buff, mode);
 	}
 }
@@ -979,8 +977,7 @@ vsize(void *arg, VARENT *ve, int mode)
 
 	k = arg;
 	v = ve->var;
-	intprintorsetwidth(v,
-	    pgtok(k->p_vm_dsize + k->p_vm_ssize + k->p_vm_tsize), mode);
+	intprintorsetwidth(v, pgtok(k->p_vm_msize), mode);
 }
 
 void
@@ -1004,6 +1001,17 @@ p_rssize(void *arg, VARENT *ve, int mode)	/* doesn't account for text */
 	k = arg;
 	v = ve->var;
 	intprintorsetwidth(v, pgtok(k->p_vm_rssize), mode);
+}
+
+void
+cpuid(void *arg, VARENT *ve, int mode)
+{
+	struct kinfo_lwp *l;
+	VAR *v;
+
+	l = arg;
+	v = ve->var;
+	intprintorsetwidth(v, l->l_cpuid, mode);
 }
 
 void
@@ -1073,9 +1081,7 @@ getpcpu(k)
 
 #define	fxtofl(fixpt)	((double)(fixpt) / fscale)
 
-	/* XXX - I don't like this */
-	if (k->p_swtime == 0 || (k->p_flag & L_INMEM) == 0 ||
-	    k->p_realstat == SZOMB)
+	if (k->p_swtime == 0 || k->p_realstat == SZOMB)
 		return (0.0);
 	if (rawcpu)
 		return (100.0 * fxtofl(k->p_pctcpu));
@@ -1088,10 +1094,12 @@ pcpu(void *arg, VARENT *ve, int mode)
 {
 	struct kinfo_proc2 *k;
 	VAR *v;
+	double dbl;
 
 	k = arg;
 	v = ve->var;
-	doubleprintorsetwidth(v, getpcpu(k), 1, mode);
+	dbl = getpcpu(k);
+	doubleprintorsetwidth(v, dbl, (dbl >= 99.95) ? 0 : 1, mode);
 }
 
 double
@@ -1107,8 +1115,6 @@ getpmem(k)
 	if (failure)
 		return (0.0);
 
-	if ((k->p_flag & L_INMEM) == 0)
-		return (0.0);
 	/* XXX want pmap ptpages, segtab, etc. (per architecture) */
 	szptudot = uspace/getpagesize();
 	/* XXX don't have info about shared */

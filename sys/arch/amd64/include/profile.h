@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.h,v 1.12 2007/12/20 23:46:12 ad Exp $	*/
+/*	$NetBSD: profile.h,v 1.15 2008/10/26 00:08:15 mrg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -30,6 +30,8 @@
  *
  *	@(#)profile.h	8.1 (Berkeley) 6/11/93
  */
+
+#ifdef __x86_64__
 
 #ifdef _KERNEL_OPT
 #include "opt_multiprocessor.h"
@@ -114,13 +116,13 @@ mcount_disable_intr(void)
 static inline u_long
 mcount_read_psl(void)
 {
-	return (HYPERVISOR_shared_info->vcpu_info[0].evtchn_upcall_mask);
+	return (curcpu()->ci_vcpu->evtchn_upcall_mask);
 }
 
 static inline void
 mcount_write_psl(u_long psl)
 {
-	HYPERVISOR_shared_info->vcpu_info[0].evtchn_upcall_mask = psl;
+	curcpu()->ci_vcpu->evtchn_upcall_mask = psl;
 	x86_lfence();
 	/* XXX can't call hypervisor_force_callback() because we're in mcount*/ 
 }
@@ -137,14 +139,14 @@ mcount_read_psl(void)
 {
 	u_long	ef;
 
-	__asm volatile("pushfl; popl %0" : "=r" (ef));
+	__asm volatile("pushfq; popq %0" : "=r" (ef));
 	return (ef);
 }
 
 static inline void
 mcount_write_psl(u_long ef)
 {
-	__asm volatile("pushl %0; popfl" : : "r" (ef));
+	__asm volatile("pushq %0; popfq" : : "r" (ef));
 }
 
 #endif /* XEN */
@@ -158,3 +160,9 @@ mcount_write_psl(u_long ef)
 	mcount_write_psl(s);
 
 #endif /* _KERNEL */
+
+#else	/*	__x86_64__	*/
+
+#include <i386/profile.h>
+
+#endif	/*	__x86_64__	*/

@@ -1,4 +1,4 @@
-/*	$NetBSD: adb.c,v 1.24 2007/11/07 19:47:00 garbled Exp $	*/
+/*	$NetBSD: adb.c,v 1.29 2009/12/12 14:44:09 tsutsui Exp $	*/
 
 /*-
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Bradley A. Grantham.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.24 2007/11/07 19:47:00 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.29 2009/12/12 14:44:09 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -60,9 +55,9 @@ __KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.24 2007/11/07 19:47:00 garbled Exp $");
 /*
  * Function declarations.
  */
-static int	adbmatch __P((struct device *, struct cfdata *, void *));
-static void	adbattach __P((struct device *, struct device *, void *));
-static int	adbprint __P((void *, const char *));
+static int	adbmatch(struct device *, struct cfdata *, void *);
+static void	adbattach(struct device *, struct device *, void *);
+static int	adbprint(void *, const char *);
 static void	adb_todr_init(void);
 
 /*
@@ -81,10 +76,7 @@ CFATTACH_DECL(adb, sizeof(struct adb_softc),
     adbmatch, adbattach, NULL, NULL);
 
 static int
-adbmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+adbmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -104,9 +96,7 @@ adbmatch(parent, cf, aux)
 }
 
 static void
-adbattach(parent, self, aux)
-	struct device *parent, *self;
-	void   *aux;
+adbattach(struct device *parent, struct device *self, void *aux)
 {
 	struct adb_softc *sc = (struct adb_softc *)self;
 	struct confargs *ca = aux;
@@ -204,9 +194,7 @@ adbattach(parent, self, aux)
 }
 
 int
-adbprint(args, name)
-	void *args;
-	const char *name;
+adbprint(void *args, const char *name)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)args;
 	int rv = UNCONF;
@@ -279,7 +267,7 @@ adbprint(args, name)
 #define DIFF19041970 2082844800
 
 static int
-adb_todr_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
+adb_todr_get(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	unsigned long sec;
 
@@ -291,7 +279,7 @@ adb_todr_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
 }
 
 static int
-adb_todr_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
+adb_todr_set(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	unsigned long sec;
 

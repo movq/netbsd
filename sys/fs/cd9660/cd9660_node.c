@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_node.c,v 1.20 2008/01/02 11:48:40 ad Exp $	*/
+/*	$NetBSD: cd9660_node.c,v 1.28 2011/05/19 03:11:55 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_node.c,v 1.20 2008/01/02 11:48:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_node.c,v 1.28 2011/05/19 03:11:55 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,20 +71,19 @@ extern int prtactive;	/* 1 => print out reclaim of active vnodes */
 
 struct pool cd9660_node_pool;
 
-static u_int cd9660_chars2ui(u_char *, int);
+static u_int cd9660_chars2ui(const u_char *, int);
 
 /*
  * Initialize hash links for inodes and dnodes.
  */
 void
-cd9660_init()
+cd9660_init(void)
 {
 
 	malloc_type_attach(M_ISOFSMNT);
 	pool_init(&cd9660_node_pool, sizeof(struct iso_node), 0, 0, 0,
 	    "cd9660nopl", &pool_allocator_nointr, IPL_NONE);
-	isohashtbl = hashinit(desiredvnodes, HASH_LIST, M_ISOFSMNT, M_WAITOK,
-	    &isohash);
+	isohashtbl = hashinit(desiredvnodes, HASH_LIST, true, &isohash);
 	mutex_init(&cd9660_ihash_lock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&cd9660_hashlock, MUTEX_DEFAULT, IPL_NONE);
 }
@@ -94,15 +93,14 @@ cd9660_init()
  */
 
 void
-cd9660_reinit()
+cd9660_reinit(void)
 {
 	struct iso_node *ip;
 	struct ihashhead *oldhash1, *hash1;
 	u_long oldmask1, mask1, val;
 	u_int i;
 
-	hash1 = hashinit(desiredvnodes, HASH_LIST, M_ISOFSMNT, M_WAITOK,
-	    &mask1);
+	hash1 = hashinit(desiredvnodes, HASH_LIST, true, &mask1);
 
 	mutex_enter(&cd9660_ihash_lock);
 	oldhash1 = isohashtbl;
@@ -117,16 +115,16 @@ cd9660_reinit()
 		}
 	}
 	mutex_exit(&cd9660_ihash_lock);
-	hashdone(oldhash1, M_ISOFSMNT);
+	hashdone(oldhash1, HASH_LIST, oldmask1);
 }
 
 /*
  * Destroy node pool and hash table.
  */
 void
-cd9660_done()
+cd9660_done(void)
 {
-	hashdone(isohashtbl, M_ISOFSMNT);
+	hashdone(isohashtbl, HASH_LIST, isohash);
 	pool_destroy(&cd9660_node_pool);
 	mutex_destroy(&cd9660_ihash_lock);
 	mutex_destroy(&cd9660_hashlock);
@@ -138,10 +136,7 @@ cd9660_done()
  * to it. If it is in core, but locked, wait for it.
  */
 struct vnode *
-cd9660_ihashget(dev, inum, flags)
-	dev_t dev;
-	ino_t inum;
-	int flags;
+cd9660_ihashget(dev_t dev, ino_t inum, int flags)
 {
 	struct iso_node *ip;
 	struct vnode *vp;
@@ -156,7 +151,7 @@ loop:
 			} else {
 				mutex_enter(&vp->v_interlock);
 				mutex_exit(&cd9660_ihash_lock);
-				if (vget(vp, flags | LK_INTERLOCK))
+				if (vget(vp, flags))
 					goto loop;
 			}
 			return (vp);
@@ -172,8 +167,7 @@ loop:
  * ip->i_vnode must be initialized first.
  */
 void
-cd9660_ihashins(ip)
-	struct iso_node *ip;
+cd9660_ihashins(struct iso_node *ip)
 {
 	struct ihashhead *ipp;
 
@@ -184,15 +178,14 @@ cd9660_ihashins(ip)
 	LIST_INSERT_HEAD(ipp, ip, i_hash);
 	mutex_exit(&cd9660_ihash_lock);
 
-	lockmgr(&ip->i_vnode->v_lock, LK_EXCLUSIVE, &ip->i_vnode->v_interlock);
+	VOP_LOCK(ITOV(ip), LK_EXCLUSIVE);
 }
 
 /*
  * Remove the inode from the hash table.
  */
 void
-cd9660_ihashrem(ip)
-	struct iso_node *ip;
+cd9660_ihashrem(struct iso_node *ip)
 {
 	mutex_enter(&cd9660_ihash_lock);
 	LIST_REMOVE(ip, i_hash);
@@ -204,8 +197,7 @@ cd9660_ihashrem(ip)
  * truncate and deallocate the file.
  */
 int
-cd9660_inactive(v)
-	void *v;
+cd9660_inactive(void *v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
@@ -215,16 +207,13 @@ cd9660_inactive(v)
 	struct iso_node *ip = VTOI(vp);
 	int error = 0;
 
-	if (prtactive && vp->v_usecount != 0)
-		vprint("cd9660_inactive: pushing active", vp);
-
 	/*
 	 * If we are done with the inode, reclaim it
 	 * so that it can be reused immediately.
 	 */
 	ip->i_flag = 0;
 	*ap->a_recycle = (ip->inode.iso_mode == 0);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return error;
 }
 
@@ -232,8 +221,7 @@ cd9660_inactive(v)
  * Reclaim an inode so that it can be used for other purposes.
  */
 int
-cd9660_reclaim(v)
-	void *v;
+cd9660_reclaim(void *v)
 {
 	struct vop_reclaim_args /* {
 		struct vnode *a_vp;
@@ -242,7 +230,7 @@ cd9660_reclaim(v)
 	struct vnode *vp = ap->a_vp;
 	struct iso_node *ip = VTOI(vp);
 
-	if (prtactive && vp->v_usecount != 0)
+	if (prtactive && vp->v_usecount > 1)
 		vprint("cd9660_reclaim: pushing active", vp);
 	/*
 	 * Remove the inode from its hash chain.
@@ -251,7 +239,6 @@ cd9660_reclaim(v)
 	/*
 	 * Purge old data structures associated with the inode.
 	 */
-	cache_purge(vp);
 	if (ip->i_devvp) {
 		vrele(ip->i_devvp);
 		ip->i_devvp = 0;
@@ -266,10 +253,8 @@ cd9660_reclaim(v)
  * File attributes
  */
 void
-cd9660_defattr(isodir, inop, bp)
-	struct iso_directory_record *isodir;
-	struct iso_node *inop;
-	struct buf *bp;
+cd9660_defattr(struct iso_directory_record *isodir, struct iso_node *inop,
+	struct buf *bp)
 {
 	struct buf *bp2 = NULL;
 	struct iso_mnt *imp;
@@ -329,10 +314,8 @@ cd9660_defattr(isodir, inop, bp)
  * Time stamps
  */
 void
-cd9660_deftstamp(isodir,inop,bp)
-	struct iso_directory_record *isodir;
-	struct iso_node *inop;
-	struct buf *bp;
+cd9660_deftstamp(struct iso_directory_record *isodir, struct iso_node *inop,
+	struct buf *bp)
 {
 	struct buf *bp2 = NULL;
 	struct iso_mnt *imp;
@@ -369,9 +352,7 @@ cd9660_deftstamp(isodir,inop,bp)
 }
 
 int
-cd9660_tstamp_conv7(pi,pu)
-	u_char *pi;
-	struct timespec *pu;
+cd9660_tstamp_conv7(const u_char *pi, struct timespec *pu)
 {
 	int crtime, days;
 	int y, m, d, hour, minute, second, tz;
@@ -412,9 +393,7 @@ cd9660_tstamp_conv7(pi,pu)
 }
 
 static u_int
-cd9660_chars2ui(begin,len)
-	u_char *begin;
-	int len;
+cd9660_chars2ui(const u_char *begin, int len)
 {
 	u_int rc;
 
@@ -426,9 +405,7 @@ cd9660_chars2ui(begin,len)
 }
 
 int
-cd9660_tstamp_conv17(pi,pu)
-	u_char *pi;
-	struct timespec *pu;
+cd9660_tstamp_conv17(const u_char *pi, struct timespec *pu)
 {
 	u_char tbuf[7];
 
@@ -457,9 +434,7 @@ cd9660_tstamp_conv17(pi,pu)
 }
 
 ino_t
-isodirino(isodir, imp)
-	struct iso_directory_record *isodir;
-	struct iso_mnt *imp;
+isodirino(struct iso_directory_record *isodir, struct iso_mnt *imp)
 {
 	ino_t ino;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sab.c,v 1.40 2007/11/28 18:04:33 ad Exp $	*/
+/*	$NetBSD: sab.c,v 1.47 2011/05/24 01:17:36 mrg Exp $	*/
 /*	$OpenBSD: sab.c,v 1.7 2002/04/08 17:49:42 jason Exp $	*/
 
 /*
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sab.c,v 1.40 2007/11/28 18:04:33 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sab.c,v 1.47 2011/05/24 01:17:36 mrg Exp $");
 
 #include "opt_kgdb.h"
 #include <sys/types.h>
@@ -104,14 +104,15 @@ struct sabtty_softc {
 	u_char *		sc_txp;
 	int			sc_txc;
 	int			sc_flags;
-#define SABTTYF_STOP		0x01
-#define	SABTTYF_DONE		0x02
-#define	SABTTYF_RINGOVERFLOW	0x04
-#define	SABTTYF_CDCHG		0x08
-#define	SABTTYF_CONS_IN		0x10
-#define	SABTTYF_CONS_OUT	0x20
-#define	SABTTYF_TXDRAIN		0x40
-#define	SABTTYF_DONTDDB		0x80
+#define SABTTYF_STOP		0x0001
+#define	SABTTYF_DONE		0x0002
+#define	SABTTYF_RINGOVERFLOW	0x0004
+#define	SABTTYF_CDCHG		0x0008
+#define	SABTTYF_CONS_IN		0x0010
+#define	SABTTYF_CONS_OUT	0x0020
+#define	SABTTYF_TXDRAIN		0x0040
+#define	SABTTYF_DONTDDB		0x0080
+#define SABTTYF_IS_RSC		0x0100
 	uint8_t			sc_rbuf[SABTTY_RBUF_SIZE];
 	uint8_t			*sc_rend, *sc_rput, *sc_rget;
 	uint8_t			sc_polling, sc_pollrfc;
@@ -226,7 +227,8 @@ sab_match(struct device *parent, struct cfdata *match, void *aux)
 	struct ebus_attach_args *ea = aux;
 	char *compat;
 
-	if (strcmp(ea->ea_name, "se") == 0)
+	if (strcmp(ea->ea_name, "se") == 0 ||
+	    strcmp(ea->ea_name, "FJSV,se") == 0)
 		return (1);
 
 	compat = prom_getpropstring(ea->ea_node, "compatible");
@@ -288,6 +290,7 @@ sab_attach(struct device *parent, struct device *self, void *aux)
 		break;
 	}
 	aprint_normal("\n");
+	aprint_naive(": Serial controller\n");
 
 	/* Let current output drain */
 	DELAY(100000);
@@ -382,7 +385,7 @@ sabtty_attach(struct device *parent, struct device *self, void *aux)
 #endif
 
 	if (!is_kgdb) {
-		sc->sc_tty = ttymalloc();
+		sc->sc_tty = tty_alloc();
 		if (sc->sc_tty == NULL) {
 			aprint_normal(": failed to allocate tty\n");
 			return;
@@ -442,7 +445,10 @@ sabtty_attach(struct device *parent, struct device *self, void *aux)
 		}
 
 		t.c_ispeed= 0;
-		t.c_ospeed = 9600;
+		if (sc->sc_flags & SABTTYF_IS_RSC)
+			t.c_ospeed = 115200;
+		else
+			t.c_ospeed = 9600;
 		t.c_cflag = CREAD | CS8 | HUPCL;
 		sc->sc_tty->t_ospeed = 0;
 		sabttyparam(sc, sc->sc_tty, &t);
@@ -479,6 +485,7 @@ sabtty_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	aprint_normal("\n");
+	aprint_naive(": Serial port\n");
 }
 
 int
@@ -657,7 +664,7 @@ sabopen(dev_t dev, int flags, int mode, struct lwp *l)
 	struct proc *p;
 	int s, s1;
 
-	sc = device_lookup(&sabtty_cd, SABUNIT(dev));
+	sc = device_lookup_private(&sabtty_cd, SABUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -717,7 +724,7 @@ sabopen(dev_t dev, int flags, int mode, struct lwp *l)
 		    (tp->t_state & TS_CARR_ON) == 0) {
 			int error;
 
-			error = ttysleep(tp, &tp->t_rawq.c_cv, true, 0);
+			error = ttysleep(tp, &tp->t_rawcv, true, 0);
 			if (error != 0) {
 				mutex_spin_exit(&tty_lock);
 				return (error);
@@ -752,7 +759,7 @@ sabopen(dev_t dev, int flags, int mode, struct lwp *l)
 int
 sabclose(dev_t dev, int flags, int mode, struct lwp *l)
 {
-	struct sabtty_softc *sc = device_lookup(&sabtty_cd, SABUNIT(dev));
+	struct sabtty_softc *sc = device_lookup_private(&sabtty_cd, SABUNIT(dev));
 	struct sab_softc *bc = sc->sc_parent;
 	struct tty *tp = sc->sc_tty;
 	int s;
@@ -792,7 +799,7 @@ sabclose(dev_t dev, int flags, int mode, struct lwp *l)
 int
 sabread(dev_t dev, struct uio *uio, int flags)
 {
-	struct sabtty_softc *sc = device_lookup(&sabtty_cd, SABUNIT(dev));
+	struct sabtty_softc *sc = device_lookup_private(&sabtty_cd, SABUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return ((*tp->t_linesw->l_read)(tp, uio, flags));
@@ -801,7 +808,7 @@ sabread(dev_t dev, struct uio *uio, int flags)
 int
 sabwrite(dev_t dev, struct uio *uio, int flags)
 {
-	struct sabtty_softc *sc = device_lookup(&sabtty_cd, SABUNIT(dev));
+	struct sabtty_softc *sc = device_lookup_private(&sabtty_cd, SABUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return ((*tp->t_linesw->l_write)(tp, uio, flags));
@@ -810,7 +817,7 @@ sabwrite(dev_t dev, struct uio *uio, int flags)
 int
 sabioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
-	struct sabtty_softc *sc = device_lookup(&sabtty_cd, SABUNIT(dev));
+	struct sabtty_softc *sc = device_lookup_private(&sabtty_cd, SABUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 	int error;
 
@@ -873,7 +880,7 @@ sabioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 struct tty *
 sabtty(dev_t dev)
 {
-	struct sabtty_softc *sc = device_lookup(&sabtty_cd, SABUNIT(dev));
+	struct sabtty_softc *sc = device_lookup_private(&sabtty_cd, SABUNIT(dev));
 
 	return (sc->sc_tty);
 }
@@ -881,7 +888,7 @@ sabtty(dev_t dev)
 void
 sabstop(struct tty *tp, int flag)
 {
-	struct sabtty_softc *sc = device_lookup(&sabtty_cd, SABUNIT(tp->t_dev));
+	struct sabtty_softc *sc = device_lookup_private(&sabtty_cd, SABUNIT(tp->t_dev));
 	int s;
 
 	s = spltty();
@@ -898,7 +905,7 @@ sabstop(struct tty *tp, int flag)
 int
 sabpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct sabtty_softc *sc = device_lookup(&sabtty_cd, SABUNIT(dev));
+	struct sabtty_softc *sc = device_lookup_private(&sabtty_cd, SABUNIT(dev));
 	struct tty *tp = sc->sc_tty;
 
 	return ((*tp->t_linesw->l_poll)(tp, events, l));
@@ -1032,7 +1039,7 @@ sabttyparam(struct sabtty_softc *sc, struct tty *tp, struct termios *t)
 		dafo |= SAB_DAFO_PAR_NONE;
 	SAB_WRITE(sc, SAB_DAFO, dafo);
 
-	if (ospeed != 0) {
+	if (!(sc->sc_flags & SABTTYF_IS_RSC) && ospeed != 0) {
 		SAB_WRITE(sc, SAB_BGR, ospeed & 0xff);
 		r = SAB_READ(sc, SAB_CCR2);
 		r &= ~(SAB_CCR2_BR9 | SAB_CCR2_BR8);
@@ -1063,7 +1070,7 @@ sabttyparam(struct sabtty_softc *sc, struct tty *tp, struct termios *t)
 int
 sabtty_param(struct tty *tp, struct termios *t)
 {
-	struct sabtty_softc *sc = device_lookup(&sabtty_cd, SABUNIT(tp->t_dev));
+	struct sabtty_softc *sc = device_lookup_private(&sabtty_cd, SABUNIT(tp->t_dev));
 
 	return (sabttyparam(sc, tp, t));
 }
@@ -1071,7 +1078,7 @@ sabtty_param(struct tty *tp, struct termios *t)
 void
 sabtty_start(struct tty *tp)
 {
-	struct sabtty_softc *sc = device_lookup(&sabtty_cd, SABUNIT(tp->t_dev));
+	struct sabtty_softc *sc = device_lookup_private(&sabtty_cd, SABUNIT(tp->t_dev));
 	int s;
 
 	s = spltty();
@@ -1299,6 +1306,10 @@ sabtty_console_flags(struct sabtty_softc *sc)
 		if (channel == cookie)
 			sc->sc_flags |= SABTTYF_CONS_OUT;
 	}
+	/* Are we connected to an E250 RSC? */
+	if (channel == prom_getpropint(node, "ssp-console", -1) ||
+	    channel == prom_getpropint(node, "ssp-control", -1))
+		sc->sc_flags |= SABTTYF_IS_RSC;
 }
 
 void

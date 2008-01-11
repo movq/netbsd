@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.es,v 1.9 2007/12/25 01:03:32 ad Exp $	*/
+/*	$NetBSD: msg.md.es,v 1.13 2011/04/04 08:30:32 mbalmer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -39,8 +35,11 @@
 /* MD Message catalog -- Spanish, i386 version */
 
 message md_hello
-{Si ha iniciado desde disquette, ahora deberia retirar el disco.
+{
+}
 
+message md_may_remove_boot_medium
+{Si ha iniciado desde disquette, ahora deberia retirar el disco.
 }
 
 message Keyboard_type {Tipo de teclado}
@@ -52,7 +51,7 @@ message dobad144
 
 message getboottype
 {¿Le gustaria instalar el set normal de bootblocks o bootblocks por serie?
- 
+
 Bootblocks normal usa el dispositivo de consola de BIOS como consola
 (normalmente el monitor y teclado). Bootblocks por serie usa el primer
 puerto serie como consola.
@@ -72,8 +71,6 @@ message Use_serial_com2		{Usar puerto serie com2}
 message Use_serial_com3		{Usar puerto serie com3}
 message serial_baud_rate	{Baudios puerto serie}
 message Use_existing_bootblocks	{Usar bootblocks existente}
-
-message No_Bootcode		{No hay código de arranque para la partición root}
 
 message dobootblks
 {Instalando bloques de arranque en %s....
@@ -165,4 +162,3 @@ message updatembr
 Record a la ultima versión del código de arranque de NetBSD?}
 
 message set_kernel_1  {Núcleo (GENERIC)}
-message set_kernel_2  {Núcleo (GENERIC.NOACPI)}

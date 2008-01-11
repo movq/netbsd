@@ -1,4 +1,4 @@
-#	$NetBSD: files.bebox,v 1.51 2007/12/08 15:31:16 ober Exp $
+#	$NetBSD: files.bebox,v 1.55 2010/10/16 05:59:35 kiyohara Exp $
 #
 # First try for bebox specific configuration info
 #
@@ -7,8 +7,6 @@ maxpartitions 8
 maxusers 2 8 64
 
 include "arch/powerpc/pic/files.pic"
-
-defflag	XSERVER
 
 file	arch/bebox/bebox/autoconf.c
 file	arch/bebox/bebox/machdep.c
@@ -40,11 +38,6 @@ include "dev/ata/files.ata"
 file	dev/md_root.c			memory_disk_hooks
 
 #
-# Machine-independent I2O drivers.
-#
-include "dev/i2o/files.i2o"
-
-#
 # System bus types
 #
 define mainbus { }
@@ -57,8 +50,10 @@ file	arch/bebox/bebox/cpu.c
 
 file	arch/bebox/bebox/mainbus.c	mainbus|cpu needs-flag
 
-# generic fb driver
-include "dev/wsfb/files.wsfb"
+#
+# Machine-independent I2O drivers. (require iop by pci)
+#
+include "dev/i2o/files.i2o"
 
 #
 # PCI-only drivers
@@ -93,34 +88,9 @@ include "dev/isa/files.isa"
 file    arch/powerpc/isa/isa_machdep_common.c   isa
 file    arch/powerpc/isa/isadma_machdep.c       isa
 
-#file	arch/bebox/isa/isa_machdep.c	isa
-#file	arch/bebox/isa/isadma_machdep.c	isa
-
-# PC clock
-#file	arch/bebox/isa/isaclock.c		isa
-
 device	mcclock: mc146818
 attach	mcclock at isa with mcclock_isa
 file	arch/bebox/isa/mcclock_isa.c		mcclock_isa
-
-# attribute used to represent the "keyboard controller"
-# XXX should be a real device
-define pckbcport { [irq = -1], [port = -1] }
-
-# PC Mice; Logitech-style, Microsoft-style, and PS/2-style
-device	lms
-attach	lms at isa
-file	arch/bebox/isa/lms.c		lms needs-flag
-device	mms
-attach	mms at isa
-file	arch/bebox/isa/mms.c		mms needs-flag
-
-include	"dev/wscons/files.wscons"
-include	"dev/wsfont/files.wsfont"
-
-#device	pfb: wsemuldisplaydev, wsrasteremulops
-#attach	pfb at pci
-#file	arch/bebox/pci/pfb.c		pfb needs-flag
 
 include "dev/pckbport/files.pckbport"
 
@@ -133,8 +103,5 @@ file	dev/isa/fdc_isa.c		fdc_isa
 
 device	fd: disk
 attach	fd at fdc
-
-# ISA Plug 'n Play support
-file    arch/powerpc/isa/isapnp_machdep.c       isapnp
 
 include	"arch/bebox/conf/majors.bebox"

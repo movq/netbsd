@@ -1,4 +1,4 @@
-/* $NetBSD: wsfontload.c,v 1.12 2006/08/17 23:42:37 uwe Exp $ */
+/* $NetBSD: wsfontload.c,v 1.14 2009/04/19 02:25:48 lukem Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed for the NetBSD Project
- *	by Matthias Drochner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -93,7 +87,7 @@ usage(void)
 static const char *
 rgetfontorder(int fontorder)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < sizeof(fontorders) / sizeof(fontorders[0]); i++)
 		if (fontorders[i].val == fontorder)
@@ -108,7 +102,7 @@ rgetfontorder(int fontorder)
 static const char *
 rgetencoding(int enc)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < sizeof(encodings) / sizeof(encodings[0]); i++)
 		if (encodings[i].val == enc)
@@ -123,15 +117,16 @@ rgetencoding(int enc)
 static int
 getencoding(char *name)
 {
-	int i;
+	size_t i;
+	int j;
 
 	for (i = 0; i < sizeof(encodings) / sizeof(encodings[0]); i++)
 		if (!strcmp(name, encodings[i].name))
 			return (encodings[i].val);
 
-	if (sscanf(name, "%d", &i) != 1)
+	if (sscanf(name, "%d", &j) != 1)
 		errx(1, "invalid encoding");
-	return (i);
+	return (j);
 }
 
 int
@@ -219,7 +214,7 @@ main(int argc, char **argv)
 	res = read(ffd, buf, len);
 	if (res < 0)
 		err(4, "read font");
-	if (res != len)
+	if ((size_t)res != len)
 		errx(4, "short read");
 
 	f.data = buf;

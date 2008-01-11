@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipi_base.c,v 1.145 2007/07/09 21:01:21 ad Exp $	*/
+/*	$NetBSD: scsipi_base.c,v 1.155 2010/11/13 13:52:11 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002, 2003, 2004 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.145 2007/07/09 21:01:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.155 2010/11/13 13:52:11 uebayasi Exp $");
 
 #include "opt_scsi.h"
 
@@ -55,8 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.145 2007/07/09 21:01:21 ad Exp $")
 #include <sys/kthread.h>
 #include <sys/hash.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <dev/scsipi/scsi_spc.h>
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsipi_disk.h>
@@ -65,6 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.145 2007/07/09 21:01:21 ad Exp $")
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsi_message.h>
+
+#include <machine/param.h>
 
 static int	scsipi_complete(struct scsipi_xfer *);
 static void	scsipi_request_sense(struct scsipi_xfer *);
@@ -137,9 +130,8 @@ scsipi_channel_init(struct scsipi_channel *chan)
 	 */
 	if (kthread_create(PRI_NONE, 0, NULL, scsipi_completion_thread, chan,
 	    &chan->chan_thread, "%s", chan->chan_name)) {
-		printf("%s: unable to create completion thread for "
-		    "channel %d\n", adapt->adapt_dev->dv_xname,
-		    chan->chan_channel);
+		aprint_error_dev(adapt->adapt_dev, "unable to create completion thread for "
+		    "channel %d\n", chan->chan_channel);
 		panic("scsipi_channel_init");
 	}
 
@@ -507,6 +499,7 @@ scsipi_put_xs(struct scsipi_xfer *xs)
 	SC_DEBUG(periph, SCSIPI_DB3, ("scsipi_free_xs\n"));
 
 	TAILQ_REMOVE(&periph->periph_xferq, xs, device_q);
+	callout_destroy(&xs->xs_callout);
 	pool_put(&scsipi_xfer_pool, xs);
 
 #ifdef DIAGNOSTIC
@@ -712,7 +705,7 @@ scsipi_kill_pending(struct scsipi_periph *periph)
 /*
  * scsipi_print_cdb:
  * prints a command descriptor block (for debug purpose, error messages,
- * SCSIPI_VERBOSE, ...)
+ * SCSIVERBOSE, ...)
  */
 void
 scsipi_print_cdb(struct scsipi_generic *cmd)
@@ -773,7 +766,6 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 	struct scsipi_periph *periph = xs->xs_periph;
 	u_int8_t key;
 	int error;
-#ifndef	SCSIVERBOSE
 	u_int32_t info;
 	static const char *error_mes[] = {
 		"soft error (corrected)",
@@ -785,7 +777,6 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		"search returned equal", "volume overflow",
 		"verify miscompare", "unknown error key"
 	};
-#endif
 
 	sense = &xs->sense.scsi_sense;
 #ifdef SCSIPI_DEBUG
@@ -862,12 +853,10 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 		printf(" DEFERRED ERROR, key = 0x%x\n", key);
 		/* FALLTHROUGH */
 	case 0x70:
-#ifndef	SCSIVERBOSE
 		if ((sense->response_code & SSD_RCODE_VALID) != 0)
 			info = _4btol(sense->info);
 		else
 			info = 0;
-#endif
 		key = SSD_SENSE_KEY(sense->flags);
 
 		switch (key) {
@@ -952,44 +941,44 @@ scsipi_interpret_sense(struct scsipi_xfer *xs)
 			break;
 		}
 
-#ifdef SCSIVERBOSE
-		if (key && (xs->xs_control & XS_CTL_SILENT) == 0)
-			scsipi_print_sense(xs, 0);
-#else
-		if (key) {
-			scsipi_printaddr(periph);
-			printf("%s", error_mes[key - 1]);
-			if ((sense->response_code & SSD_RCODE_VALID) != 0) {
-				switch (key) {
-				case SKEY_NOT_READY:
-				case SKEY_ILLEGAL_REQUEST:
-				case SKEY_UNIT_ATTENTION:
-				case SKEY_DATA_PROTECT:
-					break;
-				case SKEY_BLANK_CHECK:
-					printf(", requested size: %d (decimal)",
-					    info);
-					break;
-				case SKEY_ABORTED_COMMAND:
-					if (xs->xs_retries)
-						printf(", retrying");
-					printf(", cmd 0x%x, info 0x%x",
-					    xs->cmd->opcode, info);
-					break;
-				default:
-					printf(", info = %d (decimal)", info);
-				}
+		/* Print verbose decode if appropriate and possible */
+		if ((key == 0) ||
+		    ((xs->xs_control & XS_CTL_SILENT) != 0) ||
+		    (scsipi_print_sense(xs, 0) != 0))
+			return (error);
+
+		/* Print brief(er) sense information */
+		scsipi_printaddr(periph);
+		printf("%s", error_mes[key - 1]);
+		if ((sense->response_code & SSD_RCODE_VALID) != 0) {
+			switch (key) {
+			case SKEY_NOT_READY:
+			case SKEY_ILLEGAL_REQUEST:
+			case SKEY_UNIT_ATTENTION:
+			case SKEY_DATA_PROTECT:
+				break;
+			case SKEY_BLANK_CHECK:
+				printf(", requested size: %d (decimal)",
+				    info);
+				break;
+			case SKEY_ABORTED_COMMAND:
+				if (xs->xs_retries)
+					printf(", retrying");
+				printf(", cmd 0x%x, info 0x%x",
+				    xs->cmd->opcode, info);
+				break;
+			default:
+				printf(", info = %d (decimal)", info);
 			}
-			if (sense->extra_len != 0) {
-				int n;
-				printf(", data =");
-				for (n = 0; n < sense->extra_len; n++)
-					printf(" %02x",
-					    sense->csi[n]);
-			}
-			printf("\n");
 		}
-#endif
+		if (sense->extra_len != 0) {
+			int n;
+			printf(", data =");
+			for (n = 0; n < sense->extra_len; n++)
+				printf(" %02x",
+				    sense->csi[n]);
+		}
+		printf("\n");
 		return (error);
 
 	/*
@@ -1157,6 +1146,9 @@ int
 scsipi_prevent(struct scsipi_periph *periph, int type, int flags)
 {
 	struct scsi_prevent_allow_medium_removal cmd;
+
+	if (periph->periph_quirks & PQUIRK_NODOORLOCK)
+		return 0;
 
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.opcode = SCSI_PREVENT_ALLOW_MEDIUM_REMOVAL;
@@ -1443,9 +1435,7 @@ scsipi_complete(struct scsipi_xfer *xs)
 			if (xs->resid < xs->datalen) {
 				printf("we read %d bytes of sense anyway:\n",
 				    xs->datalen - xs->resid);
-#ifdef SCSIVERBOSE
 				scsipi_print_sense_data((void *)xs->data, 0);
-#endif
 			}
 			return EINVAL;
 		}
@@ -1521,7 +1511,8 @@ scsipi_complete(struct scsipi_xfer *xs)
 			 */
 			if ((xs->xs_control & XS_CTL_POLL) ||
 			    (chan->chan_flags & SCSIPI_CHAN_TACTIVE) == 0) {
-				delay(1000000);
+				/* XXX: quite extreme */
+				kpause("xsbusy", false, hz, NULL);
 			} else if (!callout_pending(&periph->periph_callout)) {
 				scsipi_periph_freeze(periph, 1);
 				callout_reset(&periph->periph_callout,
@@ -1872,19 +1863,6 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 
 	(chan->chan_bustype->bustype_cmd)(xs);
 
-	if (xs->xs_control & XS_CTL_DATA_ONSTACK) {
-#if 1
-		if (xs->xs_control & XS_CTL_ASYNC)
-			panic("scsipi_execute_xs: on stack and async");
-#endif
-		/*
-		 * If the I/O buffer is allocated on stack, the
-		 * process must NOT be swapped out, as the device will
-		 * be accessing the stack.
-		 */
-		uvm_lwp_hold(curlwp);
-	}
-
 	xs->xs_status &= ~XS_STS_DONE;
 	xs->error = XS_NOERROR;
 	xs->resid = xs->datalen;
@@ -2028,9 +2006,6 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 * into....
 	 */
  free_xs:
-	if (xs->xs_control & XS_CTL_DATA_ONSTACK)
-		uvm_lwp_rele(curlwp);
-
 	s = splbio();
 	scsipi_put_xs(xs);
 	splx(s);
@@ -2201,7 +2176,7 @@ scsipi_print_xfer_mode(struct scsipi_periph *periph)
 	if ((periph->periph_flags & PERIPH_MODE_VALID) == 0)
 		return;
 
-	aprint_normal("%s: ", periph->periph_dev->dv_xname);
+	aprint_normal_dev(periph->periph_dev, "");
 	if (periph->periph_mode & (PERIPH_CAP_SYNC | PERIPH_CAP_DT)) {
 		period = scsipi_sync_factor_to_period(periph->periph_period);
 		aprint_normal("sync (%d.%02dns offset %d)",

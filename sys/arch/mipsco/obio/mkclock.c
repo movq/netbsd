@@ -1,4 +1,4 @@
-/*	$NetBSD: mkclock.c,v 1.7 2006/09/15 16:37:19 gdamore Exp $	*/
+/*	$NetBSD: mkclock.c,v 1.10 2009/03/14 21:04:12 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mkclock.c,v 1.7 2006/09/15 16:37:19 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mkclock.c,v 1.10 2009/03/14 21:04:12 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -74,18 +67,13 @@ static int mk_read (struct mkclock_softc *, int);
 static void mk_write (struct mkclock_softc *, int, int);
 
 int
-mkclock_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+mkclock_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	return 1;
 }
 
 void
-mkclock_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+mkclock_attach(struct device *parent, struct device *self, void *aux)
 {
         struct mkclock_softc *sc = (void *)self;
 	struct confargs *ca = aux;
@@ -108,9 +96,7 @@ mkclock_attach(parent, self, aux)
 }
 
 static int
-mk_read(sc, reg)
-	struct mkclock_softc *sc;
-	int reg;
+mk_read(struct mkclock_softc *sc, int reg)
 {
 	u_int8_t val;
 
@@ -119,9 +105,7 @@ mk_read(sc, reg)
 }
 
 static void
-mk_write(sc, reg, val)
-	struct mkclock_softc *sc;
-	int reg, val;
+mk_write(struct mkclock_softc *sc, int reg, int val)
 {
 	bus_space_write_1(sc->sc_bst, sc->sc_bsh,
 			  DATA_PORT + reg*4, TOBCD(val));

@@ -1,4 +1,4 @@
-/*	$NetBSD: isapnpres.c,v 1.17 2007/10/19 12:00:32 ad Exp $	*/
+/*	$NetBSD: isapnpres.c,v 1.21 2009/03/14 21:04:20 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isapnpres.c,v 1.17 2007/10/19 12:00:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isapnpres.c,v 1.21 2009/03/14 21:04:20 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,8 +67,7 @@ static int isapnp_process_tag(u_char, u_char, u_char *,
  *	Wait for the next byte of resource data to become available
  */
 static int
-isapnp_wait_status(sc)
-	struct isapnp_softc *sc;
+isapnp_wait_status(struct isapnp_softc *sc)
 {
 	int i;
 
@@ -94,8 +86,7 @@ isapnp_wait_status(sc)
  *	resources of the current card if needed.
  */
 static struct isapnp_attach_args *
-isapnp_newdev(card)
-	struct isapnp_attach_args *card;
+isapnp_newdev(struct isapnp_attach_args *card)
 {
 	struct isapnp_attach_args *ipa, *dev = ISAPNP_MALLOC(sizeof(*dev));
 
@@ -123,8 +114,7 @@ isapnp_newdev(card)
  *	Add a new alternate configuration to a logical device
  */
 static struct isapnp_attach_args *
-isapnp_newconf(dev)
-	struct isapnp_attach_args *dev;
+isapnp_newconf(struct isapnp_attach_args *dev)
 {
 	struct isapnp_attach_args *ipa, *conf = ISAPNP_MALLOC(sizeof(*conf));
 
@@ -156,9 +146,7 @@ isapnp_newconf(dev)
  *	Merge the common device configurations to the subconfigurations
  */
 static void
-isapnp_merge(c, d)
-	struct isapnp_attach_args *c;
-	const struct isapnp_attach_args *d;
+isapnp_merge(struct isapnp_attach_args *c, const struct isapnp_attach_args *d)
 {
 	int i;
 
@@ -183,8 +171,7 @@ isapnp_merge(c, d)
  *	Flatten the tree to a list of config entries.
  */
 static struct isapnp_attach_args *
-isapnp_flatten(card)
-	struct isapnp_attach_args *card;
+isapnp_flatten(struct isapnp_attach_args *card)
 {
 	struct isapnp_attach_args *dev, *conf, *d, *c, *pa;
 
@@ -229,9 +216,7 @@ isapnp_flatten(card)
  *	Process a resource tag
  */
 static int
-isapnp_process_tag(tag, len, buf, card, dev, conf)
-	u_char tag, len, *buf;
-	struct isapnp_attach_args **card, **dev, **conf;
+isapnp_process_tag(u_char tag, u_char len, u_char *buf, struct isapnp_attach_args **card, struct isapnp_attach_args **dev, struct isapnp_attach_args **conf)
 {
 	char str[64];
 	struct isapnp_region *r;
@@ -453,9 +438,7 @@ isapnp_process_tag(tag, len, buf, card, dev, conf)
  *	Read the resources for card c
  */
 struct isapnp_attach_args *
-isapnp_get_resource(sc, c)
-	struct isapnp_softc *sc;
-	int c;
+isapnp_get_resource(struct isapnp_softc *sc, int c)
 {
 	u_char d, tag;
 	u_short len;
@@ -479,8 +462,9 @@ isapnp_get_resource(sc, c)
 
 		if (d != sc->sc_id[c][i] && i != ISAPNP_SERIAL_SIZE - 1) {
 			if (!warned) {
-				printf("%s: card %d violates PnP spec; byte %d\n",
-				    sc->sc_dev.dv_xname, c + 1, i);
+				aprint_error_dev(sc->sc_dev,
+				    "card %d violates PnP spec; byte %d\n",
+				    c + 1, i);
 				warned++;
 			}
 			if (i == 0) {
@@ -517,8 +501,9 @@ parse:
 		}
 
 		if (len >= ISAPNP_MAX_TAGSIZE) {
-			printf("%s: Maximum tag size exceeded, card %d\n",
-			    sc->sc_dev.dv_xname, c + 1);
+			aprint_error_dev(sc->sc_dev,
+			    "Maximum tag size exceeded, card %d\n",
+			    c + 1);
 			len = ISAPNP_MAX_TAGSIZE - 1;
 			if (++warned == 10)
 				goto bad;
@@ -526,8 +511,9 @@ parse:
 
 		if (isapnp_process_tag(tag, len, buf, &card, &dev,
 		    &conf) == -1) {
-			printf("%s: No current device for tag, card %d\n",
-			    sc->sc_dev.dv_xname, c + 1);
+			aprint_error_dev(sc->sc_dev,
+			    "No current device for tag, card %d\n",
+			    c + 1);
 			if (++warned == 10)
 				goto bad;
 		}
@@ -541,7 +527,7 @@ bad:
 		ISAPNP_FREE(card);
 		card = dev;
 	}
-	printf("%s: %s, card %d\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(sc->sc_dev, "%s, card %d\n",
 	    warned >= 10 ? "Too many tag errors" : "Resource timeout", c + 1);
 	return NULL;
 }

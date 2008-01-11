@@ -1,4 +1,6 @@
-# $NetBSD: Makefile,v 1.12 2005/01/10 03:11:18 lukem Exp $
+# $NetBSD: Makefile,v 1.14 2009/04/14 22:15:23 lukem Exp $
+
+WARNS?=	1	# XXX -Wextra -Wshadow
 
 NOMAN=	# defined
 NOLINT= # defined
@@ -8,15 +10,13 @@ NOLINT= # defined
 DIST=		${NETBSDSRCDIR}/crypto/dist
 .PATH: ${DIST}/heimdal/lib/sl
 
-WARNS?=  1
-
 PROG= mk_cmds
 
 SRCS= make_cmds.c make_cmds.h parse.y lex.l
 
 YHEADER=	1
 
-CFLAGS+= -I.					\
+CPPFLAGS+= -I.					\
 	-I${DIST}/heimdal/lib/sl		\
 	-I${NETBSDSRCDIR}/include/heimdal	\
 	-I${DESTDIR}/usr/include/krb5		\

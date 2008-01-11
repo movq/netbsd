@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.30 2008/01/04 21:17:43 ad Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.45 2011/05/17 17:34:53 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -80,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.30 2008/01/04 21:17:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.45 2011/05/17 17:34:53 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -89,6 +82,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.30 2008/01/04 21:17:43 ad Exp $");
 #include <sys/errno.h>
 #include <sys/device.h>
 #include <sys/bus.h>
+#include <sys/cpu.h>
+#include <sys/kmem.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -101,9 +96,10 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.30 2008/01/04 21:17:43 ad Exp $");
 #include <dev/isa/isavar.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
+#include <dev/pci/pccbbreg.h>
 #include <dev/pci/pcidevs.h>
 
-#include "acpi.h"
+#include "acpica.h"
 #include "opt_mpbios.h"
 #include "opt_acpi.h"
 
@@ -111,7 +107,7 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.30 2008/01/04 21:17:43 ad Exp $");
 #include <machine/mpbiosvar.h>
 #endif
 
-#if NACPI > 0
+#if NACPICA > 0
 #include <machine/mpacpi.h>
 #endif
 
@@ -126,28 +122,33 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.30 2008/01/04 21:17:43 ad Exp $");
 #endif
 #endif
 
-int pci_mode = -1;
+#ifdef PCI_CONF_MODE
+#if (PCI_CONF_MODE == 1) || (PCI_CONF_MODE == 2)
+static int pci_mode = PCI_CONF_MODE;
+#else
+#error Invalid PCI configuration mode.
+#endif
+#else
+static int pci_mode = -1;
+#endif
 
+struct pci_conf_lock {
+	uint32_t cl_cpuno;	/* 0: unlocked
+				 * 1 + n: locked by CPU n (0 <= n)
+				 */
+	uint32_t cl_sel;	/* the address that's being read. */
+};
+
+static void pci_conf_unlock(struct pci_conf_lock *);
+static uint32_t pci_conf_selector(pcitag_t, int);
+static unsigned int pci_conf_port(pcitag_t, int);
+static void pci_conf_select(uint32_t);
+static void pci_conf_lock(struct pci_conf_lock *, uint32_t);
 static void pci_bridge_hook(pci_chipset_tag_t, pcitag_t, void *);
 struct pci_bridge_hook_arg {
 	void (*func)(pci_chipset_tag_t, pcitag_t, void *); 
 	void *arg; 
 }; 
-
-
-__cpu_simple_lock_t pci_conf_lock = __SIMPLELOCK_UNLOCKED;
-
-#define	PCI_CONF_LOCK(s)						\
-do {									\
-	(s) = splhigh();						\
-	__cpu_simple_lock(&pci_conf_lock);				\
-} while (0)
-
-#define	PCI_CONF_UNLOCK(s)						\
-do {									\
-	__cpu_simple_unlock(&pci_conf_lock);				\
-	splx((s));							\
-} while (0)
 
 #define	PCI_MODE1_ENABLE	0x80000000UL
 #define	PCI_MODE1_ADDRESS_REG	0x0cf8
@@ -161,7 +162,7 @@ do {									\
 #define _qe(bus, dev, fcn, vend, prod) \
 	{_m1tag(bus, dev, fcn), PCI_ID_CODE(vend, prod)}
 struct {
-	u_int32_t tag;
+	uint32_t tag;
 	pcireg_t id;
 } pcim1_quirk_tbl[] = {
 	_qe(0, 0, 0, PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_TRIFLEX1),
@@ -175,6 +176,8 @@ struct {
 	/* Parallels Desktop for Mac */
 	_qe(0, 2, 0, PCI_VENDOR_PARALLELS, PCI_PRODUCT_PARALLELS_VIDEO),
 	_qe(0, 3, 0, PCI_VENDOR_PARALLELS, PCI_PRODUCT_PARALLELS_TOOLS),
+	/* SIS 740 */
+	_qe(0, 0, 0, PCI_VENDOR_SIS, PCI_PRODUCT_SIS_740),
 	/* SIS 741 */
 	_qe(0, 0, 0, PCI_VENDOR_SIS, PCI_PRODUCT_SIS_741),
 	{0, 0xffffffff} /* patchable */
@@ -241,9 +244,130 @@ struct x86_bus_dma_tag pci_bus_dma64_tag = {
 };
 #endif
 
+static struct pci_conf_lock cl0 = {
+	  .cl_cpuno = 0UL
+	, .cl_sel = 0UL
+};
+
+static struct pci_conf_lock * const cl = &cl0;
+
+static void
+pci_conf_lock(struct pci_conf_lock *ocl, uint32_t sel)
+{
+	uint32_t cpuno;
+
+	KASSERT(sel != 0);
+
+	kpreempt_disable();
+	cpuno = cpu_number() + 1;
+	/* If the kernel enters pci_conf_lock() through an interrupt
+	 * handler, then the CPU may already hold the lock.
+	 *
+	 * If the CPU does not already hold the lock, spin until
+	 * we can acquire it.
+	 */
+	if (cpuno == cl->cl_cpuno) {
+		ocl->cl_cpuno = cpuno;
+	} else {
+		u_int spins;
+
+		ocl->cl_cpuno = 0;
+
+		spins = SPINLOCK_BACKOFF_MIN;
+		while (atomic_cas_32(&cl->cl_cpuno, 0, cpuno) != 0) {
+			SPINLOCK_BACKOFF(spins);
+#ifdef LOCKDEBUG
+			if (SPINLOCK_SPINOUT(spins)) {
+				panic("%s: cpu %" PRId32
+				    " spun out waiting for cpu %" PRId32,
+				    __func__, cpuno, cl->cl_cpuno);
+			}
+#endif	/* LOCKDEBUG */
+		}
+	}
+
+	/* Only one CPU can be here, so an interlocked atomic_swap(3)
+	 * is not necessary.
+	 *
+	 * Evaluating atomic_cas_32_ni()'s argument, cl->cl_sel,
+	 * and applying atomic_cas_32_ni() is not an atomic operation,
+	 * however, any interrupt that, in the middle of the
+	 * operation, modifies cl->cl_sel, will also restore
+	 * cl->cl_sel.  So cl->cl_sel will have the same value when
+	 * we apply atomic_cas_32_ni() as when we evaluated it,
+	 * before.
+	 */
+	ocl->cl_sel = atomic_cas_32_ni(&cl->cl_sel, cl->cl_sel, sel);
+	pci_conf_select(sel);
+}
+
+static void
+pci_conf_unlock(struct pci_conf_lock *ocl)
+{
+	uint32_t sel;
+
+	sel = atomic_cas_32_ni(&cl->cl_sel, cl->cl_sel, ocl->cl_sel);
+	pci_conf_select(ocl->cl_sel);
+	if (ocl->cl_cpuno != cl->cl_cpuno)
+		atomic_cas_32(&cl->cl_cpuno, cl->cl_cpuno, ocl->cl_cpuno);
+	kpreempt_enable();
+}
+
+static uint32_t
+pci_conf_selector(pcitag_t tag, int reg)
+{
+	static const pcitag_t mode2_mask = {
+		.mode2 = {
+			  .enable = 0xff
+			, .forward = 0xff
+		}
+	};
+
+	switch (pci_mode) {
+	case 1:
+		return tag.mode1 | reg;
+	case 2:
+		return tag.mode1 & mode2_mask.mode1;
+	default:
+		panic("%s: mode not configured", __func__);
+	}
+}
+
+static unsigned int
+pci_conf_port(pcitag_t tag, int reg)
+{
+	switch (pci_mode) {
+	case 1:
+		return PCI_MODE1_DATA_REG;
+	case 2:
+		return tag.mode2.port | reg;
+	default:
+		panic("%s: mode not configured", __func__);
+	}
+}
+
+static void
+pci_conf_select(uint32_t sel)
+{
+	pcitag_t tag;
+
+	switch (pci_mode) {
+	case 1:
+		outl(PCI_MODE1_ADDRESS_REG, sel);
+		return;
+	case 2:
+		tag.mode1 = sel;
+		outb(PCI_MODE2_ENABLE_REG, tag.mode2.enable);
+		if (tag.mode2.enable != 0)
+			outb(PCI_MODE2_FORWARD_REG, tag.mode2.forward);
+		return;
+	default:
+		panic("%s: mode not configured", __func__);
+	}
+}
+
 void
-pci_attach_hook(struct device *parent, struct device *self,
-    struct pcibus_attach_args *pba)
+pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 
 	if (pba->pba_bus == 0)
@@ -251,7 +375,7 @@ pci_attach_hook(struct device *parent, struct device *self,
 #ifdef MPBIOS
 	mpbios_pci_attach_hook(parent, self, pba);
 #endif
-#if NACPI > 0
+#if NACPICA > 0
 	mpacpi_pci_attach_hook(parent, self, pba);
 #endif
 }
@@ -290,41 +414,36 @@ pci_make_tag(pci_chipset_tag_t pc, int bus, int device, int function)
 {
 	pcitag_t tag;
 
-#ifndef PCI_CONF_MODE
+	if (pc != NULL) {
+		if ((pc->pc_present & PCI_OVERRIDE_MAKE_TAG) != 0) {
+			return (*pc->pc_ov->ov_make_tag)(pc->pc_ctx,
+			    pc, bus, device, function);
+		}
+		if (pc->pc_super != NULL) {
+			return pci_make_tag(pc->pc_super, bus, device,
+			    function);
+		}
+	}
+
 	switch (pci_mode) {
 	case 1:
-		goto mode1;
+		if (bus >= 256 || device >= 32 || function >= 8)
+			panic("%s: bad request", __func__);
+
+		tag.mode1 = PCI_MODE1_ENABLE |
+			    (bus << 16) | (device << 11) | (function << 8);
+		return tag;
 	case 2:
-		goto mode2;
+		if (bus >= 256 || device >= 16 || function >= 8)
+			panic("%s: bad request", __func__);
+
+		tag.mode2.port = 0xc000 | (device << 8);
+		tag.mode2.enable = 0xf0 | (function << 1);
+		tag.mode2.forward = bus;
+		return tag;
 	default:
-		panic("pci_make_tag: mode not configured");
+		panic("%s: mode not configured", __func__);
 	}
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 1)
-#ifndef PCI_CONF_MODE
-mode1:
-#endif
-	if (bus >= 256 || device >= 32 || function >= 8)
-		panic("pci_make_tag: bad request");
-
-	tag.mode1 = PCI_MODE1_ENABLE |
-		    (bus << 16) | (device << 11) | (function << 8);
-	return tag;
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 2)
-#ifndef PCI_CONF_MODE
-mode2:
-#endif
-	if (bus >= 256 || device >= 16 || function >= 8)
-		panic("pci_make_tag: bad request");
-
-	tag.mode2.port = 0xc000 | (device << 8);
-	tag.mode2.enable = 0xf0 | (function << 1);
-	tag.mode2.forward = bus;
-	return tag;
-#endif
 }
 
 void
@@ -332,49 +451,56 @@ pci_decompose_tag(pci_chipset_tag_t pc, pcitag_t tag,
     int *bp, int *dp, int *fp)
 {
 
-#ifndef PCI_CONF_MODE
+	if (pc != NULL) {
+		if ((pc->pc_present & PCI_OVERRIDE_DECOMPOSE_TAG) != 0) {
+			(*pc->pc_ov->ov_decompose_tag)(pc->pc_ctx,
+			    pc, tag, bp, dp, fp);
+			return;
+		}
+		if (pc->pc_super != NULL) {
+			pci_decompose_tag(pc->pc_super, tag, bp, dp, fp);
+			return;
+		}
+	}
+
 	switch (pci_mode) {
 	case 1:
-		goto mode1;
+		if (bp != NULL)
+			*bp = (tag.mode1 >> 16) & 0xff;
+		if (dp != NULL)
+			*dp = (tag.mode1 >> 11) & 0x1f;
+		if (fp != NULL)
+			*fp = (tag.mode1 >> 8) & 0x7;
+		return;
 	case 2:
-		goto mode2;
+		if (bp != NULL)
+			*bp = tag.mode2.forward & 0xff;
+		if (dp != NULL)
+			*dp = (tag.mode2.port >> 8) & 0xf;
+		if (fp != NULL)
+			*fp = (tag.mode2.enable >> 1) & 0x7;
+		return;
 	default:
-		panic("pci_decompose_tag: mode not configured");
+		panic("%s: mode not configured", __func__);
 	}
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 1)
-#ifndef PCI_CONF_MODE
-mode1:
-#endif
-	if (bp != NULL)
-		*bp = (tag.mode1 >> 16) & 0xff;
-	if (dp != NULL)
-		*dp = (tag.mode1 >> 11) & 0x1f;
-	if (fp != NULL)
-		*fp = (tag.mode1 >> 8) & 0x7;
-	return;
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 2)
-#ifndef PCI_CONF_MODE
-mode2:
-#endif
-	if (bp != NULL)
-		*bp = tag.mode2.forward & 0xff;
-	if (dp != NULL)
-		*dp = (tag.mode2.port >> 8) & 0xf;
-	if (fp != NULL)
-		*fp = (tag.mode2.enable >> 1) & 0x7;
-#endif
 }
 
 pcireg_t
-pci_conf_read( pci_chipset_tag_t pc, pcitag_t tag,
-    int reg)
+pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 {
 	pcireg_t data;
-	int s;
+	struct pci_conf_lock ocl;
+
+	KASSERT((reg & 0x3) == 0);
+
+	if (pc != NULL) {
+		if ((pc->pc_present & PCI_OVERRIDE_CONF_READ) != 0) {
+			return (*pc->pc_ov->ov_conf_read)(pc->pc_ctx,
+			    pc, tag, reg);
+		}
+		if (pc->pc_super != NULL)
+			return pci_conf_read(pc->pc_super, tag, reg);
+	}
 
 #if defined(__i386__) && defined(XBOX)
 	if (arch_i386_is_xbox) {
@@ -385,48 +511,30 @@ pci_conf_read( pci_chipset_tag_t pc, pcitag_t tag,
 	}
 #endif
 
-#ifndef PCI_CONF_MODE
-	switch (pci_mode) {
-	case 1:
-		goto mode1;
-	case 2:
-		goto mode2;
-	default:
-		panic("pci_conf_read: mode not configured");
-	}
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 1)
-#ifndef PCI_CONF_MODE
-mode1:
-#endif
-	PCI_CONF_LOCK(s);
-	outl(PCI_MODE1_ADDRESS_REG, tag.mode1 | reg);
-	data = inl(PCI_MODE1_DATA_REG);
-	outl(PCI_MODE1_ADDRESS_REG, 0);
-	PCI_CONF_UNLOCK(s);
+	pci_conf_lock(&ocl, pci_conf_selector(tag, reg));
+	data = inl(pci_conf_port(tag, reg));
+	pci_conf_unlock(&ocl);
 	return data;
-#endif
-
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 2)
-#ifndef PCI_CONF_MODE
-mode2:
-#endif
-	PCI_CONF_LOCK(s);
-	outb(PCI_MODE2_ENABLE_REG, tag.mode2.enable);
-	outb(PCI_MODE2_FORWARD_REG, tag.mode2.forward);
-	data = inl(tag.mode2.port | reg);
-	outb(PCI_MODE2_ENABLE_REG, 0);
-	PCI_CONF_UNLOCK(s);
-	return data;
-#endif
 }
 
 void
-pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg,
-    pcireg_t data)
+pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 {
-	int s;
+	struct pci_conf_lock ocl;
+
+	KASSERT((reg & 0x3) == 0);
+
+	if (pc != NULL) {
+		if ((pc->pc_present & PCI_OVERRIDE_CONF_WRITE) != 0) {
+			(*pc->pc_ov->ov_conf_write)(pc->pc_ctx, pc, tag, reg,
+			    data);
+			return;
+		}
+		if (pc->pc_super != NULL) {
+			pci_conf_write(pc->pc_super, tag, reg, data);
+			return;
+		}
+	}
 
 #if defined(__i386__) && defined(XBOX)
 	if (arch_i386_is_xbox) {
@@ -437,54 +545,23 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg,
 	}
 #endif
 
-#ifndef PCI_CONF_MODE
-	switch (pci_mode) {
-	case 1:
-		goto mode1;
-	case 2:
-		goto mode2;
-	default:
-		panic("pci_conf_write: mode not configured");
-	}
-#endif
+	pci_conf_lock(&ocl, pci_conf_selector(tag, reg));
+	outl(pci_conf_port(tag, reg), data);
+	pci_conf_unlock(&ocl);
+}
 
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 1)
-#ifndef PCI_CONF_MODE
-mode1:
-#endif
-	PCI_CONF_LOCK(s);
-	outl(PCI_MODE1_ADDRESS_REG, tag.mode1 | reg);
-	outl(PCI_MODE1_DATA_REG, data);
-	outl(PCI_MODE1_ADDRESS_REG, 0);
-	PCI_CONF_UNLOCK(s);
-	return;
-#endif
+void
+pci_mode_set(int mode)
+{
+	KASSERT(pci_mode == -1 || pci_mode == mode);
 
-#if !defined(PCI_CONF_MODE) || (PCI_CONF_MODE == 2)
-#ifndef PCI_CONF_MODE
-mode2:
-#endif
-	PCI_CONF_LOCK(s);
-	outb(PCI_MODE2_ENABLE_REG, tag.mode2.enable);
-	outb(PCI_MODE2_FORWARD_REG, tag.mode2.forward);
-	outl(tag.mode2.port | reg, data);
-	outb(PCI_MODE2_ENABLE_REG, 0);
-	PCI_CONF_UNLOCK(s);
-#endif
+	pci_mode = mode;
 }
 
 int
-pci_mode_detect()
+pci_mode_detect(void)
 {
-
-#ifdef PCI_CONF_MODE
-#if (PCI_CONF_MODE == 1) || (PCI_CONF_MODE == 2)
-	return (pci_mode = PCI_CONF_MODE);
-#else
-#error Invalid PCI configuration mode.
-#endif
-#else
-	u_int32_t sav, val;
+	uint32_t sav, val;
 	int i;
 	pcireg_t idreg;
 
@@ -557,7 +634,6 @@ not1:
 not2:
 
 	return (pci_mode = 0);
-#endif
 }
 
 /*
@@ -566,9 +642,9 @@ not2:
  * which cannot safely use memory-mapped device access.
  */
 int
-pci_bus_flags()
+pci_bus_flags(void)
 {
-	int rval = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED |
+	int rval = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY |
 	    PCI_FLAGS_MRL_OKAY | PCI_FLAGS_MRM_OKAY | PCI_FLAGS_MWI_OKAY;
 	int device, maxndevs;
 	pcitag_t tag;
@@ -602,7 +678,7 @@ pci_bus_flags()
  disable_mem:
 	printf("Warning: broken PCI-Host bridge detected; "
 	    "disabling memory-mapped access\n");
-	rval &= ~(PCI_FLAGS_MEM_ENABLED|PCI_FLAGS_MRL_OKAY|PCI_FLAGS_MRM_OKAY|
+	rval &= ~(PCI_FLAGS_MEM_OKAY|PCI_FLAGS_MRL_OKAY|PCI_FLAGS_MRM_OKAY|
 	    PCI_FLAGS_MWI_OKAY);
 	return (rval);
 }
@@ -691,4 +767,76 @@ pci_bridge_hook(pci_chipset_tag_t pc, pcitag_t tag, void *ctx)
 		PCI_SUBCLASS(reg) == PCI_SUBCLASS_BRIDGE_CARDBUS)) {
 		(*bridge_hook->func)(pc, tag, bridge_hook->arg);
 	}
+}
+
+static const void *
+bit_to_function_pointer(const struct pci_overrides *ov, uint64_t bit)
+{
+	switch (bit) {
+	case PCI_OVERRIDE_CONF_READ:
+		return ov->ov_conf_read;
+	case PCI_OVERRIDE_CONF_WRITE:
+		return ov->ov_conf_write;
+	case PCI_OVERRIDE_INTR_MAP:
+		return ov->ov_intr_map;
+	case PCI_OVERRIDE_INTR_STRING:
+		return ov->ov_intr_string;
+	case PCI_OVERRIDE_INTR_EVCNT:
+		return ov->ov_intr_evcnt;
+	case PCI_OVERRIDE_INTR_ESTABLISH:
+		return ov->ov_intr_establish;
+	case PCI_OVERRIDE_INTR_DISESTABLISH:
+		return ov->ov_intr_disestablish;
+	case PCI_OVERRIDE_MAKE_TAG:
+		return ov->ov_make_tag;
+	case PCI_OVERRIDE_DECOMPOSE_TAG:
+		return ov->ov_decompose_tag;
+	default:
+		return NULL;
+	}
+}
+
+void
+pci_chipset_tag_destroy(pci_chipset_tag_t pc)
+{
+	kmem_free(pc, sizeof(struct pci_chipset_tag));
+}
+
+int
+pci_chipset_tag_create(pci_chipset_tag_t opc, const uint64_t present,
+    const struct pci_overrides *ov, void *ctx, pci_chipset_tag_t *pcp)
+{
+	uint64_t bit, bits, nbits;
+	pci_chipset_tag_t pc;
+	const void *fp;
+
+	if (ov == NULL || present == 0)
+		return EINVAL;
+
+	pc = kmem_alloc(sizeof(struct pci_chipset_tag), KM_SLEEP);
+
+	if (pc == NULL)
+		return ENOMEM;
+
+	pc->pc_super = opc;
+
+	for (bits = present; bits != 0; bits = nbits) {
+		nbits = bits & (bits - 1);
+		bit = nbits ^ bits;
+		if ((fp = bit_to_function_pointer(ov, bit)) == NULL) {
+			printf("%s: missing bit %" PRIx64 "\n", __func__, bit);
+			goto einval;
+		}
+	}
+
+	pc->pc_ov = ov;
+	pc->pc_present = present;
+	pc->pc_ctx = ctx;
+
+	*pcp = pc;
+
+	return 0;
+einval:
+	kmem_free(pc, sizeof(struct pci_chipset_tag));
+	return EINVAL;
 }

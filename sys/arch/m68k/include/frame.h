@@ -1,6 +1,7 @@
-/*	$NetBSD: frame.h,v 1.28 2007/03/13 17:17:28 thorpej Exp $	*/
+/*	$NetBSD: frame.h,v 1.30 2011/02/08 20:20:16 rmind Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1982, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -17,45 +18,6 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  * 3. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: frame.h 1.8 92/12/20$
- *
- *	@(#)frame.h	8.1 (Berkeley) 6/10/93
- */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -258,23 +220,23 @@ void	sendsig_sigcontext(const ksiginfo_t *, const sigset_t *);
 
 #if defined(__mc68010__)
 /*
- * Restartable atomic sequence-cased compare-and-swap for locking
- * primitives.  We defined this here because it manipulates a
+ * Restartable atomic sequence-cased compare-and-swap for atomic_cas ops
+ * and locking primitives.  We defined this here because it manipulates a
  * "clockframe" as prepared by interrupt handlers.
  */
-extern char	_lock_cas_ras_start;
-extern char	_lock_cas_ras_end;
+extern char	_atomic_cas_ras_start;
+extern char	_atomic_cas_ras_end;
 
-#define LOCK_CAS_CHECK(cfp)						\
+#define ATOMIC_CAS_CHECK(cfp)						\
 do {									\
 	if (! CLKF_USERMODE(cfp) &&					\
-	    (CLKF_PC(cfp) < (u_long)&_lock_cas_ras_end &&		\
-	     CLKF_PC(cfp) > (u_long)&_lock_cas_ras_start)) {		\
-	    	(cfp)->cf_pc = (u_long)&_lock_cas_ras_start;		\
+	    (CLKF_PC(cfp) < (u_long)&_atomic_cas_ras_end &&		\
+	     CLKF_PC(cfp) > (u_long)&_atomic_cas_ras_start)) {		\
+	    	(cfp)->cf_pc = (u_long)&_atomic_cas_ras_start;		\
 	}								\
 } while (/*CONSTCOND*/0)
 #else
-#define	LOCK_CAS_CHECK(cfp)	/* nothing */
+#define	ATOMIC_CAS_CHECK(cfp)	/* nothing */
 #endif /* __mc68010__ */
 
 #endif	/* _KERNEL */

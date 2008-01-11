@@ -1,4 +1,4 @@
-/* $NetBSD: fdfs.c,v 1.5 2007/10/08 21:41:13 ad Exp $	 */
+/* $NetBSD: fdfs.c,v 1.7 2009/08/06 00:51:55 pooka Exp $	 */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,6 +52,7 @@
 #include "vnode.h"
 #include "bufcache.h"
 #include "fdfs.h"
+#include "kernelops.h"
 
 /*
  * Return a "vnode" interface to a given file descriptor.
@@ -209,7 +203,7 @@ fd_preload(struct uvnode *vp, daddr_t start)
 	fs->fd_bufp[fs->fd_bufi].start = start;
 	fs->fd_bufp[fs->fd_bufi].end =	 start + fs->fd_ssize / fs->fd_bsize;
 
-	if ((r = pread(fs->fd_fd, fs->fd_bufp[fs->fd_bufi].buf,
+	if ((r = kops.ko_pread(fs->fd_fd, fs->fd_bufp[fs->fd_bufi].buf,
 		       (size_t)fs->fd_ssize, start * fs->fd_bsize)) < 0) {
 		syslog(LOG_ERR, "preload to segment buffer %d", fs->fd_bufi);
 		return r;
@@ -257,12 +251,12 @@ fd_vop_strategy(struct ubuf * bp)
 			bp->b_flags |= (B_DONTFREE | B_DONE);
 			return 0;
 		}
-		count = pread(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
+		count = kops.ko_pread(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
 			      bp->b_blkno * fs->fd_bsize);
 		if (count == bp->b_bcount)
 			bp->b_flags |= B_DONE;
 	} else {
-		count = pwrite(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
+		count = kops.ko_pwrite(bp->b_vp->v_fd, bp->b_data, bp->b_bcount,
 			       bp->b_blkno * fs->fd_bsize);
 		if (count == 0) {
 			perror("pwrite");

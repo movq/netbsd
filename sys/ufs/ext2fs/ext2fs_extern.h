@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_extern.h,v 1.38 2007/12/08 19:29:53 pooka Exp $	*/
+/*	$NetBSD: ext2fs_extern.h,v 1.42 2009/10/21 17:37:21 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -43,11 +43,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -138,11 +133,12 @@ void ext2fs_itimes(struct inode *, const struct timespec *,
 
 /* ext2fs_vfsops.c */
 VFS_PROTOS(ext2fs);
-int ext2fs_reload(struct mount *, kauth_cred_t);
+int ext2fs_reload(struct mount *, kauth_cred_t, struct lwp *);
 int ext2fs_mountfs(struct vnode *, struct mount *);
 int ext2fs_flushfiles(struct mount *, int);
 int ext2fs_sbupdate(struct ufsmount *, int);
 int ext2fs_cgupdate(struct ufsmount *, int);
+void ext2fs_set_inode_guid(struct inode *);
 
 /* ext2fs_readwrite.c */
 int ext2fs_read(void *);
@@ -170,9 +166,6 @@ int ext2fs_makeinode(int, struct vnode *, struct vnode **,
 			  struct componentname *cnp);
 int ext2fs_reclaim(void *);
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_ext2fs_setup);
-#endif /* SYSCTL_SETUP_PROTO */
 __END_DECLS
 
 #define IS_EXT2_VNODE(vp)   (vp->v_tag == VT_EXT2FS)

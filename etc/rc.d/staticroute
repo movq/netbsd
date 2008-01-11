@@ -1,11 +1,13 @@
 #!/bin/sh
 #
-# $NetBSD: staticroute,v 1.2 2004/08/13 18:08:03 mycroft Exp $
+# $NetBSD: staticroute,v 1.5 2009/10/07 08:06:11 tron Exp $
 #
 
 # PROVIDE: staticroute
 # REQUIRE: network
 # BEFORE:  NETWORKING
+
+# See the route.conf(5) manual page for details.
 
 $_rc_subr_loaded . /etc/rc.subr
 
@@ -14,6 +16,8 @@ start_cmd="staticroute_doit Adding add"
 stop_cmd="staticroute_doit Deleting delete"
 
 staticroute_doit() {
+	retval=0
+
 	if [ -s /etc/route.conf ]; then
 		echo "$1 static routes."
 		while read args; do
@@ -22,17 +26,23 @@ staticroute_doit() {
 			"#"*)
 				;;
 			"+"*)
-				[ $2 = "add" ] && eval ${args#*+}
+				if [ $2 = "add" ]; then
+					eval ${args#*+} || retval=1
+				fi
 				;;
 			"-"*)
-				[ $2 = "delete" ] && eval ${args#*-}
+				if [ $2 = "delete" ]; then
+					eval ${args#*-} || retval=1
+				fi
 				;;
 			*)
-				route -q $2 -$args
+				route -q $2 -$args || retval=1
 				;;
 			esac
 		done < /etc/route.conf
 	fi
+
+	return $retval
 }
 
 load_rc_config $name

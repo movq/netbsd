@@ -1,4 +1,4 @@
-/*      $NetBSD: procfs_linux.c,v 1.47 2007/12/22 01:06:54 yamt Exp $      */
+/*      $NetBSD: procfs_linux.c,v 1.59 2010/12/20 00:25:47 matt Exp $      */
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_linux.c,v 1.47 2007/12/22 01:06:54 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_linux.c,v 1.59 2010/12/20 00:25:47 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_linux.c,v 1.47 2007/12/22 01:06:54 yamt Exp $
 #include <sys/conf.h>
 
 #include <miscfs/procfs/procfs.h>
+
 #include <compat/linux/common/linux_exec.h>
 
 #include <uvm/uvm_extern.h>
@@ -187,7 +188,6 @@ procfs_dodevices(struct lwp *curl, struct proc *p,
 	char *bf;
 	int offset = 0;
 	int i, error = ENAMETOOLONG;
-	extern kmutex_t devsw_lock;
 
 	/* XXX elad - may need filtering. */
 
@@ -197,7 +197,7 @@ procfs_dodevices(struct lwp *curl, struct proc *p,
 	if (offset >= LBFSZ)
 		goto out;
 
-	mutex_enter(&devsw_lock);
+	mutex_enter(&device_lock);
 	for (i = 0; i < max_devsw_convs; i++) {
 		if ((devsw_conv[i].d_name == NULL) || 
 		    (devsw_conv[i].d_cmajor == -1))
@@ -206,14 +206,14 @@ procfs_dodevices(struct lwp *curl, struct proc *p,
 		offset += snprintf(&bf[offset], LBFSZ - offset, 
 		    "%3d %s\n", devsw_conv[i].d_cmajor, devsw_conv[i].d_name);
 		if (offset >= LBFSZ) {
-			mutex_exit(&devsw_lock);
+			mutex_exit(&device_lock);
 			goto out;
 		}
 	}
 
 	offset += snprintf(&bf[offset], LBFSZ - offset, "\nBlock devices:\n");
 	if (offset >= LBFSZ) {
-		mutex_exit(&devsw_lock);
+		mutex_exit(&device_lock);
 		goto out;
 	}
 
@@ -225,11 +225,11 @@ procfs_dodevices(struct lwp *curl, struct proc *p,
 		offset += snprintf(&bf[offset], LBFSZ - offset, 
 		    "%3d %s\n", devsw_conv[i].d_bmajor, devsw_conv[i].d_name);
 		if (offset >= LBFSZ) {
-			mutex_exit(&devsw_lock);
+			mutex_exit(&device_lock);
 			goto out;
 		}
 	}
-	mutex_exit(&devsw_lock);
+	mutex_exit(&device_lock);
 
 	error = uiomove_frombuf(bf, offset, uio);
 out:
@@ -253,6 +253,8 @@ procfs_docpustat(struct lwp *curl, struct proc *p,
         CPU_INFO_ITERATOR cii;
 #endif
 	int	 	 i;
+	uint64_t	nintr;
+	uint64_t	nswtch;
 
 	error = ENAMETOOLONG;
 	bf = malloc(LBFSZ, M_TEMP, M_WAITOK);
@@ -275,6 +277,8 @@ procfs_docpustat(struct lwp *curl, struct proc *p,
 #endif
 
 	i = 0;
+	nintr = 0;
+	nswtch = 0;
 	for (ALLCPUS) {
 		len += snprintf(&bf[len], LBFSZ - len, 
 			"cpu%d %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64
@@ -286,20 +290,22 @@ procfs_docpustat(struct lwp *curl, struct proc *p,
 		if (len >= LBFSZ)
 			goto out;
 		i += 1;
+		nintr += CPUNAME->ci_data.cpu_nintr;
+		nswtch += CPUNAME->ci_data.cpu_nswtch;
 	}
 
 	len += snprintf(&bf[len], LBFSZ - len,
 			"disk 0 0 0 0\n"
 			"page %u %u\n"
 			"swap %u %u\n"
-			"intr %u\n"
-			"ctxt %u\n"
-			"btime %lld\n",
+			"intr %"PRIu64"\n"
+			"ctxt %"PRIu64"\n"
+			"btime %"PRId64"\n",
 			uvmexp.pageins, uvmexp.pdpageouts,
 			uvmexp.pgswapin, uvmexp.pgswapout,
-			uvmexp.intrs,
-			uvmexp.swtch,
-			(long long)boottime.tv_sec);
+			nintr,
+			nswtch,
+			boottime.tv_sec);
 	if (len >= LBFSZ)
 		goto out;
 
@@ -379,6 +385,8 @@ procfs_do_pid_statm(struct lwp *curl, struct lwp *l,
 		(unsigned long)(vm->vm_ssize),	/* stack size in pages */
 		(unsigned long) 0);
 
+	uvmspace_free(vm);
+
 	if (len == 0)
 		goto out;
 
@@ -417,18 +425,17 @@ procfs_do_pid_stat(struct lwp *curl, struct lwp *l,
 
 	get_proc_size_info(l, &stext, &etext, &sstack);
 
-	mutex_enter(&proclist_lock);
-	mutex_enter(&p->p_mutex);
-	mutex_enter(&p->p_smutex);
+	mutex_enter(proc_lock);
+	mutex_enter(p->p_lock);
 
 	calcru(p, NULL, NULL, NULL, &rt);
 
 	len = snprintf(bf, LBFSZ,
-	    "%d (%s) %c %d %d %d %d %d "
+	    "%d (%s) %c %d %d %d %lld %d "
 	    "%u "
 	    "%lu %lu %lu %lu %lu %lu %lu %lu "
 	    "%d %d %d "
-	    "%lu %lu %lu %lu %" PRIu64 " "
+	    "%lld %lld %lu %lu %" PRIu64 " "
 	    "%lu %lu %lu "
 	    "%u %u "
 	    "%u %u %u %u "
@@ -441,7 +448,7 @@ procfs_do_pid_stat(struct lwp *curl, struct lwp *l,
 
 	    p->p_pgid,
 	    p->p_session->s_sid,
-	    tty ? tty->t_dev : 0,
+	    (unsigned long long)(tty ? tty->t_dev : 0),
 	    (tty && tty->t_pgrp) ? tty->t_pgrp->pg_id : 0,
 
 	    p->p_flag,
@@ -450,17 +457,17 @@ procfs_do_pid_stat(struct lwp *curl, struct lwp *l,
 	    cru->ru_minflt,
 	    ru->ru_majflt,
 	    cru->ru_majflt,
-	    USEC_2_TICKS(ru->ru_utime.tv_usec),
-	    USEC_2_TICKS(ru->ru_stime.tv_usec),
-	    USEC_2_TICKS(cru->ru_utime.tv_usec),
-	    USEC_2_TICKS(cru->ru_stime.tv_usec),
+	    (long)USEC_2_TICKS(ru->ru_utime.tv_usec),
+	    (long)USEC_2_TICKS(ru->ru_stime.tv_usec),
+	    (long)USEC_2_TICKS(cru->ru_utime.tv_usec),
+	    (long)USEC_2_TICKS(cru->ru_stime.tv_usec),
 
 	    l->l_priority,				/* XXX: priority */
 	    p->p_nice - 20,
 	    0,
 
-	    rt.tv_sec,
-	    p->p_stats->p_start.tv_sec,
+	    (long long)rt.tv_sec,
+	    (long long)p->p_stats->p_start.tv_sec,
 	    (unsigned long)(vm->vm_tsize + vm->vm_dsize + vm->vm_ssize), /* size */
 	    (unsigned long)(vm->vm_rssize),	/* resident */
 	    p->p_rlimit[RLIMIT_RSS].rlim_cur,
@@ -481,9 +488,10 @@ procfs_do_pid_stat(struct lwp *curl, struct lwp *l,
 	    p->p_exitsig,
 	    0);						/* XXX: processor */
 
-	mutex_exit(&p->p_smutex);
-	mutex_exit(&p->p_mutex);
-	mutex_exit(&proclist_lock);
+	mutex_exit(p->p_lock);
+	mutex_exit(proc_lock);
+
+	uvmspace_free(vm);
 
 	if (len == 0)
 		goto out;
@@ -533,8 +541,8 @@ procfs_douptime(struct lwp *curl, struct proc *p,
 	microuptime(&runtime);
 	idle = curcpu()->ci_schedstate.spc_cp_time[CP_IDLE];
 	len = snprintf(bf, LBFSZ,
-	    "%lu.%02lu %" PRIu64 ".%02" PRIu64 "\n",
-	    runtime.tv_sec, runtime.tv_usec / 10000,
+	    "%lld.%02lu %" PRIu64 ".%02" PRIu64 "\n",
+	    (long long)runtime.tv_sec, (long)runtime.tv_usec / 10000,
 	    idle / hz, (((idle % hz) * 100) / hz) % 100);
 
 	if (len == 0)
@@ -561,8 +569,7 @@ procfs_domounts(struct lwp *curl, struct proc *p,
 	mutex_enter(&mountlist_lock);
 	for (mp = CIRCLEQ_FIRST(&mountlist); mp != (void *)&mountlist;
 	     mp = nmp) {
-		if (vfs_busy(mp, LK_NOWAIT, &mountlist_lock)) {
-			nmp = CIRCLEQ_NEXT(mp, mnt_list);
+		if (vfs_busy(mp, &nmp)) {
 			continue;
 		}
 
@@ -591,9 +598,7 @@ procfs_domounts(struct lwp *curl, struct proc *p,
 		memcpy(mtab + mtabsz, bf, len);
 		mtabsz += len;
 
-		mutex_enter(&mountlist_lock);
-		nmp = CIRCLEQ_NEXT(mp, mnt_list);
-		vfs_unbusy(mp);
+		vfs_unbusy(mp, false, &nmp);
 	}
 	mutex_exit(&mountlist_lock);
 	free(bf, M_TEMP);

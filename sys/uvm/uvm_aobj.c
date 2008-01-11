@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_aobj.c,v 1.96 2008/01/02 11:49:15 ad Exp $	*/
+/*	$NetBSD: uvm_aobj.c,v 1.114 2011/04/23 18:14:12 rmind Exp $	*/
 
 /*
  * Copyright (c) 1998 Chuck Silvers, Charles D. Cranor and
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,6 +27,7 @@
  *
  * from: Id: uvm_aobj.c,v 1.1.2.5 1998/02/06 05:14:38 chs Exp
  */
+
 /*
  * uvm_aobj.c: anonymous memory uvm_object pager
  *
@@ -43,15 +38,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_aobj.c,v 1.96 2008/01/02 11:49:15 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_aobj.c,v 1.114 2011/04/23 18:14:12 rmind Exp $");
 
 #include "opt_uvmhist.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/malloc.h>
 #include <sys/kernel.h>
+#include <sys/kmem.h>
 #include <sys/pool.h>
 
 #include <uvm/uvm.h>
@@ -118,7 +113,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_aobj.c,v 1.96 2008/01/02 11:49:15 ad Exp $");
 	(MIN((AOBJ)->u_pages >> UAO_SWHASH_CLUSTER_SHIFT, \
 	     UAO_SWHASH_MAXBUCKETS))
 
-
 /*
  * uao_swhash_elt: when a hash table is being used, this structure defines
  * the format of an entry in the bucket list.
@@ -138,11 +132,10 @@ struct uao_swhash_elt {
 LIST_HEAD(uao_swhash, uao_swhash_elt);
 
 /*
- * uao_swhash_elt_pool: pool of uao_swhash_elt structures
- * NOTE: Pages for this pool must not come from a pageable kernel map!
+ * uao_swhash_elt_pool: pool of uao_swhash_elt structures.
+ * Note: pages for this pool must not come from a pageable kernel map.
  */
-POOL_INIT(uao_swhash_elt_pool, sizeof(struct uao_swhash_elt), 0, 0, 0,
-    "uaoeltpl", NULL, IPL_VM);
+static struct pool uao_swhash_elt_pool;
 
 /*
  * uvm_aobj: the actual anon-backed uvm_object
@@ -167,14 +160,6 @@ struct uvm_aobj {
 };
 
 /*
- * uvm_aobj_pool: pool of uvm_aobj structures
- */
-POOL_INIT(uvm_aobj_pool, sizeof(struct uvm_aobj), 0, 0, 0, "aobjpl",
-    &pool_allocator_nointr, IPL_NONE);
-
-MALLOC_DEFINE(M_UVMAOBJ, "UVM aobj", "UVM aobj and related structures");
-
-/*
  * local functions
  */
 
@@ -182,6 +167,9 @@ static void	uao_free(struct uvm_aobj *);
 static int	uao_get(struct uvm_object *, voff_t, struct vm_page **,
 		    int *, int, vm_prot_t, int, int);
 static int	uao_put(struct uvm_object *, voff_t, voff_t, int);
+
+static void uao_detach_locked(struct uvm_object *);
+static void uao_reference_locked(struct uvm_object *);
 
 #if defined(VMSWAP)
 static struct uao_swhash_elt *uao_find_swhash_elt
@@ -324,6 +312,8 @@ uao_set_swslot(struct uvm_object *uobj, int pageidx, int slot)
 	UVMHIST_LOG(pdhist, "aobj %p pageidx %d slot %d",
 	    aobj, pageidx, slot, 0);
 
+	KASSERT(mutex_owned(&uobj->vmobjlock) || uobj->uo_refs == 0);
+
 	/*
 	 * if noswap flag is set, then we can't set a non-zero slot.
 	 */
@@ -396,8 +386,6 @@ uao_set_swslot(struct uvm_object *uobj, int pageidx, int slot)
 static void
 uao_free(struct uvm_aobj *aobj)
 {
-	int swpgonlydelta = 0;
-
 
 #if defined(VMSWAP)
 	uao_dropswap_range1(aobj, 0, 0);
@@ -412,14 +400,14 @@ uao_free(struct uvm_aobj *aobj)
 		 * free the hash table itself.
 		 */
 
-		free(aobj->u_swhash, M_UVMAOBJ);
+		hashdone(aobj->u_swhash, HASH_LIST, aobj->u_swhashmask);
 	} else {
 
 		/*
 		 * free the array itsself.
 		 */
 
-		free(aobj->u_swslots, M_UVMAOBJ);
+		kmem_free(aobj->u_swslots, aobj->u_pages * sizeof(int));
 	}
 #endif /* defined(VMSWAP) */
 
@@ -428,19 +416,7 @@ uao_free(struct uvm_aobj *aobj)
 	 */
 
 	UVM_OBJ_DESTROY(&aobj->u_obj);
-	pool_put(&uvm_aobj_pool, aobj);
-
-	/*
-	 * adjust the counter of pages only in swap for all
-	 * the swap slots we've freed.
-	 */
-
-	if (swpgonlydelta > 0) {
-		mutex_enter(&uvm_swap_data_lock);
-		KASSERT(uvmexp.swpgonly >= swpgonlydelta);
-		uvmexp.swpgonly -= swpgonlydelta;
-		mutex_exit(&uvm_swap_data_lock);
-	}
+	kmem_free(aobj, sizeof(struct uvm_aobj));
 }
 
 /*
@@ -466,7 +442,7 @@ uao_create(vsize_t size, int flags)
 	int refs;
 
 	/*
-	 * malloc a new aobj unless we are asked for the kernel object
+	 * Allocate a new aobj, unless kernel object is requested.
 	 */
 
 	if (flags & UAO_FLAG_KERNOBJ) {
@@ -482,7 +458,7 @@ uao_create(vsize_t size, int flags)
 		kobj_alloced = UAO_FLAG_KERNSWAP;
 		refs = 0xdeadbeaf; /* XXX: gcc */
 	} else {
-		aobj = pool_get(&uvm_aobj_pool, PR_WAITOK);
+		aobj = kmem_alloc(sizeof(struct uvm_aobj), KM_SLEEP);
 		aobj->u_pages = pages;
 		aobj->u_flags = 0;
 		refs = 1;
@@ -497,21 +473,20 @@ uao_create(vsize_t size, int flags)
 
 	if (flags == 0 || (flags & UAO_FLAG_KERNSWAP) != 0) {
 #if defined(VMSWAP)
-		int mflags = (flags & UAO_FLAG_KERNSWAP) != 0 ?
-		    M_NOWAIT : M_WAITOK;
+		const int kernswap = (flags & UAO_FLAG_KERNSWAP) != 0;
 
 		/* allocate hash table or array depending on object size */
 		if (UAO_USES_SWHASH(aobj)) {
 			aobj->u_swhash = hashinit(UAO_SWHASH_BUCKETS(aobj),
-			    HASH_LIST, M_UVMAOBJ, mflags, &aobj->u_swhashmask);
+			    HASH_LIST, kernswap ? false : true,
+			    &aobj->u_swhashmask);
 			if (aobj->u_swhash == NULL)
 				panic("uao_create: hashinit swhash failed");
 		} else {
-			aobj->u_swslots = malloc(pages * sizeof(int),
-			    M_UVMAOBJ, mflags);
+			aobj->u_swslots = kmem_zalloc(pages * sizeof(int),
+			    kernswap ? KM_NOSLEEP : KM_SLEEP);
 			if (aobj->u_swslots == NULL)
-				panic("uao_create: malloc swslots failed");
-			memset(aobj->u_swslots, 0, pages * sizeof(int));
+				panic("uao_create: swslots allocation failed");
 		}
 #endif /* defined(VMSWAP) */
 
@@ -555,6 +530,8 @@ uao_init(void)
 	uao_initialized = true;
 	LIST_INIT(&uao_list);
 	mutex_init(&uao_list_lock, MUTEX_DEFAULT, IPL_NONE);
+	pool_init(&uao_swhash_elt_pool, sizeof(struct uao_swhash_elt),
+	    0, 0, 0, "uaoeltpl", NULL, IPL_VM);
 }
 
 /*
@@ -567,6 +544,14 @@ uao_init(void)
 void
 uao_reference(struct uvm_object *uobj)
 {
+
+	/*
+ 	 * kernel_object already has plenty of references, leave it alone.
+ 	 */
+
+	if (UVM_OBJ_IS_KERN_OBJECT(uobj))
+		return;
+
 	mutex_enter(&uobj->vmobjlock);
 	uao_reference_locked(uobj);
 	mutex_exit(&uobj->vmobjlock);
@@ -581,7 +566,7 @@ uao_reference(struct uvm_object *uobj)
  * it's already locked.
  */
 
-void
+static void
 uao_reference_locked(struct uvm_object *uobj)
 {
 	UVMHIST_FUNC("uao_reference"); UVMHIST_CALLED(maphist);
@@ -608,6 +593,14 @@ uao_reference_locked(struct uvm_object *uobj)
 void
 uao_detach(struct uvm_object *uobj)
 {
+
+	/*
+ 	 * detaching from kernel_object is a noop.
+ 	 */
+
+	if (UVM_OBJ_IS_KERN_OBJECT(uobj))
+		return;
+
 	mutex_enter(&uobj->vmobjlock);
 	uao_detach_locked(uobj);
 }
@@ -621,7 +614,7 @@ uao_detach(struct uvm_object *uobj)
  * it's already locked.
  */
 
-void
+static void
 uao_detach_locked(struct uvm_object *uobj)
 {
 	struct uvm_aobj *aobj = (struct uvm_aobj *)uobj;
@@ -752,7 +745,7 @@ uao_put(struct uvm_object *uobj, voff_t start, voff_t stop, int flags)
 			stop = aobj->u_pages << PAGE_SHIFT;
 		}
 		by_list = (uobj->uo_npages <=
-		    ((stop - start) >> PAGE_SHIFT) * UVM_PAGE_HASH_PENALTY);
+		    ((stop - start) >> PAGE_SHIFT) * UVM_PAGE_TREE_PENALTY);
 	}
 	UVMHIST_LOG(maphist,
 	    " flush start=0x%lx, stop=0x%x, by_list=%d, flags=0x%x",
@@ -773,12 +766,8 @@ uao_put(struct uvm_object *uobj, voff_t start, voff_t stop, int flags)
 	 * genfs_putpages() also.
 	 */
 
-	curmp.uobject = uobj;
-	curmp.offset = (voff_t)-1;
-	curmp.flags = PG_BUSY;
-	endmp.uobject = uobj;
-	endmp.offset = (voff_t)-1;
-	endmp.flags = PG_BUSY;
+	curmp.flags = PG_MARKER;
+	endmp.flags = PG_MARKER;
 
 	/*
 	 * now do it.  note: we must update nextpg in the body of loop or we
@@ -787,23 +776,22 @@ uao_put(struct uvm_object *uobj, voff_t start, voff_t stop, int flags)
 	 */
 
 	if (by_list) {
-		TAILQ_INSERT_TAIL(&uobj->memq, &endmp, listq);
+		TAILQ_INSERT_TAIL(&uobj->memq, &endmp, listq.queue);
 		nextpg = TAILQ_FIRST(&uobj->memq);
-		uvm_lwp_hold(curlwp);
 	} else {
 		curoff = start;
 		nextpg = NULL;	/* Quell compiler warning */
 	}
 
-	mutex_enter(&uvm_pageqlock);
-
-	/* locked: both page queues and uobj */
+	/* locked: uobj */
 	for (;;) {
 		if (by_list) {
 			pg = nextpg;
 			if (pg == &endmp)
 				break;
-			nextpg = TAILQ_NEXT(pg, listq);
+			nextpg = TAILQ_NEXT(pg, listq.queue);
+			if (pg->flags & PG_MARKER)
+				continue;
 			if (pg->offset < start || pg->offset >= stop)
 				continue;
 		} else {
@@ -815,6 +803,28 @@ uao_put(struct uvm_object *uobj, voff_t start, voff_t stop, int flags)
 			if (pg == NULL)
 				continue;
 		}
+
+		/*
+		 * wait and try again if the page is busy.
+		 */
+
+		if (pg->flags & PG_BUSY) {
+			if (by_list) {
+				TAILQ_INSERT_BEFORE(pg, &curmp, listq.queue);
+			}
+			pg->flags |= PG_WANTED;
+			UVM_UNLOCK_AND_WAIT(pg, &uobj->vmobjlock, 0,
+			    "uao_put", 0);
+			mutex_enter(&uobj->vmobjlock);
+			if (by_list) {
+				nextpg = TAILQ_NEXT(&curmp, listq.queue);
+				TAILQ_REMOVE(&uobj->memq, &curmp,
+				    listq.queue);
+			} else
+				curoff -= PAGE_SIZE;
+			continue;
+		}
+
 		switch (flags & (PGO_CLEANIT|PGO_FREE|PGO_DEACTIVATE)) {
 
 		/*
@@ -828,17 +838,15 @@ uao_put(struct uvm_object *uobj, voff_t start, voff_t stop, int flags)
 		case PGO_CLEANIT|PGO_DEACTIVATE:
 		case PGO_DEACTIVATE:
  deactivate_it:
+			mutex_enter(&uvm_pageqlock);
 			/* skip the page if it's wired */
-			if (pg->wire_count != 0)
-				continue;
-
-			/* ...and deactivate the page. */
-			pmap_clear_reference(pg);
-			uvm_pagedeactivate(pg);
-			continue;
+			if (pg->wire_count == 0) {
+				uvm_pagedeactivate(pg);
+			}
+			mutex_exit(&uvm_pageqlock);
+			break;
 
 		case PGO_FREE:
-
 			/*
 			 * If there are multiple references to
 			 * the object, just deactivate the page.
@@ -848,29 +856,10 @@ uao_put(struct uvm_object *uobj, voff_t start, voff_t stop, int flags)
 				goto deactivate_it;
 
 			/*
-			 * wait and try again if the page is busy.
-			 * otherwise free the swap slot and the page.
+			 * free the swap slot and the page.
 			 */
 
 			pmap_page_protect(pg, VM_PROT_NONE);
-			if (pg->flags & PG_BUSY) {
-				if (by_list) {
-					TAILQ_INSERT_BEFORE(pg, &curmp, listq);
-				}
-				pg->flags |= PG_WANTED;
-				mutex_exit(&uvm_pageqlock);
-				UVM_UNLOCK_AND_WAIT(pg, &uobj->vmobjlock, 0,
-				    "uao_put", 0);
-				mutex_enter(&uobj->vmobjlock);
-				mutex_enter(&uvm_pageqlock);
-				if (by_list) {
-					nextpg = TAILQ_NEXT(&curmp, listq);
-					TAILQ_REMOVE(&uobj->memq, &curmp,
-					    listq);
-				} else
-					curoff -= PAGE_SIZE;
-				continue;
-			}
 
 			/*
 			 * freeing swapslot here is not strictly necessary.
@@ -879,14 +868,17 @@ uao_put(struct uvm_object *uobj, voff_t start, voff_t stop, int flags)
 			 */
 
 			uao_dropswap(uobj, pg->offset >> PAGE_SHIFT);
+			mutex_enter(&uvm_pageqlock);
 			uvm_pagefree(pg);
-			continue;
+			mutex_exit(&uvm_pageqlock);
+			break;
+
+		default:
+			panic("%s: impossible", __func__);
 		}
 	}
-	mutex_exit(&uvm_pageqlock);
 	if (by_list) {
-		TAILQ_REMOVE(&uobj->memq, &endmp, listq);
-		uvm_lwp_rele(curlwp);
+		TAILQ_REMOVE(&uobj->memq, &endmp, listq.queue);
 	}
 	mutex_exit(&uobj->vmobjlock);
 	return 0;

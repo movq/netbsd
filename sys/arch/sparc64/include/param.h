@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.42 2007/10/17 19:57:30 garbled Exp $ */
+/*	$NetBSD: param.h,v 1.45 2011/05/12 05:41:50 mrg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -67,13 +67,15 @@
 #include "opt_sparc_arch.h"
 #endif
 
+#ifdef __arch64__
 #define	_MACHINE	sparc64
 #define	MACHINE		"sparc64"
-#ifdef __arch64__
 #define	_MACHINE_ARCH	sparc64
 #define	MACHINE_ARCH	"sparc64"
 #define	MID_MACHINE	MID_SPARC64
 #else
+#define	_MACHINE	sparc
+#define	MACHINE		"sparc"
 #define	_MACHINE_ARCH	sparc
 #define	MACHINE_ARCH	"sparc"
 #define	MID_MACHINE	MID_SPARC
@@ -206,18 +208,6 @@ extern int nbpg, pgofset, pgshift;
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
-#endif
-
 #define MSGBUFSIZE	NBPG
 
 /*
@@ -240,6 +230,10 @@ extern void	delay(unsigned int);
 
 extern int cputyp;
 
+#define CPU_ISSUN4U     (cputyp == CPU_SUN4U)
+#define CPU_ISSUN4US    (cputyp == CPU_SUN4US)
+#define CPU_ISSUN4V     (cputyp == CPU_SUN4V)
+
 #endif /* _LOCORE */
 #endif /* _KERNEL */
 
@@ -250,6 +244,8 @@ extern int cputyp;
 #define CPU_SUN4C	1
 #define CPU_SUN4M	2
 #define CPU_SUN4U	3
+#define CPU_SUN4US	4
+#define CPU_SUN4V	5
 
 /*
  * Shorthand CPU-type macros. Enumerate all eight cases.
@@ -265,7 +261,6 @@ extern int cputyp;
  * extra memory references they'll generate.
  */
 
-#define CPU_ISSUN4U	(1)
 #define CPU_ISSUN4M	(0)
 #define CPU_ISSUN4C	(0)
 #define CPU_ISSUN4	(0)

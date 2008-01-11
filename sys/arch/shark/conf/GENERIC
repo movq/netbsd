@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.75 2008/01/05 20:14:01 christos Exp $
+#	$NetBSD: GENERIC,v 1.94 2011/03/23 04:46:29 macallan Exp $
 #
 # Generic Shark configuration.
 #
@@ -7,7 +7,7 @@ include	"arch/shark/conf/std.shark"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.75 $"
+#ident		"GENERIC-$Revision: 1.94 $"
 
 # estimated number of users
 maxusers	32
@@ -17,7 +17,6 @@ maxusers	32
 options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 options 	HZ=64
 #options 	NTP		# NTP phase/frequency locked loop
-options 	NMBCLUSTERS=1024 # XXX, temporarily required
 #options 	BOOT_QUIETLY	# twiddle instead of normal boot msg output
 
 # CPU options
@@ -53,7 +52,6 @@ file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay filesystem
-#file-system	PORTAL		# portal filesystem (still experimental)
 file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
@@ -63,9 +61,10 @@ file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
 
 # File system options
-#options 	QUOTA		# UFS quotas
+#options 	QUOTA		# legacy UFS quotas
+#options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# FFS Endian Independant support
-options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -118,6 +117,8 @@ options 	COMPAT_15	# NetBSD 1.5 compatibility.
 options 	COMPAT_16	# NetBSD 1.6 compatibility.
 options 	COMPAT_20	# NetBSD 2.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_43	# 4.3BSD compatibility.
 options 	COMPAT_LINUX	# Linux compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -128,7 +129,6 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
-#options 	SHMMAXPGS=1024	# 1024 pages is the default
 options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
@@ -148,11 +148,11 @@ options 	INSECURE		# disable kernel securelevel
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics, XXX temp required
-options 	LKM		# loadable kernel modules
 options 	KMEMSTATS	# kernel memory statistics, XXX temp required
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
+options 	MODULAR		# new style module(7) framework
 
 # Development and Debugging options
 
@@ -160,7 +160,6 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 #options 	PORTMASTER	# Enable PortMaster only options
 options 	DIAGNOSTIC	# internal consistency checks
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
-#options 	IPKDB		# remote kernel debugging
 options 	DDB		# in-kernel debugger
 options 	SYMTAB_SPACE=440000 	# reserve symbol space for DDB
 				# (needed because we boot netbsd.aout)
@@ -252,7 +251,8 @@ pckbc*		at ofisa?
 pckbd*		at pckbc?
 pms*		at pckbc?
 vga*		at ofbus?
-igsfb*		at ofbus?
+igsfb*		at ofbus?	# IGS CyberPro in rev. 5 sharks
+chipsfb*	at ofbus?	# C&T 65550 in rev. 4 and earlier
 wsdisplay*	at wsemuldisplaydev?
 wskbd*		at pckbd? console ?
 wsmouse*	at pms? mux 0
@@ -279,6 +279,14 @@ midi*		at opl?
 # Joystick @OFW
 joy*		at ofisa?
 
+# Pull in optional local configuration
+cinclude "arch/shark/conf/GENERIC.local"
+
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
 pseudo-device	loop	1		# network loopback
 pseudo-device	bpfilter		# packet filter
 #pseudo-device	carp			# Common Address Redundancy Protocol
@@ -294,11 +302,11 @@ pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 #pseudo-device	ccd	2		# concatenated disk devices
-pseudo-device	fss	4		# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 #pseudo-device	cgd	4		# cryptographic disk devices
 pseudo-device	rnd			# /dev/random and /dev/urandom
 
-#pseudo-device	md	1		# Ramdisk driver
+#pseudo-device	md			# Ramdisk driver
 #pseudo-device	profiler 1		# fiq based profiling device
 pseudo-device	sequencer 1		# MIDI sequencer
 pseudo-device	openfirm		# /dev/openfirm

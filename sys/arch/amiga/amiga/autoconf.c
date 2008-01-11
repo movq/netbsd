@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.98 2005/12/11 12:16:26 christos Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.106 2011/01/13 22:02:05 phx Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.98 2005/12/11 12:16:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.106 2011/01/13 22:02:05 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,6 +46,9 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.98 2005/12/11 12:16:26 christos Exp $
 #include <amiga/amiga/cfdev.h>
 #include <amiga/amiga/device.h>
 #include <amiga/amiga/custom.h>
+#ifdef DRACO
+#include <amiga/amiga/drcustom.h>
+#endif
 
 static void findroot(void);
 void mbattach(struct device *, struct device *, void *);
@@ -62,7 +65,7 @@ int amiga_realconfig;
  * called at boot time, configure all devices on system
  */
 void
-cpu_configure()
+cpu_configure(void)
 {
 	int s;
 #ifdef DEBUG_KERNEL_START
@@ -115,7 +118,7 @@ cpu_configure()
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
 	findroot();
 #ifdef DEBUG_KERNEL_START
@@ -129,23 +132,20 @@ cpu_rootconf()
 
 /*ARGSUSED*/
 int
-simple_devprint(auxp, pnp)
-	void *auxp;
-	const char *pnp;
+simple_devprint(void *auxp, const char *pnp)
 {
 	return(QUIET);
 }
 
 int
-matchname(fp, sp)
-	const char *fp, *sp;
+matchname(const char *fp, const char *sp)
 {
 	int len;
 
 	len = strlen(fp);
 	if (strlen(sp) != len)
 		return(0);
-	if (bcmp(fp, sp, len) == 0)
+	if (memcmp(fp, sp, len) == 0)
 		return(1);
 	return(0);
 }
@@ -157,11 +157,7 @@ matchname(fp, sp)
  * by checking for NULL.
  */
 int
-amiga_config_found(pcfp, pdp, auxp, pfn)
-	struct cfdata *pcfp;
-	struct device *pdp;
-	void *auxp;
-	cfprint_t pfn;
+amiga_config_found(struct cfdata *pcfp, struct device *pdp, void *auxp, cfprint_t pfn)
 {
 	struct device temp;
 	struct cfdata *cf;
@@ -197,7 +193,7 @@ amiga_config_found(pcfp, pdp, auxp, pfn)
  * the console. Kinda hacky but it works.
  */
 void
-config_console()
+config_console(void)
 {
 	struct cfdata *cf;
 
@@ -237,10 +233,7 @@ CFATTACH_DECL(mainbus, sizeof(struct device),
     mbmatch, mbattach, NULL, NULL);
 
 int
-mbmatch(pdp, cfp, auxp)
-	struct device	*pdp;
-	struct cfdata	*cfp;
-	void		*auxp;
+mbmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 #if 0	/*
 	 * XXX is this right? but we need to be found twice
@@ -261,9 +254,7 @@ mbmatch(pdp, cfp, auxp)
  * "find" all the things that should be there.
  */
 void
-mbattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+mbattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	printf("\n");
 	config_found(dp, __UNCONST("clock"), simple_devprint);
@@ -293,15 +284,13 @@ mbattach(pdp, dp, auxp)
 		config_found(dp, __UNCONST("amidisplaycc"), simple_devprint);
 		config_found(dp, __UNCONST("fdc"), simple_devprint);
 	}
-	if (is_a4000() || is_a1200()) {
+	if (is_a4000() || is_a1200() || is_a600())
 		config_found(dp, __UNCONST("wdc"), simple_devprint);
-		config_found(dp, __UNCONST("idesc"), simple_devprint);
-	}
 	if (is_a4000())			/* Try to configure A4000T SCSI */
 		config_found(dp, __UNCONST("afsc"), simple_devprint);
 	if (is_a3000())
 		config_found(dp, __UNCONST("ahsc"), simple_devprint);
-	if (/*is_a600() || */is_a1200())
+	if (is_a600() || is_a1200())
 		config_found(dp, __UNCONST("pccard"), simple_devprint);
 #ifdef DRACO
 	if (!is_draco())
@@ -312,9 +301,7 @@ mbattach(pdp, dp, auxp)
 }
 
 int
-mbprint(auxp, pnp)
-	void *auxp;
-	const char *pnp;
+mbprint(void *auxp, const char *pnp)
 {
 	if (pnp)
 		aprint_normal("%s at %s", (char *)auxp, pnp);
@@ -374,7 +361,7 @@ findroot(void)
 {
 	struct disk *dkp;
 	struct partition *pp;
-	struct device **devs;
+	device_t *devs;
 	int i, maj, unit;
 	const struct bdevsw *bdp;
 
@@ -392,15 +379,15 @@ findroot(void)
 #ifdef DEBUG_KERNEL_START
 			printf("probing for sd%d\n", unit);
 #endif
-			if (sd_cd.cd_devs[unit] == NULL)
+			if (device_lookup(&sd_cd,unit) == NULL)
 				continue;
 
 			/*
 			 * Find the disk corresponding to the current
 			 * device.
 			 */
-			devs = (struct device **)sd_cd.cd_devs;
-			if ((dkp = disk_find(devs[unit]->dv_xname)) == NULL)
+			devs = (device_t *)sd_cd.cd_devs;
+			if ((dkp = disk_find(device_xname(device_lookup(&sd_cd, unit)))) == NULL)
 				continue;
 
 			if (dkp->dk_driver == NULL ||
@@ -448,8 +435,8 @@ findroot(void)
 			 * Find the disk structure corresponding to the
 			 * current device.
 			 */
-			devs = (struct device **)genericconf[i]->cd_devs;
-			if ((dkp = disk_find(devs[unit]->dv_xname)) == NULL)
+			devs = (device_t *)genericconf[i]->cd_devs;
+			if ((dkp = disk_find(device_xname(devs[unit]))) == NULL)
 				continue;
 
 			if (dkp->dk_driver == NULL ||
@@ -582,5 +569,13 @@ is_a1200()
 {
 	if ((machineid >> 16) == 1200)
 		return (1);		/* It's an A1200 */
+	return (0);			/* Machine type not set */
+}
+
+int
+is_a600()
+{
+	if ((machineid >> 16) == 600)
+		return (1);		/* It's an A600 */
 	return (0);			/* Machine type not set */
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.23 2008/01/09 00:23:18 yamt Exp $	*/
+/*	$NetBSD: lock.h,v 1.25 2009/01/15 01:20:31 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,6 +35,8 @@
 
 #ifndef _X86_LOCK_H_
 #define	_X86_LOCK_H_
+
+#include <sys/param.h>
 
 static __inline int
 __SIMPLELOCK_LOCKED_P(__cpu_simple_lock_t *__ptr)
@@ -69,7 +64,7 @@ __cpu_simple_lock_clear(__cpu_simple_lock_t *__ptr)
 	*__ptr = __SIMPLELOCK_UNLOCKED;
 }
 
-#ifdef _KERNEL
+#ifdef _HARDKERNEL
 
 #include <machine/cpufunc.h>
 
@@ -186,6 +181,6 @@ __cpu_simple_unlock(__cpu_simple_lock_t *lockp)
 	*lockp = __SIMPLELOCK_UNLOCKED;
 }
 
-#endif	/* _KERNEL */
+#endif	/* _HARDKERNEL */
 
 #endif /* _X86_LOCK_H_ */

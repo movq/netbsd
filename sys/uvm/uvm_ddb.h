@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_ddb.h,v 1.11 2007/02/21 23:00:12 thorpej Exp $	*/
+/*	$NetBSD: uvm_ddb.h,v 1.15 2011/05/17 04:18:07 mrg Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -39,7 +32,7 @@
 
 #ifdef _KERNEL
 
-#ifdef DDB
+#if defined(DDB) || defined(DEBUGPRINT)
 void	uvm_map_printit(struct vm_map *, bool,
 	    void (*)(const char *, ...));
 void	uvm_object_printit(struct uvm_object *, bool,
@@ -48,7 +41,7 @@ void	uvm_page_printit(struct vm_page *, bool,
 	    void (*)(const char *, ...));
 void	uvm_page_printall(void (*)(const char *, ...));
 void	uvmexp_print(void (*)(const char *, ...));
-#endif /* DDB */
+#endif /* DDB || DEBUGPRINT */
 
 #endif /* _KERNEL */
 

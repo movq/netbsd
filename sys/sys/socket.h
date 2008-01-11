@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.h,v 1.89 2007/09/19 04:33:45 dyoung Exp $	*/
+/*	$NetBSD: socket.h,v 1.99 2011/02/01 01:39:21 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -120,7 +120,9 @@ typedef	_BSD_SSIZE_T_	ssize_t;
 #define	SO_LINGER	0x0080		/* linger on close if data present */
 #define	SO_OOBINLINE	0x0100		/* leave received OOB data in line */
 #define	SO_REUSEPORT	0x0200		/* allow local address & port reuse */
-#define	SO_TIMESTAMP	0x0400		/* timestamp received dgram traffic */
+/* 	SO_OTIMESTAMP	0x0400		*/
+#define	SO_ACCEPTFILTER	0x1000		/* there is an accept filter */
+#define	SO_TIMESTAMP	0x2000		/* timestamp received dgram traffic */
 
 
 /*
@@ -130,8 +132,8 @@ typedef	_BSD_SSIZE_T_	ssize_t;
 #define SO_RCVBUF	0x1002		/* receive buffer size */
 #define SO_SNDLOWAT	0x1003		/* send low-water mark */
 #define SO_RCVLOWAT	0x1004		/* receive low-water mark */
-#define SO_SNDTIMEO	0x1005		/* send timeout */
-#define SO_RCVTIMEO	0x1006		/* receive timeout */
+/* SO_OSNDTIMEO		0x1005 */
+/* SO_ORCVTIMEO		0x1006 */
 #define	SO_ERROR	0x1007		/* get error status and clear */
 #define	SO_TYPE		0x1008		/* get socket type */
 #define	SO_OVERFLOWED	0x1009		/* datagrams: return packets dropped */
@@ -140,12 +142,19 @@ typedef	_BSD_SSIZE_T_	ssize_t;
 					 * kernel removes header and supplies
 					 * payload
 					 */
+#define SO_SNDTIMEO	0x100b		/* send timeout */
+#define SO_RCVTIMEO	0x100c		/* receive timeout */
 /*
  * Structure used for manipulating linger option.
  */
 struct	linger {
 	int	l_onoff;		/* option on/off */
 	int	l_linger;		/* linger time in seconds */
+};
+
+struct	accept_filter_arg {
+	char	af_name[16];
+	char	af_arg[256-16];
 };
 
 /*
@@ -157,7 +166,7 @@ struct	linger {
  * Address families.
  */
 #define	AF_UNSPEC	0		/* unspecified */
-#define	AF_LOCAL	1		/* local to host (pipes, portals) */
+#define	AF_LOCAL	1		/* local to host */
 #define	AF_UNIX		AF_LOCAL	/* backward compatibility */
 #define	AF_INET		2		/* internetwork: UDP, TCP, etc. */
 #define	AF_IMPLINK	3		/* arpanet imp addresses */
@@ -175,7 +184,7 @@ struct	linger {
 #define AF_LAT		14		/* LAT */
 #define	AF_HYLINK	15		/* NSC Hyperchannel */
 #define	AF_APPLETALK	16		/* Apple Talk */
-#define	AF_ROUTE	17		/* Internal Routing Protocol */
+#define	AF_OROUTE	17		/* Internal Routing Protocol */
 #define	AF_LINK		18		/* Link layer interface */
 #if defined(_NETBSD_SOURCE)
 #define	pseudo_AF_XTP	19		/* eXpress Transfer Protocol (no AF) */
@@ -200,8 +209,10 @@ struct	linger {
 					   in interface output routine */
 #endif
 #define AF_BLUETOOTH	31		/* Bluetooth: HCI, SCO, L2CAP, RFCOMM */
-
-#define	AF_MAX		32
+#define	AF_IEEE80211	32		/* IEEE80211 */
+#define	AF_MPLS		33		/* MultiProtocol Label Switching */
+#define	AF_ROUTE	34		/* Internal Routing Protocol */
+#define	AF_MAX		35
 
 /*
  * Structure used by kernel to store most
@@ -269,7 +280,7 @@ struct sockaddr_storage {
 #define PF_LAT		AF_LAT
 #define	PF_HYLINK	AF_HYLINK
 #define	PF_APPLETALK	AF_APPLETALK
-#define	PF_ROUTE	AF_ROUTE
+#define	PF_OROUTE	AF_OROUTE
 #define	PF_LINK		AF_LINK
 #if defined(_NETBSD_SOURCE)
 #define	PF_XTP		pseudo_AF_XTP	/* really just proto family, no AF */
@@ -290,6 +301,8 @@ struct sockaddr_storage {
 #define PF_KEY 		pseudo_AF_KEY	/* like PF_ROUTE, only for key mgmt */
 #endif
 #define PF_BLUETOOTH	AF_BLUETOOTH
+#define	PF_MPLS		AF_MPLS
+#define	PF_ROUTE	AF_ROUTE
 
 #define	PF_MAX		AF_MAX
 
@@ -354,7 +367,7 @@ struct sockcred {
 	{ "lat", CTLTYPE_NODE }, \
 	{ "hylink", CTLTYPE_NODE }, \
 	{ "appletalk", CTLTYPE_NODE }, \
-	{ "route", CTLTYPE_NODE }, \
+	{ "oroute", CTLTYPE_NODE }, \
 	{ "link_layer", CTLTYPE_NODE }, \
 	{ "xtp", CTLTYPE_NODE }, \
 	{ "coip", CTLTYPE_NODE }, \
@@ -367,6 +380,9 @@ struct sockcred {
 	{ "natm", CTLTYPE_NODE }, \
 	{ "arp", CTLTYPE_NODE }, \
 	{ "key", CTLTYPE_NODE }, \
+	{ "ieee80211", CTLTYPE_NODE }, \
+	{ "mlps", CTLTYPE_NODE }, \
+	{ "route", CTLTYPE_NODE }, \
 }
 
 struct kinfo_pcb {
@@ -422,14 +438,16 @@ struct kinfo_pcb {
  */
 #define NET_RT_DUMP	1		/* dump; may limit to a.f. */
 #define NET_RT_FLAGS	2		/* by flags, e.g. RESOLVING */
-#define NET_RT_OIFLIST	3		/* old NET_RT_IFLIST (pre 1.5) */
-#define NET_RT_IFLIST	4		/* survey interface list */
-#define	NET_RT_MAXID	5
+#define NET_RT_OOIFLIST	3		/* old NET_RT_IFLIST (pre 1.5) */
+#define NET_RT_OIFLIST	4		/* survey interface list */
+#define	NET_RT_IFLIST	5
+#define	NET_RT_MAXID	6
 
 #define CTL_NET_RT_NAMES { \
 	{ 0, 0 }, \
 	{ "dump", CTLTYPE_STRUCT }, \
 	{ "flags", CTLTYPE_STRUCT }, \
+	{ 0, 0 }, \
 	{ 0, 0 }, \
 	{ "iflist", CTLTYPE_STRUCT }, \
 }
@@ -533,8 +551,9 @@ struct cmsghdr {
 /* "Socket"-level control message types: */
 #define	SCM_RIGHTS	0x01		/* access rights (array of int) */
 #if defined(_NETBSD_SOURCE)
-#define	SCM_TIMESTAMP	0x02		/* timestamp (struct timeval) */
+/* 			0x02		   timestamp (struct timeval50) */
 #define	SCM_CREDS	0x04		/* credentials (struct sockcred) */
+#define	SCM_TIMESTAMP	0x08		/* timestamp (struct timeval) */
 #endif
 
 /*
@@ -560,10 +579,13 @@ sockaddr_getlen(const struct sockaddr *sa)
 __BEGIN_DECLS
 struct sockaddr *sockaddr_copy(struct sockaddr *, socklen_t,
     const struct sockaddr *);
+struct sockaddr *sockaddr_externalize(struct sockaddr *, socklen_t,
+    const struct sockaddr *);
 struct sockaddr *sockaddr_alloc(sa_family_t, socklen_t, int);
 const void *sockaddr_const_addr(const struct sockaddr *, socklen_t *);
 void *sockaddr_addr(struct sockaddr *, socklen_t *);
 const struct sockaddr *sockaddr_any(const struct sockaddr *);
+const struct sockaddr *sockaddr_any_by_family(int);
 const void *sockaddr_anyaddr(const struct sockaddr *, socklen_t *);
 int sockaddr_cmp(const struct sockaddr *, const struct sockaddr *);
 struct sockaddr *sockaddr_dup(const struct sockaddr *, int);

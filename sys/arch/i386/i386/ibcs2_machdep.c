@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_machdep.c,v 1.33 2007/12/20 23:02:40 dsl Exp $	*/
+/*	$NetBSD: ibcs2_machdep.c,v 1.40 2010/02/14 11:09:54 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,11 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.33 2007/12/20 23:02:40 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.40 2010/02/14 11:09:54 drochner Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
-#include "opt_math_emulate.h"
 #include "opt_compat_ibcs2.h"
 #endif
 
@@ -49,7 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.33 2007/12/20 23:02:40 dsl Exp $
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
-#include <sys/user.h>
 #include <sys/signalvar.h>
 #include <sys/signal.h>
 
@@ -71,12 +62,9 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.33 2007/12/20 23:02:40 dsl Exp $
 #include <compat/ibcs2/ibcs2_syscallargs.h>
 
 void
-ibcs2_setregs(l, epp, stack)
-	struct lwp *l;
-	struct exec_package *epp;
-	u_long stack;
+ibcs2_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 	struct trapframe *tf;
 
 	setregs(l, epp, stack);
@@ -86,7 +74,7 @@ ibcs2_setregs(l, epp, stack)
 		pcb->pcb_savefpu.sv_87.sv_env.en_cw = __iBCS2_NPXCW__;
 	tf = l->l_md.md_regs;
 	tf->tf_eax = 0x2000000;		/* XXX base of heap */
-	tf->tf_cs = GSEL(LUCODEBIG_SEL, SEL_UPL);
+	tf->tf_cs = GSEL(GUCODEBIG_SEL, SEL_UPL);
 }
 
 /*
@@ -160,9 +148,9 @@ ibcs2_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	sendsig_reset(l, sig);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -191,12 +179,7 @@ ibcs2_sys_sysmachine(struct lwp *l, const struct ibcs2_sys_sysmachine_args *uap,
 
 	switch (SCARG(uap, cmd)) {
 	case IBCS2_SI86FPHW:
-		val = IBCS2_FP_NO;
-#ifdef MATH_EMULATE
-		val = IBCS2_FP_SW;
-#else
-		val = IBCS2_FP_387;		/* a real coprocessor */
-#endif
+		val = IBCS2_FP_387;
 		if ((error = copyout((void *)&val, (void *)SCARG(uap, arg),
 				     sizeof(val))))
 			return error;

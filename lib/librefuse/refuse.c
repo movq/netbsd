@@ -1,4 +1,4 @@
-/*	$NetBSD: refuse.c,v 1.87 2007/12/27 11:39:06 pooka Exp $	*/
+/*	$NetBSD: refuse.c,v 1.92 2009/03/05 01:21:57 msaitoh Exp $	*/
 
 /*
  * Copyright © 2007 Alistair Crooks.  All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: refuse.c,v 1.87 2007/12/27 11:39:06 pooka Exp $");
+__RCSID("$NetBSD: refuse.c,v 1.92 2009/03/05 01:21:57 msaitoh Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -364,9 +364,10 @@ set_refuse_mount_name(char **argv, char *name, size_t size)
 
 
 /* this function exposes struct fuse to userland */
-struct fuse *
-fuse_setup(int argc, char **argv, const struct fuse_operations *ops,
-	size_t size, char **mountpoint, int *multithreaded, int *fd)
+static struct fuse *
+fuse_setup_real(int argc, char **argv, const struct fuse_operations *ops,
+	size_t size, char **mountpoint, int *multithreaded, int *fd,
+        void *user_data)
 {
 	struct fuse_chan	*fc;
 	struct fuse_args	*args;
@@ -397,7 +398,7 @@ fuse_setup(int argc, char **argv, const struct fuse_operations *ops,
 	}
 
 	fc = fuse_mount(*mountpoint = argv[i], args);
-	fuse = fuse_new(fc, args, ops, size, NULL);
+	fuse = fuse_new(fc, args, ops, size, user_data);
 
 	fuse_opt_free_args(args);
 	free(args);
@@ -413,6 +414,26 @@ fuse_setup(int argc, char **argv, const struct fuse_operations *ops,
 	}
 
 	return fuse;
+}
+
+#ifdef fuse_setup
+#undef fuse_setup
+#endif
+
+struct fuse *
+fuse_setup(int argc, char **argv, const struct fuse_operations *ops,
+	size_t size, char **mountpoint, int *multithreaded, int *fd)
+{
+    return fuse_setup_real(argc, argv, ops, size, mountpoint,
+	multithreaded, fd, NULL);
+}
+
+struct fuse *
+fuse_setup26(int argc, char **argv, const struct fuse_operations *ops,
+	size_t size, char **mountpoint, int *multithreaded, void *user_data)
+{
+    return fuse_setup_real(argc, argv, ops, size, mountpoint,
+	multithreaded, NULL, user_data);
 }
 
 #define FUSE_ERR_UNLINK(fuse, file) if (fuse->op.unlink) fuse->op.unlink(file)
@@ -1063,7 +1084,7 @@ puffs_fuse_node_write(struct puffs_usermount *pu, void *opc, uint8_t *buf,
 	    &rn->file_info);
 
 	if (ret > 0) {
-		if (offset + ret > pn->pn_va.va_size)
+		if ((uint64_t)(offset + ret) > pn->pn_va.va_size)
 			pn->pn_va.va_size = offset + ret;
 		*resid -= ret;
 		ret = 0;
@@ -1119,7 +1140,7 @@ puffs_fuse_node_readdir(struct puffs_usermount *pu, void *opc,
 	}
 
 	/* now, stuff results into the kernel buffers */
-	while (*readoff < dirh->bufsize - dirh->reslen) {
+	while (*readoff < (off_t)(dirh->bufsize - dirh->reslen)) {
 		/*LINTED*/
 		fromdent = (struct dirent *)((uint8_t *)dirh->dbuf + *readoff);
 
@@ -1185,7 +1206,7 @@ puffs_fuse_fs_statvfs(struct puffs_usermount *pu, struct statvfs *svfsb)
 		ret = fuse->op.statfs(PNPATH(puffs_getroot(pu)), svfsb);
 	}
 
-        return ret;
+        return -ret;
 }
 
 
@@ -1265,7 +1286,7 @@ fuse_new(struct fuse_chan *fc, struct fuse_args *args,
 		err(EXIT_FAILURE, "fuse_new");
 	}
 
-	/* copy fuse ops to their own stucture */
+	/* copy fuse ops to their own structure */
 	(void) memcpy(&fuse->op, ops, sizeof(fuse->op));
 
 	fusectx = fuse_get_context();

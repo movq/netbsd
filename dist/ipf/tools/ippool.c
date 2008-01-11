@@ -1,4 +1,4 @@
-/*	$NetBSD: ippool.c,v 1.5 2007/04/14 20:34:35 martin Exp $	*/
+/*	$NetBSD: ippool.c,v 1.7 2009/08/20 08:12:05 he Exp $	*/
 
 /*
  * Copyright (C) 2002-2006 by Darren Reed.
@@ -36,7 +36,7 @@
 #endif
 
 #include "ipf.h"
-#include "ipl.h"
+#include "netinet/ipl.h"
 #include "netinet/ip_lookup.h"
 #include "netinet/ip_pool.h"
 #include "netinet/ip_htable.h"
@@ -499,7 +499,7 @@ char *argv[];
 		}
 
 	}
-	printf("%zu object%s flushed\n", flush.iplf_count,
+	printf("%u object%s flushed\n", flush.iplf_count,
 	       (flush.iplf_count == 1) ? "" : "s");
 
 	return 0;

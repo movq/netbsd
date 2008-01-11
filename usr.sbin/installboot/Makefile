@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.37 2006/09/01 21:47:21 uwe Exp $
+#	$NetBSD: Makefile,v 1.43 2011/01/26 01:18:55 pooka Exp $
 #
 
 .include <bsd.own.mk>
@@ -12,7 +12,7 @@ ARCH_XLAT= amd64-i386.c news68k-news.c newsmips-news.c
 ARCH_XLAT+= sun2-sun68k.c sun3-sun68k.c
 
 .if !defined(SMALLPROG) && !defined(ARCH_FILES)
-ARCH_FILES=  alpha.c amiga.c ews4800mips.c hp300.c hp700.c i386.c
+ARCH_FILES=  alpha.c amiga.c emips.c ews4800mips.c hp300.c hp700.c i386.c
 ARCH_FILES+= landisk.c macppc.c news.c next68k.c pmax.c
 ARCH_FILES+= sparc.c sparc64.c sun68k.c vax.c x68k.c
 .else
@@ -36,21 +36,15 @@ CPPFLAGS+=	-DNO_FFS_SWAP
 .else
 SRCS+= ffs_bswap.c
 .endif
+#SRCS+= ext2fs.c ext2fs_bswap.c
 .endif
-
-WARNS?=	3
 
 UFSSRC=		${NETBSDSRCDIR}/sys/ufs
 CPPFLAGS+=	-I${.CURDIR} -I.
-.PATH:		${.CURDIR}/arch ${UFSSRC}/ffs
-
-# XXX
-.if ${MACHINE_ARCH} == "m68000"
-COPTS.ffs.c=	-O0
-.endif
+.PATH:		${.CURDIR}/arch ${UFSSRC}/ffs ${UFSSRC}/ext2fs
 
 .if !defined(HOSTPROGNAME)
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 .for f in i386 macppc
 COPTS.${f}.c+=  -Wno-pointer-sign
 .endfor

@@ -1,4 +1,4 @@
-/*	$NetBSD: lebuffer.c,v 1.26 2007/10/19 12:01:11 ad Exp $ */
+/*	$NetBSD: lebuffer.c,v 1.36 2009/09/17 17:53:35 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lebuffer.c,v 1.26 2007/10/19 12:01:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lebuffer.c,v 1.36 2009/09/17 17:53:35 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,16 +47,14 @@ __KERNEL_RCSID(0, "$NetBSD: lebuffer.c,v 1.26 2007/10/19 12:01:11 ad Exp $");
 #include <dev/sbus/lebuffervar.h>
 
 int	lebufprint(void *, const char *);
-int	lebufmatch(struct device *, struct cfdata *, void *);
-void	lebufattach(struct device *, struct device *, void *);
+int	lebufmatch(device_t, cfdata_t, void *);
+void	lebufattach(device_t, device_t, void *);
 
-CFATTACH_DECL(lebuffer, sizeof(struct lebuf_softc),
+CFATTACH_DECL_NEW(lebuffer, sizeof(struct lebuf_softc),
     lebufmatch, lebufattach, NULL, NULL);
 
 int
-lebufprint(aux, busname)
-	void *aux;
-	const char *busname;
+lebufprint(void *aux, const char *busname)
 {
 
 	sbus_print(aux, busname);
@@ -71,10 +62,7 @@ lebufprint(aux, busname)
 }
 
 int
-lebufmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+lebufmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -85,21 +73,22 @@ lebufmatch(parent, cf, aux)
  * Attach all the sub-devices we can find
  */
 void
-lebufattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+lebufattach(device_t parent, device_t self, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
-	struct lebuf_softc *sc = (void *)self;
+	struct lebuf_softc *sc = device_private(self);
+	struct sbus_softc *sbsc = device_private(parent);
 	int node;
 	int sbusburst;
 	bus_space_tag_t bt = sa->sa_bustag;
 	bus_dma_tag_t	dt = sa->sa_dmatag;
 	bus_space_handle_t bh;
 
+	sc->sc_dev = self;
+
 	if (sbus_bus_map(bt, sa->sa_slot, sa->sa_offset, sa->sa_size,
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: attach: cannot map registers\n", self->dv_xname);
+		aprint_error(": cannot map registers\n");
 		return;
 	}
 
@@ -116,7 +105,7 @@ lebufattach(parent, self, aux)
 	/*
 	 * Get transfer burst size from PROM
 	 */
-	sbusburst = ((struct sbus_softc *)parent)->sc_burst;
+	sbusburst = sbsc->sc_burst;
 	if (sbusburst == 0)
 		sbusburst = SBUS_BURST_32 - 1; /* 1->16 */
 
@@ -128,16 +117,14 @@ lebufattach(parent, self, aux)
 	/* Clamp at parent's burst sizes */
 	sc->sc_burst &= sbusburst;
 
-	sbus_establish(&sc->sc_sd, &sc->sc_dev);
-
 	printf(": %dK memory\n", sc->sc_bufsiz / 1024);
 
 	/* search through children */
 	for (node = firstchild(node); node; node = nextsibling(node)) {
 		struct sbus_attach_args sax;
-		sbus_setup_attach_args((struct sbus_softc *)parent,
+		sbus_setup_attach_args(sbsc,
 				       bt, dt, node, &sax);
-		(void)config_found(&sc->sc_dev, (void *)&sax, lebufprint);
+		(void)config_found(self, (void *)&sax, lebufprint);
 		sbus_destroy_attach_args(&sax);
 	}
 }

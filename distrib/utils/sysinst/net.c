@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.116 2007/07/29 20:44:26 jmmv Exp $	*/
+/*	$NetBSD: net.c,v 1.127 2011/04/04 08:30:13 mbalmer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -38,31 +34,33 @@
 
 /* net.c -- routines to fetch files off the network. */
 
+#include <sys/ioctl.h>
+#include <sys/param.h>
+#include <sys/resource.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <sys/statvfs.h>
+#include <sys/sysctl.h>
+#include <sys/wait.h>
+#include <arpa/inet.h>
+#include <net/if.h>
+#include <net/if_media.h>
+#include <netinet/in.h>
+
+#include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <curses.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/param.h>
-#include <sys/stat.h>
-#ifdef INET6
-#include <sys/sysctl.h>
-#endif
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <netinet/in.h>
-#include <net/if.h>
-#include <net/if_media.h>
-#include <arpa/inet.h>
+
 #include "defs.h"
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
 #include "txtwalk.h"
-
-#include <sys/wait.h>
-#include <sys/resource.h>
 
 int network_up = 0;
 /* Access to network information */
@@ -87,7 +85,7 @@ static int net_dhcpconf;
 static char net_ip6[STRSIZE];
 char net_namesvr6[STRSIZE];
 static int net_ip6conf;
-#define IP6CONF_AUTOHOST        0x01    
+#define IP6CONF_AUTOHOST        0x01
 #endif
 
 
@@ -99,7 +97,7 @@ static char *url_encode (char *dst, const char *src, const char *ep,
 
 static void write_etc_hosts(FILE *f);
 
-#define DHCLIENT_EX "/sbin/dhclient"
+#define DHCPCD "/sbin/dhcpcd"
 #include <signal.h>
 static int config_dhcp(char *);
 static void get_dhcp_value(char *, size_t, const char *);
@@ -299,7 +297,25 @@ get_ifconfig_info(void)
 }
 
 static int
-do_ifreq(struct ifmediareq *ifmr, unsigned long cmd)
+do_ifreq(struct ifreq *ifr, unsigned long cmd)
+{
+	int sock;
+	int rval;
+
+	sock = socket(PF_INET, SOCK_DGRAM, 0);
+	if (sock == -1)
+		return -1;
+
+	memset(ifr, 0, sizeof *ifr);
+	strncpy(ifr->ifr_name, net_dev, sizeof ifr->ifr_name);
+	rval = ioctl(sock, cmd, ifr);
+	close(sock);
+
+	return rval;
+}
+
+static int
+do_ifmreq(struct ifmediareq *ifmr, unsigned long cmd)
 {
 	int sock;
 	int rval;
@@ -320,19 +336,20 @@ do_ifreq(struct ifmediareq *ifmr, unsigned long cmd)
 static void
 get_ifinterface_info(void)
 {
+	struct ifreq ifr;
 	struct ifmediareq ifmr;
-	struct sockaddr_in *sa_in = (void *)&((struct ifreq *)&ifmr)->ifr_addr;
+	struct sockaddr_in *sa_in = (void*)&ifr.ifr_addr;
 	int modew;
 	const char *media_opt;
 	const char *sep;
 
-	if (do_ifreq(&ifmr, SIOCGIFADDR) == 0 && sa_in->sin_addr.s_addr != 0)
+	if (do_ifreq(&ifr, SIOCGIFADDR) == 0 && sa_in->sin_addr.s_addr != 0)
 		strlcpy(net_ip, inet_ntoa(sa_in->sin_addr), sizeof net_ip);
 
-	if (do_ifreq(&ifmr, SIOCGIFNETMASK) == 0 && sa_in->sin_addr.s_addr != 0)
+	if (do_ifreq(&ifr, SIOCGIFNETMASK) == 0 && sa_in->sin_addr.s_addr != 0)
 		strlcpy(net_mask, inet_ntoa(sa_in->sin_addr), sizeof net_mask);
 
-	if (do_ifreq(&ifmr, SIOCGIFMEDIA) == 0) {
+	if (do_ifmreq(&ifmr, SIOCGIFMEDIA) == 0) {
 		/* Get the name of the media word */
 		modew = ifmr.ifm_current;
 		strlcpy(net_media, get_media_subtype_string(modew),
@@ -477,6 +494,44 @@ get_v6wait(void)
 }
 #endif
 
+static int
+handle_license(const char *dev)
+{
+	static struct {
+		const char *dev;
+		const char *lic;
+	} licdev[] = {
+		{ "iwi", "/libdata/firmware/if_iwi/LICENSE.ipw2200-fw" },
+		{ "ipw", "/libdata/firmware/if_ipw/LICENSE" },
+	};
+
+	size_t i;
+
+	for (i = 0; i < __arraycount(licdev); i++)
+		if (strncmp(dev, licdev[i].dev, 3) == 0) {
+			char buf[64];
+			int val;
+			size_t len = sizeof(int);
+			(void)snprintf(buf, sizeof(buf), "hw.%s.accept_eula",
+			    licdev[i].dev);
+			if (sysctlbyname(buf, &val, &len, NULL, 0) != -1
+			    && val != 0)
+				return 1;
+			msg_display(MSG_license, dev, licdev[i].lic);
+			process_menu(MENU_yesno, NULL);
+			if (yesno) {
+				val = 1;
+				if (sysctlbyname(buf, NULL, NULL, &val,
+				    0) == -1)
+					return 0;
+				add_sysctl_conf("%s=1", buf);
+				return 1;
+			} else
+				return 0;
+		}
+	return 1;
+}
+
 /*
  * Get the information to configure the network, configure it and
  * make sure both the gateway and the name server are up.
@@ -490,11 +545,12 @@ config_network(void)
 	char *textbuf;
 	int  octet0;
 	int  dhcp_config;
-
- 	int  slip;
+	int  nfs_root = 0;
+ 	int  slip = 0;
  	int  pid, status;
  	char **ap, *slcmd[10], *in_buf;
  	char buffer[STRSIZE];
+ 	struct statvfs sb;
 
 	int l;
 	char dhcp_host[STRSIZE];
@@ -545,13 +601,22 @@ again:
 		break;
 	}
 	free(defname);
+	if (!handle_license(net_dev))
+		goto done;
 
 	slip = net_dev[0] == 's' && net_dev[1] == 'l' &&
 	    isdigit((unsigned char)net_dev[2]);
 
-	if (slip)
+	/* If root is on NFS do not reconfigure the interface. */
+	if (statvfs("/", &sb) == 0 && strcmp(sb.f_fstypename, "nfs") == 0) {
+		nfs_root = 1;
 		dhcp_config = 0;
-	else {
+		get_ifinterface_info();
+		get_if6interface_info();
+		get_host_info();
+	} else if (slip) {
+		dhcp_config = 0;
+	} else {
 		/* Preload any defaults we can find */
 		get_ifinterface_info();
 		get_if6interface_info();
@@ -601,6 +666,7 @@ again:
 			free(textbuf);
 		}
 
+		net_dhcpconf = 0;
 		/* try a dhcp configuration */
 		dhcp_config = config_dhcp(net_dev);
 		if (dhcp_config) {
@@ -663,11 +729,13 @@ again:
 
 	if (!dhcp_config) {
 		/* Manually configure IPv4 */
-		msg_prompt_add(MSG_net_ip, net_ip, net_ip, sizeof net_ip);
+		if (!nfs_root)
+			msg_prompt_add(MSG_net_ip, net_ip, net_ip,
+			    sizeof net_ip);
 		if (slip)
 			msg_prompt_add(MSG_net_srv_ip, net_srv_ip, net_srv_ip,
 			    sizeof net_srv_ip);
-		else {
+		else if (!nfs_root) {
 			/* We don't want netmasks for SLIP */
 			octet0 = atoi(net_ip);
 			if (!net_mask[0]) {
@@ -732,6 +800,7 @@ again:
 			(v6config ? "yes" : "no"),
 		     *net_namesvr6 == '\0' ? "<none>" : net_namesvr6);
 #endif
+done:
 	process_menu(MENU_yesno, deconst(MSG_netok_ok));
 	if (!yesno)
 		msg_display(MSG_netagain);
@@ -778,7 +847,7 @@ again:
 	run_program(0, "/sbin/ifconfig lo0 127.0.0.1");
 
 #ifdef INET6
-	if (v6config) {
+	if (v6config && !nfs_root) {
 		init_v6kernel(1);
 		run_program(0, "/sbin/ifconfig %s up", net_dev);
 		sleep(get_v6wait() + 1);
@@ -811,7 +880,7 @@ again:
 				execvp(slcmd[0], slcmd);
 			} else
 				wait4(pid, &status, WNOHANG, 0);
-		} else {
+		} else if (!nfs_root) {
 			if (net_mask[0] != '\0') {
 				run_program(0, "/sbin/ifconfig %s inet %s netmask %s",
 				    net_dev, net_ip, net_mask);
@@ -827,7 +896,7 @@ again:
 	  	sethostname(net_host, strlen(net_host));
 
 	/* Set a default route if one was given */
-	if (net_defroute[0] != '\0') {
+	if (!nfs_root && net_defroute[0] != '\0') {
 		run_program(RUN_DISPLAY | RUN_PROGRESS,
 				"/sbin/route -n flush -inet");
 		run_program(RUN_DISPLAY | RUN_PROGRESS,
@@ -837,8 +906,10 @@ again:
 	/*
 	 * wait a couple of seconds for the interface to go live.
 	 */
-	msg_display_add(MSG_wait_network);
-	sleep(5);
+	if (!nfs_root) {
+		msg_display_add(MSG_wait_network);
+		sleep(5);
+	}
 
 	/*
 	 * ping should be verbose, so users can see the cause
@@ -847,21 +918,21 @@ again:
 
 #ifdef INET6
 	if (v6config && network_up) {
-		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS, 
+		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
 		    "/sbin/ping6 -v -c 3 -n -I %s ff02::2", net_dev);
 
 		if (net_namesvr6[0] != '\0')
-			network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS, 
+			network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
 			    "/sbin/ping6 -v -c 3 -n %s", net_namesvr6);
 	}
 #endif
 
 	if (net_namesvr[0] != '\0' && network_up)
-		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS, 
+		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
 		    "/sbin/ping -v -c 5 -w 5 -o -n %s", net_namesvr);
 
 	if (net_defroute[0] != '\0' && network_up)
-		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS, 
+		network_up = !run_program(RUN_DISPLAY | RUN_PROGRESS,
 		    "/sbin/ping -v -c 5 -w 5 -o -n %s", net_defroute);
 	fflush(NULL);
 
@@ -874,7 +945,7 @@ ftp_fetch(const char *set_name)
 	const char *ftp_opt;
 	char ftp_user_encoded[STRSIZE];
 	char ftp_dir_encoded[STRSIZE];
-	char *cp;
+	char *cp, *set_dir2;
 	int rval;
 
 	/*
@@ -907,13 +978,18 @@ ftp_fetch(const char *set_name)
 	cp = url_encode(ftp_dir_encoded, ftp.dir,
 			ftp_dir_encoded + sizeof ftp_dir_encoded - 1,
 			RFC1738_SAFE_LESS_SHELL_PLUS_SLASH, 1);
-	if (set_dir[0] != '/')
+	if (cp != ftp_dir_encoded && cp[-1] != '/')
 		*cp++ = '/';
-	url_encode(cp, set_dir,
+
+	set_dir2 = set_dir;
+	while (*set_dir2 == '/')
+		++set_dir2;
+
+	url_encode(cp, set_dir2,
 			ftp_dir_encoded + sizeof ftp_dir_encoded,
 			RFC1738_SAFE_LESS_SHELL_PLUS_SLASH, 0);
 
-	rval = run_program(RUN_DISPLAY | RUN_PROGRESS | RUN_XFER_DIR, 
+	rval = run_program(RUN_DISPLAY | RUN_PROGRESS | RUN_XFER_DIR,
 		    "/usr/bin/ftp %s%s://%s%s/%s/%s%s",
 		    ftp_opt, ftp.xfer_type, ftp_user_encoded, ftp.host,
 		    ftp_dir_encoded, set_name, dist_postfix);
@@ -964,9 +1040,17 @@ get_via_ftp(const char *xfer_type)
 int
 get_via_nfs(void)
 {
+	struct statvfs sb;
 
 	if (do_config_network() != 0)
 		return SET_RETRY;
+
+	/* If root is on NFS and we have sets, skip this step. */
+	if (statvfs(set_dir, &sb) == 0 &&
+	    strcmp(sb.f_fstypename, "nfs") == 0) {
+	    	strlcpy(ext_dir, set_dir, sizeof ext_dir);
+		return SET_OK;
+	}
 
 	/* Get server and filepath */
 	process_menu(MENU_nfssource, NULL);
@@ -1090,8 +1174,7 @@ mnt_net_config(void)
 
 		add_rc_conf("defaultroute=\"%s\"\n", net_defroute);
 	} else {
-		add_rc_conf("dhclient=YES\n");
-		add_rc_conf("dhclient_flags=\"%s\"\n", net_dev);
+		add_rc_conf("ifconfig_%s=dhcp\n", net_dev);
         }
 
 #ifdef INET6
@@ -1116,73 +1199,55 @@ int
 config_dhcp(char *inter)
 {
 	int dhcpautoconf;
-	int result;
-	char *textbuf;
-	int pid;
 
-	/* check if dhclient is running, if so, kill it */
-	result = collect(T_FILE, &textbuf, "/tmp/dhclient.pid");
-	if (result >= 0) {
-		pid = atoi(textbuf);
-		if (pid > 0) {
-			kill(pid, 15);
-			sleep(1);
-			kill(pid, 9);
-		}
-	}
-	free(textbuf);
+	/*
+	 * Don't bother checking for an existing instance of dhcpcd, just
+	 * ask it to renew the lease.  It will fork and daemonize if there
+	 * wasn't already an instance.
+	 */
 
-	if (!file_mode_match(DHCLIENT_EX, S_IFREG))
+	if (!file_mode_match(DHCPCD, S_IFREG))
 		return 0;
 	process_menu(MENU_yesno, deconst(MSG_Perform_DHCP_autoconfiguration));
 	if (yesno) {
-		/* spawn off dhclient and wait for parent to exit */
+		/* spawn off dhcpcd and wait for parent to exit */
 		dhcpautoconf = run_program(RUN_DISPLAY | RUN_PROGRESS,
-		    "%s -q -pf /tmp/dhclnt.pid -lf /tmp/dhclient.leases %s",
-		    DHCLIENT_EX, inter);
+		    "%s -d -n %s", DHCPCD, inter);
 		return dhcpautoconf ? 0 : 1;
 	}
 	return 0;
 }
 
 static void
-get_dhcp_value(char *targ, size_t l, const char *line)
+get_dhcp_value(char *targ, size_t l, const char *var)
 {
-	int textsize;
-	char *textbuf;
-	char *t;
-	char *walkp;
+	static const char *lease_data = "/tmp/dhcpcd-lease";
+	FILE *fp;
+	char *line;
+	size_t len, var_len;
 
-	textsize = collect(T_FILE, &textbuf, "/tmp/dhclient.leases");
-	if (textsize < 0) {
-		if (logging)
-			(void)fprintf(logfp,
-			    "Could not open file /tmp/dhclient.leases.\n");
-		(void)fprintf(stderr, "Could not open /tmp/dhclient.leases\n");
-		/* not fatal, just assume value not found */
+	if ((fp = fopen(lease_data, "r")) == NULL) {
+		warn("Could not open %s", lease_data);
+		*targ = '\0';
+		return;
 	}
-	if (textsize >= 0) {
-		(void)strtok(textbuf, " \t\n"); /* jump past 'lease' */
-		while ((t = strtok(NULL, " \t\n")) != NULL) {
-			if (strcmp(t, line) == 0) {
-				t = strtok(NULL, " \t\n");
-				/* found the tag, extract the value */
-				/* last char should be a ';' */
-				walkp = strrchr(t, ';');
-				if (walkp != NULL) {
-					*walkp = '\0';
-				}
-				/* strip any " from the string */
-				walkp = strrchr(t, '"');
-				if (walkp != NULL) {
-					*walkp = '\0';
-					t++;
-				}
-				strlcpy(targ, t, l);
-				break;
-			}
-		}
+
+	var_len = strlen(var);
+
+	while ((line = fgetln(fp, &len)) != NULL) {
+		if (line[len - 1] == '\n')
+			--len;
+		if (len <= var_len)
+			continue;
+		if (memcmp(line, var, var_len))
+			continue;
+		if (line[var_len] != '=')
+			continue;
+		line += var_len + 1;
+		len -= var_len + 1;
+		strlcpy(targ, line, l > len ? len + 1: l);
+		break;
 	}
-	free(textbuf);
-	return;
+
+	fclose(fp);
 }

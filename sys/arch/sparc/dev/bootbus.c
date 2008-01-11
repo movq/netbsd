@@ -1,4 +1,4 @@
-/*	$NetBSD: bootbus.c,v 1.15 2005/12/11 12:19:05 christos Exp $	*/
+/*	$NetBSD: bootbus.c,v 1.17 2009/09/20 16:18:21 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bootbus.c,v 1.15 2005/12/11 12:19:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bootbus.c,v 1.17 2009/09/20 16:18:21 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -64,8 +57,8 @@ struct bootbus_softc {
 	bus_space_tag_t sc_bustag;		/* passed on to children */
 };
 
-static int bootbus_match(struct device *, struct cfdata *, void *);
-static void bootbus_attach(struct device *, struct device *, void *);
+static int bootbus_match(device_t, cfdata_t, void *);
+static void bootbus_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(bootbus, sizeof(struct bootbus_softc),
     bootbus_match, bootbus_attach, NULL, NULL);
@@ -79,7 +72,7 @@ static int bootbus_setup_attach_args(struct bootbus_softc *, bus_space_tag_t,
 static void bootbus_destroy_attach_args(struct bootbus_attach_args *);
 
 static int
-bootbus_match(struct device *parent, struct cfdata *cf, void *aux)
+bootbus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct cpuunit_attach_args *cpua = aux;
 
@@ -90,9 +83,9 @@ bootbus_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-bootbus_attach(struct device *parent, struct device *self, void *aux)
+bootbus_attach(device_t parent, device_t self, void *aux)
 {
-	struct bootbus_softc *sc = (void *) self;
+	struct bootbus_softc *sc = device_private(self);
 	struct cpuunit_attach_args *cpua = aux;
 	int node, error;
 
@@ -119,7 +112,7 @@ bootbus_attach(struct device *parent, struct device *self, void *aux)
 	    &sc->sc_bustag->ranges);
 	if (error) {
 		printf("%s: error %d getting \"ranges\" property\n",
-		    sc->sc_dev.dv_xname, error);
+		    device_xname(self), error);
 		panic("bootbus_attach");
 	}
 
@@ -131,7 +124,7 @@ bootbus_attach(struct device *parent, struct device *self, void *aux)
 		if (bootbus_setup_attach_args(sc, sc->sc_bustag, node, &baa))
 			panic("bootbus_attach: failed to set up attach args");
 
-		(void) config_found_sm_loc(&sc->sc_dev, "bootbus", NULL, &baa,
+		(void) config_found_sm_loc(self, "bootbus", NULL, &baa,
 					   bootbus_print, bootbus_submatch);
 
 		bootbus_destroy_attach_args(&baa);
@@ -139,8 +132,7 @@ bootbus_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-bootbus_submatch(struct device *parent, struct cfdata *cf,
-		 const int *ldesc, void *aux)
+bootbus_submatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct bootbus_attach_args *baa = aux;
 

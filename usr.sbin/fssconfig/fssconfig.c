@@ -1,4 +1,4 @@
-/*	$NetBSD: fssconfig.c,v 1.5 2005/04/17 16:28:26 hannken Exp $	*/
+/*	$NetBSD: fssconfig.c,v 1.7 2011/02/24 09:38:58 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -175,14 +168,15 @@ configure:
 		err(1, "open: %s", argv[0]);
 	}
 
+	if ((xflag || istmp) && isreg)
+		fss.fss_flags |= FSS_UNLINK_ON_CREATE;
+	else
+		fss.fss_flags = 0;
 	if (ioctl(fd, FSSIOCSET, &fss) < 0) {
 		if (istmp)
 			unlink(fss.fss_bstore);
 		err(1, "%s: FSSIOCSET", full);
 	}
-
-	if ((xflag || istmp) && isreg && unlink(fss.fss_bstore) < 0)
-		err(1, "unlink: %s", fss.fss_bstore);
 
 	if (vflag)
 		list(1, argv);

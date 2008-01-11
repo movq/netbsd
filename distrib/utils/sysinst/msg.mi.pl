@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.59 2007/11/12 15:07:33 jmmv Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.74 2011/04/17 12:33:42 martin Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -44,8 +40,15 @@ message usage
 {uzycie: sysinst [-r wersja] [-f plik-definicji]
 }
 
+/*
+ * We can not use non ascii characters in this message - it is displayed
+ * before the locale is set up!
+ */
 message sysinst_message_language
 {Komunikaty instalacyjne w jezyku polskim}
+
+message sysinst_message_locale
+{pl_PL.ISO8859-2}
 
 message Yes {Tak}
 message No {Nie}
@@ -77,7 +80,6 @@ NetBSD na twardym dysku, lub zaktualizowac istniejacy system NetBSD,
 zuzywajac minimum czasu.  W ponizszych menu mozesz zmienic aktualne
 ustawienia poprzez naciskanie klawiszy (a, b, c, ...). Klawisze strzalek
 takze moga dzialac.  Aktywujesz ustawienie poprzez nacisniecie ENTER.
-
 }
 
 message thanks
@@ -87,7 +89,7 @@ message thanks
 message installusure
 {Zdecydowales sie zainstalowac NetBSD na twardym dysku. Spowoduje to zmiane
 informacji na twoim dysku. Powinienes zrobic pelny backup danych przed
-rozpoczeciem tej procedury!  Zostana wykonane nastepujace czynnosci: 
+rozpoczeciem tej procedury!  Zostana wykonane nastepujace czynnosci:
 	a) Podzial dysku twardego
 	b) Stworzenie nowych systemow plikow BSD
 	c) Wgranie i zainstalowanie pakietow dystrybucji
@@ -111,7 +113,7 @@ message reinstallusure
 Ta procedura tylko sciaga i rozpakowuje pakiety na pre-partycjonowany
 bootowalny dysk. Nie nazywa dyskow, aktualizuje bootblokow, lub zapisuje
 istniejacej konfiguracji.   (Wyjdz i wybierz `instaluj' lub
-`aktualizuj' jesli chcesz to zrobic.) Powinienes wykonac `instaluj' lub 
+`aktualizuj' jesli chcesz to zrobic.) Powinienes wykonac `instaluj' lub
 `aktualizuj' przed rozpoczeciem tej procedury!
 
 Czy napewno chcesz przeinstalowac pakiety dystrybucjne NetBSD?
@@ -158,13 +160,13 @@ message megname
 {MB}
 
 message layout
-{NetBSD uzywa BSD disklabel aby pociac czesc dysku NetBSD na kilka  
+{NetBSD uzywa BSD disklabel aby pociac czesc dysku NetBSD na kilka
 partycji BSD.  Musisz teraz skonfigurowac BSD disklabel.
-Masz kilka mozliwosci. Sa one opisane ponizej. 
--- Standard: partycje BSD disklabel sa ustawiane przez ten program. 
+Masz kilka mozliwosci. Sa one opisane ponizej.
+-- Standard: partycje BSD disklabel sa ustawiane przez ten program.
 -- Uzyj istniejacych: Uzywa aktualnych partycji. Musisz je zamontowac.
 
-Dysk NetBSD to %d Megabajtow. 
+Dysk NetBSD to %d Megabajtow.
 Standard wymaga przynajmniej %d Megabajtow.
 Standard z X Window System wymaga przynajmniej %d Megabajtow.
 }
@@ -183,7 +185,7 @@ Wybierz specyfikator rozmiaru}
 message ptnsizes
 {Mozesz teraz zmienic rozmiary partycji systemowych. Domyslne ustawienia
 alokuja cala przestrzen na glowny system plikow, aczkolwiek mozesz zdefiniowac
-osobne partycje /usr (dodatkowe pliki systemowe), /var (dane systemowe i logi) 
+osobne partycje /usr (dodatkowe pliki systemowe), /var (dane systemowe i logi)
 lub /home (katalogi domowe uzytkownikow).
 
 Wolna przestrzen zostanie dodana do partycji oznaczonej '+'.
@@ -219,7 +221,7 @@ message fssizesok
 {Zaakceptuj rozmiary partycji. Wolne miejsce %d %s, %d wolnych partycji.}
 
 message fssizesbad
-{Zmniejsz rozmiary partycji o %d %s (%d sektorow).}
+{Zmniejsz rozmiary partycji o %d %s (%u sektorow).}
 
 message startoutsidedisk
 {Wartosc poczatkowa ktora podales jest poza koncem dysku.
@@ -228,6 +230,13 @@ message startoutsidedisk
 message endoutsidedisk
 {Przy tej wartosci, koniec partycji znajduje sie poza koncem dysku. Rozmiar
 twojej partycji zostal zmniejszony do %d %s.
+}
+
+message toobigdisklabel
+{
+Ten dysk jest zbyt duzy dla tablicy partycji disklabel i dlatego
+nie moze zostac uzyty jako dysk starowy ani nie moze przechowywac
+glownej partycji.
 }
 
 message fspart
@@ -241,7 +250,7 @@ message fspart_header	/* XXX abbreviations (or change fspart_row below) */
 }
 
 message fspart_row
-{%9d %9d %10d %-10s %-7s %-9s %s}
+{%9lu %9lu %10lu %-10s %-7s %-9s %s}
 
 message show_all_unused_partitions
 {Pokaz wszystkie nieuzywane partycje}
@@ -250,7 +259,7 @@ message partition_sizes_ok
 {Rozmiary partycji w porzadku}
 
 message edfspart
-{Powinienes najpierw ustawic rodzaj systemu plikow (SP). 
+{Powinienes najpierw ustawic rodzaj systemu plikow (SP).
 Pozniej inne wartosci.
 
 Aktualne wartosci dla partycji %c:
@@ -336,11 +345,11 @@ message packname
 {Podaj nazwe dla swojego dysku NetBSD}
 
 message lastchance
-{Ok, jestesmy teraz gotowi zainstalowac NetBSD na twoim dysku (%s). Nic 
+{Ok, jestesmy teraz gotowi zainstalowac NetBSD na twoim dysku (%s). Nic
 nie zostalo jeszcze zapisane. Masz teraz ostatnia szanse na przerwanie tego
 procesu poki nic nie zostalo jeszcze zmienione.
 
-Czy kontynuowac ?
+Czy kontynuowac?
 }
 
 message disksetupdone
@@ -360,7 +369,7 @@ message openfail
 }
 
 message mountfail
-{zamountowanie urzadzenia /dev/%s%c na %s nie powiodlo sie.
+{zamontowanie urzadzenia /dev/%s%c na %s nie powiodlo sie.
 }
 
 message extractcomplete
@@ -380,7 +389,7 @@ potrzebom. Przegladnij /etc/defaults/rc.conf aby poznac domyslne wartosci.
 
 message upgrcomplete
 {Aktualizacja NetBSD-@@VERSION@@ zostala zakonczona. Bedziesz teraz
-musial wykonac polecenia zawarte w pliku INSTALL, aby uzyskac system 
+musial wykonac polecenia zawarte w pliku INSTALL, aby uzyskac system
 odpowiadajacy twoim potrzebom.
 
 Musisz przynajmniej dostosowac rc.conf do swojego lokalnego srodowiska
@@ -392,7 +401,7 @@ zostac utworzone dla tej wersji), jesli uzywales lokalnych plikow hasel.
 
 
 message unpackcomplete
-{Rozpakowywanie dodatkowych pakietow NetBSD-@@VERSION@@ zostalo zakonczone. 
+{Rozpakowywanie dodatkowych pakietow NetBSD-@@VERSION@@ zostalo zakonczone.
 Musisz teraz wykonac
 polecenia zawarte w pliku INSTALL aby przekonfigurowac system do swoich
 potrzeb.
@@ -431,7 +440,7 @@ message dev
 {urzadzenie}
 
 message nfssource
-{Wprowadz hosta NFS oraz katalog gdzie znajduje sie dystrybucja. 
+{Wprowadz hosta NFS oraz katalog gdzie znajduje sie dystrybucja.
 Pamietaj, ze katalog musi zawierac pliki .tgz oraz, ze musi byc
 dostepny przez NFS.
 
@@ -446,20 +455,30 @@ znajdowac sie w glownym katalogu dyskietki.
 
 message cdromsource
 {Podaj urzadzenie CDROM oraz katalog na CDROMie, w ktorym znajduje sie
-dystrybucja. 
+dystrybucja.
 Pamietaj, ze katalog musi zawierac pliki .tgz.
 
 }
 
+message Available_cds
+{Dostepne CD}
+
+message ask_cd
+{Znaleziono kilka CD, prosze wybrac CD zawierajcy instalacje.}
+
+message cd_path_not_found
+{Zbiory instalacyjne nie zostaly znalezione w domyslnym polozeniu na tym
+CD. Prosze sprawdzic urzadzenie i sciezke.}
+
 message localfssource
 {Podaj niezamountowane lokalne urzadzenie oraz katalog na nim, gdzie
-znajduje sie dystrybucja. 
+znajduje sie dystrybucja.
 Pamietaj, ze katalog musi zawierac pliki .tgz.
 
 }
 
 message localdir
-{Podaj aktualnie zamountowany lokalny katalog, gdzie znajduje sie dystrybucja. 
+{Podaj aktualnie zamountowany lokalny katalog, gdzie znajduje sie dystrybucja.
 Pamietaj, ze katalog musi zawierac pliki .tgz.
 
 }
@@ -520,33 +539,33 @@ message net_media
 message netok
 {Ponizej sa wartosci, ktore wprowadziles.
 
-Domena DNS:		%s 
-Nazwa hosta:		%s 
-Podstawowy interfejs:	%s 
-Twoj adres IP:		%s 
-Maska podsieci:		%s 
-Serwer nazw IPv4:	%s 
-Bramka IPv4:		%s 
+Domena DNS:		%s
+Nazwa hosta:		%s
+Podstawowy interfejs:	%s
+Twoj adres IP:		%s
+Maska podsieci:		%s
+Serwer nazw IPv4:	%s
+Bramka IPv4:		%s
 Medium sieciowe:	%s
 }
 
 message netok_slip
 {Ponizej sa wartosci, ktore wprowadziles. Czy sa poprawne?
 
-Domena DNS:		%s 
-Nazwa hosta:		%s 
-Podstawowy interfejs:	%s 
-Twoj adres IP:		%s 
+Domena DNS:		%s
+Nazwa hosta:		%s
+Podstawowy interfejs:	%s
+Twoj adres IP:		%s
 Adres IP serwera:	%s
-Maska podsieci:		%s 
-Serwer nazw IPv4:	%s 
-Bramka IPv4:		%s 
+Maska podsieci:		%s
+Serwer nazw IPv4:	%s
+Bramka IPv4:		%s
 Medium sieciowe:	%s
 }
 
 message netokv6
-{Autkonfiguracja IPv6:	%s 
-Serwer nazw IPv6:	%s 
+{Autkonfiguracja IPv6:	%s
+Serwer nazw IPv6:	%s
 }
 
 message netok_ok
@@ -577,14 +596,6 @@ message realdir
 
 message delete_xfer_file
 {Usun po zakonczeniu instalacji}
-
-message verboseextract
-{
-Kolejny krok to sciagniecie i rozpakowanie pakietow dystrybucji. 
-
-Czy w trakcie rozpakowywania plikow, chcesz widziec nazwe aktualnie
-wypakowywanego pliku ?
-}
 
 message notarfile
 {Pakiet %s nie istnieje.}
@@ -629,7 +640,7 @@ message createfstab
 
 
 message noetcfstab
-{Pomocy! Na dysku docelowym %s nie ma /etc/fstab. Przerywamy aktualizacje. 
+{Pomocy! Na dysku docelowym %s nie ma /etc/fstab. Przerywamy aktualizacje.
 }
 
 message badetcfstab
@@ -657,7 +668,7 @@ siec jeszcze raz? (Nie pozwala ci kontynuowac lub przerwac instalacje.)
 
 message netnotup_continueanyway
 {Czy chcesz kontynuowac proces instalacji i zalozyc, ze twoja siec dziala?
-(Nie przerywa proces instalacji.)
+(Nie przerywa procesu instalacji.)
 }
 
 message makedev
@@ -675,7 +686,7 @@ message rootmissing
 
 message badroot
 {Kompletny nowy system plikow nie przeszedl podstawowych testow.
- Jestes pewien, ze zainstalowales wszystkie wymagane pakiety? 
+ Jestes pewien, ze zainstalowales wszystkie wymagane pakiety?
 }
 
 message fd_type
@@ -689,7 +700,7 @@ message fdremount
 {Dyskietka nie zostala pomyslnie zamountowana.
 }
 
-message fdmount	
+message fdmount
 {Wloz dyskietke zawierajaca plik "%s.%s".
 
 Jezeli nie masz juz wiecej dyskietek, wybierz "Pakiet kompletny"
@@ -729,8 +740,11 @@ message set_man_pages
 message set_misc
 {Inne}
 
+message set_modules
+{Moduly kernela}
+
 message set_tests
-{Test programs}
+{Programy testujace}
 
 message set_text_tools
 {Narzedzia Przetwarzania Tekstu}
@@ -745,7 +759,7 @@ message set_X11_etc
 {Konfiguracja X11}
 
 message set_X11_fonts
-{Fonty X11}
+{Czcionki X11}
 
 message set_X11_servers
 {Serwery X11}
@@ -778,6 +792,13 @@ message must_be_one_root
 message partitions_overlap
 {partycje %c i %c pokrycia.}
 
+message No_Bootcode
+{Brak kodu startowego dla glownej partycji}
+
+message cannot_ufs2_root
+{Glowny system plikow nie moze byc FFSv2 poniewaz nie ma kodu startowego dla
+tej platformy.}
+
 message edit_partitions_again
 {
 
@@ -790,39 +811,23 @@ message config_open_error
 {Nie moglem otworzyc pliku konfiguracyjnego %s\n}
 
 message choose_timezone
-{Wybierz strefe czasowa, ktora najlepiej ci odpowiada z ponizszej listy. 
-Nacisnij ENTER aby wybrac. 
+{Wybierz strefe czasowa, ktora najlepiej ci odpowiada z ponizszej listy.
+Nacisnij ENTER aby wybrac.
 Nacisnij 'x' a potem ENTER aby wyjsc.
 
- Domyslna:	%s 
- Wybrana:	%s 
- Lokalny czas:	%s %s 
+ Domyslna:	%s
+ Wybrana:	%s
+ Lokalny czas:	%s %s
 }
 
 message tz_back
 {Powroc do glownej listy stref}
 
-message choose_crypt
-{Wybierz sposob szyfrowania hasel, ktorego chcesz uzywac. NetBSD moze korzystac
-z DES, MD5 lub Blowfish.
-
-Tradycyjna metoda DES jest kompatybilna z wiekszoscia unixowych systemow
-operacyjnych, ale wtedy tylko 8 pierwszych znakow w hasle jest rozpoznawanych.
-Metody MD5 oraz Blowfish umozliwiaja dluzsze hasla, niektorzy uwazaja to za
-bardziej bezpieczne.
-
-Jesli posiadasz siec oraz zamierasz korzystac z NIS, pamietaj o mozliwosciach
-maszyn w twojej sieci i wynikajacych stad ograniczeniach.
-
-Jezeli uaktualniasz swoj system i nie chcesz, aby zostaly dokonane zmiany w
-konfiguracji, wybierz ostatnia opcje "nie zmieniaj".
-}
-
 message swapactive
 {Dysk, ktory wybrales posiada partycje wymiany, ktora moze byc aktualnie
 w uzyciu jesli twoj system ma malo pamieci. Poniewaz chcesz zmienic uklad
 partycji, partycja wymiany zostanie teraz wylaczona. Moze to spowodowac
-pojawienie sie bledow. Jesli zuwazysz takie bledy zrestartuj komputer, 
+pojawienie sie bledow. Jesli zuwazysz takie bledy zrestartuj komputer,
 a nastepnie sprobuj jeszcze raz.}
 
 message swapdelfailed
@@ -863,6 +868,7 @@ message Upgrade_NetBSD_on_a_hard_disk {Zaktualizuj NetBSD na twardym dysku}
 message Re_install_sets_or_install_additional_sets {Przeinstaluj albo zainstaluj dodatkowe pakiety}
 message Reboot_the_computer {Zrestartuj komputer}
 message Utility_menu {Menu Narzedziowe}
+message exit_utility_menu {Exit}
 message NetBSD_VERSION_Utilities {Narzedzia NetBSD-@@VERSION@@}
 message Run_bin_sh {Uruchom /bin/sh}
 message Set_timezone {Ustaw strefe czasowa}
@@ -888,6 +894,7 @@ message local_fs {Niezamontowany SP}
 message local_dir {Lokalny katalog}
 message Select_your_distribution {Wybierz swoja dystrybucje}
 message Full_installation {Pelna instalacja}
+message Full_installation_nox {Instalacja bez X11}
 message Minimal_installation {Minimalna instalacja}
 message Custom_installation {Inna instalacja}
 message hidden {** ukryte **}
@@ -907,11 +914,6 @@ message Skip_set {Pomin pakiet}
 message Skip_group {Pomin grupe pakietow}
 message Abandon {Przerwij instalacje}
 message Abort_fetch {Przerwij pobieranie}
-message Password_cipher {Kodowanie hasel}
-message DES {DES}
-message MD5 {MD5}
-message Blowfish_2_7_round {Blowfish 2^7 round}
-message do_not_change {nie zmieniaj}
 message Device {Urzadzenie}
 message File_system {SystemPlikow}
 message Select_IPv6_DNS_server {  Wybierz serwer nazw IPv6}
@@ -919,10 +921,6 @@ message other {inny  }
 message Perform_IPv6_autoconfiguration {Wykonac autokonfiguracje IPv6?}
 message Perform_DHCP_autoconfiguration {Wykonac autkonfiguracje DHCP?}
 message Root_shell {Powloka root'a}
-message Select_set_extraction_verbosity {Wybierz gadatliwosc procesu rozpakowywania pakietow}
-message Progress_bar {Pasek postepu (zalecany)}
-message Silent {Cichy}
-message Verbose {Lista plikow (wolne)}
 
 .if AOUT2ELF
 message aoutfail
@@ -939,8 +937,14 @@ zajac sie polaczeniem nowo utworzonego /emul/aout ze starym.
 .endif
 
 message oldsendmail
-{Sendmail is no longer in this release of NetBSD, default MTA is
-postfix. The file /etc/mailer.conf still chooses the removed
-sendmail. Do you want to upgrade /etc/mailer.conf automatically for
-postfix? If you choose "No" you will have to update /etc/mailer.conf
-yourself to ensure proper email delivery.}
+{Sendmail nie jest dostepny w tym wydaniu NetBSD. Domyslnym MTA jest
+postfix. Plik /etc/mailer.conf ciagle wskazuje usuniety program
+sendmail. Chcesz automatycznie uaktualnic /etc/mailer.conf dla
+postfix? Jesli wybierzesz "Nie", trzeba bedzie recznie zmienic
+/etc/mailer.conf, aby dzialalo dostarczanie poczty.}
+
+message license
+{Aby uzywac interfejsu sieciowego %s, musisz zgodzic sie na licencje
+zawarta w pliku %s.
+Aby obejrzec ten plik, mozesz wpisac ^Z, przejrzec jego zawartosc,
+a nastepnie wpisac "fg".}

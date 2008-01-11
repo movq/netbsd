@@ -1,4 +1,4 @@
-/*	$NetBSD: aacvar.h,v 1.11 2007/12/15 00:39:27 perry Exp $	*/
+/*	$NetBSD: aacvar.h,v 1.13 2008/10/02 08:21:57 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -167,6 +160,7 @@ struct aac_softc;
 #define AAC_QUIRK_NEW_COMM	(1 << 11)	/* New comm. i/f supported */
 #define AAC_QUIRK_RAW_IO	(1 << 12)	/* Raw I/O interface */
 #define AAC_QUIRK_ARRAY_64BIT	(1 << 13)	/* 64-bit array size */
+#define AAC_QUIRK_LBA_64BIT	(1 << 14)	/* 64-bit LBA support */
 
 
 /*
@@ -291,7 +285,7 @@ struct aac_ccb {
 struct aac_drive {
 	u_int	hd_present;
 	u_int	hd_devtype;
-	u_int	hd_size;
+	u_int64_t	hd_size;
 };
 
 /*

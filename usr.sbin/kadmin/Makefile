@@ -1,5 +1,6 @@
-# $NetBSD: Makefile,v 1.16 2007/05/28 12:06:37 tls Exp $
+# $NetBSD: Makefile,v 1.20 2010/02/03 15:34:47 roy Exp $
 
+WARNS?=	1	# XXX -Wextra -Wsign-compare
 NOLINT= # defined
 
 .include <bsd.own.mk>
@@ -9,12 +10,12 @@ USE_FORT?= yes	# network client
 DIST=		${NETBSDSRCDIR}/crypto/dist
 .PATH: ${DIST}/heimdal/kadmin
 
-WARNS?=  1
-
 PROG= kadmin
 
 SRCS=		 				\
 	ank.c					\
+	add_enctype.c				\
+	check.c					\
 	cpw.c					\
 	del.c					\
 	del_enctype.c				\
@@ -26,8 +27,11 @@ SRCS=		 				\
 	load.c					\
 	mod.c					\
 	rename.c				\
+	stash.c					\
 	util.c					\
+	pw_quality.c				\
 	random_password.c			\
+	kadmin-commands.c
 
 CPPFLAGS+= -I.					\
 	-I${DIST}/heimdal/kadmin		\
@@ -44,12 +48,12 @@ CPPFLAGS+=-DHAVE_IPV6
 
 VERS!=	cd ${NETBSDSRCDIR}/lib/libvers && ${PRINTOBJDIR}
 
-LDADD+=	-lkadm5srv -lhdb -lkrb5 -lcrypto -lasn1  \
-	-lcom_err -lsl -ledit -ltermcap -L${VERS} -lvers \
-	-lroken -lcrypt
-DPADD+=	${LIBKADM5SRV} ${LIBHDB} ${LIBKRB5} ${LIBCRYPTO} ${LIBASN1} \
-	${LIBCOM_ERR} ${LIBSL} ${LIBEDIT} ${LIBTERMCAP} ${VERS}/libvers.a \
-	${LIBROKEN} ${LIBCRYPT}
+LDADD+=	-lkadm5srv -lhdb -lkrb5 -lhx509 -lcrypto \
+	-lasn1 -lcom_err -lsl -ledit -lterminfo \
+	-L${VERS} -lvers -lroken -lcrypt -lutil
+DPADD+=	${LIBKADM5SRV} ${LIBHDB} ${LIBKRB5} ${LIBHX509} ${LIBCRYPTO} \
+	${LIBASN1} ${LIBCOM_ERR} ${LIBSL} ${LIBEDIT} ${LIBTERMINFO} \
+	${VERS}/libvers.a ${LIBROKEN} ${LIBCRYPT} ${LIBUTIL}
 
 MAN=	kadmin.8
 

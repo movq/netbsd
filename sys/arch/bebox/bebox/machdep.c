@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.91 2007/12/09 03:33:29 ober Exp $	*/
+/*	$NetBSD: machdep.c,v 1.99 2010/10/30 06:11:18 kiyohara Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.91 2007/12/09 03:33:29 ober Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.99 2010/10/30 06:11:18 kiyohara Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -54,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.91 2007/12/09 03:33:29 ober Exp $");
 #include <sys/syscallargs.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
+#include <sys/ksyms.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -70,6 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.91 2007/12/09 03:33:29 ober Exp $");
 #include <machine/trap.h>
 
 #include <powerpc/oea/bat.h>
+#include <powerpc/pic/picvar.h> 
 
 #include <dev/cons.h>
 
@@ -108,15 +109,16 @@ struct mem_region physmemr[OFMEMREGIONS], availmemr[OFMEMREGIONS];
 char bootpath[256];
 paddr_t avail_end;			/* XXX temporary */
 struct pic_ops *isa_pic;
-void initppc(u_long, u_long, void *);
-void consinit(void);
-void ext_intr(void);
+int isa_pcmciamask = 0x8b28;		/* XXXX */
+extern int primary_pic;
+void initppc(u_long, u_long, u_int, void *);
+static void disable_device(const char *);
 void setup_bebox_intr(void);
 
 extern void *startsym, *endsym;
 
 void
-initppc(u_long startkernel, u_long endkernel, void *btinfo)
+initppc(u_long startkernel, u_long endkernel, u_int args, void *btinfo)
 {
 	/*
 	 * copy bootinfo
@@ -155,20 +157,14 @@ initppc(u_long startkernel, u_long endkernel, void *btinfo)
 		ns_per_tick = 1000000000 / ticks_per_sec;
 	}
 
-
-	/*
-	 * boothowto
-	 */
-	/*	boothowto = args; */
-	
-	setup_bebox_intr();
+	prep_initppc(startkernel, endkernel, args);
 }
 
 /*
  * Machine dependent startup code.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
 	/*
 	 * BeBox Mother Board's Register Mapping
@@ -176,24 +172,36 @@ cpu_startup()
 	bebox_mb_reg = (vaddr_t) mapiodev(BEBOX_INTR_REG, PAGE_SIZE);
 	if (!bebox_mb_reg)
 		panic("cpu_startup: no room for interrupt register");
-  
+
 	/*
 	 * Do common VM initialization
 	 */
 	oea_startup(NULL);
-  
+
+	pic_init();
+	isa_pic = setup_i8259();
+	setup_bebox_intr();
+	primary_pic = 1;
+
+	/*
+	 * set up i8259 as a cascade on BeInterruptController irq 26.
+	 */
+	intr_establish(16 + 26, IST_LEVEL, IPL_NONE, pic_handle_intr, isa_pic);
+
+	oea_install_extint(pic_ext_intr);
+
 	/*
 	 * Now that we have VM, malloc's are OK in bus_space.
 	 */
 	bus_space_mallocok();
-  
+
 	/*
 	 * Now allow hardware interrupts.
 	 */
 	{
 		int msr;
-    
-		splhigh();
+
+		splraise(-1);
 		__asm volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0"
 		    : "=r"(msr) : "K"(PSL_EE));
 	}
@@ -204,8 +212,7 @@ cpu_startup()
  * Look up information in bootinfo of boot loader.
  */
 void *
-lookup_bootinfo(type)
-	int type;
+lookup_bootinfo(int type)
 {
 	struct btinfo_common *bt;
 	struct btinfo_common *help = (struct btinfo_common *)bootinfo;
@@ -221,12 +228,27 @@ lookup_bootinfo(type)
 	return (NULL);
 }
 
+static void
+disable_device(const char *name)
+{
+	extern struct cfdata cfdata[];
+	int i;
+
+	for (i = 0; cfdata[i].cf_name != NULL; i++)
+		if (strcmp(cfdata[i].cf_name, name) == 0) {
+			if (cfdata[i].cf_fstate == FSTATE_NOTFOUND)
+				cfdata[i].cf_fstate = FSTATE_DNOTFOUND;
+			else if (cfdata[i].cf_fstate == FSTATE_STAR)
+				cfdata[i].cf_fstate = FSTATE_DSTAR;
+		}
+}
+
 /*
  * consinit
  * Initialize system console.
  */
 void
-consinit()
+consinit(void)
 {
 	struct btinfo_console *consinfo;
 	static int initted;
@@ -238,60 +260,50 @@ consinit()
 	consinfo = (struct btinfo_console *)lookup_bootinfo(BTINFO_CONSOLE);
 	if (!consinfo)
 		panic("not found console information in bootinfo");
-	
-#if (NPC > 0) || (NVGA > 0)
+
+	/*
+	 * We need to disable genfb or vga, because foo_match() return
+	 * the same value.
+	 */
+	if (!strcmp(consinfo->devname, "be")) {
+		/*
+		 * We use Framebuffer for initialized by BootROM of BeBox.
+		 * In this case, our console will be attached more late. 
+		 */
+#if (NPCKBC > 0)
+		pckbc_cnattach(&genppc_isa_io_space_tag, IO_KBD, KBCMDP,
+		    PCKBC_KBD_SLOT);
+#endif
+		disable_device("vga");
+		return;
+	}
+
+	disable_device("genfb");
+
+#if (NVGA > 0)
 	if (!strcmp(consinfo->devname, "vga")) {
-#if (NVGA > 0)
-		if (!vga_cnattach(&genppc_isa_io_space_tag, &genppc_isa_mem_space_tag,
-			-1, 1))
-			goto dokbd;
-#endif
-#if (NPC > 0)
-		pccnattach();
-#endif
-#if (NVGA > 0)
-dokbd:
-#endif
+		vga_cnattach(&prep_io_space_tag, &prep_mem_space_tag, -1, 1);
 #if (NPCKBC > 0)
 		pckbc_cnattach(&genppc_isa_io_space_tag, IO_KBD, KBCMDP,
 		    PCKBC_KBD_SLOT);
 #endif
 		return;
 	}
-#endif /* PC | VGA */
+#endif
 
 #if (NCOM > 0)
 	if (!strcmp(consinfo->devname, "com")) {
 	   	bus_space_tag_t tag = &genppc_isa_io_space_tag;
 
 		if(comcnattach(tag, consinfo->addr, consinfo->speed,
-			COM_FREQ, COM_TYPE_NORMAL,
-			((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8)))
+		    COM_FREQ, COM_TYPE_NORMAL,
+		    ((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8)))
 			panic("can't init serial console");
-
 		return;
 	}
 #endif
 	panic("invalid console device %s", consinfo->devname);
 }
-
-#if (NPCKBC > 0) && (NPCKBD == 0)
-/*
- * glue code to support old console code with the
- * mi keyboard controller driver
- */
-int
-pckbport_machdep_cnattach(kbctag, kbcslot)
-	pckbport_tag_t kbctag;
-	pckbport_slot_t kbcslot;
-{
-#if (NPC > 0)
-	return (pcconskbd_cnattach(kbctag, kbcslot));
-#else
-	return (ENXIO);
-#endif
-}
-#endif
 
 /*
  * Halt or reboot the machine after syncing/dumping according to howto.
@@ -312,12 +324,14 @@ cpu_reboot(int howto, char *what)
 	splhigh();
 	if (howto & RB_HALT) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("halted\n\n");
 
 	}
 	if (!cold && (howto & RB_DUMP))
 		oea_dumpsys();
 	doshutdownhooks();
+	pmf_system_shutdown(boothowto);
 	printf("rebooting\n\n");
 	if (what && *what) {
 		if (strlen(what) > sizeof str - 5)

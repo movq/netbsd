@@ -1,4 +1,4 @@
-/*	$NetBSD: cread.c,v 1.20 2007/12/02 04:59:25 tsutsui Exp $	*/
+/*	$NetBSD: cread.c,v 1.23 2009/03/25 18:41:06 tls Exp $	*/
 
 /*
  * Copyright (c) 1996
@@ -77,15 +77,44 @@ static struct sd {
 	int		compressed;	/* 1 if input file is a .gz file */
 } *ss[SOPEN_MAX];
 
-static int		get_byte __P((struct sd *));
-static unsigned long	getLong __P((struct sd *));
-static void		check_header __P((struct sd *));
+static int		get_byte(struct sd *);
+static unsigned long	getLong(struct sd *);
+static void		check_header(struct sd *);
 
 /* XXX - find suitable header file for these: */
-void	*zcalloc __P((void *, unsigned int, unsigned int));
-void	zcfree __P((void *, void *));
-void	zmemcpy __P((unsigned char *, unsigned char *, unsigned int));
+void	*zcalloc(void *, unsigned int, unsigned int);
+void	zcfree(void *, void *);
+void	zmemcpy(unsigned char *, unsigned char *, unsigned int);
 
+/*
+ * The libkern version of this function uses an 8K set of tables.
+ * This is the double-loop version of LE CRC32 from if_ethersubr,
+ * lightly modified -- it is 200 bytes smaller than the version using
+ * a 4-bit table and at least 8K smaller than the libkern version.
+ */
+#ifndef ETHER_CRC_POLY_LE
+#define ETHER_CRC_POLY_LE	0xedb88320
+#endif
+uint32_t
+crc32(uint32_t crc, const uint8_t *const buf, size_t len)
+{
+	uint32_t c, carry;
+	size_t i, j;
+
+	crc = 0xffffffffU ^ crc;
+	for (i = 0; i < len; i++) {
+	    c = buf[i];
+	    for (j = 0; j < 8; j++) {
+		carry = ((crc & 0x01) ? 1 : 0) ^ (c & 0x01);
+		crc >>= 1;
+		c >>= 1;
+		if (carry) {
+			crc = (crc ^ ETHER_CRC_POLY_LE);
+		}
+	    }
+	}
+	return (crc ^ 0xffffffffU);
+}
 
 /*
  * compression utilities
@@ -109,7 +138,7 @@ void
 zmemcpy(unsigned char *dest, unsigned char *source, unsigned int len)
 {
 
-	bcopy(source, dest, len);
+	memcpy(dest, source, len);
 }
 
 static int
@@ -237,7 +266,7 @@ open(const char *fname, int mode)
 	ss[fd] = s = alloc(sizeof(struct sd));
 	if (s == 0)
 		goto errout;
-	bzero(s, sizeof(struct sd));
+	(void)memset(s, 0, sizeof(struct sd));
 
 	if (inflateInit2(&(s->stream), -15) != Z_OK)
 		goto errout;
@@ -419,7 +448,8 @@ lseek(int fd, off_t offset, int where)
 			inflateEnd(&(s->stream));
 
 			sav_inbuf = s->inbuf; /* don't allocate again */
-			bzero(s, sizeof(struct sd)); /* this resets total_out to 0! */
+			(void)memset(s, 0, sizeof(struct sd));
+			/* this resets total_out to 0! */
 
 			inflateInit2(&(s->stream), -15);
 			s->stream.next_in = s->inbuf = sav_inbuf;

@@ -1,4 +1,4 @@
-/*	$NetBSD: crunchgen.c,v 1.73 2006/10/18 21:20:44 freza Exp $	*/
+/*	$NetBSD: crunchgen.c,v 1.79 2011/05/15 21:28:51 christos Exp $	*/
 /*
  * Copyright (c) 1994 University of Maryland
  * All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: crunchgen.c,v 1.73 2006/10/18 21:20:44 freza Exp $");
+__RCSID("$NetBSD: crunchgen.c,v 1.79 2011/05/15 21:28:51 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -100,7 +100,7 @@ char dbg[MAXPATHLEN] = "-Os";
 int linenum = -1;
 int goterror = 0;
 
-char *pname = "crunchgen";
+const char *pname = "crunchgen";
 
 int verbose, readcache, useobjs, oneobj;	/* options */
 int reading_cache;
@@ -111,11 +111,11 @@ char *makeflags;
 
 /* general library routines */
 
-void status(char *str);
+void status(const char *str);
 void out_of_memory(void);
 void add_string(strlst_t **listp, char *str);
-int is_dir(char *pathname);
-int is_nonempty_file(char *pathname);
+int is_dir(const char *pathname);
+int is_nonempty_file(const char *pathname);
 
 /* helper routines for main() */
 
@@ -316,11 +316,11 @@ parse_one_file(char *filename)
 
 
 void 
-parse_line(char *line, int *fc, char **fv, int nf)
+parse_line(char *pline, int *fc, char **fv, int nf)
 {
     char *p;
 
-    p = line;
+    p = pline;
     *fc = 0;
     for (;;) {
 	while (isspace((unsigned char)*p))
@@ -855,9 +855,10 @@ gen_output_cfile(void)
 	fprintf(outcf, "%s\n", *cp);
 
     for (p = progs; p != NULL; p = p->next)
-	fprintf(outcf, "extern int _crunched_%s_stub();\n", p->ident);
+	fprintf(outcf, "extern int _crunched_%s_stub(int, char **, char **);\n",
+	    p->ident);
 
-    fprintf(outcf, "\nstruct stub entry_points[] = {\n");
+    fprintf(outcf, "\nstatic const struct stub entry_points[] = {\n");
     for (p = progs; p != NULL; p = p->next) {
 	fprintf(outcf, "\t{ \"%s\", _crunched_%s_stub },\n",
 		p->name, p->ident);
@@ -924,6 +925,7 @@ top_makefile_rules(FILE *outmk)
 #ifdef NEW_TOOLCHAIN
     fprintf(outmk, "OBJCOPY?=objcopy\n");
     fprintf(outmk, "NM?=nm\n");
+    fprintf(outmk, "AWK?=awk\n");
 #else
     fprintf(outmk, "CRUNCHIDE?=crunchide\n");
 #endif
@@ -945,6 +947,7 @@ top_makefile_rules(FILE *outmk)
 	fprintf(outmk, " %s_make", p->ident);
     fprintf(outmk, "\n\n");
 
+    fprintf(outmk, "LDSTATIC=-static\n\n");
     fprintf(outmk, "PROG=%s\n\n", execfname);
     
     fprintf(outmk, "all: ${PROG}.crunched\n");
@@ -966,7 +969,6 @@ top_makefile_rules(FILE *outmk)
 void
 bottom_makefile_rules(FILE *outmk)
 {
-    fprintf(outmk, "LDSTATIC=-static\n");
 }
 
 
@@ -992,7 +994,6 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
 	    fprintf(outmk, "%s_OBJS=", p->ident);
 	    output_strlst(outmk, p->objs);
 	}
-	fprintf(outmk, "%s:\n\t mkdir %s\n", p->ident, p->ident);
 	fprintf(outmk, "%s_make: %s .PHONY\n", p->ident, p->ident);
 	fprintf(outmk, "\t( cd %s; printf '.PATH: ${%s_SRCDIR}\\n"
 	    ".CURDIR:= ${%s_SRCDIR}\\n"
@@ -1001,7 +1002,9 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
 	for (lst = vars; lst != NULL; lst = lst->next)
 	    fprintf(outmk, "%s\\n", lst->str);
 	fprintf(outmk, "'\\\n");
-	fprintf(outmk, "\t| ${MAKE} -f- CRUNCHEDPROG=1 DBG=\"${DBG}\" depend");
+#define MAKECMD \
+    "\t| ${MAKE} -f- CRUNCHEDPROG=1 DBG=\"${DBG}\" LDSTATIC=\"${LDSTATIC}\" "
+	fprintf(outmk, MAKECMD "depend");
 	fprintf(outmk, " )\n");
 	fprintf(outmk, "\t( cd %s; printf '.PATH: ${%s_SRCDIR}\\n"
 	    ".CURDIR:= ${%s_SRCDIR}\\n"
@@ -1010,7 +1013,7 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
 	for (lst = vars; lst != NULL; lst = lst->next)
 	    fprintf(outmk, "%s\\n", lst->str);
 	fprintf(outmk, "'\\\n");
-	fprintf(outmk, "\t| ${MAKE} -f- CRUNCHEDPROG=1 DBG=\"${DBG}\" ");
+	fprintf(outmk, MAKECMD);
 	if (p->objs)
 	    fprintf(outmk, "${%s_OBJS} ) \n\n", p->ident);
 	else
@@ -1019,6 +1022,9 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
         fprintf(outmk, "%s_make:\n\t@echo \"** Using existing objs for %s\"\n\n", 
 		p->ident, p->name);
 
+#ifdef NEW_TOOLCHAIN
+    fprintf(outmk, "%s:\n\t mkdir %s\n", p->ident, p->ident);
+#endif
     fprintf(outmk, "%s.cro: %s .WAIT ${%s_OBJPATHS}\n",
 	p->name, p->ident, p->ident);
 
@@ -1027,7 +1033,7 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
 	fprintf(outmk, "\t${LD} -r -o %s/%s.ro $(%s_OBJPATHS)\n", 
 		p->ident, p->name, p->ident);
     /* Use one awk command.... */
-    fprintf(outmk, "\t${NM} -ng %s/%s.ro | awk '/^ *U / { next };",
+    fprintf(outmk, "\t${NM} -ng %s/%s.ro | ${AWK} '/^ *U / { next };",
 	    p->ident, p->name);
     fprintf(outmk, " /^[0-9a-fA-F]+ C/ { next };");
     for (lst = p->keepsymbols; lst != NULL; lst = lst->next)
@@ -1070,7 +1076,7 @@ output_strlst(FILE *outf, strlst_t *lst)
  */
 
 void
-status(char *str)
+status(const char *str)
 {
     static int lastlen = 0;
     int len, spaces;
@@ -1123,7 +1129,7 @@ add_string(strlst_t **listp, char *str)
 
 
 int
-is_dir(char *pathname)
+is_dir(const char *pathname)
 {
     struct stat buf;
 
@@ -1133,7 +1139,7 @@ is_dir(char *pathname)
 }
 
 int
-is_nonempty_file(char *pathname)
+is_nonempty_file(const char *pathname)
 {
     struct stat buf;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: itime.c,v 1.16 2006/05/19 14:52:39 christos Exp $	*/
+/*	$NetBSD: itime.c,v 1.18 2010/03/11 01:32:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)itime.c	8.1 (Berkeley) 6/5/93";
 #else
-__RCSID("$NetBSD: itime.c,v 1.16 2006/05/19 14:52:39 christos Exp $");
+__RCSID("$NetBSD: itime.c,v 1.18 2010/03/11 01:32:59 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -145,12 +145,19 @@ getdumptime(void)
 	initdumptimes();
 	/*
 	 *	Go find the entry with the same name for a lower increment
-	 *	and older date
+	 *	and older date.  If we are doing a true incremental, then
+	 *	we can use any level as a ref point.
 	 */
 	ITITERATE(i, ddp) {
 		if (strncmp(fname, ddp->dd_name, sizeof (ddp->dd_name)) != 0)
 			continue;
-		if (ddp->dd_level >= level)
+		/* trueinc: ostensibly could omit the second clause
+		 * since if trueinc is set, we don't care about the level
+		 * at all.
+		 */
+		/* if ((!trueinc && (ddp->dd_level >= level)) ||
+		    (trueinc && (ddp->dd_level > level))) */
+		if (!trueinc && (ddp->dd_level >= level))
 			continue;
 		if (ddp->dd_ddate <= iswap32(spcl.c_ddate))
 			continue;

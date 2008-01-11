@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.5 2006/06/30 17:54:51 freza Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.7 2010/03/18 13:58:38 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.5 2006/06/30 17:54:51 freza Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.7 2010/03/18 13:58:38 kiyohara Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -98,17 +98,6 @@ pci_attach_hook(struct device *parent, struct device *self,
 #ifdef PCI_CONFIGURE_VERBOSE
 	ibm4xx_show_pci_map();
 #endif
-}
-
-int
-pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
-{
-
-	/*
-	 * Bus number is irrelevant.  Configuration Mechanism 1 is in
-	 * use, can have devices 0-32 (i.e. the `normal' range).
-	 */
-	return 31;
 }
 
 pcitag_t
@@ -180,6 +169,19 @@ pci_intr_evcnt(pci_chipset_tag_t pc, pci_intr_handle_t ih)
 
 	/* XXX for now, no evcnt parent reported */
 	return NULL;
+}
+
+int
+pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
+		 int attr, uint64_t data)
+{
+
+	switch (attr) {
+	case PCI_INTR_MPSAFE:
+		return 0;
+	default:
+		return ENODEV;
+	}
 }
 
 void *

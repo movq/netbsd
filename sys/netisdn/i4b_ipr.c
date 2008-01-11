@@ -27,7 +27,7 @@
  *	i4b_ipr.c - isdn4bsd IP over raw HDLC ISDN network driver
  *	---------------------------------------------------------
  *
- *	$Id: i4b_ipr.c,v 1.28 2007/10/19 12:16:47 ad Exp $
+ *	$Id: i4b_ipr.c,v 1.35 2010/04/05 07:22:50 joerg Exp $
  *
  * $FreeBSD$
  *
@@ -59,7 +59,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.28 2007/10/19 12:16:47 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.35 2010/04/05 07:22:50 joerg Exp $");
 
 #include "irip.h"
 #include "opt_irip.h"
@@ -124,7 +124,7 @@ __KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.28 2007/10/19 12:16:47 ad Exp $");
 #if defined(__FreeBSD_version) &&  __FreeBSD_version >= 400008
 #include "bpf.h"
 #else
-#include "bpfilter.h"
+#define NBPFILTER 1
 #endif
 #if NBPFILTER > 0 || NBPF > 0
 #include <sys/time.h>
@@ -247,7 +247,7 @@ PDEVSTATIC void iripattach(void *);
 PSEUDO_SET(iripattach, i4b_ipr);
 static int irpioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data);
 #else
-PDEVSTATIC void iripattach __P((void));
+PDEVSTATIC void iripattach(void);
 static int iripioctl(struct ifnet *ifp, u_long cmd, void *data);
 #endif
 
@@ -295,7 +295,7 @@ PDEVSTATIC void
 #ifdef __FreeBSD__
 iripattach(void *dummy)
 #else
-iripattach()
+iripattach(void)
 #endif
 {
 	struct ipr_softc *sc = ipr_softc;
@@ -404,7 +404,7 @@ iripattach()
 #ifdef __FreeBSD__
 		bpfattach(&sc->sc_if, DLT_NULL, sizeof(u_int));
 #else
-		bpfattach(&sc->sc_if, DLT_NULL, sizeof(u_int));
+		bpf_attach(&sc->sc_if, DLT_NULL, sizeof(u_int));
 #endif
 #endif
 	}
@@ -560,19 +560,10 @@ iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 /*---------------------------------------------------------------------------*
  *	process ioctl
  *---------------------------------------------------------------------------*/
-#ifdef __FreeBSD__
-static int
-iripioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data)
-#else
 static int
 iripioctl(struct ifnet *ifp, u_long cmd, void *data)
-#endif
 {
-#if defined(__FreeBSD__) || defined(__bsdi__)
-	struct ipr_softc *sc = &ipr_softc[ifp->if_unit];
-#else
 	struct ipr_softc *sc = ifp->if_softc;
-#endif
 
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -584,7 +575,7 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 	switch (cmd)
 	{
 		case SIOCAIFADDR:	/* add interface address */
-		case SIOCSIFADDR:	/* set interface address */
+		case SIOCINITIFADDR:	/* set interface address */
 		case SIOCSIFDSTADDR:	/* set interface destination address */
 			if(ifa->ifa_addr->sa_family != AF_INET)
 				error = EAFNOSUPPORT;
@@ -593,10 +584,10 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 			break;
 
 		case SIOCSIFFLAGS:	/* set interface flags */
-			if(!(ifr->ifr_flags & IFF_UP))
-			{
-				if(sc->sc_if.if_flags & IFF_RUNNING)
-				{
+			if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+				break;
+			if ((ifr->ifr_flags & IFF_UP) == 0) {
+				if (sc->sc_if.if_flags & IFF_RUNNING) {
 					/* disconnect ISDN line */
 					i4b_l4_drvrdisc(sc->sc_cdp->cdid);
 					sc->sc_if.if_flags &= ~IFF_RUNNING;
@@ -609,10 +600,10 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 				iripclearqueues(sc);
 			}
 
+#if 0
 			if(ifr->ifr_flags & IFF_DEBUG)
-			{
-				/* enable debug messages */
-			}
+				; /* enable debug messages */
+#endif
 
 			break;
 
@@ -622,8 +613,8 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 				error = EINVAL;
 			else if(ifr->ifr_mtu < I4BIPRMINMTU)
 				error = EINVAL;
-			else
-				ifp->if_mtu = ifr->ifr_mtu;
+			else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+				error = 0;
 			break;
 #endif /* __OPENBSD__ */
 
@@ -636,18 +627,12 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 #ifdef IPR_VJ
 		case IPRIOCSMAXCID:
 			{
-#if defined(__FreeBSD_version) && __FreeBSD_version >= 400005
-			struct proc *p = curproc;	/* XXX */
-
-			if((error = suser(p)) != 0)
-#else
 			struct lwp *l = curlwp;		/* XXX */
 
 			if((error = kauth_authorize_network(l->l_cred,
 			    KAUTH_NETWORK_INTERFACE,
 			    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp,
 			    (void *)cmd, NULL)) != 0)
-#endif
 				break;
 		        sl_compress_setup(sc->sc_compr, *(int *)data);
 			}
@@ -655,7 +640,9 @@ iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 #endif
 #endif
 		default:
-			error = EINVAL;
+			error = ifioctl_common(ifp, cmd, data);
+			if (error == ENETRESET)
+				error = 0;
 			break;
 	}
 
@@ -1083,11 +1070,7 @@ error:
 		mm.m_len = 4;
 		mm.m_data = (char *)&af;
 
-#ifdef __FreeBSD__
 		bpf_mtap(&sc->sc_if, &mm);
-#else
-		bpf_mtap(sc->sc_if.if_bpf, &mm);
-#endif
 	}
 #endif /* NBPFILTER > 0  || NBPF > 0 */
 
@@ -1150,11 +1133,7 @@ ipr_tx_queue_empty(void *softc)
 			mm.m_len = 4;
 			mm.m_data = (char *)&af;
 
-#ifdef __FreeBSD__
 			bpf_mtap(&sc->sc_if, &mm);
-#else
-			bpf_mtap(sc->sc_if.if_bpf, &mm);
-#endif
 		}
 #endif /* NBPFILTER */
 

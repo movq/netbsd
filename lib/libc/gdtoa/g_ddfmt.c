@@ -1,4 +1,4 @@
-/* $NetBSD: g_ddfmt.c,v 1.1.1.1 2006/01/25 15:18:44 kleink Exp $ */
+/* $NetBSD: g_ddfmt.c,v 1.3 2011/03/20 23:15:35 christos Exp $ */
 
 /****************************************************************
 
@@ -35,9 +35,9 @@ THIS SOFTWARE.
 
  char *
 #ifdef KR_headers
-g_ddfmt(buf, dd, ndig, bufsize) char *buf; double *dd; int ndig; unsigned bufsize;
+g_ddfmt(buf, dd0, ndig, bufsize) char *buf; double *dd0; int ndig; size_t bufsize;
 #else
-g_ddfmt(char *buf, double *dd, int ndig, unsigned bufsize)
+g_ddfmt(char *buf, double *dd0, int ndig, size_t bufsize)
 #endif
 {
 	FPI fpi;
@@ -45,12 +45,28 @@ g_ddfmt(char *buf, double *dd, int ndig, unsigned bufsize)
 	ULong *L, bits0[4], *bits, *zx;
 	int bx, by, decpt, ex, ey, i, j, mode;
 	Bigint *x, *y, *z;
-	double ddx[2];
+	U *dd, ddx[2];
+#ifdef Honor_FLT_ROUNDS /*{{*/
+	int Rounding;
+#ifdef Trust_FLT_ROUNDS /*{{ only define this if FLT_ROUNDS really works! */
+	Rounding = Flt_Rounds;
+#else /*}{*/
+	Rounding = 1;
+	switch(fegetround()) {
+	  case FE_TOWARDZERO:	Rounding = 0; break;
+	  case FE_UPWARD:	Rounding = 2; break;
+	  case FE_DOWNWARD:	Rounding = 3;
+	  }
+#endif /*}}*/
+#else /*}{*/
+#define Rounding FPI_Round_near
+#endif /*}}*/
 
 	if (bufsize < 10 || bufsize < ndig + 8)
 		return 0;
 
-	L = (ULong*)dd;
+	dd = (U*)dd0;
+	L = dd->L;
 	if ((L[_0] & 0x7ff00000L) == 0x7ff00000L) {
 		/* Infinity or NaN */
 		if (L[_0] & 0xfffff || L[_1]) {
@@ -75,7 +91,7 @@ g_ddfmt(char *buf, double *dd, int ndig, unsigned bufsize)
 			goto nanret;
 		goto infret;
 		}
-	if (dd[0] + dd[1] == 0.) {
+	if (dval(&dd[0]) + dval(&dd[1]) == 0.) {
 		b = buf;
 #ifndef IGNORE_ZERO_SIGN
 		if (L[_0] & L[2+_0] & 0x80000000L)
@@ -86,31 +102,44 @@ g_ddfmt(char *buf, double *dd, int ndig, unsigned bufsize)
 		return b;
 		}
 	if ((L[_0] & 0x7ff00000L) < (L[2+_0] & 0x7ff00000L)) {
-		ddx[1] = dd[0];
-		ddx[0] = dd[1];
+		dval(&ddx[1]) = dval(&dd[0]);
+		dval(&ddx[0]) = dval(&dd[1]);
 		dd = ddx;
-		L = (ULong*)dd;
+		L = dd->L;
 		}
-	z = d2b(dd[0], &ex, &bx);
-	if (dd[1] == 0.)
+	z = d2b(dval(&dd[0]), &ex, &bx);
+	if (z == NULL)
+		return NULL;
+	if (dval(&dd[1]) == 0.)
 		goto no_y;
 	x = z;
-	y = d2b(dd[1], &ey, &by);
+	y = d2b(dval(&dd[1]), &ey, &by);
+	if (y == NULL)
+		return NULL;
 	if ( (i = ex - ey) !=0) {
 		if (i > 0) {
 			x = lshift(x, i);
+			if (x == NULL)
+				return NULL;
 			ex = ey;
 			}
-		else
+		else {
 			y = lshift(y, -i);
+			if (y == NULL)
+				return NULL;
+			}
 		}
 	if ((L[_0] ^ L[2+_0]) & 0x80000000L) {
 		z = diff(x, y);
+		if (z == NULL)
+			return NULL;
 		if (L[_0] & 0x80000000L)
 			z->sign = 1 - z->sign;
 		}
 	else {
 		z = sum(x, y);
+		if (z == NULL)
+			return NULL;
 		if (L[_0] & 0x80000000L)
 			z->sign = 1;
 		}
@@ -146,11 +175,15 @@ g_ddfmt(char *buf, double *dd, int ndig, unsigned bufsize)
 		}
 	fpi.emin = 1-1023-53+1;
 	fpi.emax = 2046-1023-106+1;
-	fpi.rounding = FPI_Round_near;
+	fpi.rounding = Rounding;
 	fpi.sudden_underflow = 0;
 	i = STRTOG_Normal;
 	s = gdtoa(&fpi, ex, bits, &i, mode, ndig, &decpt, &se);
-	b = g__fmt(buf, s, se, decpt, z->sign);
+	if (s == NULL)
+		return NULL;
+	b = g__fmt(buf, s, se, decpt, z->sign, bufsize);
+	if (b == NULL)
+		return NULL;
 	Bfree(z);
 	return b;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.12 2005/12/11 12:18:13 christos Exp $	*/
+/*	$NetBSD: obio.c,v 1.16 2009/03/16 23:11:13 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.12 2005/12/11 12:18:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.16 2009/03/16 23:11:13 dsl Exp $");
 
 #include "locators.h"
 
@@ -50,13 +43,13 @@ __KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.12 2005/12/11 12:18:13 christos Exp $");
 #include <machine/bus.h>
 #include <machine/sysconf.h>
 
-static int	obio_match __P((struct device *, struct cfdata *, void *));
-static void	obio_attach __P((struct device *, struct device *, void *));
-static int	obio_search __P((struct device *, struct cfdata *,
-				 const int *, void *));
-static int	obio_print __P((void *, const char *));
-static void	obio_intr_establish  __P((bus_space_tag_t, int, int, int,
-					  int (*)(void *), void *));
+static int	obio_match(struct device *, struct cfdata *, void *);
+static void	obio_attach(struct device *, struct device *, void *);
+static int	obio_search(struct device *, struct cfdata *,
+				 const int *, void *);
+static int	obio_print(void *, const char *);
+static void	obio_intr_establish(bus_space_tag_t, int, int, int,
+					  int (*)(void *), void *);
 
 CFATTACH_DECL(obio, sizeof(struct device),
     obio_match, obio_attach, NULL, NULL);
@@ -67,10 +60,7 @@ struct mipsco_bus_space obio_bustag;
 struct mipsco_bus_dma_tag obio_dmatag;
  
 static int
-obio_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+obio_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -81,10 +71,7 @@ obio_match(parent, cf, aux)
 }
 
 static void
-obio_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+obio_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -104,11 +91,7 @@ obio_attach(parent, self, aux)
 }
 
 static int
-obio_search(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+obio_search(struct device *parent, struct cfdata *cf, const int *ldesc, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -126,9 +109,7 @@ obio_search(parent, cf, ldesc, aux)
  * when there was no match found by config_found().
  */
 static int
-obio_print(args, name)
-	void *args;
-	const char *name;
+obio_print(void *args, const char *name)
 {
 	struct confargs *ca = args;
 
@@ -142,13 +123,7 @@ obio_print(args, name)
 }
 
 void
-obio_intr_establish(bst, level, pri, flags, func, arg)
-	bus_space_tag_t bst;
-	int level;
-	int pri;
-	int flags;
-	int (*func) __P((void *));
-	void *arg;
+obio_intr_establish(bus_space_tag_t bst, int level, int pri, int flags, int (*func)(void *), void *arg)
 {
 	(*platform.intr_establish)(level, func, arg);
 }

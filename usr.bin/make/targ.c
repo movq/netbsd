@@ -1,4 +1,4 @@
-/*	$NetBSD: targ.c,v 1.50 2007/12/21 20:32:24 dsl Exp $	*/
+/*	$NetBSD: targ.c,v 1.56 2010/11/25 21:31:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -69,14 +69,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: targ.c,v 1.50 2007/12/21 20:32:24 dsl Exp $";
+static char rcsid[] = "$NetBSD: targ.c,v 1.56 2010/11/25 21:31:09 christos Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)targ.c	8.2 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: targ.c,v 1.50 2007/12/21 20:32:24 dsl Exp $");
+__RCSID("$NetBSD: targ.c,v 1.56 2010/11/25 21:31:09 christos Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -144,13 +144,13 @@ static Hash_Table targets;	/* a hash table of same */
 
 #define HTSIZE	191		/* initial size of hash table */
 
-static int TargPrintOnlySrc(ClientData, ClientData);
-static int TargPrintName(ClientData, ClientData);
+static int TargPrintOnlySrc(void *, void *);
+static int TargPrintName(void *, void *);
 #ifdef CLEANUP
-static void TargFreeGN(ClientData);
+static void TargFreeGN(void *);
 #endif
-static int TargPropagateCohort(ClientData, ClientData);
-static int TargPropagateNode(ClientData, ClientData);
+static int TargPropagateCohort(void *, void *);
+static int TargPropagateNode(void *, void *);
 
 /*-
  *-----------------------------------------------------------------------
@@ -187,7 +187,7 @@ void
 Targ_End(void)
 {
 #ifdef CLEANUP
-    Lst_Destroy(allTargets, NOFREE);
+    Lst_Destroy(allTargets, NULL);
     if (allGNs)
 	Lst_Destroy(allGNs, TargFreeGN);
     Hash_DeleteTable(&targets);
@@ -233,8 +233,8 @@ Targ_NewGN(const char *name)
 {
     GNode *gn;
 
-    gn = emalloc(sizeof(GNode));
-    gn->name = estrdup(name);
+    gn = bmake_malloc(sizeof(GNode));
+    gn->name = bmake_strdup(name);
     gn->uname = NULL;
     gn->path = NULL;
     if (name[0] == '-' && name[1] == 'l') {
@@ -248,8 +248,9 @@ Targ_NewGN(const char *name)
     gn->centurion =    	NULL;
     gn->made = 	    	UNMADE;
     gn->flags = 	0;
-    gn->checked = 0;
-    gn->mtime = gn->cmtime = 0;
+    gn->checked =	0;
+    gn->mtime =		0;
+    gn->cmgn =		NULL;
     gn->iParents =  	Lst_Init(FALSE);
     gn->cohorts =   	Lst_Init(FALSE);
     gn->parents =   	Lst_Init(FALSE);
@@ -285,7 +286,7 @@ Targ_NewGN(const char *name)
  *-----------------------------------------------------------------------
  */
 static void
-TargFreeGN(ClientData gnp)
+TargFreeGN(void *gnp)
 {
     GNode *gn = (GNode *)gnp;
 
@@ -297,14 +298,14 @@ TargFreeGN(ClientData gnp)
 	free(gn->path);
     /* gn->fname points to name allocated when file was opened, don't free */
 
-    Lst_Destroy(gn->iParents, NOFREE);
-    Lst_Destroy(gn->cohorts, NOFREE);
-    Lst_Destroy(gn->parents, NOFREE);
-    Lst_Destroy(gn->children, NOFREE);
-    Lst_Destroy(gn->order_succ, NOFREE);
-    Lst_Destroy(gn->order_pred, NOFREE);
+    Lst_Destroy(gn->iParents, NULL);
+    Lst_Destroy(gn->cohorts, NULL);
+    Lst_Destroy(gn->parents, NULL);
+    Lst_Destroy(gn->children, NULL);
+    Lst_Destroy(gn->order_succ, NULL);
+    Lst_Destroy(gn->order_pred, NULL);
     Hash_DeleteTable(&gn->context);
-    Lst_Destroy(gn->commands, NOFREE);
+    Lst_Destroy(gn->commands, NULL);
     free(gn);
 }
 #endif
@@ -321,7 +322,7 @@ TargFreeGN(ClientData gnp)
  *			found
  *
  * Results:
- *	The node in the list if it was. If it wasn't, return NILGNODE of
+ *	The node in the list if it was. If it wasn't, return NULL of
  *	flags was TARG_NOCREATE or the newly created and initialized node
  *	if it was TARG_CREATE
  *
@@ -340,7 +341,7 @@ Targ_FindNode(const char *name, int flags)
     if (!(flags & (TARG_CREATE | TARG_NOHASH))) {
 	he = Hash_FindEntry(&targets, name);
 	if (he == NULL)
-	    return (NILGNODE);
+	    return NULL;
 	return (GNode *)Hash_GetValue(he);
     }
 
@@ -392,10 +393,10 @@ Targ_FindList(Lst names, int flags)
     if (Lst_Open(names) == FAILURE) {
 	return (nodes);
     }
-    while ((ln = Lst_Next(names)) != NILLNODE) {
+    while ((ln = Lst_Next(names)) != NULL) {
 	name = (char *)Lst_Datum(ln);
 	gn = Targ_FindNode(name, flags);
-	if (gn != NILGNODE) {
+	if (gn != NULL) {
 	    /*
 	     * Note: Lst_AtEnd must come before the Lst_Concat so the nodes
 	     * are added to the list in the order in which they were
@@ -511,7 +512,7 @@ Targ_SetMain(GNode *gn)
 }
 
 static int
-TargPrintName(ClientData gnp, ClientData pflags __unused)
+TargPrintName(void *gnp, void *pflags __unused)
 {
     GNode *gn = (GNode *)gnp;
 
@@ -522,7 +523,7 @@ TargPrintName(ClientData gnp, ClientData pflags __unused)
 
 
 int
-Targ_PrintCmd(ClientData cmd, ClientData dummy)
+Targ_PrintCmd(void *cmd, void *dummy)
 {
     fprintf(debug_file, "\t%s\n", (char *)cmd);
     return (dummy ? 0 : 0);
@@ -623,7 +624,7 @@ made_name(enum enum_made made)
  *-----------------------------------------------------------------------
  */
 int
-Targ_PrintNode(ClientData gnp, ClientData passp)
+Targ_PrintNode(void *gnp, void *passp)
 {
     GNode         *gn = (GNode *)gnp;
     int	    	  pass = passp ? *(int *)passp : 0;
@@ -716,7 +717,7 @@ Targ_PrintNode(ClientData gnp, ClientData passp)
  *-----------------------------------------------------------------------
  */
 static int
-TargPrintOnlySrc(ClientData gnp, ClientData dummy __unused)
+TargPrintOnlySrc(void *gnp, void *dummy __unused)
 {
     GNode   	  *gn = (GNode *)gnp;
     if (!OP_NOP(gn->type))
@@ -789,7 +790,7 @@ Targ_PrintGraph(int pass)
  *-----------------------------------------------------------------------
  */
 static int
-TargPropagateNode(ClientData gnp, ClientData junk __unused)
+TargPropagateNode(void *gnp, void *junk __unused)
 {
     GNode	  *gn = (GNode *)gnp;
 
@@ -817,7 +818,7 @@ TargPropagateNode(ClientData gnp, ClientData junk __unused)
  *-----------------------------------------------------------------------
  */
 static int
-TargPropagateCohort(ClientData cgnp, ClientData pgnp)
+TargPropagateCohort(void *cgnp, void *pgnp)
 {
     GNode	  *cgn = (GNode *)cgnp;
     GNode	  *pgn = (GNode *)pgnp;

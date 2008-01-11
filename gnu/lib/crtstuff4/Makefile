@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2007/03/09 04:40:38 matt Exp $
+#	$NetBSD: Makefile,v 1.7 2010/11/28 18:40:55 skrll Exp $
 
 REQUIRETOOLS=	yes
 NOLINT=		# defined
@@ -7,7 +7,7 @@ NOLINT=		# defined
 
 # If using an external toolchain, we expect crtbegin/crtend to be
 # supplied by that toolchain's run-time support.
-.if !defined(EXTERNAL_TOOLCHAIN) && ${MKGCC} != "no" && ${OBJECT_FMT} == "ELF"
+.if !defined(EXTERNAL_TOOLCHAIN) && ${MKGCC} != "no"
 
 DIST=		${NETBSDSRCDIR}/gnu/dist/gcc4
 GNUHOSTDIST=	${DIST}
@@ -48,6 +48,16 @@ tconfig.h:
 	TARGET_CPU_DEFAULT="" \
 	${HOST_SH} $(GNUHOSTDIST)/gcc/mkconfig.sh tconfig.h
 
+# these aren't necessary but are #include'd
+FAKEHEADERS=options.h insn-flags.h insn-constants.h
+${FAKEHEADERS}:
+	${_MKTARGET_CREATE}
+	touch ${.TARGET}
+DPSRCS+=	${FAKEHEADERS}
+CLEANFILES+=	${FAKEHEADERS}
+
+${OBJS}: ${DPSRCS}
+
 .include <bsd.prog.mk>
 
 # Override the default .c -> .o rule.
@@ -56,16 +66,17 @@ tconfig.h:
 	${CC} ${CPPFLAGS} ${GCFLAGS} ${CPUFLAGS} -c ${.IMPSRC} -o ${.TARGET}.o
 	mv ${.TARGET}.o ${.TARGET}
 
-# these aren't necessary but are #include'd
-FAKEHEADERS=options.h insn-flags.h insn-constants.h
-${FAKEHEADERS}:
-	${_MKTARGET_CREATE}
-	touch ${.TARGET}
-tm.h ${SRCS}: ${FAKEHEADERS}
-CLEANFILES+=	${FAKEHEADERS}
+.if (${MACHINE_ARCH} == "mips64eb") || (${MACHINE_ARCH} == "mips64el")
+# Turn off as(1) warnings on MIPS, since warnings are fatal with WARNS>0
+# and GCC configury passes -finhibit-size-directive which causes mips-gas
+# to barf.  Don't know what the real fix for this is...
+#
+# XXX should be COPTS, but that's too early
+CPUFLAGS+=-Wa,--no-warn
+.endif
 
 .else
 
 .include <bsd.prog.mk>			# do nothing
 
-.endif	# ! EXTERNAL_TOOLCHAIN && MKGCC != no && OBJECT_FMT == ELF
+.endif	# ! EXTERNAL_TOOLCHAIN && MKGCC != no

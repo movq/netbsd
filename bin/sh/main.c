@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.50 2005/10/10 21:14:42 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.56 2010/02/21 09:54:57 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1991, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1991, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.7 (Berkeley) 7/19/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.50 2005/10/10 21:14:42 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.56 2010/02/21 09:54:57 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,6 +51,7 @@ __RCSID("$NetBSD: main.c,v 1.50 2005/10/10 21:14:42 christos Exp $");
 #include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdlib.h>
 #include <locale.h>
 #include <fcntl.h>
 
@@ -80,8 +81,7 @@ __RCSID("$NetBSD: main.c,v 1.50 2005/10/10 21:14:42 christos Exp $");
 
 int rootpid;
 int rootshell;
-STATIC union node *curcmd;
-STATIC union node *prevcmd;
+int posix;
 #if PROFILE
 short profile_buf[16384];
 extern int etext();
@@ -109,6 +109,7 @@ main(int argc, char **argv)
 
 	setlocale(LC_ALL, "");
 
+	posix = getenv("POSIXLY_CORRECT") != NULL;
 #if PROFILE
 	monitor(4, etext, profile_buf, sizeof profile_buf, 50);
 #endif
@@ -186,7 +187,8 @@ state1:
 	}
 state2:
 	state = 3;
-	if (getuid() == geteuid() && getgid() == getegid()) {
+	if ((iflag || !posix) &&
+	    getuid() == geteuid() && getgid() == getegid()) {
 		if ((shinit = lookupvar("ENV")) != NULL && *shinit != '\0') {
 			state = 3;
 			read_profile(shinit);
@@ -203,7 +205,7 @@ state3:
 		    SIGPIPE
 		};
 #define SIGSSIZE (sizeof(sigs)/sizeof(sigs[0]))
-		int i;
+		size_t i;
 
 		for (i = 0; i < SIGSSIZE; i++)
 		    setsignal(sigs[i], 0);

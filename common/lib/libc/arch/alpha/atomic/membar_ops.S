@@ -1,4 +1,4 @@
-/*	$NetBSD: membar_ops.S,v 1.2 2007/11/28 17:39:08 ad Exp $	*/
+/*	$NetBSD: membar_ops.S,v 1.6 2008/05/25 15:56:11 chs Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,26 +31,55 @@
 
 #include "atomic_op_asm.h"
 
-#if defined(_KERNEL)
-
 	.text
+
+#ifdef _KERNEL
 
 /*
  * We start out with no-op versions that do nothing.  We hot-patch when
  * we detect a MP system.
  */
-LEAF_NOPROFILE(_membar_producer, 0)
+LEAF(_membar_producer, 0)
 	RET
 	nop
 	END(_membar_producer)
 EXPORT(_membar_producer_end)
-ATOMIC_OP_ALIAS(membar_producer,_membar_producer)
 
-LEAF_NOPROFILE(_membar_sync, 0)
+LEAF(_membar_sync, 0)
 	RET
 	nop
 	END(_membar_sync)
 EXPORT(_membar_sync_end)
+
+LEAF(_membar_producer_mp, 0)
+	wmb
+	RET
+	END(_membar_producer_mp)
+EXPORT(_membar_producer_mp_end)
+
+LEAF(_membar_sync_mp, 0)
+	mb
+	RET
+	END(_membar_sync_mp)
+EXPORT(_membar_sync_mp_end)
+
+#else	/* _KERNEL */
+
+LEAF(_membar_producer, 0)
+	mb
+	RET
+	END(_membar_producer)
+EXPORT(_membar_producer_end)
+
+LEAF(_membar_sync, 0)
+	mb
+	RET
+	END(_membar_sync)
+EXPORT(_membar_sync_end)
+
+#endif	/* _KERNEL */
+
+ATOMIC_OP_ALIAS(membar_producer,_membar_producer)
 ATOMIC_OP_ALIAS(membar_sync,_membar_sync)
 ATOMIC_OP_ALIAS(membar_enter,_membar_sync)
 STRONG_ALIAS(_membar_enter,_membar_sync)
@@ -65,19 +87,3 @@ ATOMIC_OP_ALIAS(membar_exit,_membar_sync)
 STRONG_ALIAS(_membar_exit,_membar_sync)
 ATOMIC_OP_ALIAS(membar_consumer,_membar_sync)
 STRONG_ALIAS(_membar_consumer,_membar_sync)
-
-LEAF_NOPROFILE(_membar_producer_mp, 0)
-	wmb
-	RET
-	END(_membar_producer_mp)
-EXPORT(_membar_producer_mp_end)
-
-LEAF_NOPROFILE(_membar_sync_mp, 0)
-	mb
-	RET
-	END(_membar_sync_mp)
-EXPORT(_membar_sync_mp_end)
-
-#else /* _KERNEL */
-
-#endif /* _KERNEL */

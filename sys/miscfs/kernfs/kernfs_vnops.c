@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs_vnops.c,v 1.134 2008/01/02 11:49:00 ad Exp $	*/
+/*	$NetBSD: kernfs_vnops.c,v 1.143 2010/07/21 09:06:38 hannken Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kernfs_vnops.c,v 1.134 2008/01/02 11:49:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kernfs_vnops.c,v 1.143 2010/07/21 09:06:38 hannken Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"
@@ -380,12 +380,7 @@ kernfs_addentry(kernfs_parentdir_t *pkt, kernfs_entry_t *dkt)
 }
 
 static int
-kernfs_xread(kfs, off, bufp, len, wrlen)
-	struct kernfs_node *kfs;
-	int off;
-	char **bufp;
-	size_t len;
-	size_t *wrlen;
+kernfs_xread(struct kernfs_node *kfs, int off, char **bufp, size_t len, size_t *wrlen)
 {
 	const struct kern_target *kt;
 #ifdef IPSEC
@@ -400,7 +395,8 @@ kernfs_xread(kfs, off, bufp, len, wrlen)
 		struct timeval tv;
 
 		microtime(&tv);
-		snprintf(*bufp, len, "%ld %ld\n", tv.tv_sec, tv.tv_usec);
+		snprintf(*bufp, len, "%lld %ld\n", (long long)tv.tv_sec,
+		    (long)tv.tv_usec);
 		break;
 	}
 
@@ -462,7 +458,6 @@ kernfs_xread(kfs, off, bufp, len, wrlen)
 		memcpy(*bufp, cp, xlen);
 		(*bufp)[xlen] = '\n';
 		(*bufp)[xlen+1] = '\0';
-		len = strlen(*bufp);
 		break;
 	}
 
@@ -475,6 +470,8 @@ kernfs_xread(kfs, off, bufp, len, wrlen)
 
 #ifdef IPSEC
 	case KFSipsecsa:
+		if (key_setdumpsa_spi == NULL)
+			return 0;
 		/*
 		 * Note that SA configuration could be changed during the
 		 * read operation, resulting in garbled output.
@@ -499,6 +496,8 @@ kernfs_xread(kfs, off, bufp, len, wrlen)
 		 * Note that SP configuration could be changed during the
 		 * read operation, resulting in garbled output.
 		 */
+		if (key_getspbyid == NULL)
+			return 0;
 		if (!kfs->kfs_v) {
 			struct secpolicy *sp;
 
@@ -543,10 +542,7 @@ kernfs_xread(kfs, off, bufp, len, wrlen)
 }
 
 static int
-kernfs_xwrite(kfs, bf, len)
-	const struct kernfs_node *kfs;
-	char *bf;
-	size_t len;
+kernfs_xwrite(const struct kernfs_node *kfs, char *bf, size_t len)
 {
 
 	switch (kfs->kfs_type) {
@@ -569,8 +565,7 @@ kernfs_xwrite(kfs, bf, len)
  * ndp is the name to locate in that directory...
  */
 int
-kernfs_lookup(v)
-	void *v;
+kernfs_lookup(void *v)
 {
 	struct vop_lookup_args /* {
 		struct vnode * a_dvp;
@@ -598,7 +593,7 @@ kernfs_lookup(v)
 
 	if (cnp->cn_namelen == 1 && *pname == '.') {
 		*vpp = dvp;
-		VREF(dvp);
+		vref(dvp);
 		return (0);
 	}
 
@@ -698,8 +693,7 @@ kernfs_lookup(v)
 }
 
 int
-kernfs_open(v)
-	void *v;
+kernfs_open(void *v)
 {
 	struct vop_open_args /* {
 		struct vnode *a_vp;
@@ -715,6 +709,8 @@ kernfs_open(v)
 	switch (kfs->kfs_type) {
 #ifdef IPSEC
 	case KFSipsecsa:
+		if (key_setdumpsa_spi == NULL)
+			return 0;
 		m = key_setdumpsa_spi(htonl(kfs->kfs_value));
 		if (m) {
 			m_freem(m);
@@ -723,6 +719,8 @@ kernfs_open(v)
 			return (ENOENT);
 
 	case KFSipsecsp:
+		if (key_getspbyid == NULL)
+			return 0;
 		sp = key_getspbyid(kfs->kfs_value);
 		if (sp) {
 			kfs->kfs_v = sp;
@@ -738,8 +736,7 @@ kernfs_open(v)
 }
 
 int
-kernfs_close(v)
-	void *v;
+kernfs_close(void *v)
 {
 	struct vop_close_args /* {
 		struct vnode *a_vp;
@@ -751,6 +748,8 @@ kernfs_close(v)
 	switch (kfs->kfs_type) {
 #ifdef IPSEC
 	case KFSipsecsp:
+		if (key_freesp == NULL)
+			return 0;
 		key_freesp((struct secpolicy *)kfs->kfs_v);
 		break;
 #endif
@@ -763,9 +762,23 @@ kernfs_close(v)
 	return (0);
 }
 
+static int
+kernfs_check_possible(struct vnode *vp, mode_t mode)
+{
+
+	return 0;
+}
+
+static int
+kernfs_check_permitted(struct vattr *va, mode_t mode, kauth_cred_t cred)
+{
+
+	return genfs_can_access(va->va_type, va->va_mode, va->va_uid, va->va_gid,
+	    mode, cred);
+}
+
 int
-kernfs_access(v)
-	void *v;
+kernfs_access(void *v)
 {
 	struct vop_access_args /* {
 		struct vnode *a_vp;
@@ -778,13 +791,17 @@ kernfs_access(v)
 	if ((error = VOP_GETATTR(ap->a_vp, &va, ap->a_cred)) != 0)
 		return (error);
 
-	return (vaccess(va.va_type, va.va_mode, va.va_uid, va.va_gid,
-	    ap->a_mode, ap->a_cred));
+	error = kernfs_check_possible(ap->a_vp, ap->a_mode);
+	if (error)
+		return error;
+
+	error = kernfs_check_permitted(&va, ap->a_mode, ap->a_cred);
+
+	return error;
 }
 
 static int
-kernfs_default_fileop_getattr(v)
-	void *v;
+kernfs_default_fileop_getattr(void *v)
 {
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
@@ -800,8 +817,7 @@ kernfs_default_fileop_getattr(v)
 }
 
 int
-kernfs_getattr(v)
-	void *v;
+kernfs_getattr(void *v)
 {
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
@@ -815,7 +831,7 @@ kernfs_getattr(v)
 	char strbuf[KSTRING], *bf;
 	size_t nread, total;
 
-	VATTR_NULL(vap);
+	vattr_null(vap);
 	vap->va_type = ap->a_vp->v_type;
 	vap->va_uid = 0;
 	vap->va_gid = 0;
@@ -827,7 +843,7 @@ kernfs_getattr(v)
 	/* Make all times be current TOD, except for the "boottime" node. */
 	if (kfs->kfs_kt->kt_namlen == 8 &&
 	    !memcmp(kfs->kfs_kt->kt_name, "boottime", 8)) {
-		TIMEVAL_TO_TIMESPEC(&boottime, &vap->va_ctime);
+		vap->va_ctime = boottime;
 	} else {
 		getnanotime(&vap->va_ctime);
 	}
@@ -909,8 +925,7 @@ kernfs_setattr(void *v)
 }
 
 int
-kernfs_default_xread(v)
-	void *v;
+kernfs_default_xread(void *v)
 {
 	struct vop_read_args /* {
 		struct vnode *a_vp;
@@ -940,8 +955,7 @@ kernfs_default_xread(v)
 }
 
 int
-kernfs_read(v)
-	void *v;
+kernfs_read(void *v)
 {
 	struct vop_read_args /* {
 		struct vnode *a_vp;
@@ -960,8 +974,7 @@ kernfs_read(v)
 }
 
 static int
-kernfs_default_xwrite(v)
-	void *v;
+kernfs_default_xwrite(void *v)
 {
 	struct vop_write_args /* {
 		struct vnode *a_vp;
@@ -991,8 +1004,7 @@ kernfs_default_xwrite(v)
 }
 
 int
-kernfs_write(v)
-	void *v;
+kernfs_write(void *v)
 {
 	struct vop_write_args /* {
 		struct vnode *a_vp;
@@ -1011,8 +1023,7 @@ kernfs_write(v)
 }
 
 int
-kernfs_ioctl(v)
-	void *v;
+kernfs_ioctl(void *v)
 {
 	struct vop_ioctl_args /* {
 		const struct vnodeop_desc *a_desc;
@@ -1083,8 +1094,7 @@ kernfs_setdirentfileno(struct dirent *d, off_t entry,
 }
 
 int
-kernfs_readdir(v)
-	void *v;
+kernfs_readdir(void *v)
 {
 	struct vop_readdir_args /* {
 		struct vnode *a_vp;
@@ -1158,6 +1168,13 @@ kernfs_readdir(v)
 				if (*dp == NODEV ||
 				    !vfinddev(*dp, kt->kt_vtype, &fvp))
 					continue;
+				vrele(fvp);
+			}
+			if (kt->kt_tag == KFSmsgbuf) {
+				if (!msgbufenabled
+				    || msgbufp->msg_magic != MSG_MAGIC) {
+					continue;
+				}
 			}
 			d.d_namlen = kt->kt_namlen;
 			if ((error = kernfs_setdirentfileno(&d, i, kfs,
@@ -1234,6 +1251,7 @@ kernfs_readdir(v)
 				if (*dp == NODEV ||
 				    !vfinddev(*dp, kt->kt_vtype, &fvp))
 					continue;
+				vrele(fvp);
 			}
 			d.d_namlen = kt->kt_namlen;
 			if ((error = kernfs_setdirentfileno(&d, i, kfs,
@@ -1254,6 +1272,8 @@ kernfs_readdir(v)
 	case KFSipsecsadir:
 		/* count SA in the system */
 		n = 0;
+		if (&satailq == NULL)
+			return 0;
 		TAILQ_FOREACH(sav, &satailq, tailq) {
 			for (sav2 = TAILQ_FIRST(&satailq);
 			    sav2 != sav;
@@ -1328,6 +1348,9 @@ kernfs_readdir(v)
 
 	case KFSipsecspdir:
 		/* count SP in the system */
+		if (&sptailq == NULL)
+			return 0;
+
 		n = 0;
 		TAILQ_FOREACH(sp, &sptailq, tailq)
 			n++;
@@ -1402,8 +1425,7 @@ kernfs_readdir(v)
 }
 
 int
-kernfs_inactive(v)
-	void *v;
+kernfs_inactive(void *v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
@@ -1420,6 +1442,8 @@ kernfs_inactive(v)
 	switch (kfs->kfs_type) {
 #ifdef IPSEC
 	case KFSipsecsa:
+		if (key_setdumpsa_spi == NULL)
+			return 0;
 		m = key_setdumpsa_spi(htonl(kfs->kfs_value));
 		if (m)
 			m_freem(m);
@@ -1427,6 +1451,8 @@ kernfs_inactive(v)
 			*ap->a_recycle = true;
 		break;
 	case KFSipsecsp:
+		if (key_getspbyid == NULL)
+			return 0;
 		sp = key_getspbyid(kfs->kfs_value);
 		if (sp)
 			key_freesp(sp);
@@ -1438,13 +1464,12 @@ kernfs_inactive(v)
 	default:
 		break;
 	}
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (0);
 }
 
 int
-kernfs_reclaim(v)
-	void *v;
+kernfs_reclaim(void *v)
 {
 	struct vop_reclaim_args /* {
 		struct vnode *a_vp;
@@ -1457,8 +1482,7 @@ kernfs_reclaim(v)
  * Return POSIX pathconf information applicable to special devices.
  */
 int
-kernfs_pathconf(v)
-	void *v;
+kernfs_pathconf(void *v)
 {
 	struct vop_pathconf_args /* {
 		struct vnode *a_vp;
@@ -1507,8 +1531,7 @@ kernfs_print(void *v)
 }
 
 int
-kernfs_link(v)
-	void *v;
+kernfs_link(void *v)
 {
 	struct vop_link_args /* {
 		struct vnode *a_dvp;
@@ -1522,8 +1545,7 @@ kernfs_link(v)
 }
 
 int
-kernfs_symlink(v)
-	void *v;
+kernfs_symlink(void *v)
 {
 	struct vop_symlink_args /* {
 		struct vnode *a_dvp;

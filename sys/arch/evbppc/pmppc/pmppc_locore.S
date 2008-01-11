@@ -1,4 +1,4 @@
-/*	$NetBSD: pmppc_locore.S,v 1.2 2007/10/17 19:54:19 garbled Exp $	*/
+/*	$NetBSD: pmppc_locore.S,v 1.9 2011/01/17 08:23:55 matt Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -34,7 +34,6 @@
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "fs_kernfs.h"
 #include "opt_ipkdb.h"
 #include "opt_multiprocessor.h"
 #include "opt_openpic.h"
@@ -48,10 +47,10 @@
 #include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
-#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 #include <powerpc/oea/hid.h>
 
 #include "ksyms.h"
@@ -68,9 +67,8 @@ GLOBAL(startsym)
 	.long	0			/* start symbol table */
 GLOBAL(endsym)
 	.long	0			/* end symbol table */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
-
+GLOBAL(oeacpufeat)
+	.long	0			/* cpu features */
 /*
  * This symbol is here for the benefit of kvm_mkdb, and is supposed to
  * mark the start of kernel text.
@@ -101,7 +99,7 @@ __start:
 	lis	4,_C_LABEL(end)@ha
 	addi	4,4,_C_LABEL(end)@l
 
-	INIT_CPUINFO(4,1,9,0)
+	INIT_CPUINFO(4,1,9,5)
 
 	lis	3,__start@ha
 	addi	3,3,__start@l
@@ -143,7 +141,7 @@ _C_LABEL(disable_intr):
 #include <powerpc/powerpc/locore_subr.S>
 
 /*
- * Include common trap / execption code
+ * Include common trap / exception code
  */
 #include <powerpc/powerpc/trap_subr.S>
 

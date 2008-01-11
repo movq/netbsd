@@ -1,4 +1,4 @@
-/*	$NetBSD: ktrace.h,v 1.18 2007/02/09 22:08:49 ad Exp $	*/
+/*	$NetBSD: ktrace.h,v 1.20 2011/04/27 00:00:47 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -32,8 +32,7 @@
  */
 
 #define DEF_POINTS (KTRFAC_SYSCALL | KTRFAC_SYSRET | KTRFAC_NAMEI | \
-		  KTRFAC_GENIO | KTRFAC_PSIG | KTRFAC_EMUL | KTRFAC_USER | \
-		  KTRFAC_MMSG | KTRFAC_MOOL)
+		  KTRFAC_GENIO | KTRFAC_PSIG | KTRFAC_EMUL | KTRFAC_USER)
 
 #define ALL_POINTS KTRFAC_MASK
 
@@ -43,5 +42,5 @@
 
 int	getpoints(int, char *);
 const char	*ioctlname(u_long);
-char	*siginfocodename(int, int);
+const char	*siginfocodename(int, int);
 void	dumpfile(const char *, int, int);

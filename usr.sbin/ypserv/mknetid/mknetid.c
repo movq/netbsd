@@ -1,4 +1,4 @@
-/*	$NetBSD: mknetid.c,v 1.15 2004/10/30 16:01:48 dsl Exp $	*/
+/*	$NetBSD: mknetid.c,v 1.17 2009/10/20 00:51:14 snj Exp $	*/
 
 /*
  * Copyright (c) 1996 Mats O Jansson <moj@stacken.kth.se>
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mknetid.c,v 1.15 2004/10/30 16:01:48 dsl Exp $");
+__RCSID("$NetBSD: mknetid.c,v 1.17 2009/10/20 00:51:14 snj Exp $");
 #endif
 
 /*
@@ -89,10 +84,10 @@ struct user_list hroot[HASHMAX];
 int
 main(int argc, char *argv[])
 {
-	char *HostFile = _PATH_HOSTS;
-	char *PasswdFile = _PATH_PASSWD;
-	char *GroupFile = _PATH_GROUP;
-	char *NetidFile = "/etc/netid";
+	const char *HostFile = _PATH_HOSTS;
+	const char *PasswdFile = _PATH_PASSWD;
+	const char *GroupFile = _PATH_GROUP;
+	const char *NetidFile = "/etc/netid";
 
 	int qflag, ch;
 	char *domain;

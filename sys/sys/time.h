@@ -1,4 +1,4 @@
-/*	$NetBSD: time.h,v 1.59 2008/01/08 20:56:22 christos Exp $	*/
+/*	$NetBSD: time.h,v 1.64 2009/03/27 11:06:26 drochner Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -42,8 +42,8 @@
  * and used in other calls.
  */
 struct timeval {
-	long    tv_sec;		/* seconds */
-	long    tv_usec;	/* and microseconds */
+	time_t    	tv_sec;		/* seconds */
+	suseconds_t	tv_usec;	/* and microseconds */
 };
 
 /*
@@ -61,7 +61,7 @@ struct timespec {
 } while (/*CONSTCOND*/0)
 #define	TIMESPEC_TO_TIMEVAL(tv, ts) do {				\
 	(tv)->tv_sec = (ts)->tv_sec;					\
-	(tv)->tv_usec = (ts)->tv_nsec / 1000;				\
+	(tv)->tv_usec = (suseconds_t)(ts)->tv_nsec / 1000;		\
 } while (/*CONSTCOND*/0)
 
 /*
@@ -99,6 +99,12 @@ struct timezone {
 		}							\
 	} while (/* CONSTCOND */ 0)
 
+/*
+ * hide bintime for _STANDALONE because this header is used for hpcboot.exe,
+ * which is built with compilers which don't recognize LL suffix.
+ *	http://mail-index.NetBSD.org/tech-userlevel/2008/02/27/msg000181.html
+ */
+#if !defined(_STANDALONE)
 struct bintime {
 	time_t	sec;
 	uint64_t frac;
@@ -157,7 +163,7 @@ static __inline void
 bintime2timespec(const struct bintime *bt, struct timespec *ts)
 {
 
-	ts->tv_sec = (/* XXX NetBSD not SUS compliant - MUST FIX */time_t)bt->sec;
+	ts->tv_sec = bt->sec;
 	ts->tv_nsec =
 	    (long)(((uint64_t)1000000000 * (uint32_t)(bt->frac >> 32)) >> 32);
 }
@@ -177,17 +183,18 @@ bintime2timeval(const struct bintime *bt, struct timeval *tv)
 
 	tv->tv_sec = bt->sec;
 	tv->tv_usec =
-	    (long)(((uint64_t)1000000 * (uint32_t)(bt->frac >> 32)) >> 32);
+	    (suseconds_t)(((uint64_t)1000000 * (uint32_t)(bt->frac >> 32)) >> 32);
 }
 
 static __inline void
 timeval2bintime(const struct timeval *tv, struct bintime *bt)
 {
 
-	bt->sec = (/* XXX NetBSD not SUS compliant - MUST FIX */time_t)tv->tv_sec;
+	bt->sec = tv->tv_sec;
 	/* 18446744073709 = int(2^64 / 1000000) */
 	bt->frac = tv->tv_usec * (uint64_t)18446744073709LL;
 }
+#endif /* !defined(_STANDALONE) */
 
 /* Operations on timespecs. */
 #define	timespecclear(tsp)	(tsp)->tv_sec = (time_t)((tsp)->tv_nsec = 0L)
@@ -214,6 +221,7 @@ timeval2bintime(const struct timeval *tv, struct bintime *bt)
 			(vsp)->tv_nsec += 1000000000L;			\
 		}							\
 	} while (/* CONSTCOND */ 0)
+#define timespec2ns(x) (((uint64_t)(x)->tv_sec) * 1000000000L + (x)->tv_nsec)
 #endif /* _NETBSD_SOURCE */
 
 /*
@@ -243,7 +251,9 @@ struct	itimerspec {
 #define	CLOCK_PROF	2
 #define	CLOCK_MONOTONIC	3
 
+#if defined(_NETBSD_SOURCE)
 #define	TIMER_RELTIME	0x0	/* relative timer */
+#endif
 #define	TIMER_ABSTIME	0x1	/* absolute timer */
 
 #ifdef _KERNEL
@@ -260,22 +270,25 @@ struct	itimerspec {
 #include <time.h>
 
 __BEGIN_DECLS
+#ifndef __LIBC12_SOURCE__
 #if (_POSIX_C_SOURCE - 0) >= 200112L || \
     defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
-int	getitimer(int, struct itimerval *);
-int	gettimeofday(struct timeval * __restrict, void *__restrict);
+int	getitimer(int, struct itimerval *) __RENAME(__getitimer50);
+int	gettimeofday(struct timeval * __restrict, void *__restrict)
+    __RENAME(__gettimeofday50);
 int	setitimer(int, const struct itimerval * __restrict,
-	    struct itimerval * __restrict);
-int	utimes(const char *, const struct timeval [2]);
+	    struct itimerval * __restrict) __RENAME(__setitimer50);
+int	utimes(const char *, const struct timeval [2]) __RENAME(__utimes50);
 #endif /* _POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE || _NETBSD_SOURCE */
 
-#if defined(_NETBSD_SOURCE)
-int	adjtime(const struct timeval *, struct timeval *);
-int	futimes(int, const struct timeval [2]);
-int	lutimes(const char *, const struct timeval [2]);
+#if defined(_NETBSD_SOURCE) || defined(HAVE_NBTOOL_CONFIG_H)
+int	adjtime(const struct timeval *, struct timeval *) __RENAME(__adjtime50);
+int	futimes(int, const struct timeval [2]) __RENAME(__futimes50);
+int	lutimes(const char *, const struct timeval [2]) __RENAME(__lutimes50);
 int	settimeofday(const struct timeval * __restrict,
-	    const void *__restrict);
+	    const void *__restrict) __RENAME(__settimeofday50);
 #endif /* _NETBSD_SOURCE */
+#endif /* __LIBC12_SOURCE__ */
 __END_DECLS
 
 #endif	/* !_STANDALONE */

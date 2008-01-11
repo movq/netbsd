@@ -1,4 +1,4 @@
-/*	$NetBSD: emuxki.c,v 1.50 2007/03/04 06:02:18 christos Exp $	*/
+/*	$NetBSD: emuxki.c,v 1.59 2009/11/26 15:17:09 njoly Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: emuxki.c,v 1.50 2007/03/04 06:02:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: emuxki.c,v 1.59 2009/11/26 15:17:09 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -79,9 +72,9 @@ __KERNEL_RCSID(0, "$NetBSD: emuxki.c,v 1.50 2007/03/04 06:02:18 christos Exp $")
 #include <dev/pci/emuxkivar.h>
 
 /* autoconf goo */
-static int	emuxki_match(struct device *, struct cfdata *, void *);
-static void	emuxki_attach(struct device *, struct device *, void *);
-static int	emuxki_detach(struct device *, int);
+static int	emuxki_match(device_t, cfdata_t, void *);
+static void	emuxki_attach(device_t, device_t, void *);
+static int	emuxki_detach(device_t, int);
 
 /* DMA mem mgmt */
 static struct dmamem *dmamem_alloc(bus_dma_tag_t, size_t, bus_size_t,
@@ -176,7 +169,7 @@ static enum ac97_host_flags emuxki_ac97_flags(void *);
 /*
  * Autoconfig goo.
  */
-CFATTACH_DECL(emuxki, sizeof(struct emuxki_softc),
+CFATTACH_DECL_NEW(emuxki, sizeof(struct emuxki_softc),
     emuxki_match, emuxki_attach, emuxki_detach, NULL);
 
 static const struct audio_hw_if emuxki_hw_if = {
@@ -383,12 +376,11 @@ emuxki_ac97_init(struct emuxki_softc *sc)
 	sc->hostif.write = emuxki_ac97_write;
 	sc->hostif.reset = emuxki_ac97_reset;
 	sc->hostif.flags = emuxki_ac97_flags;
-	return ac97_attach(&sc->hostif, &sc->sc_dev);
+	return ac97_attach(&sc->hostif, sc->sc_dev);
 }
 
 static int
-emuxki_match(struct device *parent, struct cfdata *match,
-    void *aux)
+emuxki_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -407,7 +399,7 @@ emuxki_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-emuxki_attach(struct device *parent, struct device *self, void *aux)
+emuxki_attach(device_t parent, device_t self, void *aux)
 {
 	struct emuxki_softc *sc;
 	struct pci_attach_args *pa;
@@ -415,7 +407,8 @@ emuxki_attach(struct device *parent, struct device *self, void *aux)
 	pci_intr_handle_t ih;
 	const char *intrstr;
 
-	sc = (struct emuxki_softc *) self;
+	sc = device_private(self);
+	sc->sc_dev = self;
 	pa = aux;
 	aprint_naive(": Audio controller\n");
 
@@ -435,8 +428,7 @@ emuxki_attach(struct device *parent, struct device *self, void *aux)
 		(PCI_COMMAND_STATUS_REG) | PCI_COMMAND_MASTER_ENABLE));
 
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: couldn't map interrupt\n",
-			sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_ios);
 		return;
 	}
@@ -445,15 +437,14 @@ emuxki_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_AUDIO, emuxki_intr,
 		sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_ios);
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
  /* XXX it's unknown whether APS is made from Audigy as well */
 	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_CREATIVELABS_AUDIGY) {
@@ -490,11 +481,11 @@ emuxki_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-emuxki_detach(struct device *self, int flags)
+emuxki_detach(device_t self, int flags)
 {
 	struct emuxki_softc *sc;
 
-	sc = (struct emuxki_softc *)self;
+	sc = device_private(self);
 	if (sc->sc_audev != NULL) /* Test in case audio didn't attach */
 		config_detach(sc->sc_audev, 0);
 
@@ -1733,11 +1724,12 @@ static uint32_t
 emuxki_voice_curaddr(struct emuxki_voice *voice)
 {
 	int idxreg;
+	int rv;
 
 	/* XXX different semantics in these cases */
 	if (voice->use & EMU_VOICE_USE_PLAY) {
 		/* returns number of samples (an l/r pair counts 1) */
-		return emuxki_read(voice->sc,
+		rv = emuxki_read(voice->sc,
 		    voice->dataloc.chan[0]->num, EMU_CHAN_CCCA_CURRADDR) -
 		    voice->dataloc.chan[0]->loop.start;
 	} else {
@@ -1761,10 +1753,10 @@ emuxki_voice_curaddr(struct emuxki_voice *voice)
 #endif
 				break;
 		}
-		return emuxki_read(voice->sc, 0, EMU_RECIDX(idxreg)
+		rv = emuxki_read(voice->sc, 0, EMU_RECIDX(idxreg)
 				& EMU_RECIDX_MASK);
 	}
-	return 0;
+	return rv;
 }
 
 static void
@@ -2033,7 +2025,7 @@ emuxki_open(void *addr, int flags)
 
 	sc = addr;
 #ifdef EMUXKI_DEBUG
-	printf("%s: emuxki_open called\n", sc->sc_dev.dv_xname);
+	printf("%s: emuxki_open called\n", device_xname(sc->sc_dev));
 #endif
 
 	/*
@@ -2078,7 +2070,7 @@ emuxki_close(void *addr)
 
 	sc = addr;
 #ifdef EMUXKI_DEBUG
-	printf("%s: emu10K1_close called\n", sc->sc_dev.dv_xname);
+	printf("%s: emu10K1_close called\n", device_xname(sc->sc_dev));
 #endif
 
 	/* No multiple voice support for now */
@@ -2099,7 +2091,7 @@ emuxki_query_encoding(void *addr, struct audio_encoding *fp)
 	struct emuxki_softc *sc;
 
 	sc = addr;
-	printf("%s: emuxki_query_encoding called\n", sc->sc_dev.dv_xname);
+	printf("%s: emuxki_query_encoding called\n", device_xname(sc->sc_dev));
 #endif
 
 	switch (fp->index) {
@@ -2234,7 +2226,7 @@ emuxki_halt_input(void *addr)
 
 	sc = addr;
 #ifdef EMUXKI_DEBUG
-	printf("%s: emuxki_halt_input called\n", sc->sc_dev.dv_xname);
+	printf("%s: emuxki_halt_input called\n", device_xname(sc->sc_dev));
 #endif
 
 	/* No multiple voice support for now */
@@ -2340,7 +2332,7 @@ emuxki_round_blocksize(void *addr, int blksize,
 	if (sc == NULL)
 		return blksize;
 
-	au = (void *)sc->sc_audev;
+	au = device_private(sc->sc_audev);
 	if (au == NULL)
 		return blksize;
 

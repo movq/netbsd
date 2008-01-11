@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.263 2007/12/31 15:31:59 ad Exp $
+# $NetBSD: GENERIC,v 1.291 2011/04/26 15:51:24 joerg Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/macppc/conf/std.macppc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.263 $"
+#ident 		"GENERIC-$Revision: 1.291 $"
 
 maxusers	32
 
@@ -40,7 +40,7 @@ options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
 options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
-options 	LKM		# loadable kernel modules
+options 	MODULAR		# new style module(7) framework
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -59,7 +59,7 @@ options 	DDB		# in-kernel debugger
 #options 	DDB_ONPANIC=0	# don't go into ddb on panic.
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	TRAP_PANICWAIT
-#options		DDB_COMMANDONENTER="bt"
+options		DDB_COMMANDONENTER="bt"
 
 #makeoptions 	DEBUG="-g"	# compile full symbol table
 
@@ -72,16 +72,13 @@ options 	COMPAT_13	# NetBSD 1.3,
 options 	COMPAT_14	# NetBSD 1.4,
 options 	COMPAT_15	# NetBSD 1.5,
 options 	COMPAT_16	# NetBSD 1.6,
-options 	COMPAT_20	# NetBSD 2.0
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_20	# NetBSD 2.0,
+options 	COMPAT_30	# NetBSD 3.0,
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	COMPAT_LINUX	# Linux binary compatibility
-#options 	COMPAT_DARWIN	# Darwin binary compatibility (experimental)
-#options 	COMPAT_MACH	# Mach compatibility, needed for COMPAT_DARWIN 
-#options 	EXEC_MACHO	# Mach-O binary support, needed for COMPAT_MACH
-#options 	DEBUG_DARWIN	# COMPAT_DARWIN debugging
-#options 	DEBUG_MACH	# COMPAT_MACH debugging
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
@@ -97,7 +94,7 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	NULLFS		# loopback file system
 file-system 	OVERLAY		# overlay file system
-file-system 	PORTAL		# portal filesystem (still experimental)
+file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
@@ -108,9 +105,10 @@ file-system	TMPFS		# Efficient memory file-system
 #file-system	HFS		# experimental - Apple HFS+ (read-only)
 
 # File system options
-options 	QUOTA		# UFS quotas
+options 	QUOTA		# legacy UFS quotas
+options 	QUOTA2		# new, in-filesystem UFS quotas
 #options 	FFS_EI		# FFS Endian Independant support
-options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Network File System server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -139,6 +137,7 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	IPFILTER_LOG	# ipmon(8) log support
 options 	IPFILTER_LOOKUP	# ippool(8) support
+options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -171,8 +170,6 @@ options 	WS_DEFAULT_FG=WSCOL_BLACK
 options 	WS_DEFAULT_BG=WSCOL_LIGHT_WHITE
 options 	WS_KERNEL_FG=WSCOL_GREEN
 options 	WS_KERNEL_BG=WSCOL_LIGHT_WHITE
-
-#options 	FONT_GALLANT12x22
 
 #options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 options 	FONT_GALLANT12x22
@@ -208,12 +205,8 @@ bandit*	at mainbus?
 grackle* at mainbus?
 uninorth* at mainbus?
 uni_n*	at mainbus?
-
-# interrupt controller support
-options PIC_OHARE
-options PIC_HEATHROW
-#options PIC_GRANDCENTRAL
-options PIC_OPENPIC
+memory*	at mainbus?
+spdmem*	at memory? addr ?
 
 pci*	at bandit? bus ?
 pci*	at grackle? bus ?
@@ -231,6 +224,7 @@ an*	at pci? dev ? function ?	# Aironet PC4500/PC4800 (802.11)
 ath*	at pci? dev ? function ?	# Atheros 5210/5211/5212 802.11
 atw*	at pci? dev ? function ?	# ADMtek ADM8211 (802.11)
 bge*	at pci? dev ? function ?	# Broadcom 570x Gigabit Ethernet
+bwi*	at pci? dev ? function ?	# Broadcom / Apple Airport Extreme
 ep*	at pci? dev ? function ?	# 3Com 3c59x
 epic*	at pci? dev ? function ?	# SMC EPIC/100 Ethernet
 ex*	at pci? dev ? function ?	# 3Com 90x[BC]
@@ -269,6 +263,7 @@ bha*	at pci? dev ? function ?	# BusLogic 9xx SCSI
 esiop*	at pci? dev ? function ?	# NCR 53c8xx SCSI (enhanced)
 iha*	at pci? dev ? function ?	# Initio INIC-940/950 SCSI
 isp*	at pci? dev ? function ?	# Qlogic ISP 10x0/2xx0 SCSI/Fibre Chan
+mpt*	at pci? dev ? function ?	# LSILogic 9x9 and 53c1030
 pcscp*	at pci? dev ? function ?	# AMD Am53c974 PCscsi-PCI SCSI
 siop*	at pci? dev ? function ?	# NCR 53c8xx SCSI
 trm*	at pci? dev ? function ?	# Tekram DC-395U/UW/F, DC-315/U SCSI
@@ -280,6 +275,10 @@ trm*	at pci? dev ? function ?	# Tekram DC-395U/UW/F, DC-315/U SCSI
 # O'Hare based machine that uses external cache like the PowerBook 3400c
 #options 	OFB_ENABLE_CACHE	# Speed up console in ofb
 #options 	OFB_FAKE_VGA_FB		# Allow X to mmap VGA regs
+# 
+# ofb is considered obsolete and machine-independent genfb should be used
+# instead.
+
 chipsfb*	at pci?	function ?	# C&T 65550
 machfb*		at pci? function ?	# ATI Mach 64, Rage, Rage Pro
 
@@ -300,16 +299,19 @@ wsdisplay*	at wsemuldisplaydev?
 pciide* at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
 acardide* at pci? dev ? function ?	# Acard IDE controllers
 aceride* at pci? dev ? function ?	# Acer Lab IDE controllers
+ahcisata* 	at pci? dev ? function ?	# AHCI SATA controllers
 artsata* at pci? dev ? function ?	# Intel i31244 SATA controller
 cmdide* at pci? dev ? function ?	# CMD tech IDE controllers
 cypide* at pci? dev ? function ?	# Cypress IDE controllers
 hptide* at pci? dev ? function ?	# Triones/HighPoint IDE controllers
+iteide* at pci? dev ? function ?	# IT Express IDE controllers
 optiide* at pci? dev ? function ?	# Opti IDE controllers
 pdcide* at pci? dev ? function ?	# Promise IDE controllers
 pdcsata* at pci? dev ? function ?	# Promise SATA150 controllers
 satalink* at pci? dev ? function ?	# SiI SATALink controllers
 siside* at pci? dev ? function ?	# SiS IDE controllers
 slide*  at pci? dev ? function ?	# Symphony Labs IDE controllers
+stpcide*	at pci? dev ? function ?	# STMicro STPC IDE controllers
 viaide* at pci? dev ? function ?	# VIA/AMD/Nvidia IDE controllers
 wdc*	at pci? dev ? function ?	# Kauai ATA
 cbb*	at pci? dev ? function ?	# PCI-CardBus bridge
@@ -365,9 +367,11 @@ nvram*	at obio?			# nvram
 #ams*	at adb?				# ADB mouse
 #abtn*	at adb?
 
-cuda*	at obio?			# Apple CUDA
-pmu*	at obio?			# Apple CUDA
-nadb*	at adb_bus?				# new ADB Bus abstraction
+# the new, improved ADB subsystem
+
+cuda*	at obio?			# CUDA, for Old World PowerMacs
+pmu*	at obio?			# PMU, *Books and newer PowerMacs
+nadb*	at adb_bus?			# ADB bus enumerator, at cuda or pmu
 adbkbd* at nadb?			# ADB keyboard
 adbms*	at nadb?			# ADB mice and touchpads
 adbbt*	at nadb?			# button device found on *Books
@@ -375,23 +379,12 @@ adbbt*	at nadb?			# button device found on *Books
 wskbd*		at wskbddev? console ?
 wsmouse*	at wsmousedev?
 
-# the new, improved, experimental ADB subsystem
+battery* at pmu?		# legacy battery, for ohare-based PowerBooks
+smartbat* at pmu?		# Smart battery, found in newer *Books
 
-#cuda*	at obio?		# CUDA, for Old World PowerMacs
-#pmu*	at obio?		# PMU, *Books and newer PowerMacs
-#battery* at pmu?		# legacy battery, for ohare-based PowerBooks
-
-#iic0	at cuda0		# CUDA's IIC bus
-#sgsmix0 at iic0	addr 0x8a	# additional mixer found in beige G3
+iic0	at cuda0		# CUDA's IIC bus
+sgsmix0 at iic0 addr 0x8a	# additional mixer found in beige G3
 				# use with awacs
-
-#nadb*	at adb_bus?		# ADB bus enumerator, at cuda or pmu
-
-#adbkbd* at nadb?		# ADB keyboard
-#adbms*	at nadb?		# ADB mouse or trackpad
-
-wsmouse* at wsmousedev?
-wskbd*	at wskbddev?
 
 zsc*	at obio?
 zstty*	at zsc? channel ?
@@ -405,10 +398,7 @@ wdc*	at mediabay? flags 0
 ki2c*	at obio?			# Keywest I2C
 ki2c*	at uni_n?			# Keywest I2C
 iic*	at ki2c?
-adt7467c*	at ki2c? 		# Analog Devices ADT7467 thermal 
-					# monitor, iBook G4
-adm1030c*	at ki2c? 		# Analog Devices ADM1030 thermal 
-					# monitor, iBook G3
+dbcool*	at ki2c?			# dbCool thermal monitor & fan control
 
 deq*	at ki2c?			# mixer/equalizer, needed by snapper
 wi*	at obio?			# AirMac
@@ -483,6 +473,8 @@ ums*	at uhidev? reportid ?				# USB Mice
 
 ukbd*	at uhidev? reportid ?				# USB Keyboards
 
+uthum*	at uhidev? reportid ?				# TEMPerHUM sensors
+
 ucycom*	at uhidev? reportid ?				# USB serial adapter
 
 uhid*	at uhidev? reportid ?				# USB Generic HID
@@ -491,6 +483,11 @@ ulpt*	at uhub? port ? configuration ? interface ?	# USB Printer
 
 umodem*	at uhub? port ? configuration ?			# USB Modem
 ucom*	at umodem?
+
+ubsa*	at uhub? port ?					# Belkin serial adapter
+ucom*	at ubsa? portno ?
+
+uhso*	at uhub? port ? configuration ?			# Option N.V. Wireless WAN modems
 
 umass*	at uhub? port ? configuration ? interface ?	# USB Mass Storage
 
@@ -517,7 +514,9 @@ ugen*	at uhub? port ? configuration ? interface ?	# USB Generic driver
 
 # USB 802.11 adapters
 atu*	at uhub? port ?		# Atmel at76c50x 802.11b
+otus*	at uhub? port ?		# Atheros AR9001U
 ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
+rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
 #zyd*	at uhub? port ?		# Zydas ZD1211
 
 # PCI IEEE1394 controllers
@@ -557,6 +556,11 @@ audio*	at audiobus?
 midi*	at eap?			# 137[01] MIDI port
 #midi*	at mpu?			# MPU 401
 
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
 #pseudo-device 	crypto			# /dev/crypto device
 					# (disabled, requires generic softints)
 #pseudo-device	swcrypto		# software crypto implementation
@@ -574,8 +578,8 @@ options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # options 	RF_INCLUDE_INTERDECLUSTER=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 # options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss		4	# file system snapshot device
-pseudo-device	md		1	# memory disk device
+pseudo-device	fss			# file system snapshot device
+pseudo-device	md			# memory disk device
 pseudo-device	loop			# network loopback
 pseudo-device	bpfilter		# packet filter
 pseudo-device	ipfilter		# IP filter (firewall) and NAT
@@ -601,6 +605,7 @@ pseudo-device	ksyms			# /dev/ksyms
 pseudo-device	nsmb			# SMB requester
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+pseudo-device	putter			# for puffs and pud
 
 # Veriexec
 #

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_memrw.c,v 1.5 2007/11/22 16:16:41 bouyer Exp $	*/
+/*	$NetBSD: db_memrw.c,v 1.8 2010/12/20 00:25:24 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -58,15 +51,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_memrw.c,v 1.5 2007/11/22 16:16:41 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_memrw.c,v 1.8 2010/12/20 00:25:24 matt Exp $");
 
 #include "opt_xen.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/db_machdep.h>
 
@@ -186,7 +177,7 @@ db_write_text(vaddr_t addr, size_t size, const char *data)
 void
 db_write_bytes(vaddr_t addr, size_t size, const char *data)
 {
-	extern char __data_start;
+	extern int __data_start;
 	char *dst;
 
 	dst = (char *)addr;

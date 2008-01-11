@@ -1,4 +1,4 @@
-/*	$NetBSD: mpool.c,v 1.16 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: mpool.c,v 1.19 2009/04/22 18:44:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -29,14 +29,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)mpool.c	8.5 (Berkeley) 7/26/94";
-#else
-__RCSID("$NetBSD: mpool.c,v 1.16 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: mpool.c,v 1.19 2009/04/22 18:44:06 christos Exp $");
 
 #include "namespace.h"
 #include <sys/queue.h>
@@ -343,7 +341,7 @@ mpool_bkt(MPOOL *mp)
 			return (bp);
 		}
 
-new:	if ((bp = (BKT *)malloc((size_t)(sizeof(BKT) + mp->pagesize))) == NULL)
+new:	if ((bp = calloc(1, (size_t)(sizeof(BKT) + mp->pagesize))) == NULL)
 		return (NULL);
 #ifdef STATISTICS
 	++mp->pagealloc;

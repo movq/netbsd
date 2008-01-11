@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_inode.c,v 1.64 2008/01/09 16:15:23 ad Exp $	*/
+/*	$NetBSD: ext2fs_inode.c,v 1.73 2010/07/28 11:03:48 hannken Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -43,11 +43,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -65,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_inode.c,v 1.64 2008/01/09 16:15:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_inode.c,v 1.73 2010/07/28 11:03:48 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,18 +90,18 @@ static int ext2fs_indirtrunc(struct inode *, daddr_t, daddr_t,
 /*
  * Get the size of an inode.
  */
-u_int64_t
+uint64_t
 ext2fs_size(struct inode *ip)
 {
-	u_int64_t size = ip->i_e2fs_size;
+	uint64_t size = ip->i_e2fs_size;
 
 	if ((ip->i_e2fs_mode & IFMT) == IFREG)
-		size |= (u_int64_t)ip->i_e2fs_dacl << 32;
+		size |= (uint64_t)ip->i_e2fs_dacl << 32;
 	return size;
 }
 
 int
-ext2fs_setsize(struct inode *ip, u_int64_t size)
+ext2fs_setsize(struct inode *ip, uint64_t size)
 {
 	if ((ip->i_e2fs_mode & IFMT) == IFREG ||
 	    ip->i_e2fs_mode == 0) {
@@ -161,10 +156,7 @@ ext2fs_inactive(void *v)
 		}
 		ip->i_e2fs_dtime = time_second;
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
-		mutex_enter(&vp->v_interlock);
-		vp->v_iflag |= VI_FREEING;
-		mutex_exit(&vp->v_interlock);
-		ext2fs_vfree(vp, ip->i_number, ip->i_e2fs_mode);
+		ip->i_omode = 1;
 	}
 	if (ip->i_flag & (IN_CHANGE | IN_UPDATE | IN_MODIFIED)) {
 		ext2fs_update(vp, NULL, NULL, 0);
@@ -175,7 +167,7 @@ out:
 	 * so that it can be reused immediately.
 	 */
 	*ap->a_recycle = (ip->i_e2fs_dtime != 0);
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (error);
 }
 
@@ -214,14 +206,14 @@ ext2fs_update(struct vnode *vp, const struct timespec *acc,
 
 	error = bread(ip->i_devvp,
 			  fsbtodb(fs, ino_to_fsba(fs, ip->i_number)),
-			  (int)fs->e2fs_bsize, NOCRED, &bp);
+			  (int)fs->e2fs_bsize, NOCRED, B_MODIFY, &bp);
 	if (error) {
 		brelse(bp, 0);
 		return (error);
 	}
 	ip->i_flag &= ~(IN_MODIFIED | IN_ACCESSED);
 	cp = (char *)bp->b_data +
-	    (ino_to_fsbo(fs, ip->i_number) * EXT2_DINODE_SIZE);
+	    (ino_to_fsbo(fs, ip->i_number) * EXT2_DINODE_SIZE(fs));
 	e2fs_isave(ip->i_din.e2fs_din, (struct ext2fs_dinode *)cp);
 	if ((updflags & (UPDATE_WAIT|UPDATE_DIROP)) != 0 &&
 	    (flags & IN_MODIFIED) != 0 &&
@@ -277,6 +269,8 @@ ext2fs_truncate(struct vnode *ovp, off_t length, int ioflag,
 		return (ext2fs_update(ovp, NULL, NULL, 0));
 	}
 	if (ext2fs_size(oip) == length) {
+		/* still do a uvm_vnp_setsize() as writesize may be larger */
+		uvm_vnp_setsize(ovp, length);
 		oip->i_flag |= IN_CHANGE | IN_UPDATE;
 		return (ext2fs_update(ovp, NULL, NULL, 0));
 	}
@@ -487,7 +481,7 @@ ext2fs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 		trace(TR_BREADHIT, pack(vp, fs->e2fs_bsize), lbn);
 	} else {
 		trace(TR_BREADMISS, pack(vp, fs->e2fs_bsize), lbn);
-		curproc->p_stats->p_ru.ru_inblock++;	/* pay for read */
+		curlwp->l_ru.ru_inblock++;	/* pay for read */
 		bp->b_flags |= B_READ;
 		if (bp->b_bcount > bp->b_bufsize)
 			panic("ext2fs_indirtrunc: bad buffer size");
@@ -507,7 +501,7 @@ ext2fs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 		copy = malloc(fs->e2fs_bsize, M_TEMP, M_WAITOK);
 		memcpy((void *)copy, (void *)bap, (u_int)fs->e2fs_bsize);
 		memset((void *)&bap[last + 1], 0,
-			(u_int)(NINDIR(fs) - (last + 1)) * sizeof (u_int32_t));
+			(u_int)(NINDIR(fs) - (last + 1)) * sizeof (uint32_t));
 		error = bwrite(bp);
 		if (error)
 			allerror = error;
@@ -553,7 +547,7 @@ ext2fs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 	}
 
 	if (copy != NULL) {
-		FREE(copy, M_TEMP);
+		free(copy, M_TEMP);
 	} else {
 		brelse(bp, BC_INVAL);
 	}

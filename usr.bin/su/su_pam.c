@@ -1,4 +1,4 @@
-/*	$NetBSD: su_pam.c,v 1.13 2007/10/17 21:05:39 christos Exp $	*/
+/*	$NetBSD: su_pam.c,v 1.16 2010/10/02 10:55:36 tron Exp $	*/
 
 /*
  * Copyright (c) 1988 The Regents of the University of California.
@@ -31,16 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-    "@(#) Copyright (c) 1988 The Regents of the University of California.\n\
- All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)su.c	8.3 (Berkeley) 4/2/94";*/
 #else
-__RCSID("$NetBSD: su_pam.c,v 1.13 2007/10/17 21:05:39 christos Exp $");
+__RCSID("$NetBSD: su_pam.c,v 1.16 2010/10/02 10:55:36 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -115,6 +114,7 @@ main(int argc, char **argv)
 	char *gname;
 #endif
 
+	(void)setprogname(argv[0]);
 	asme = asthem = fastlogin = 0;
 	gohome = 1;
 	shell = class = NULL;
@@ -469,8 +469,8 @@ out:
 				 * how could we get untrusted data here?
 				 */
 				for (envitem = pamenv; *envitem; envitem++) {
-					(void)putenv(*envitem);
-					free(*envitem);
+					if (putenv(*envitem) == -1)
+						free(*envitem);
 				}
 
 				free(pamenv);

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.19 2007/02/16 02:53:44 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.24 2010/11/13 13:34:00 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -36,190 +36,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * machine/intr.h for the Amiga port.
- * Currently, only a wrapper, for most of the stuff, around the old
- * include files.
- */
-
-#ifndef _MACHINE_INTR_H_
-#define _MACHINE_INTR_H_
+#ifndef _AMIGAPPC_INTR_H_
+#define _AMIGAPPC_INTR_H_
 
 #ifdef _KERNEL
 #include <amiga/amiga/isr.h>
-#include <amiga/include/mtpr.h>
 #endif
-
-/* ADAM: commented out
-#define IPL_SOFTSERIAL 1
-#define IPL_SOFTNET 1
-*/
-
-#ifdef splaudio
-#undef splaudio
-#define splaudio spl6
-#endif
-
-#define spllpt()	spl6()
-
-/* ADAM: from macppc/intr.h */
-/* Interrupt priority `levels'. */
-#define	IPL_NONE	9	/* nothing */
-#define	IPL_SOFTCLOCK	8	/* timeouts */
-#define	IPL_SOFTNET	7	/* protocol stacks */
-#define	IPL_BIO		6	/* block I/O */
-#define	IPL_NET		5	/* network */
-#define	IPL_SOFTSERIAL	4	/* serial */
-#define	IPL_TTY		3	/* terminal */
-#define	IPL_VM		3	/* memory allocation */
-#define	IPL_AUDIO	2	/* audio */
-#define	IPL_CLOCK	1	/* clock */
-#define	IPL_HIGH	1	/* everything */
-#define	IPL_SERIAL	0	/* serial */
-#define	NIPL		10
-
-/* Interrupt sharing types. */
-#define	IST_NONE	0	/* none */
-#define	IST_PULSE	1	/* pulsed */
-#define	IST_EDGE	2	/* edge-triggered */
-#define	IST_LEVEL	3	/* level-triggered */
+#include <powerpc/intr.h>
 
 #ifndef _LOCORE
+#include <machine/cpu.h>
+#endif /* _LOCORE */
 
-/*
- * Interrupt handler chains.  intr_establish() inserts a handler into
- * the list.  The handler is called with its (single) argument.
- */
-struct intrhand {
-	int	(*ih_fun) __P((void *));
-	void	*ih_arg;
-	u_long	ih_count;
-	struct	intrhand *ih_next;
-	int	ih_level;
-	int	ih_irq;
-};
-
-void do_pending_int __P((void));
-
-static __inline int splraise __P((int));
-static __inline int spllower __P((int));
-static __inline void splx __P((int));
-static __inline void softintr __P((int));
-
-extern volatile int cpl, ipending, astpending, tickspending;
-extern int imask[];
-
-/*
- *  Reorder protection in the following inline functions is
- * achieved with the "eieio" instruction which the assembler
- * seems to detect and then doesn't move instructions past....
- */
-static __inline int
-splraise(ncpl)
-	int ncpl;
-{
-	int ocpl;
-
-	__asm volatile("sync; eieio\n");	/* don't reorder.... */
-	ocpl = cpl;
-	cpl = ocpl | ncpl;
-	__asm volatile("sync; eieio\n");	/* reorder protect */
-	return (ocpl);
-}
-
-static __inline void
-splx(ncpl)
-	int ncpl;
-{
-	__asm volatile("sync; eieio\n");	/* reorder protect */
-	cpl = ncpl;
-	if (ipending & ~ncpl)
-		do_pending_int();
-	__asm volatile("sync; eieio\n");	/* reorder protect */
-}
-
-static __inline int
-spllower(ncpl)
-	int ncpl;
-{
-	int ocpl;
-
-	__asm volatile("sync; eieio\n");	/* reorder protect */
-	ocpl = cpl;
-	cpl = ncpl;
-	if (ipending & ~ncpl)
-		do_pending_int();
-	__asm volatile("sync; eieio\n");	/* reorder protect */
-	return (ocpl);
-}
-
-/* Following code should be implemented with lwarx/stwcx to avoid
- * the disable/enable. i need to read the manual once more.... */
-static __inline void
-softintr(ipl)
-	int ipl;
-{
-	int msrsave;
-
-	__asm volatile("mfmsr %0" : "=r"(msrsave));
-	__asm volatile("mtmsr %0" :: "r"(msrsave & ~PSL_EE));
-	ipending |= 1 << ipl;
-	__asm volatile("mtmsr %0" :: "r"(msrsave));
-}
-
-#define	ICU_LEN		32
-
-/* Soft interrupt masks. */
-/*
-#define SIR_CLOCK	28
-#define SIR_NET		29
-#define SIR_SERIAL	30
-*/
-#define SPL_CLOCK	31
-
-/*
- * Hardware interrupt masks
- */
-#define splbio()	splraise(imask[IPL_BIO])
-#define splnet()	splraise(imask[IPL_NET])
-#define spltty()	splraise(imask[IPL_TTY])
-#define	splaudio()	splraise(imask[IPL_AUDIO])
-#define splclock()	splraise(imask[IPL_CLOCK])
-#define splstatclock()	splclock()
-#define	splserial()	splraise(imask[IPL_SERIAL])
-
-/* ADAM: see above
-#define spllpt()	spltty()
-*/
-
-/*
- * Software interrupt masks
- */
-#define	splsoftclock()	splraise(imask[IPL_SOFTCLOCK])
-#define	splsoftnet()	splraise(imask[IPL_SOFTNET])
-#define	splsoftserial()	splraise(imask[IPL_SOFTSERIAL])
-
-/*
- * Miscellaneous
- */
-#define splvm()		splraise(imask[IPL_VM])
-#define	splhigh()	splraise(imask[IPL_HIGH])
-#define	splsched()	splhigh()
-#define	spllock()	splhigh()
-#define	spl0()		spllower(0)
-
-/*
-#define	setsoftnet()	softintr(SIR_NET)
-#define	setsoftserial()	softintr(SIR_SERIAL)
-*/
-extern long intrcnt[];
-
-#define CNT_IRQ0	0
-#define CNT_CLOCK	64
-#define CNT_SOFTCLOCK	65
-#define CNT_SOFTNET	66
-#define CNT_SOFTSERIAL	67
-
-#endif /* !_LOCORE */
-
-#endif /* !_MACPPC_INTR_H_ */
+#endif /* !_AMIGAPPC_INTR_H_ */

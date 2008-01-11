@@ -1,4 +1,4 @@
-/*	$NetBSD: fstat.h,v 1.7 2006/02/10 16:01:45 christos Exp $	*/
+/*	$NetBSD: fstat.h,v 1.9 2009/04/12 06:36:12 lukem Exp $	*/
 /*-
  * Copyright (c) 1988, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -30,7 +30,7 @@
 
 struct  filestat {
 	long	fsid;
-	long	fileid;
+	ino_t	fileid;
 	mode_t	mode;
 	off_t	size;
 	dev_t	rdev;
@@ -40,7 +40,12 @@ struct  filestat {
  * a kvm_read that returns true if everything is read 
  */
 #define KVM_READ(kaddr, paddr, len) \
-	(kvm_read(kd, (u_long)(kaddr), (void *)(paddr), (len)) == (len))
+	((size_t)kvm_read(kd, (u_long)(kaddr), (void *)(paddr), (len)) \
+	 == (size_t)(len))
+#define KVM_NLIST(nl) \
+	kvm_nlist(kd, (nl))
+#define KVM_GETERR() \
+	kvm_geterr(kd)
 
 extern	kvm_t	*kd;
 extern	int	 vflg;
@@ -49,6 +54,8 @@ extern	pid_t	 Pid;
 #define dprintf	if (vflg) warnx
 
 mode_t	getftype(enum vtype);
+struct file;
+int	pmisc(struct file *, const char *);
 int	isofs_filestat(struct vnode *, struct filestat *);
 int	ntfs_filestat(struct vnode *, struct filestat *);
 int	ptyfs_filestat(struct vnode *, struct filestat *);

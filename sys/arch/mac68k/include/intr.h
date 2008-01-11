@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.28 2007/12/03 15:33:52 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.31 2008/07/17 16:13:33 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1997 Scott Reynolds
@@ -36,12 +36,6 @@
 
 /* spl0 requires checking for software interrupts */
 
-/*
- * This array contains the appropriate PSL_S|PSL_IPL? values
- * to raise interrupt priority to the requested level.
- */
-extern unsigned short mac68k_ipls[];
-
 #define	IPL_NONE	0
 #define	IPL_SOFTCLOCK	1
 #define	IPL_SOFTBIO	2
@@ -52,9 +46,13 @@ extern unsigned short mac68k_ipls[];
 #define	IPL_HIGH	7
 #define	NIPL		8
 
+/*
+ * This array contains the appropriate PSL_S|PSL_IPL? values
+ * to raise interrupt priority to the requested level.
+ */
+extern uint16_t ipl2psl_table[NIPL];
+
 /* These spl calls are _not_ to be used by machine-independent code. */
-#define	splsoft()	splraise1()
-#define	spladb()	_splraise(mac68k_ipls[IPL_ADB])
 #define	splzs()		splserial()
 
 /*
@@ -83,7 +81,7 @@ static inline int
 splraiseipl(ipl_cookie_t icookie)
 {
 
-	return _splraise(mac68k_ipls[icookie._ipl]);
+	return _splraise(ipl2psl_table[icookie._ipl]);
 }
 
 #include <sys/spl.h>

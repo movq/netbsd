@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: ipf2netbsd,v 1.20 2007/12/11 03:34:59 lukem Exp $
+#	$NetBSD: ipf2netbsd,v 1.23 2010/04/17 22:05:53 darrenr Exp $
 #
 # Copyright (c) 1999 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -13,13 +13,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#	This product includes software developed by the NetBSD
-#	Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,6 +69,7 @@ pax -rvw \
 	ip_auth.h \
 	ip_compat.h \
 	ip_fil.h \
+	ip_fil_compat.c \
 	ip_fil_netbsd.c \
 	ip_frag.c \
 	ip_frag.h \
@@ -110,6 +104,22 @@ pax -rvw \
 pax -rvw mln_ipl.c $dlkm
 cd $r/test
 pax -rvw * $dregress
+
+### Remove uninteresting bits
+echo "removing extraneous files and directiones."
+(
+	cd ${dest}/src/dist/ipf
+	find . -name .cvsignore | xargs /bin/rm -f
+	for i in 4bsd AIX BSD BSDOS BSDOS3 BSDOS4 COMPILE.2.5 COMPILE.Solaris2 \
+		 FAQ.FreeBSD FreeBSD FreeBSD-2.2 FreeBSD-3 FreeBSD-4.0 HPUX \
+		 INST.FreeBSD-2.2 INSTALL.BSDOS INSTALL.FreeBSD INSTALL.IRIX \
+		 INSTALL.Sol2 INSTALL.SunOS INSTALL.Tru64 Linux IRIX OSF \
+		 INSTALL.NetBSD INSTALL.Linux INSTALL.xBSD INSTALL.BSDOS3 NAT.FreeBSD OpenBSD OpenBSD-2 OpenBSD-3 SunOS4 SunOS5 ipsend/.OLD; do
+		echo "removing $i";
+		/bin/rm -rf "$i"
+	done
+)
+echo done
 
 ### Remove the $'s around various RCSIDs
 find $dest -type f -print | while read f; do

@@ -1,4 +1,4 @@
-/*	$NetBSD: uudecode.c,v 1.22 2006/09/24 21:43:14 dbj Exp $	*/
+/*	$NetBSD: uudecode.c,v 1.25 2009/04/14 06:16:59 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1993
@@ -35,12 +35,12 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)uudecode.c	8.2 (Berkeley) 4/2/94";
 #endif
-__RCSID("$NetBSD: uudecode.c,v 1.22 2006/09/24 21:43:14 dbj Exp $");
+__RCSID("$NetBSD: uudecode.c,v 1.25 2009/04/14 06:16:59 lukem Exp $");
 #endif /* not lint */
 
 /*
@@ -74,7 +74,7 @@ static int base64_decode(void);
 int main(int, char *[]);
 
 int base64, pflag;
-char *filename;
+const char *filename;
 
 int
 main(int argc, char *argv[])
@@ -288,7 +288,7 @@ base64_decode(void)
 static void
 usage()
 {
-	(void)fprintf(stderr, "usage: %s [-m | -p] [file ...]\n",
+	(void)fprintf(stderr, "usage: %s [-m | -p] [encoded-file ...]\n",
 		      getprogname());
 	exit(1);
 }

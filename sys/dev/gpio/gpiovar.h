@@ -1,4 +1,4 @@
-/* $NetBSD: gpiovar.h,v 1.4 2006/02/20 03:18:36 riz Exp $ */
+/* $NetBSD: gpiovar.h,v 1.10 2009/08/21 12:53:42 mbalmer Exp $ */
 /*	$OpenBSD: gpiovar.h,v 1.3 2006/01/14 12:33:49 grange Exp $	*/
 
 /*
@@ -20,10 +20,14 @@
 #ifndef _DEV_GPIO_GPIOVAR_H_
 #define _DEV_GPIO_GPIOVAR_H_
 
+#include <sys/device.h>
+
 /* GPIO controller description */
 typedef struct gpio_chipset_tag {
 	void	*gp_cookie;
 
+	int	(*gp_gc_open)(void *, device_t);
+	void    (*gp_gc_close)(void *, device_t);
 	int	(*gp_pin_read)(void *, int);
 	void	(*gp_pin_write)(void *, int, int);
 	void	(*gp_pin_ctl)(void *, int, int);
@@ -48,6 +52,10 @@ struct gpiobus_attach_args {
 int gpiobus_print(void *, const char *);
 
 /* GPIO framework private methods */
+#define gpiobus_open(gc, dev) \
+    ((gc)->gp_gc_open ? ((gc)->gp_gc_open((gc)->gp_cookie, dev)) : 0)
+#define gpiobus_close(gc, dev) \
+    ((gc)->gp_gc_close ? ((gc)->gp_gc_close((gc)->gp_cookie, dev)), 1 : 0)
 #define gpiobus_pin_read(gc, pin) \
     ((gc)->gp_pin_read((gc)->gp_cookie, (pin)))
 #define gpiobus_pin_write(gc, pin, value) \
@@ -60,6 +68,7 @@ struct gpio_attach_args {
 	void *			ga_gpio;
 	int			ga_offset;
 	u_int32_t		ga_mask;
+	char			*ga_dvname;
 };
 
 /* GPIO pin map */
@@ -68,6 +77,18 @@ struct gpio_pinmap {
 	int	pm_size;		/* map size */
 };
 
+struct gpio_dev {
+	device_t		sc_dev;	/* the gpio device */
+	LIST_ENTRY(gpio_dev)	sc_next;
+};
+
+struct gpio_name {
+	char			gp_name[GPIOMAXNAME];
+	int			gp_pin;
+	LIST_ENTRY(gpio_name)	gp_next;
+};
+
+int	gpio_pin_can_map(void *, int, u_int32_t);
 int	gpio_pin_map(void *, int, u_int32_t, struct gpio_pinmap *);
 void	gpio_pin_unmap(void *, struct gpio_pinmap *);
 int	gpio_pin_read(void *, struct gpio_pinmap *, int);

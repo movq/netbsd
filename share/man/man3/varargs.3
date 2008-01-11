@@ -1,4 +1,4 @@
-.\"	$NetBSD: varargs.3,v 1.6 2003/08/07 10:31:01 agc Exp $
+.\"	$NetBSD: varargs.3,v 1.8 2011/04/08 08:47:54 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -61,7 +61,7 @@ interfaces.
 A function may be called with a varying number of arguments of varying
 types.
 The include file
-.Aq Pa varargs.h
+.In varargs.h
 declares a type
 .Pq Em va_list
 and defines three macros for stepping
@@ -184,16 +184,6 @@ void foo(fmt, va_alist)
 	va_end(ap);
 }
 .Ed
-.Sh SEE ALSO
-.Xr stdarg 3
-.Sh STANDARDS
-These historic macros were replaced in
-.St -ansiC
-by the include file
-.Aq Pa stdarg.h ;
-see
-.Xr stdarg 3
-for its description.
 .Sh COMPATIBILITY
 These macros are
 .Em not
@@ -201,3 +191,13 @@ compatible with the new macros they were replaced by.
 In particular, it is not possible for a
 .Em stdarg
 function to have no fixed arguments.
+.Sh SEE ALSO
+.Xr stdarg 3
+.Sh STANDARDS
+These historic macros were replaced in
+.St -ansiC
+by the include file
+.In stdarg.h ;
+see
+.Xr stdarg 3
+for its description.

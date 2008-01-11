@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_ifattach.h,v 1.11 2007/11/01 20:33:57 dyoung Exp $	*/
+/*	$NetBSD: in6_ifattach.h,v 1.13 2009/09/19 13:11:02 christos Exp $	*/
 /*	$KAME: in6_ifattach.h,v 1.8 2000/04/12 03:51:30 itojun Exp $	*/
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufsmount.h,v 1.33 2007/12/08 19:29:57 pooka Exp $	*/
+/*	$NetBSD: ufsmount.h,v 1.36 2011/03/06 17:08:39 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -98,13 +98,28 @@ struct ufsmount {
 	u_long	um_bptrtodb;			/* indir ptr to disk block */
 	u_long	um_seqinc;			/* inc between seq blocks */
 	kmutex_t um_lock;			/* lock on global data */
-	time_t	um_btime[MAXQUOTAS];		/* block quota time limit */
-	time_t	um_itime[MAXQUOTAS];		/* inode quota time limit */
-	char	um_qflags[MAXQUOTAS];		/* quota specific flags */
+	union {
+	    struct um_q1 {
+		time_t	q1_btime[MAXQUOTAS];	/* block quota time limit */
+		time_t	q1_itime[MAXQUOTAS];	/* inode quota time limit */
+		char	q1_qflags[MAXQUOTAS];	/* quota specific flags */
+	    } um_q1;
+	    struct um_q2 {
+		uint64_t q2_bsize;		/* block size of quota file */
+		uint64_t q2_bmask;		/* mask for above */
+	    } um_q2;
+	} um_q;
+#define umq1_btime  um_q.um_q1.q1_btime
+#define umq1_itime  um_q.um_q1.q1_itime
+#define umq1_qflags um_q.um_q1.q1_qflags
+#define umq2_bsize  um_q.um_q2.q2_bsize
+#define umq2_bmask  um_q.um_q2.q2_bmask
+
 	void	*um_oldfscompat;		/* save 4.2 rotbl */
 	int	um_maxsymlinklen;
 	int	um_dirblksiz;
 	u_int64_t um_maxfilesize;
+	void	*um_snapinfo;			/* snapshot private data */
 
 	const struct ufs_ops *um_ops;
 };
@@ -119,6 +134,7 @@ struct ufs_ops {
 	int (*uo_vfree)(struct vnode *, ino_t, int);
 	int (*uo_balloc)(struct vnode *, off_t, int, kauth_cred_t, int,
 	    struct buf **);
+        void (*uo_unmark_vnode)(struct vnode *);
 };
 
 #define	UFS_OPS(vp)	(VFSTOUFS((vp)->v_mount)->um_ops)
@@ -135,10 +151,14 @@ struct ufs_ops {
 	(*UFS_OPS(vp)->uo_vfree)((vp), (ino), (mode))
 #define	UFS_BALLOC(vp, off, size, cr, flags, bpp) \
 	(*UFS_OPS(vp)->uo_balloc)((vp), (off), (size), (cr), (flags), (bpp))
+#define	UFS_UNMARK_VNODE(vp) \
+	(*UFS_OPS(vp)->uo_unmark_vnode)((vp))
 
 /* UFS-specific flags */
 #define UFS_NEEDSWAP	0x01	/* filesystem metadata need byte-swapping */
 #define UFS_ISAPPLEUFS	0x02	/* filesystem is Apple UFS */
+#define UFS_QUOTA	0x04	/* filesystem has QUOTA (v1) */
+#define UFS_QUOTA2	0x08	/* filesystem has QUOTA2 */
 
 /*
  * Filesystem types

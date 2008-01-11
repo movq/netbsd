@@ -1,4 +1,4 @@
-/*	$NetBSD: tar.c,v 1.65 2007/04/23 18:40:22 christos Exp $	*/
+/*	$NetBSD: tar.c,v 1.67 2009/02/14 08:10:06 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)tar.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: tar.c,v 1.65 2007/04/23 18:40:22 christos Exp $");
+__RCSID("$NetBSD: tar.c,v 1.67 2009/02/14 08:10:06 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -73,7 +73,7 @@ static void longlink(ARCHD *, int);
 static u_long tar_chksm(char *, int);
 static char *name_split(char *, int);
 static int ul_oct(u_long, char *, int, int);
-#if !defined(NET2_STAT) && !defined(_LP64)
+#if !defined(_LP64)
 static int ull_oct(unsigned long long, char *, int, int);
 #endif
 static int tar_gnutar_exclude_one(const char *, size_t);
@@ -261,7 +261,7 @@ ul_oct(u_long val, char *str, int len, int term)
 	return 0;
 }
 
-#if !defined(NET2_STAT) && !defined(_LP64)
+#if !defined(_LP64)
 /*
  * ull_oct()
  *	convert an unsigned long long to an octal string. one of many oddball
@@ -614,7 +614,7 @@ tar_wr(ARCHD *arcn)
 	case PAX_SLK:
 	case PAX_HLK:
 	case PAX_HRG:
-		if (arcn->ln_nlen > sizeof(hd->linkname)) {
+		if (arcn->ln_nlen > (int)sizeof(hd->linkname)) {
 			tty_warn(1,"Link name too long for tar %s",
 			    arcn->ln_name);
 			return 1;
@@ -632,7 +632,7 @@ tar_wr(ARCHD *arcn)
 	len = arcn->nlen;
 	if (arcn->type == PAX_DIR)
 		++len;
-	if (len >= sizeof(hd->name)) {
+	if (len >= (int)sizeof(hd->name)) {
 		tty_warn(1, "File name too long for tar %s", arcn->name);
 		return 1;
 	}
@@ -1055,7 +1055,7 @@ ustar_wr(ARCHD *arcn)
 		/*
 		 * check the length of the linkname
 		 */
-		if (arcn->ln_nlen >= sizeof(hd->linkname)) {
+		if (arcn->ln_nlen >= (int)sizeof(hd->linkname)) {
 			if (is_gnutar) {
 				longlink(arcn, PAX_GLL);
 			} else {
@@ -1318,7 +1318,8 @@ tar_gnutar_exclude_one(const char *line, size_t len)
 	char sbuf[MAXPATHLEN * 2 + 1];
 	/* + / + // + .*""/\/ + \/.* */
 	char rabuf[MAXPATHLEN * 2 + 1 + 1 + 2 + 4 + 4];
-	int i, j = 0;
+	size_t i;
+	int j = 0;
 
 	if (line[len - 1] == '\n')
 		len--;

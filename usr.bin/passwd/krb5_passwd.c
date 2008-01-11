@@ -1,4 +1,4 @@
-/* $NetBSD: krb5_passwd.c,v 1.13 2005/02/26 07:19:25 thorpej Exp $ */
+/* $NetBSD: krb5_passwd.c,v 1.19 2011/04/24 21:16:43 elric Exp $ */
 
 /*
  * Copyright (c) 2000, 2005 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright 
  *    notice, this list of conditions and the following disclaimer in the 
  *    documentation and/or other materials provided with the distribution. 
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,13 +68,14 @@ pwkrb5_process(const char *username, int argc, char **argv)
 {
 	krb5_context context;
 	krb5_error_code ret;
-	krb5_get_init_creds_opt opt;
+	krb5_get_init_creds_opt *opt;
 	krb5_principal principal;
 	krb5_creds cred;
 	int result_code;
 	krb5_data result_code_string, result_string;
 	char pwbuf[BUFSIZ];
 	int ch;
+	const char *errtxt;
 
 	while ((ch = getopt(argc, argv, "5ku:")) != -1) {
 		switch (ch) {
@@ -132,21 +126,34 @@ pwkrb5_process(const char *username, int argc, char **argv)
 	if (ret != 0) {
 		if (ret == ENXIO)
 			errx(1, "Kerberos 5 not in use.");
-		warnx("Unable to initialize Kerberos 5: %s",
-		    krb5_get_err_text(context, ret));
-		goto bad;
+		errx(1, "Unable to initialize Kerberos 5: %s", strerror(ret));
 	}
 
-	krb5_get_init_creds_opt_init(&opt);
+	ret = krb5_get_init_creds_opt_alloc(context, &opt);
+	if (ret) {
+		errtxt = krb5_get_error_message(context, ret);
+		if (errtxt != NULL) {
+			warnx("failed to allocate opts: %s", errtxt);
+			krb5_free_error_message(context, errtxt);
+		} else {
+			warnx("failed to allocate opts: %d", ret);
+		}
+		goto bad;
+	}
     
-	krb5_get_init_creds_opt_set_tkt_life(&opt, 300);
-	krb5_get_init_creds_opt_set_forwardable(&opt, FALSE);
-	krb5_get_init_creds_opt_set_proxiable(&opt, FALSE);
+	krb5_get_init_creds_opt_set_tkt_life(opt, 300L);
+	krb5_get_init_creds_opt_set_forwardable(opt, FALSE);
+	krb5_get_init_creds_opt_set_proxiable(opt, FALSE);
 
 	ret = krb5_parse_name(context, username, &principal);
 	if (ret) {
-		warnx("failed to parse principal: %s", 
-		    krb5_get_err_text(context, ret));
+		errtxt = krb5_get_error_message(context, ret);
+		if (errtxt != NULL) {
+			warnx("failed to parse principal: %s", errtxt);
+			krb5_free_error_message(context, errtxt);
+		} else {
+			warnx("failed to parse principal: %d", ret);
+		}
 		goto bad;
 	}
 
@@ -156,9 +163,9 @@ pwkrb5_process(const char *username, int argc, char **argv)
 					   NULL,
 					   krb5_prompter_posix,
 					   NULL,
-					   0,
+					   0L,
 					   "kadmin/changepw",
-					   &opt);
+					   opt);
 
 
 	switch (ret) {
@@ -173,11 +180,15 @@ pwkrb5_process(const char *username, int argc, char **argv)
 	case KRB5KRB_AP_ERR_MODIFIED :
 		fprintf(stderr, "Password incorrect\n");
 		goto bad;
-		break;
 
 	default:
-		warnx("failed to get credentials: %s", 
-		    krb5_get_err_text(context, ret));
+		errtxt = krb5_get_error_message(context, ret);
+		if (errtxt != NULL) {
+			warnx("failed to get credentials: %s", errtxt);
+			krb5_free_error_message(context, errtxt);
+		} else {
+			warnx("failed to get credentials: %d", ret);
+		}
 		goto bad;
  	}
 
@@ -194,8 +205,13 @@ pwkrb5_process(const char *username, int argc, char **argv)
 				&result_code_string,
 				&result_string);
 	if (ret) {
-		warnx("unable to set password: %s",
-		    krb5_get_err_text(context, ret));
+		errtxt = krb5_get_error_message(context, ret);
+		if (errtxt != NULL) {
+			warnx("unable to set password: %s", errtxt);
+			krb5_free_error_message(context, errtxt);
+		} else {
+			warnx("unable to set password: %d", ret);
+		}
 		goto bad;
 	}
 
@@ -208,7 +224,7 @@ pwkrb5_process(const char *username, int argc, char **argv)
 	krb5_data_free(&result_code_string);
 	krb5_data_free(&result_string);
 
-	krb5_free_creds_contents(context, &cred);
+	krb5_free_cred_contents(context, &cred);
 	krb5_free_context(context);
 	if (result_code)
 		exit(1);
@@ -221,18 +237,18 @@ pwkrb5_process(const char *username, int argc, char **argv)
 
 #else /* ! USE_PAM */
 
-static krb5_context context;
+static krb5_context defcontext;
 static krb5_principal defprinc;
 static int kusage = PW_USE;
 
 int
 krb5_init(const char *progname)
 {
-    return krb5_init_context(&context);
+    return krb5_init_context(&defcontext);
 }
 
 int
-krb5_arg (char ch, const char *optarg)
+krb5_arg (char ch, const char *opt)
 {
     krb5_error_code ret;
     switch(ch) {
@@ -241,9 +257,9 @@ krb5_arg (char ch, const char *optarg)
 	kusage = PW_USE_FORCE;
 	return 1;
     case 'u':
-	ret = krb5_parse_name(context, optarg, &defprinc);
+	ret = krb5_parse_name(defcontext, opt, &defprinc);
 	if(ret) {
-	    krb5_warn(context, ret, "%s", optarg);
+	    krb5_warn(defcontext, ret, "%s", opt);
 	    return 0;
 	}
 	return 1;
@@ -260,11 +276,11 @@ krb5_arg_end(void)
 void
 krb5_end(void)
 {
-    if (context == NULL)
+    if (defcontext == NULL)
 	return;
     if(defprinc)
-	krb5_free_principal(context, defprinc);
-    krb5_free_context(context);
+	krb5_free_principal(defcontext, defprinc);
+    krb5_free_context(defcontext);
 }
 
 
@@ -279,11 +295,17 @@ krb5_chpw(const char *username)
     int result_code;
     krb5_data result_code_string, result_string;
     char pwbuf[BUFSIZ];
+    const char *errtxt;
 
     ret = krb5_init_context (&context);
     if (ret) {
-	warnx("failed kerberos initialisation: %s", 
-	      krb5_get_err_text(context, ret));
+	errtxt = krb5_get_error_message(context, ret);
+	if (errtxt != NULL) {
+	    warnx("failed kerberos initialisation: %s", errtxt);
+	    krb5_free_error_message(context, errtxt);
+	} else {
+	    warnx("failed kerberos initialisation: %d", ret);
+	}
 	return 1;
     }
 
@@ -296,8 +318,13 @@ krb5_chpw(const char *username)
     if(username != NULL) {
         ret = krb5_parse_name (context, username, &principal);
         if (ret) {
-	    warnx("failed to parse principal: %s", 
-		  krb5_get_err_text(context, ret));
+	    errtxt = krb5_get_error_message(context, ret);
+	    if (errtxt != NULL) {
+		warnx("failed to parse principal: %s", errtxt);
+		krb5_free_error_message(context, errtxt);
+	    } else {
+		warnx("failed to parse principal: %d", ret);
+	    }
 	    return 1;
 	}
     } else
@@ -325,8 +352,13 @@ krb5_chpw(const char *username)
 	return 1;
         break;
     default:
-	warnx("failed to get credentials: %s", 
-	      krb5_get_err_text(context, ret));
+	errtxt = krb5_get_error_message(context, ret);
+	if (errtxt != NULL) {
+	    warnx("failed to get credentials: %s", errtxt);
+	    krb5_free_error_message(context, errtxt);
+	} else {
+	    warnx("failed to get credentials: %d", ret);
+	}
 	return 1;
     }
     krb5_data_zero (&result_code_string);
@@ -351,7 +383,7 @@ krb5_chpw(const char *username)
     krb5_data_free (&result_code_string);
     krb5_data_free (&result_string);
     
-    krb5_free_creds_contents (context, &cred);
+    krb5_free_cred_contents (context, &cred);
     krb5_free_context (context);
     return result_code;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: token.l,v 1.12 2007/07/18 12:07:53 vanhu Exp $	*/
+/*	$NetBSD: token.l,v 1.16 2011/05/26 21:50:02 drochner Exp $	*/
 
 /*	$KAME: token.l,v 1.44 2003/10/21 07:20:58 itojun Exp $	*/
 
@@ -111,7 +111,9 @@ hostname	{name}(({dot}{name})+{dot}?)?
 
 %s S_PL S_AUTHALG S_ENCALG
 
+%option noinput nounput
 %%
+
 
 add		{ return(ADD); }
 delete		{ return(DELETE); }
@@ -125,6 +127,7 @@ bye		{ return(EXIT); }
 
 	/* for management SPD */
 spdadd		{ return(SPDADD); }
+spdupdate	{ return(SPDUPDATE); }
 spddelete	{ return(SPDDELETE); }
 spddump		{ return(SPDDUMP); }
 spdflush	{ return(SPDFLUSH); }
@@ -218,6 +221,16 @@ tcp		{
 <S_ENCALG>camellia-cbc	{ 
 #ifdef SADB_X_EALG_CAMELLIACBC
 	yylval.num = SADB_X_EALG_CAMELLIACBC; BEGIN INITIAL; return(ALG_ENC); 
+#endif
+}
+<S_ENCALG>aes-gcm-16	{
+#ifdef SADB_X_EALG_AESGCM16
+	yylval.num = SADB_X_EALG_AESGCM16; BEGIN INITIAL; return(ALG_ENC);
+#endif
+}
+<S_ENCALG>aes-gmac	{
+#ifdef SADB_X_EALG_AESGMAC
+	yylval.num = SADB_X_EALG_AESGMAC; BEGIN INITIAL; return(ALG_ENC);
 #endif
 }
 

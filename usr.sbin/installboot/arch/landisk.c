@@ -1,4 +1,4 @@
-/*	$NetBSD: landisk.c,v 1.2 2006/09/27 21:22:52 christos Exp $	*/
+/*	$NetBSD: landisk.c,v 1.5 2009/05/07 07:03:39 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: landisk.c,v 1.2 2006/09/27 21:22:52 christos Exp $");
+__RCSID("$NetBSD: landisk.c,v 1.5 2009/05/07 07:03:39 lukem Exp $");
 #endif /* !__lint */
 
 #include <sys/param.h>
@@ -72,9 +65,9 @@ landisk_setboot(ib_params *params)
 	uint8_t *bootstrapbuf;
 	ssize_t rv;
 	uint32_t magic;
-	u_int bootstrapsize;
+	size_t bootstrapsize;
 	int retval, i;
-	int bplen;
+	uint32_t bplen;
 	int bpbsize;
 
 	assert(params != NULL);
@@ -87,7 +80,7 @@ landisk_setboot(ib_params *params)
 	bootstrapbuf = NULL;
 
 	/*
-	 * There is only 8k of space in a UFSv1 partition (and ustarfs)
+	 * There is only 8k of space in a FFSv1 partition (and ustarfs)
 	 * so ensure we don't splat over anything important.
 	 */
 	if (params->s1stat.st_size > 8192) {
@@ -125,7 +118,7 @@ landisk_setboot(ib_params *params)
 
 	bootstrapbuf = malloc(bootstrapsize);
 	if (bootstrapbuf == NULL) {
-		warn("Allocating %u bytes",  bootstrapsize);
+		warn("Allocating %zu bytes",  bootstrapsize);
 		goto done;
 	}
 	memset(bootstrapbuf, 0, bootstrapsize);
@@ -168,7 +161,7 @@ landisk_setboot(ib_params *params)
 	 * Ensure bootxx hasn't got any code or data (i.e, non-zero bytes) in
 	 * the partition table.
 	 */
-	for (i = 0; i < sizeof(mbr.mbr_parts); i++) {
+	for (i = 0; i < (int)sizeof(mbr.mbr_parts); i++) {
 		if (*(uint8_t *)(bootstrapbuf + MBR_PART_OFFSET + i) != 0) {
 			warnx(
 		    "Partition table has non-zero byte at offset %d in `%s'",
@@ -243,7 +236,7 @@ landisk_setboot(ib_params *params)
 	if (rv == -1) {
 		warn("Writing `%s'", params->filesystem);
 		goto done;
-	} else if (rv != bootstrapsize - 512 * 2) {
+	} else if ((size_t)rv != bootstrapsize - 512 * 2) {
 		warnx("Writing `%s': short write", params->filesystem);
 		goto done;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: sock.c,v 1.13 2007/10/09 01:23:21 mrg Exp $	*/
+/*	$NetBSD: sock.c,v 1.18 2010/04/17 21:00:09 darrenr Exp $	*/
 
 /*
  * sock.c (C) 1995-1998 Darren Reed
@@ -8,7 +8,7 @@
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)sock.c	1.2 1/11/96 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: sock.c,v 2.8.4.6 2007/02/17 12:41:51 darrenr Exp";
+static const char rcsid[] = "@(#)Id: sock.c,v 2.8.4.9 2009/12/27 06:53:15 darrenr Exp";
 #endif
 #include <sys/param.h>
 #include <sys/types.h>
@@ -32,7 +32,7 @@ typedef int     boolean_t;
 # include <sys/dir.h>
 #endif
 #if !defined(__osf__)
-# ifdef __NetBSD__ 
+# ifdef __NetBSD__
 #  include <machine/lock.h>
 #  include <sys/mutex.h>
 # endif
@@ -329,12 +329,21 @@ struct	tcpiphdr *ti;
 	t = NULL;
 
 	o = (struct file **)calloc(1, sizeof(*o) * (fd->fd_lastfile + 1));
+#if defined(__NetBSD_Version__)  && __NetBSD_Version__ < 599001200
 	if (KMCPY(o, fd->fd_ofiles, (fd->fd_lastfile + 1) * sizeof(*o)) == -1)
 	    {
 		fprintf(stderr, "read(%#lx,%#lx,%lu) - u_ofile - failed\n",
 			(u_long)fd->fd_ofiles, (u_long)o, (u_long)sizeof(*o));
 		goto finderror;
 	    }
+#else
+	if (KMCPY(o, &fd->fd_dt->dt_ff, (fd->fd_lastfile + 1) * sizeof(*o)) == -1)
+	    {
+		fprintf(stderr, "read(%#lx,%#lx,%lu) - u_ofile - failed\n",
+			(u_long)fd->fd_dt->dt_ff, (u_long)o, (u_long)sizeof(*o));
+		goto finderror;
+	    }
+#endif
 	f = (struct file *)calloc(1, sizeof(*f));
 	if (KMCPY(f, o[tfd], sizeof(*f)) == -1)
 	    {

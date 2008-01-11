@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.5 2006/11/10 17:36:08 christos Exp $
+#	$NetBSD: Makefile,v 1.7 2011/05/26 12:56:28 joerg Exp $
 
-MKPRIVATELIB=	yes
+LIBISPRIVATE=	yes
 
 .include <bsd.own.mk>
 
@@ -22,5 +22,9 @@ strdup.c
 CPPFLAGS+= -I${DIST}/gettext/gettext-tools/libgrep
 
 COPTS.regex.c = -Wno-stack-protector
+
+WARNS?=		0	# pointer sign issues
+
+CWARNFLAGS.clang+=	-Wno-unused-value
 
 .include <bsd.lib.mk>

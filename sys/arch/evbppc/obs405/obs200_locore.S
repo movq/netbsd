@@ -1,4 +1,4 @@
-/*	$NetBSD: obs200_locore.S,v 1.4 2006/10/16 18:14:36 kiyohara Exp $	*/
+/*	$NetBSD: obs200_locore.S,v 1.10 2011/01/17 08:23:54 matt Exp $	*/
 /*	Original Tag: locore.S,v 1.1 2003/09/23 15:21:58 shige Exp	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
@@ -69,11 +69,11 @@
  */
 
 #undef PPC_4XX_NOCACHE
-#define _NOREGNAMES
 
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 #include "opt_lockdebug.h"
+#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_ppcarch.h"
 #include "opt_ppcparam.h"
@@ -88,7 +88,8 @@
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
-#include <powerpc/ibm4xx/dcr405gp.h>
+#include <powerpc/ibm4xx/spr.h>
+#include <powerpc/ibm4xx/dcr4xx.h>
 #include <powerpc/ibm4xx/pmap.h>
 
 /* Function pointer for requesting board_config_data from OpenBlockS S/R BIOS */
@@ -98,12 +99,6 @@
  * Some instructions gas doesn't understand (yet?)
  */
 #define	bdneq	bdnzf 2,
-
-/*
- * Globals
- */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
 
 /*
  * This symbol is here for the benefit of kvm_mkdb, and is supposed to
@@ -180,7 +175,7 @@ __start_cpu0:
 	cmpw	%r3,%r8
 	bne+	2b
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	/* If we had symbol table location we'd store it here and would've adjusted r8 here */
 	lis	%r7,_C_LABEL(startsym)@ha
 	addi	%r7,%r7,_C_LABEL(startsym)@l

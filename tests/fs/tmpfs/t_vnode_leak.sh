@@ -1,6 +1,6 @@
-# $NetBSD: t_vnode_leak.sh,v 1.1 2007/11/12 15:18:29 jmmv Exp $
+# $NetBSD: t_vnode_leak.sh,v 1.6 2010/11/07 17:51:18 jmmv Exp $
 #
-# Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
+# Copyright (c) 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -11,13 +11,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -32,7 +25,7 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 
-atf_test_case main
+atf_test_case main cleanup
 main_head() {
 	atf_set "descr" "Verifies that vnodes are not leaked and that" \
 	                "their reclaim operation works as expected: i.e.," \
@@ -44,7 +37,7 @@ main_head() {
 main_body() {
 	echo "Lowering kern.maxvnodes to 2000"
 	sysctl kern.maxvnodes | awk '{ print $3; }' >oldvnodes
-	atf_check 'sysctl -w kern.maxvnodes=2000' 0 ignore null
+	atf_check -s eq:0 -o ignore -e empty sysctl -w kern.maxvnodes=2000
 
 	test_mount -o -s$(((4000 + 2) * 4096))
 	echo "Creating 4000 directories"

@@ -1,4 +1,4 @@
-/*	$NetBSD: ypserv_proc.c,v 1.12 2007/08/22 16:49:17 christos Exp $	*/
+/*	$NetBSD: ypserv_proc.c,v 1.14 2009/10/20 00:51:15 snj Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypserv_proc.c,v 1.12 2007/08/22 16:49:17 christos Exp $");
+__RCSID("$NetBSD: ypserv_proc.c,v 1.14 2009/10/20 00:51:15 snj Exp $");
 #endif
 
 #include <sys/stat.h>
@@ -357,7 +352,7 @@ void *
 ypproc_master_2_svc(void *argp, struct svc_req *rqstp)
 {
 	static struct ypresp_master res;
-	static char *nopeer = "";
+	static const char *nopeer = "";
 	struct sockaddr *caller = svc_getrpccaller(rqstp->rq_xprt)->buf;
 	struct ypreq_nokey *k = argp;
 	int secure;
@@ -389,7 +384,7 @@ ypproc_master_2_svc(void *argp, struct svc_req *rqstp)
 	 * xdr_string in ypserv_xdr.c may be a better place?
 	 */
 	if (res.master == NULL)
-		res.master = nopeer;
+		res.master = __UNCONST(nopeer);
 
 	return ((void *)&res);
 }

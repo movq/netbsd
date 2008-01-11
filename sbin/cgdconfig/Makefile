@@ -1,16 +1,16 @@
-# $NetBSD: Makefile,v 1.7 2006/05/11 23:16:29 mrg Exp $
+# $NetBSD: Makefile,v 1.14 2010/12/14 17:46:21 pooka Exp $
 
-PROG=	cgdconfig
+RUMPPRG=cgdconfig
 MAN=	cgdconfig.8
 
-SRCS=	cgdconfig.c		\
+SRCS+=	cgdconfig.c		\
 	cgdlex.l		\
 	cgdparse.y		\
 	pkcs5_pbkdf2.c		\
 	params.c		\
 	utils.c
 
-CFLAGS+= -I${.CURDIR} -I.
+CPPFLAGS+= -I${.CURDIR} -I. -DYY_NO_INPUT
 
 YHEADER=1
 
@@ -18,7 +18,3 @@ DPADD=  ${LIBUTIL} ${LIBCRYPTO} ${LIBCRYPT} ${LIBY} ${LIBL}
 LDADD=  -lutil -lcrypto -lcrypt -ly -ll
 
 .include <bsd.prog.mk>
-
-.if ${HAVE_GCC} == 4
-COPTS.cgdconfig.c+=	-Wno-pointer-sign
-.endif

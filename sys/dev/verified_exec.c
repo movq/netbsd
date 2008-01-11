@@ -1,4 +1,4 @@
-/*	$NetBSD: verified_exec.c,v 1.63 2007/12/11 12:16:14 lukem Exp $	*/
+/*	$NetBSD: verified_exec.c,v 1.66 2009/06/29 05:08:17 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: verified_exec.c,v 1.63 2007/12/11 12:16:14 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: verified_exec.c,v 1.66 2009/06/29 05:08:17 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -54,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: verified_exec.c,v 1.63 2007/12/11 12:16:14 lukem Exp
 
 #include <prop/proplib.h>
 
-void veriexecattach(struct device *, struct device *, void *);
+void veriexecattach(device_t, device_t, void *);
 static dev_type_open(veriexecopen);
 static dev_type_close(veriexecclose);
 static dev_type_ioctl(veriexecioctl);
@@ -127,22 +127,24 @@ veriexecclose(dev_t dev, int flags, int fmt, struct lwp *l)
 static int
 veriexec_delete(prop_dictionary_t dict, struct lwp *l)
 {
-	struct nameidata nid;
+	struct vnode *vp;
+	const char *file;
 	int error;
 
-	NDINIT(&nid, LOOKUP, FOLLOW, UIO_SYSSPACE,
-	    prop_string_cstring_nocopy(prop_dictionary_get(dict, "file")));
-	error = namei(&nid);
+	if (!prop_dictionary_get_cstring_nocopy(dict, "file", &file))
+		return (EINVAL);
+
+	error = namei_simple_kernel(file, NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
 	/* XXX this should be done differently... */
-	if (nid.ni_vp->v_type == VREG)
-		error = veriexec_file_delete(l, nid.ni_vp);
-	else if (nid.ni_vp->v_type == VDIR)
-		error = veriexec_table_delete(l, nid.ni_vp->v_mount);
+	if (vp->v_type == VREG)
+		error = veriexec_file_delete(l, vp);
+	else if (vp->v_type == VDIR)
+		error = veriexec_table_delete(l, vp->v_mount);
 
-	vrele(nid.ni_vp);
+	vrele(vp);
 
 	return (error);
 }
@@ -150,18 +152,20 @@ veriexec_delete(prop_dictionary_t dict, struct lwp *l)
 static int
 veriexec_query(prop_dictionary_t dict, prop_dictionary_t rdict, struct lwp *l)
 {
-	struct nameidata nid;
+	struct vnode *vp;
+	const char *file;
 	int error;
 
-	NDINIT(&nid, LOOKUP, FOLLOW, UIO_SYSSPACE,
-	    prop_string_cstring_nocopy(prop_dictionary_get(dict, "file")));
-	error = namei(&nid);
+	if (!prop_dictionary_get_cstring_nocopy(dict, "file", &file))
+		return (EINVAL);
+
+	error = namei_simple_kernel(file, NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = veriexec_convert(nid.ni_vp, rdict);
+	error = veriexec_convert(vp, rdict);
 
-	vrele(nid.ni_vp);
+	vrele(vp);
 
 	return (error);
 }
@@ -180,6 +184,9 @@ veriexecioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 	case VERIEXEC_LOAD:
 	case VERIEXEC_DELETE:
 	case VERIEXEC_FLUSH:
+		if (!(flags & FWRITE))
+			return (EPERM);
+
 		if (veriexec_strict > VERIEXEC_LEARNING) {
 			log(LOG_WARNING, "Veriexec: Strict mode, modifying "
 			    "tables not permitted.\n");
@@ -191,6 +198,9 @@ veriexecioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 
 	case VERIEXEC_QUERY:
 	case VERIEXEC_DUMP:
+		if (!(flags & FREAD))
+			return (EPERM);
+
 		break;
 
 	default:

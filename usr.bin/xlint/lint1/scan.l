@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: scan.l,v 1.37 2007/02/06 00:08:31 he Exp $ */
+/* $NetBSD: scan.l,v 1.48 2010/12/16 17:42:29 wiz Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: scan.l,v 1.37 2007/02/06 00:08:31 he Exp $");
+__RCSID("$NetBSD: scan.l,v 1.48 2010/12/16 17:42:29 wiz Exp $");
 #endif
 
 #include <stdlib.h>
@@ -50,7 +50,6 @@ __RCSID("$NetBSD: scan.l,v 1.37 2007/02/06 00:08:31 he Exp $");
 #include "cgram.h"
 
 #define CHAR_MASK	(~(~0 << CHAR_BIT))
-#define YY_NO_UNPUT
 
 /* Current position (its also updated when an included file is parsed) */
 pos_t	curr_pos = { 1, "", 0 };
@@ -90,6 +89,10 @@ NZD	[1-9]
 OD	[0-7]
 HD	[0-9A-Fa-f]
 EX	([eE][+-]?[0-9]+)
+HX	(p[+-]?[0-9A-Fa-f]+)
+TL	([fFlL]?[i]?)
+
+%option nounput
 
 %%
 
@@ -97,10 +100,11 @@ EX	([eE][+-]?[0-9]+)
 0{OD}*[lLuU]*			return (icon(8));
 {NZD}{D}*[lLuU]*		return (icon(10));
 0[xX]{HD}+[lLuU]*		return (icon(16));
-{D}+\.{D}*{EX}?[fFlL]?		|
-{D}+{EX}[fFlL]?			|
-0[xX]{HD}+p{HD}+[fFlL]?		|
-\.{D}+{EX}?[fFlL]?		return (fcon());
+{D}+\.{D}*{EX}?{TL}	|
+{D}+{EX}{TL}		|
+0[xX]{HD}+\.{HD}*{HX}{TL} |
+0[xX]{HD}+{HX}{TL} 	|
+\.{D}+{EX}?{TL}		return (fcon());
 "="				return (operator(T_ASSIGN, ASSIGN));
 "*="				return (operator(T_OPASS, MULASS));
 "/="				return (operator(T_OPASS, DIVASS));
@@ -193,6 +197,21 @@ static	struct	kwtab {
 	u_int	kw_c99;		/* c99 keyword */
 	u_int	kw_gcc;		/* GCC keyword */
 } kwtab[] = {
+	{ "__alignof__", T_ALIGNOF,	0,	0,	0,	  0, 0, 0 },
+	{ "__attribute__",T_ATTRIBUTE,	0,	0,	0,	  0, 0, 1 },
+	{ "attribute",	T_ATTRIBUTE,	0,	0,	0,	  0, 0, 1 },
+	{ "__packed__",	T_AT_PACKED,	0,	0,	0,	  0, 0, 1 },
+	{ "packed",	T_AT_PACKED,	0,	0,	0,	  0, 0, 1 },
+	{ "__aligned__",T_AT_ALIGNED,	0,	0,	0,	  0, 0, 1 },
+	{ "aligned",	T_AT_ALIGNED,	0,	0,	0,	  0, 0, 1 },
+	{ "__transparent_union__",T_AT_TUNION,0,0,	0,	  0, 0, 1 },
+	{ "transparent_union",T_AT_TUNION,0,	0,	0,	  0, 0, 1 },
+	{ "__unused__",	T_AT_UNUSED,	0,	0,	0,	  0, 0, 1 },
+	{ "unused",	T_AT_UNUSED,	0,	0,	0,	  0, 0, 1 },
+	{ "__deprecated__",T_AT_DEPRECATED,0,	0,	0,	  0, 0, 1 },
+	{ "deprecated",	T_AT_DEPRECATED,0,	0,	0,	  0, 0, 1 },
+	{ "__may_alias__",T_AT_MAY_ALIAS,0,	0,	0,	  0, 0, 1 },
+	{ "may_alias",	T_AT_MAY_ALIAS,	0,	0,	0,	  0, 0, 1 },
 	{ "asm",	T_ASM,		0,	0,	0,	  0, 0, 1 },
 	{ "__asm",	T_ASM,		0,	0,	0,	  0, 0, 0 },
 	{ "__asm__",	T_ASM,		0,	0,	0,	  0, 0, 0 },
@@ -202,6 +221,7 @@ static	struct	kwtab {
 	{ "case",	T_CASE,		0,	0,	0,	  0, 0, 0 },
 	{ "char",	T_TYPE,		0,	CHAR,	0,	  0, 0, 0 },
 	{ "const",	T_QUAL,		0,	0,	CONST,	  1, 0, 0 },
+	{ "_Complex",	T_TYPE,		0,	COMPLEX,0,	  0, 1, 0 },
 	{ "__const__",	T_QUAL,		0,	0,	CONST,	  0, 0, 0 },
 	{ "__const",	T_QUAL,		0,	0,	CONST,	  0, 0, 0 },
 	{ "continue",	T_CONTINUE,	0,	0,	0,	  0, 0, 0 },
@@ -215,14 +235,18 @@ static	struct	kwtab {
 	{ "for",	T_FOR,		0,	0,	0,	  0, 0, 0 },
 	{ "goto",	T_GOTO,		0,	0,	0,	  0, 0, 0 },
 	{ "if",		T_IF,		0,	0,	0,	  0, 0, 0 },
+	{ "__imag__",	T_IMAG,		0,	0,	0,	  0, 1, 0 },
 	{ "inline",	T_SCLASS,	INLINE,	0,	0,	  0, 1, 0 },
 	{ "__inline__",	T_SCLASS,	INLINE,	0,	0,	  0, 0, 0 },
 	{ "__inline",	T_SCLASS,	INLINE,	0,	0,	  0, 0, 0 },
 	{ "int",	T_TYPE,		0,	INT,	0,	  0, 0, 0 },
 	{ "__symbolrename", T_SYMBOLRENAME, 0,	0,	0,	  0, 0, 0 },
 	{ "long",	T_TYPE,		0,	LONG,	0,	  0, 0, 0 },
+	{ "__real__",	T_REAL,		0,	0,	0,	  0, 1, 0 },
 	{ "register",	T_SCLASS,	REG,	0,	0,	  0, 0, 0 },
+	{ "restrict",	T_QUAL,		0,	0,	RESTRICT, 0, 1, 0 },
 	{ "return",	T_RETURN,	0,	0,	0,	  0, 0, 0 },
+	{ "__packed",	T_PACKED,	0,	0,	0,	  0, 0, 0 },
 	{ "short",	T_TYPE,		0,	SHORT,	0,	  0, 0, 0 },
 	{ "signed",	T_TYPE,		0,	SIGNED,	0,	  1, 0, 0 },
 	{ "__signed__",	T_TYPE,		0,	SIGNED,	0,	  0, 0, 0 },
@@ -270,7 +294,7 @@ initscan(void)
 {
 	struct	kwtab *kw;
 	sym_t	*sym;
-	int	h, i;
+	size_t	h, i;
 	uint64_t uq;
 
 	for (kw = kwtab; kw->kw_name != NULL; kw++) {
@@ -321,7 +345,7 @@ allocsb(void)
 	} else {
 		sb = xmalloc(sizeof (sbuf_t));
 	}
-	(void)memset(sb, 0, sizeof (sb));
+	(void)memset(sb, 0, sizeof (*sb));
 	return (sb);
 }
 
@@ -391,7 +415,6 @@ name(void)
 	sb->sb_name = yytext;
 	sb->sb_len = yyleng;
 	sb->sb_hash = hash(yytext);
-
 	if ((sym = search(sb)) != NULL && sym->s_keyw) {
 		freesb(sb);
 		return (keyw(sym));
@@ -562,11 +585,23 @@ icon(int base)
 			}
 		}
 		break;
+	case ULONG:
+		if (uq > TARG_ULONG_MAX) {
+			/* integer constant out of range */
+			warning(252);
+		}
+		break;
 	case QUAD:
 		if (uq > TARG_QUAD_MAX && !tflag) {
 			typ = UQUAD;
 			if (!sflag)
 				ansiu = 1;
+		}
+		break;
+	case UQUAD:
+		if (uq > TARG_UQUAD_MAX) {
+			/* integer constant out of range */
+			warning(252);
 		}
 		break;
 		/* LINTED (enumeration values not handled in switch) */
@@ -582,8 +617,6 @@ icon(int base)
 	case NOTSPEC:
 	case DOUBLE:
 	case FLOAT:
-	case UQUAD:
-	case ULONG:
 	case USHORT:
 	case SHORT:
 	case UCHAR:
@@ -591,6 +624,10 @@ icon(int base)
 	case CHAR:
 	case BOOL:
 	case UNSIGN:
+	case FCOMPLEX:
+	case DCOMPLEX:
+	case LCOMPLEX:
+	case COMPLEX:
 		break;
 
 	case NTSPEC:	/* this value unused */
@@ -668,6 +705,10 @@ fcon(void)
 	cp = yytext;
 	len = yyleng;
 
+	if (cp[len - 1] == 'i') {
+		/* imaginary, do nothing for now */
+		len--;
+	}
 	if ((c = cp[len - 1]) == 'f' || c == 'F') {
 		typ = FLOAT;
 		len--;
@@ -740,7 +781,8 @@ operator(int t, op_t o)
 static int
 ccon(void)
 {
-	int	n, val, c;
+	size_t	n;
+	int val, c;
 	char	cv;
 
 	n = 0;
@@ -783,7 +825,8 @@ static int
 wccon(void)
 {
 	static	char buf[MB_LEN_MAX + 1];
-	int	i, c;
+	size_t	i;
+	int c;
 	wchar_t	wc;
 
 	i = 0;
@@ -1077,7 +1120,8 @@ comment(void)
 	};
 	char	keywd[32];
 	char	arg[32];
-	int	l, i, a;
+	size_t	l, i;
+	int	a;
 	int	eoc;
 
 	eoc = 0;
@@ -1221,7 +1265,8 @@ static int
 wcstrg(void)
 {
 	char	*s;
-	int	c, i, n, wi;
+	int	c, n;
+	size_t	i, wi;
 	size_t	len, max, wlen;
 	wchar_t	*ws;
 	strg_t	*strg;
@@ -1239,7 +1284,7 @@ wcstrg(void)
 		/* unterminated string constant */
 		error(258);
 
-	/* get length of wide character string */
+	/* get length of wide-character string */
 	(void)mblen(NULL, 0);
 	for (i = 0, wlen = 0; i < len; i += n, wlen++) {
 		if ((n = mblen(&s[i], MB_CUR_MAX)) == -1) {

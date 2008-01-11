@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsmb.c,v 1.10 2007/12/04 15:58:11 xtraeme Exp $	*/
+/*	$NetBSD: nfsmb.c,v 1.21 2010/05/08 07:41:44 pgoyette Exp $	*/
 /*
  * Copyright (c) 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfsmb.c,v 1.10 2007/12/04 15:58:11 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfsmb.c,v 1.21 2010/05/08 07:41:44 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -54,20 +54,20 @@ struct nfsmbc_attach_args {
 
 struct nfsmb_softc;
 struct nfsmbc_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	pci_chipset_tag_t sc_pc;
 	pcitag_t sc_tag;
 	struct pci_attach_args *sc_pa;
 
 	bus_space_tag_t sc_iot;
-	struct device *sc_nfsmb[2];
+	device_t sc_nfsmb[2];
 };
 
 struct nfsmb_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	int sc_num;
-	struct device *sc_nfsmbc;
+	device_t sc_nfsmbc;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
@@ -77,12 +77,12 @@ struct nfsmb_softc {
 };
 
 
-static int nfsmbc_match(struct device *, struct cfdata *, void *);
-static void nfsmbc_attach(struct device *, struct device *, void *);
+static int nfsmbc_match(device_t, cfdata_t, void *);
+static void nfsmbc_attach(device_t, device_t, void *);
 static int nfsmbc_print(void *, const char *);
 
-static int nfsmb_match(struct device *, struct cfdata *, void *);
-static void nfsmb_attach(struct device *, struct device *, void *);
+static int nfsmb_match(device_t, cfdata_t, void *);
+static void nfsmb_attach(device_t, device_t, void *);
 static int nfsmb_acquire_bus(void *, int);
 static void nfsmb_release_bus(void *, int);
 static int nfsmb_exec(
@@ -99,13 +99,14 @@ static int
     nfsmb_read_1(struct nfsmb_softc *, uint8_t, i2c_addr_t, i2c_op_t, int);
 static int
     nfsmb_read_2(struct nfsmb_softc *, uint8_t, i2c_addr_t, i2c_op_t, int);
+static int 
+    nfsmb_quick(struct nfsmb_softc *, i2c_addr_t, i2c_op_t, int);
 
-
-CFATTACH_DECL(nfsmbc, sizeof(struct nfsmbc_softc),
+CFATTACH_DECL_NEW(nfsmbc, sizeof(struct nfsmbc_softc),
     nfsmbc_match, nfsmbc_attach, NULL, NULL);
 
 static int
-nfsmbc_match(struct device *parent, struct cfdata *match, void *aux)
+nfsmbc_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -123,6 +124,8 @@ nfsmbc_match(struct device *parent, struct cfdata *match, void *aux)
 		case PCI_PRODUCT_NVIDIA_MCP65_SMB:
 		case PCI_PRODUCT_NVIDIA_MCP67_SMB:
 		case PCI_PRODUCT_NVIDIA_MCP73_SMB:
+		case PCI_PRODUCT_NVIDIA_MCP78S_SMB:
+		case PCI_PRODUCT_NVIDIA_MCP79_SMB:
 			return 1;
 		}
 	}
@@ -131,9 +134,9 @@ nfsmbc_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-nfsmbc_attach(struct device *parent, struct device *self, void *aux)
+nfsmbc_attach(device_t parent, device_t self, void *aux)
 {
-	struct nfsmbc_softc *sc = (struct nfsmbc_softc *) self;
+	struct nfsmbc_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct nfsmbc_attach_args nfsmbca;
 	pcireg_t reg;
@@ -145,6 +148,7 @@ nfsmbc_attach(struct device *parent, struct device *self, void *aux)
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
+	sc->sc_dev = self;
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_tag = pa->pa_tag;
 	sc->sc_pa = pa;
@@ -158,7 +162,6 @@ nfsmbc_attach(struct device *parent, struct device *self, void *aux)
 	case PCI_PRODUCT_NVIDIA_NFORCE3_SMBUS:
 	case PCI_PRODUCT_NVIDIA_NFORCE3_250_SMBUS:
 	case PCI_PRODUCT_NVIDIA_NFORCE4_SMBUS:
-	case PCI_PRODUCT_NVIDIA_NFORCE430_SMBUS:
 		baseregs[0] = NFORCE_OLD_SMB1;
 		baseregs[1] = NFORCE_OLD_SMB2;
 		break;
@@ -171,12 +174,18 @@ nfsmbc_attach(struct device *parent, struct device *self, void *aux)
 	reg = pci_conf_read(pa->pa_pc, pa->pa_tag, baseregs[0]);
 	nfsmbca.nfsmb_num = 1;
 	nfsmbca.nfsmb_addr = NFORCE_SMBBASE(reg);
-	sc->sc_nfsmb[0] = config_found(&sc->sc_dev, &nfsmbca, nfsmbc_print);
+	sc->sc_nfsmb[0] = config_found(sc->sc_dev, &nfsmbca, nfsmbc_print);
 
 	reg = pci_conf_read(pa->pa_pc, pa->pa_tag, baseregs[1]);
 	nfsmbca.nfsmb_num = 2;
 	nfsmbca.nfsmb_addr = NFORCE_SMBBASE(reg);
-	sc->sc_nfsmb[1] = config_found(&sc->sc_dev, &nfsmbca, nfsmbc_print);
+	sc->sc_nfsmb[1] = config_found(sc->sc_dev, &nfsmbca, nfsmbc_print);
+
+	/* This driver is similar to an ISA bridge that doesn't
+	 * need any special handling. So registering NULL handlers
+	 * are sufficent. */
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
@@ -193,11 +202,11 @@ nfsmbc_print(void *aux, const char *pnp)
 }
 
 
-CFATTACH_DECL(nfsmb, sizeof(struct nfsmb_softc),
+CFATTACH_DECL_NEW(nfsmb, sizeof(struct nfsmb_softc),
     nfsmb_match, nfsmb_attach, NULL, NULL);
 
 static int
-nfsmb_match(struct device *parent, struct cfdata *match, void *aux)
+nfsmb_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct nfsmbc_attach_args *nfsmbcap = aux;
 
@@ -207,15 +216,16 @@ nfsmb_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-nfsmb_attach(struct device *parent, struct device *self, void *aux)
+nfsmb_attach(device_t parent, device_t self, void *aux)
 {
-	struct nfsmb_softc *sc = (struct nfsmb_softc *) self;
+	struct nfsmb_softc *sc = device_private(self);
 	struct nfsmbc_attach_args *nfsmbcap = aux;
 	struct i2cbus_attach_args iba;
 
 	aprint_naive("\n");
 	aprint_normal("\n");
 
+	sc->sc_dev = self;
 	sc->sc_nfsmbc = parent;
 	sc->sc_num = nfsmbcap->nfsmb_num;
 	sc->sc_iot = nfsmbcap->nfsmb_iot;
@@ -235,14 +245,19 @@ nfsmb_attach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(sc->sc_iot, nfsmbcap->nfsmb_addr, NFORCE_SMBSIZE, 0,
 	    &sc->sc_ioh) != 0) {
-		aprint_error("%s: failed to map SMBus space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "failed to map SMBus space\n");
 		return;
 	}
 
 	iba.iba_type = I2C_TYPE_SMBUS;
 	iba.iba_tag = &sc->sc_i2c;
-	(void) config_found_ia(&sc->sc_dev, "i2cbus", &iba, iicbus_print);
+	(void) config_found_ia(sc->sc_dev, "i2cbus", &iba, iicbus_print);
+
+	/* This driver is similar to an ISA bridge that doesn't
+	 * need any special handling. So registering NULL handlers
+	 * are sufficent. */
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
@@ -270,6 +285,10 @@ nfsmb_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *cmd,
 	uint8_t *p = vbuf;
 	int rv;
 
+	if ((cmdlen == 0) && (buflen == 0)) {
+		return nfsmb_quick(sc, addr, op, flags);
+	}
+
 	if (I2C_OP_READ_P(op) && (cmdlen == 0) && (buflen == 1)) {
 		rv = nfsmb_receive_1(sc, addr, op, flags);
 		if (rv == -1)
@@ -290,7 +309,7 @@ nfsmb_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *cmd,
 		rv = nfsmb_read_2(sc, *(const uint8_t*)cmd, addr, op, flags);
 		if (rv == -1)
 			return -1;
-		*p = (uint8_t)rv;
+		*(uint16_t *)p = (uint16_t)rv;
 		return 0;
 	}
 
@@ -328,6 +347,23 @@ nfsmb_check_done(struct nfsmb_softc *sc)
 	    !(stat & NFORCE_SMB_STATUS_STATUS))
 		return 0;
 	return -1;
+}
+
+/* ARGSUSED */
+static int
+nfsmb_quick(struct nfsmb_softc *sc, i2c_addr_t addr, i2c_op_t op, int flags)
+{
+	uint8_t data;
+
+	/* write smbus slave address to register */
+	data = addr << 1;
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_ADDRESS, data);
+
+	/* write smbus protocol to register */
+	data = I2C_OP_READ_P(op) | NFORCE_SMB_PROTOCOL_QUICK;
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_PROTOCOL, data);
+
+	return nfsmb_check_done(sc);
 }
 
 /* ARGSUSED */
@@ -388,7 +424,7 @@ nfsmb_write_2(struct nfsmb_softc *sc, uint8_t cmd, uint16_t val,
 	low = val;
 	bus_space_write_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_DATA, low);
 	high = val >> 8;
-	bus_space_write_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_DATA, high);
+	bus_space_write_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_DATA + 1, high);
 
 	/* write smbus slave address to register */
 	data = addr << 1;
@@ -465,7 +501,7 @@ nfsmb_read_2(struct nfsmb_softc *sc, uint8_t cmd, i2c_addr_t addr, i2c_op_t op,
 	bus_space_write_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_ADDRESS, data);
 
 	/* write smbus protocol to register */
-	data = I2C_OP_READ_P(op) | NFORCE_SMB_PROTOCOL_BYTE_DATA;
+	data = I2C_OP_READ_P(op) | NFORCE_SMB_PROTOCOL_WORD_DATA;
 	if (flags & I2C_F_PEC)
 		data |= NFORCE_SMB_PROTOCOL_PEC;
 	bus_space_write_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_PROTOCOL, data);
@@ -476,6 +512,6 @@ nfsmb_read_2(struct nfsmb_softc *sc, uint8_t cmd, i2c_addr_t addr, i2c_op_t op,
 
 	/* read data */
 	low = bus_space_read_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_DATA);
-	high = bus_space_read_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_DATA);
+	high = bus_space_read_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_DATA + 1);
 	return low | high << 8;
 }

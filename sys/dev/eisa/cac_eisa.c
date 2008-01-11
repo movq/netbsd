@@ -1,4 +1,4 @@
-/*	$NetBSD: cac_eisa.c,v 1.18 2007/10/19 11:59:41 ad Exp $	*/
+/*	$NetBSD: cac_eisa.c,v 1.21 2009/05/12 14:21:32 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.18 2007/10/19 11:59:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.21 2009/05/12 14:21:32 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,8 +80,8 @@ __KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.18 2007/10/19 11:59:41 ad Exp $");
 #define CAC_EISA_IOSIZE			0x0017
 #define CAC_EISA_IOCONF			0x38
 
-static void	cac_eisa_attach(struct device *, struct device *, void *);
-static int	cac_eisa_match(struct device *, struct cfdata *, void *);
+static void	cac_eisa_attach(device_t, device_t, void *);
+static int	cac_eisa_match(device_t, cfdata_t, void *);
 
 static struct	cac_ccb *cac_eisa_l0_completed(struct cac_softc *);
 static int	cac_eisa_l0_fifo_full(struct cac_softc *);
@@ -120,7 +113,7 @@ static struct cac_eisa_type {
 };
 
 static int
-cac_eisa_match(struct device *parent, struct cfdata *match,
+cac_eisa_match(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct eisa_attach_args *ea;
@@ -136,7 +129,7 @@ cac_eisa_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-cac_eisa_attach(struct device *parent, struct device *self, void *aux)
+cac_eisa_attach(device_t parent, device_t self, void *aux)
 {
 	struct eisa_attach_args *ea;
 	bus_space_handle_t ioh;

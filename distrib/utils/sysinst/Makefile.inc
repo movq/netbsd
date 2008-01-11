@@ -1,13 +1,15 @@
-#	$NetBSD: Makefile.inc,v 1.44 2006/05/17 05:24:25 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.52 2011/02/20 08:26:09 matt Exp $
 #
 # Makefile for sysinst
 
+.if empty(DBG:M-g)
 COPTS += -Os
+.endif
 
 PROG=		sysinst
 NOMAN=		# defined
 
-WARNS=		3
+WARNS=		4
 
 SRCS+=	menu_defs.c msg_defs.c main.c install.c upgrade.c \
 	txtwalk.c run.c factor.c net.c disks.c disks_lfs.c util.c geom.c \
@@ -25,25 +27,26 @@ MSG_MD?=	msg.md.${SYSINSTLANG}
 MENUS_MD?=	menus.md.${SYSINSTLANG}
 
 .include <bsd.own.mk>		# for mk.conf
-.include <bsd.sys.mk>		# for HOST_SH
+.include <bsd.sys.mk>		# for HOST_SH, TOOL_*
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 _MKSHTARGET_CREATE?=	${_MKSHMSG_CREATE} ${.CURDIR:T}/${.TARGET}
 
-DPADD=		${LIBCURSES} ${LIBTERMCAP} ${LIBUTIL}
-LDADD=		-lcurses -ltermcap -lutil
+DPADD=		${LIBCURSES} ${LIBTERMLIB} ${LIBUTIL}
+LDADD=		-lcurses -ltermlib -lutil
 
 UNIF_AWK=	${.CURDIR}/../../unif.awk
 MSG_XLAT_SH=	${.CURDIR}/../../msg_xlat.sh
 
 CPPFLAGS+=	-I. -I${.CURDIR}/../.. -I${.CURDIR} \
-		-DREL=\"${DISTRIBVER}\" -DMACH=\"${MACHINE}\"
+		-DREL=\"${DISTRIBVER}\" -DMACH=\"${MACHINE}\" \
+		-DMACH_${MACHINE} -DARCH_${MACHINE_ARCH}
 
 .if defined(SMALLPROG_INET6) && (${USE_INET6} != "no")
 CPPFLAGS+=-DINET6
 .endif
 
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 COPTS.label.c+=	-Wno-pointer-sign
 .endif
 
@@ -107,25 +110,30 @@ msgtouch: ${DISTRIBVERDEP}
 
 msg.def: msg.mi.${SYSINSTLANG} ${MSG_MD} msgtouch
 	${_MKTARGET_CREATE}
-	sed "s/@@VERSION@@/${DISTRIBVER}/" ${.ALLSRC} | \
-	awk -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" > ${.TARGET}
+	${TOOL_SED} "s/@@VERSION@@/${DISTRIBVER}/" ${.ALLSRC} | \
+	${TOOL_SED} "s/@@MACHINE@@/${MACHINE}/" | \
+	${TOOL_AWK} -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" > ${.TARGET}
 
 menus.def: menus.mi ${MENUS_MD} msgtouch
 	${_MKTARGET_CREATE}
-	sed "s/@@VERSION@@/${DISTRIBVER}/" ${.ALLSRC} | \
-	awk -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" > ${.TARGET}
+	${TOOL_SED} "s/@@VERSION@@/${DISTRIBVER}/" ${.ALLSRC} | \
+	${TOOL_SED} "s/@@MACHINE@@/${MACHINE}/" | \
+	${TOOL_AWK} -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" > ${.TARGET}
 
 sysinstmsgs.fmtcnt: msg.mi.${SYSINSTLANG} ${MSG_MD} msgtouch msg_defs.h
 	${_MKTARGET_CREATE}
-	sed "s/@@VERSION@@/${DISTRIBVER}/" ${.ALLSRC:M*.${SYSINSTLANG}} | \
-	awk -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" | \
+	${TOOL_SED} "s/@@VERSION@@/${DISTRIBVER}/" \
+		${.ALLSRC:M*.${SYSINSTLANG}} | \
+	${TOOL_SED} "s/@@MACHINE@@/${MACHINE}/" | \
+	${TOOL_AWK} -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" | \
 	${HOST_SH} ${MSG_XLAT_SH} -c > ${.TARGET}
 
 .for LANG in ${LANGUAGES:N${SYSINSTLANG}}
 sysinstmsgs.${LANG}: msg.mi.${LANG} ${MSG_MD:S/.${SYSINSTLANG}$/.${LANG}/} msgtouch msg_defs.h sysinstmsgs.fmtcnt
 	${_MKTARGET_CREATE}
-	sed "s/@@VERSION@@/${DISTRIBVER}/" ${.ALLSRC:M*.${LANG}} | \
-	awk -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" | \
+	${TOOL_SED} "s/@@VERSION@@/${DISTRIBVER}/" ${.ALLSRC:M*.${LANG}} | \
+	${TOOL_SED} "s/@@MACHINE@@/${MACHINE}/" | \
+	${TOOL_AWK} -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" | \
 	${HOST_SH} ${MSG_XLAT_SH} -f sysinstmsgs.fmtcnt > ${.TARGET}
 
 DPSRCS+=	sysinstmsgs.${LANG}

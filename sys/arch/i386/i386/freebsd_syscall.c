@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_syscall.c,v 1.28 2008/01/05 12:53:53 dsl Exp $	*/
+/*	$NetBSD: freebsd_syscall.c,v 1.37 2009/11/21 03:11:00 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_syscall.c,v 1.28 2008/01/05 12:53:53 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: freebsd_syscall.c,v 1.37 2009/11/21 03:11:00 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
+#include <sys/syscallvar.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -76,8 +69,7 @@ freebsd_syscall_intern(struct proc *p)
  * Like trap(), argument is call by reference.
  */
 void
-freebsd_syscall_plain(frame)
-	struct trapframe *frame;
+freebsd_syscall_plain(struct trapframe *frame)
 {
 	char *params;
 	const struct sysent *callp;
@@ -87,7 +79,6 @@ freebsd_syscall_plain(frame)
 	size_t argsize;
 	register_t code, args[8], rval[2];
 
-	uvmexp.syscalls++;
 	l = curlwp;
 	p = l->l_proc;
 	LWP_CACHE_CREDS(l, p);
@@ -128,9 +119,7 @@ freebsd_syscall_plain(frame)
 	rval[0] = 0;
 	rval[1] = frame->tf_edx; /* need to keep edx for shared FreeBSD bins */
 
-	KERNEL_LOCK(1, l);
-	error = (*callp->sy_call)(l, args, rval);
-	KERNEL_UNLOCK_LAST(l);
+	error = sy_call(callp, l, args, rval);
 
 	switch (error) {
 	case 0:
@@ -160,8 +149,7 @@ freebsd_syscall_plain(frame)
 }
 
 void
-freebsd_syscall_fancy(frame)
-	struct trapframe *frame;
+freebsd_syscall_fancy(struct trapframe *frame)
 {
 	char *params;
 	const struct sysent *callp;
@@ -171,7 +159,6 @@ freebsd_syscall_fancy(frame)
 	size_t argsize;
 	register_t code, args[8], rval[2];
 
-	uvmexp.syscalls++;
 	l = curlwp;
 	p = l->l_proc;
 	LWP_CACHE_CREDS(l, p);
@@ -209,15 +196,12 @@ freebsd_syscall_fancy(frame)
 			goto bad;
 	}
 
-	KERNEL_LOCK(1, l);
-	if ((error = trace_enter(code, code, NULL, args)) != 0)
-		goto out;
+	if ((error = trace_enter(code, args, callp->sy_narg)) == 0) {
+		rval[0] = 0;
+		rval[1] = frame->tf_edx; /* need to keep edx for shared FreeBSD bins */
+		error = sy_call(callp, l, args, rval);
+	}
 
-	rval[0] = 0;
-	rval[1] = frame->tf_edx; /* need to keep edx for shared FreeBSD bins */
-	error = (*callp->sy_call)(l, args, rval);
-out:
-	KERNEL_UNLOCK_LAST(l);
 	switch (error) {
 	case 0:
 		frame->tf_eax = rval[0];
@@ -242,7 +226,7 @@ out:
 		break;
 	}
 
-	trace_exit(code, args, rval, error);
+	trace_exit(code, rval, error);
 
 	userret(l);
 }

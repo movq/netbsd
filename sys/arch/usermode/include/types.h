@@ -1,4 +1,4 @@
-/* $NetBSD: types.h,v 1.3 2008/01/07 17:27:12 joerg Exp $ */
+/* $NetBSD: types.h,v 1.6 2009/12/11 05:52:04 matt Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,8 +33,6 @@
 #include <sys/featuretest.h>
 #include <machine/int_types.h>
 
-#define __HAVE_GENERIC_TODR	1
-
 #if defined(_KERNEL)
 typedef struct label_t {
 	long val[8];
@@ -52,13 +44,18 @@ typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
 typedef long int	register_t;
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
+#define	PRIxREGISTER	"lx"
 
 typedef volatile unsigned char	__cpu_simple_lock_t;
 #define __CPU_SIMPLE_LOCK_PAD
 
 #define __SIMPLELOCK_LOCKED	1
 #define __SIMPLELOCK_UNLOCKED	0
-
-#define __HAVE_TIMECOUNTER
 
 #endif /* !_ARCH_USERMODE_INCLUDE_TYPES_H */

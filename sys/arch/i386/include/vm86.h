@@ -1,4 +1,4 @@
-/*	$NetBSD: vm86.h,v 1.15 2007/04/16 19:12:19 ad Exp $	*/
+/*	$NetBSD: vm86.h,v 1.19 2009/11/21 03:11:01 rmind Exp $	*/
 
 #undef	VM86_USE_VIF
 
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -77,9 +70,7 @@ struct vm86_struct {
 
 #ifdef _KERNEL
 int x86_vm86(struct lwp *, char *, register_t *);
-#ifdef COMPAT_16
 int compat_16_x86_vm86(struct lwp *, char *, register_t *);
-#endif
 void vm86_gpfault(struct lwp *, int);
 void vm86_return(struct lwp *, int);
 static __inline void clr_vif(struct lwp *);
@@ -90,10 +81,9 @@ static __inline void set_vflags_short(struct lwp *, int);
 static __inline int get_vflags_short(struct lwp *);
 
 static __inline void
-clr_vif(l)
-	struct lwp *l;
+clr_vif(struct lwp *l)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 
 #ifndef VM86_USE_VIF
 	pcb->vm86_eflags &= ~PSL_I;
@@ -103,10 +93,9 @@ clr_vif(l)
 }
 
 static __inline void
-set_vif(l)
-	struct lwp *l;
+set_vif(struct lwp *l)
 {
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 
 #ifndef VM86_USE_VIF
 	pcb->vm86_eflags |= PSL_I;
@@ -119,12 +108,10 @@ set_vif(l)
 }
 
 static __inline void
-set_vflags(l, flags)
-	struct lwp *l;
-	int flags;
+set_vflags(struct lwp *l, int flags)
 {
 	struct trapframe *tf = l->l_md.md_regs;
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 
 	flags &= ~pcb->vm86_flagmask;
 	SETFLAGS(pcb->vm86_eflags, flags, VM86_VIRTFLAGS);
@@ -138,11 +125,10 @@ set_vflags(l, flags)
 }
 
 static __inline int
-get_vflags(l)
-	struct lwp *l;
+get_vflags(struct lwp *l)
 {
 	struct trapframe *tf = l->l_md.md_regs;
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 	int flags = PSL_MBO;
 
 	SETFLAGS(flags, pcb->vm86_eflags, VM86_VIRTFLAGS);
@@ -151,12 +137,10 @@ get_vflags(l)
 }
 
 static __inline void
-set_vflags_short(l, flags)
-	struct lwp *l;
-	int flags;
+set_vflags_short(struct lwp *l, int flags)
 {
 	struct trapframe *tf = l->l_md.md_regs;
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 
 	flags &= ~pcb->vm86_flagmask;
 	SETFLAGS(pcb->vm86_eflags, flags, VM86_VIRTFLAGS & 0xffff);
@@ -168,11 +152,10 @@ set_vflags_short(l, flags)
 }
 
 static __inline int
-get_vflags_short(l)
-	struct lwp *l;
+get_vflags_short(struct lwp *l)
 {
 	struct trapframe *tf = l->l_md.md_regs;
-	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct pcb *pcb = lwp_getpcb(l);
 	int flags = PSL_MBO;
 
 	SETFLAGS(flags, pcb->vm86_eflags, VM86_VIRTFLAGS & 0xffff);

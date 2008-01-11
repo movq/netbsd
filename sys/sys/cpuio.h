@@ -1,7 +1,7 @@
-/*	$NetBSD: cpuio.h,v 1.1 2007/08/04 11:03:03 ad Exp $	*/
+/*	$NetBSD: cpuio.h,v 1.4 2009/04/19 14:11:37 ad Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,9 +49,11 @@ typedef struct cpustate {
 	bool		cs_online;	/* running unbound LWPs */
 	bool		cs_intr;	/* fielding interrupts */
 	bool		cs_unused[2];	/* reserved */
-	time_t		cs_lastmod;	/* time of last state change */
+	int32_t		cs_lastmod;	/* time of last state change */
 	char		cs_name[16];	/* reserved */
-	uint32_t	cs_reserved[4];	/* reserved */
+	int32_t		cs_lastmodhi;	/* time of last state change */
+	uint32_t	cs_intrcnt;	/* count of interrupt handlers + 1 */
+	uint32_t	cs_reserved[2];	/* reserved */
 } cpustate_t;
 
 #define	IOC_CPU_SETSTATE	_IOW('c', 0, cpustate_t)

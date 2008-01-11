@@ -1,4 +1,4 @@
-/* $NetBSD: aztech.c,v 1.13 2007/10/19 12:00:15 ad Exp $ */
+/* $NetBSD: aztech.c,v 1.16 2009/05/12 09:10:15 cegger Exp $ */
 /* $OpenBSD: aztech.c,v 1.2 2001/12/05 10:27:06 mickey Exp $ */
 /* $RuOBSD: aztech.c,v 1.11 2001/10/20 13:23:47 pva Exp $ */
 
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aztech.c,v 1.13 2007/10/19 12:00:15 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aztech.c,v 1.16 2009/05/12 09:10:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,8 +77,8 @@ __KERNEL_RCSID(0, "$NetBSD: aztech.c,v 1.13 2007/10/19 12:00:15 ad Exp $");
 #define AZ_DATA_ON	(1 << 7)
 #define AZ_DATA_OFF	(0 << 7)
 
-int	az_probe(struct device *, struct cfdata *, void *);
-void	az_attach(struct device *, struct device * self, void *);
+int	az_probe(device_t, cfdata_t, void *);
+void	az_attach(device_t, device_t  self, void *);
 
 int	az_get_info(void *, struct radio_info *);
 int	az_set_info(void *, struct radio_info *);
@@ -118,7 +118,7 @@ u_int8_t	az_conv_vol(u_int8_t);
 u_int8_t	az_unconv_vol(u_int8_t);
 
 int
-az_probe(struct device *parent, struct cfdata *cf, void *aux)
+az_probe(device_t parent, cfdata_t cf, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -161,7 +161,7 @@ az_probe(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 void
-az_attach(struct device *parent, struct device *self, void *aux)
+az_attach(device_t parent, device_t self, void *aux)
 {
 	struct az_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
@@ -176,7 +176,7 @@ az_attach(struct device *parent, struct device *self, void *aux)
 	/* remap I/O */
 	if (bus_space_map(sc->lm.iot, ia->ia_io[0].ir_addr,
 	    ia->ia_io[0].ir_size, 0, &sc->lm.ioh))
-		panic(": bus_space_map() of %s failed", sc->sc_dev.dv_xname);
+		panic(": bus_space_map() of %s failed", device_xname(&sc->sc_dev));
 
 	printf(": Aztech/PackardBell\n");
 

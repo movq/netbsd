@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_km.c,v 1.97 2008/01/02 11:49:17 ad Exp $	*/
+/*	$NetBSD: uvm_km.c,v 1.108 2011/02/02 15:25:27 chuck Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -17,12 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Charles D. Cranor,
- *      Washington University, the University of California, Berkeley and
- *      its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -91,7 +86,6 @@
  * the vm system has several standard kernel submaps, including:
  *   kmem_map => contains only wired kernel memory for the kernel
  *		malloc.
- *   mb_map => memory for large mbufs,
  *   pager_map => used to map "buf" structures into kernel space
  *   exec_map => used during exec to handle exec args
  *   etc...
@@ -103,7 +97,7 @@
  * object is equal to the size of kernel virtual address space (i.e. the
  * value "VM_MAX_KERNEL_ADDRESS - VM_MIN_KERNEL_ADDRESS").
  *
- * note that just because a kernel object spans the entire kernel virutal
+ * note that just because a kernel object spans the entire kernel virtual
  * address space doesn't mean that it has to be mapped into the entire space.
  * large chunks of a kernel object's space go unused either because
  * that area of kernel VM is unmapped, or there is some other type of
@@ -128,7 +122,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_km.c,v 1.97 2008/01/02 11:49:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_km.c,v 1.108 2011/02/02 15:25:27 chuck Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -462,15 +456,16 @@ uvm_km_pgremove(vaddr_t startva, vaddr_t endva)
  */
 
 void
-uvm_km_pgremove_intrsafe(vaddr_t start, vaddr_t end)
+uvm_km_pgremove_intrsafe(struct vm_map *map, vaddr_t start, vaddr_t end)
 {
 	struct vm_page *pg;
 	paddr_t pa;
 	UVMHIST_FUNC("uvm_km_pgremove_intrsafe"); UVMHIST_CALLED(maphist);
 
-	KASSERT(VM_MIN_KERNEL_ADDRESS <= start);
+	KASSERT(VM_MAP_IS_KERNEL(map));
+	KASSERT(vm_map_min(map) <= start);
 	KASSERT(start < end);
-	KASSERT(end <= VM_MAX_KERNEL_ADDRESS);
+	KASSERT(end <= vm_map_max(map));
 
 	for (; start < end; start += PAGE_SIZE) {
 		if (!pmap_extract(pmap_kernel(), start, &pa)) {
@@ -485,23 +480,23 @@ uvm_km_pgremove_intrsafe(vaddr_t start, vaddr_t end)
 
 #if defined(DEBUG)
 void
-uvm_km_check_empty(vaddr_t start, vaddr_t end, bool intrsafe)
+uvm_km_check_empty(struct vm_map *map, vaddr_t start, vaddr_t end)
 {
+	struct vm_page *pg;
 	vaddr_t va;
 	paddr_t pa;
 
-	KDASSERT(VM_MIN_KERNEL_ADDRESS <= start);
+	KDASSERT(VM_MAP_IS_KERNEL(map));
+	KDASSERT(vm_map_min(map) <= start);
 	KDASSERT(start < end);
-	KDASSERT(end <= VM_MAX_KERNEL_ADDRESS);
+	KDASSERT(end <= vm_map_max(map));
 
 	for (va = start; va < end; va += PAGE_SIZE) {
 		if (pmap_extract(pmap_kernel(), va, &pa)) {
 			panic("uvm_km_check_empty: va %p has pa 0x%llx",
 			    (void *)va, (long long)pa);
 		}
-		if (!intrsafe) {
-			const struct vm_page *pg;
-
+		if ((map->flags & VM_MAP_INTRSAFE) == 0) {
 			mutex_enter(&uvm_kernel_object->vmobjlock);
 			pg = uvm_pagelookup(uvm_kernel_object,
 			    va - vm_map_min(kernel_map));
@@ -588,7 +583,9 @@ uvm_km_alloc(struct vm_map *map, vsize_t size, vsize_t align, uvm_flag_t flags)
 	loopva = kva;
 	loopsize = size;
 
-	pgaflags = UVM_PGA_USERESERVE;
+	pgaflags = UVM_FLAG_COLORMATCH;
+	if (flags & UVM_KMF_NOWAIT)
+		pgaflags |= UVM_PGA_USERESERVE;
 	if (flags & UVM_KMF_ZERO)
 		pgaflags |= UVM_PGA_ZERO;
 	prot = VM_PROT_READ | VM_PROT_WRITE;
@@ -597,7 +594,13 @@ uvm_km_alloc(struct vm_map *map, vsize_t size, vsize_t align, uvm_flag_t flags)
 	while (loopsize) {
 		KASSERT(!pmap_extract(pmap_kernel(), loopva, NULL));
 
-		pg = uvm_pagealloc(NULL, offset, NULL, pgaflags);
+		pg = uvm_pagealloc_strat(NULL, offset, NULL, pgaflags,
+#ifdef UVM_KM_VMFREELIST
+		   UVM_PGA_STRAT_ONLY, UVM_KM_VMFREELIST
+#else
+		   UVM_PGA_STRAT_NORMAL, 0
+#endif
+		   );
 
 		/*
 		 * out of memory?
@@ -623,7 +626,8 @@ uvm_km_alloc(struct vm_map *map, vsize_t size, vsize_t align, uvm_flag_t flags)
 		 * map it in
 		 */
 
-		pmap_kenter_pa(loopva, VM_PAGE_TO_PHYS(pg), prot);
+		pmap_kenter_pa(loopva, VM_PAGE_TO_PHYS(pg),
+		    prot, PMAP_KMPAGE);
 		loopva += PAGE_SIZE;
 		offset += PAGE_SIZE;
 		loopsize -= PAGE_SIZE;
@@ -655,9 +659,13 @@ uvm_km_free(struct vm_map *map, vaddr_t addr, vsize_t size, uvm_flag_t flags)
 		uvm_km_pgremove(addr, addr + size);
 		pmap_remove(pmap_kernel(), addr, addr + size);
 	} else if (flags & UVM_KMF_WIRED) {
-		uvm_km_pgremove_intrsafe(addr, addr + size);
+		uvm_km_pgremove_intrsafe(map, addr, addr + size);
 		pmap_kremove(addr, size);
 	}
+
+	/*
+	 * uvm_unmap_remove calls pmap_update for us.
+	 */
 
 	uvm_unmap1(map, addr, addr + size, UVM_FLAG_QUANTUM|UVM_FLAG_VAONLY);
 }
@@ -693,7 +701,7 @@ uvm_km_alloc_poolpage_cache(struct vm_map *map, bool waitok)
 		return 0;
 	KASSERT(!pmap_extract(pmap_kernel(), va, NULL));
 again:
-	pg = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_USERESERVE);
+	pg = uvm_pagealloc(NULL, 0, NULL, waitok ? 0 : UVM_PGA_USERESERVE);
 	if (__predict_false(pg == NULL)) {
 		if (waitok) {
 			uvm_wait("plpg");
@@ -703,7 +711,8 @@ again:
 			return 0;
 		}
 	}
-	pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg), VM_PROT_READ|VM_PROT_WRITE);
+	pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
+	    VM_PROT_READ|VM_PROT_WRITE, PMAP_KMPAGE);
 	pmap_update(pmap_kernel());
 
 	return va;
@@ -717,8 +726,13 @@ uvm_km_alloc_poolpage(struct vm_map *map, bool waitok)
 	struct vm_page *pg;
 	vaddr_t va;
 
+
  again:
-	pg = uvm_pagealloc(NULL, 0, NULL, UVM_PGA_USERESERVE);
+#ifdef PMAP_ALLOC_POOLPAGE
+	pg = PMAP_ALLOC_POOLPAGE(waitok ? 0 : UVM_PGA_USERESERVE);
+#else
+	pg = uvm_pagealloc(NULL, 0, NULL, waitok ? 0 : UVM_PGA_USERESERVE);
+#endif
 	if (__predict_false(pg == NULL)) {
 		if (waitok) {
 			uvm_wait("plpg");
@@ -760,7 +774,7 @@ uvm_km_free_poolpage_cache(struct vm_map *map, vaddr_t addr)
 	}
 
 	KASSERT(pmap_extract(pmap_kernel(), addr, NULL));
-	uvm_km_pgremove_intrsafe(addr, addr + PAGE_SIZE);
+	uvm_km_pgremove_intrsafe(map, addr, addr + PAGE_SIZE);
 	pmap_kremove(addr, PAGE_SIZE);
 #if defined(DEBUG)
 	pmap_update(pmap_kernel());

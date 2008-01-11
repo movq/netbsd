@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2003/07/10 10:34:25 lukem Exp $
+#	$NetBSD: Makefile,v 1.6 2008/10/25 22:27:35 apb Exp $
 #
 #	Makefile for the tp documents:
 #   design: TP design/source guide
@@ -59,16 +59,19 @@ appendix_c:
 	ditroff -man -P$(PRINTER) ../man/man8/tpstat.8
 
 appendix_a:
-	ctags -x $(SRCS) | awk '{printf("%s	%s	%s\n",  $$1, $$3, $$2)}'\
-		| sed -e 's-../../sys/netargo/--' > index_by_func.nr
+	ctags -x $(SRCS) \
+		| ${TOOL_AWK} '{printf("%s\t%s\t%s\n",  $$1, $$3, $$2)}' \
+		| ${TOOL_SED} -e 's-../../sys/netargo/--' > index_by_func.nr
 	format -P$(PRINTER) appendix_a.nr
 
 appendix_b:
-	ctags -x $(SRCS) | awk '{printf("%s	%s	%s\n",  $$3, $$1, $$2)}'\
-		| sed -e 's-../../sys/netargo/--' \
+	ctags -x $(SRCS) \
+		| ${TOOL_AWK} '{printf("%s\t%s\t%s\n",  $$3, $$1, $$2)}' \
+		| ${TOOL_SED} -e 's-../../sys/netargo/--' \
 		| sort \
 		| fmtxref -w 80 \
-		| sed	-e 's/					/		/' \
-				-e 's/			/	/' \
+		| ${TOOL_SED} \
+		    -e 's/					/		/' \
+		    -e 's/			/	/' \
 		> index_by_file.nr
 	format -P$(PRINTER) appendix_b.nr

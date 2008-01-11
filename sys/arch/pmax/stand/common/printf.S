@@ -1,4 +1,4 @@
-/*	$NetBSD: printf.S,v 1.4 1999/11/27 03:12:24 simonb Exp $	*/
+/*	$NetBSD: printf.S,v 1.9 2011/03/26 15:49:26 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,10 +33,27 @@
 #include <mips/cpuregs.h>
 #include <machine/dec_prom.h>
 
+	.set	reorder		# make as(1) handle hazard and BDslot
 LEAF(printf)
 	lw	v0, _C_LABEL(callv)	# get pointer to call back vectors
-	lw	v0, 0x30(v0)	# offset for callv->_printf
-	nop
-	j	v0		# call PROM printf
-	nop
+	lw	t9, 0x30(v0)	# offset for callv->_printf
+#ifdef __mips_n32
+	/*
+	 * If someone calls printf with more than 4 args on n32,
+	 * we need to synthesize a o32 call.  For now we assume no more than
+	 * 8 arguments and no 64bit values.
+	 */
+	subu	sp, sp,	48
+	sw	a4, 16(sp)
+	sw	a5, 20(sp)
+	sw	a6, 24(sp)
+	sw	a7, 28(sp)
+	sw	ra, 44(sp)
+	jalr	t9		# call PROM printf
+	lw	ra, 44(sp)
+	addu	sp, sp, 48
+	j	ra
+#else
+	j	t9		# call PROM printf
+#endif
 END(printf)

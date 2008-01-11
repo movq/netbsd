@@ -1,4 +1,4 @@
-/*	$NetBSD: ppp_tty.c,v 1.51 2007/11/28 21:44:11 ad Exp $	*/
+/*	$NetBSD: ppp_tty.c,v 1.57 2010/04/05 07:22:24 joerg Exp $	*/
 /*	Id: ppp_tty.c,v 1.3 1996/07/01 01:04:11 paulus Exp 	*/
 
 /*
@@ -93,7 +93,7 @@
 /* from NetBSD: if_ppp.c,v 1.15.2.2 1994/07/28 05:17:58 cgd Exp */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.51 2007/11/28 21:44:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.57 2010/04/05 07:22:24 joerg Exp $");
 
 #include "ppp.h"
 
@@ -125,10 +125,7 @@ __KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.51 2007/11/28 21:44:11 ad Exp $");
 #include <net/slcompress.h>
 #endif
 
-#include "bpfilter.h"
-#if NBPFILTER > 0 || defined(PPP_FILTER)
 #include <net/bpf.h>
-#endif
 #include <net/ppp_defs.h>
 #include <net/if_ppp.h>
 #include <net/if_pppvar.h>
@@ -156,7 +153,7 @@ struct linesw ppp_disc = {	/* XXX should be static */
 };
 
 static void	ppprcvframe(struct ppp_softc *sc, struct mbuf *m);
-static u_int16_t pppfcs(u_int16_t fcs, u_char *cp, int len);
+static uint16_t pppfcs(uint16_t fcs, const uint8_t *cp, int len);
 static void	pppsyncstart(struct ppp_softc *sc);
 static void	pppasyncstart(struct ppp_softc *);
 static void	pppasyncctlp(struct ppp_softc *);
@@ -208,8 +205,9 @@ pppopen(dev_t dev, struct tty *tp)
     struct ppp_softc *sc;
     int error, s;
 
-    if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
-	NULL)) != 0)
+    error = kauth_authorize_network(l->l_cred, KAUTH_NETWORK_INTERFACE_PPP,
+	KAUTH_REQ_NETWORK_INTERFACE_PPP_ADD, NULL, NULL, NULL);
+    if (error)
 	return (error);
 
     s = spltty();
@@ -230,10 +228,8 @@ pppopen(dev_t dev, struct tty *tp)
     if (sc->sc_relinq)
 	(*sc->sc_relinq)(sc);	/* get previous owner to relinquish the unit */
 
-#if NBPFILTER > 0
     /* Switch DLT to PPP-over-serial. */
     bpf_change_type(&sc->sc_if, DLT_PPP_SERIAL, PPP_HDRLEN);
-#endif
 
     sc->sc_ilen = 0;
     sc->sc_m = NULL;
@@ -297,10 +293,8 @@ pppasyncrelinq(struct ppp_softc *sc)
 {
     int s;
 
-#if NBPFILTER > 0
     /* Change DLT to back none. */
     bpf_change_type(&sc->sc_if, DLT_NULL, 0);
-#endif
 
     s = spltty();
     if (sc->sc_outm) {
@@ -352,7 +346,7 @@ pppread(struct tty *tp, struct uio *uio, int flag)
 	    mutex_spin_exit(&tty_lock);
 	    return (EWOULDBLOCK);
 	}
-	error = ttysleep(tp, &tp->t_rawq.c_cv, true, 0);
+	error = ttysleep(tp, &tp->t_rawcv, true, 0);
 	if (error) {
 	    mutex_spin_exit(&tty_lock);
 	    return error;
@@ -454,8 +448,8 @@ ppptioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	break;
 
     case PPPIOCSASYNCMAP:
-	if ((error = kauth_authorize_generic(l->l_cred,
- 	  KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	if ((error = kauth_authorize_device_tty(l->l_cred,
+ 	  KAUTH_DEVICE_TTY_PRIVSET, tp)) != 0)
 	    break;
 	sc->sc_asyncmap[0] = *(u_int *)data;
 	break;
@@ -465,8 +459,8 @@ ppptioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	break;
 
     case PPPIOCSRASYNCMAP:
-	if ((error = kauth_authorize_generic(l->l_cred,
-	  KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	if ((error = kauth_authorize_device_tty(l->l_cred,
+	  KAUTH_DEVICE_TTY_PRIVSET, tp)) != 0)
 	    break;
 	sc->sc_rasyncmap = *(u_int *)data;
 	break;
@@ -476,8 +470,8 @@ ppptioctl(struct tty *tp, u_long cmd, void *data, int flag, struct lwp *l)
 	break;
 
     case PPPIOCSXASYNCMAP:
-	if ((error = kauth_authorize_generic(l->l_cred,
-	  KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	if ((error = kauth_authorize_device_tty(l->l_cred,
+	  KAUTH_DEVICE_TTY_PRIVSET, tp)) != 0)
 	    break;
 	s = spltty();
 	bcopy(data, sc->sc_asyncmap, sizeof(sc->sc_asyncmap));
@@ -610,7 +604,7 @@ bail:
 /*
  * FCS lookup table as calculated by genfcstab.
  */
-static const u_int16_t fcstab[256] = {
+static const uint16_t fcstab[256] = {
 	0x0000,	0x1189,	0x2312,	0x329b,	0x4624,	0x57ad,	0x6536,	0x74bf,
 	0x8c48,	0x9dc1,	0xaf5a,	0xbed3,	0xca6c,	0xdbe5,	0xe97e,	0xf8f7,
 	0x1081,	0x0108,	0x3393,	0x221a,	0x56a5,	0x472c,	0x75b7,	0x643e,
@@ -648,8 +642,8 @@ static const u_int16_t fcstab[256] = {
 /*
  * Calculate a new FCS given the current FCS and the new data.
  */
-static u_int16_t
-pppfcs(u_int16_t fcs, u_char *cp, int len)
+static uint16_t
+pppfcs(uint16_t fcs, const uint8_t *cp, int len)
 {
     while (len--)
 	fcs = PPP_FCS(fcs, *cp++);
@@ -741,7 +735,7 @@ pppasyncstart(struct ppp_softc *sc)
 	    }
 
 	    /* Calculate the FCS for the first mbuf's worth. */
-	    sc->sc_outfcs = pppfcs(PPP_INITFCS, mtod(m, u_char *), m->m_len);
+	    sc->sc_outfcs = pppfcs(PPP_INITFCS, mtod(m, uint8_t *), m->m_len);
 	}
 
 	for (;;) {
@@ -844,7 +838,7 @@ pppasyncstart(struct ppp_softc *sc)
 		/* Finished a packet */
 		break;
 	    }
-	    sc->sc_outfcs = pppfcs(sc->sc_outfcs, mtod(m, u_char *), m->m_len);
+	    sc->sc_outfcs = pppfcs(sc->sc_outfcs, mtod(m, uint8_t *), m->m_len);
 	}
 
 	/*

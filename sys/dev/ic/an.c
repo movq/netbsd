@@ -1,4 +1,4 @@
-/*	$NetBSD: an.c,v 1.50 2007/12/09 20:27:57 jmcneill Exp $	*/
+/*	$NetBSD: an.c,v 1.59 2010/04/05 07:19:33 joerg Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -77,9 +77,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: an.c,v 1.50 2007/12/09 20:27:57 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: an.c,v 1.59 2010/04/05 07:19:33 joerg Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -109,10 +108,8 @@ __KERNEL_RCSID(0, "$NetBSD: an.c,v 1.50 2007/12/09 20:27:57 jmcneill Exp $");
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <dev/ic/anreg.h>
 #include <dev/ic/anvar.h>
@@ -173,11 +170,10 @@ an_attach(struct an_softc *sc)
 	int chan, chan_min, chan_max;
 
 	s = splnet();
-	sc->sc_invalid = 0;
 
 	an_wait(sc);
 	if (an_reset(sc) != 0) {
-		sc->sc_invalid = 1;
+		config_deactivate(sc->sc_dev);
 		splx(s);
 		return 1;
 	}
@@ -185,8 +181,7 @@ an_attach(struct an_softc *sc)
 	/* Load factory config */
 	if (an_cmd(sc, AN_CMD_READCFG, 0) != 0) {
 		splx(s);
-		aprint_error("%s: failed to load config data\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "failed to load config data\n");
 		return 1;
 	}
 
@@ -194,7 +189,7 @@ an_attach(struct an_softc *sc)
 	buflen = sizeof(sc->sc_config);
 	if (an_read_rid(sc, AN_RID_GENCONFIG, &sc->sc_config, &buflen) != 0) {
 		splx(s);
-		aprint_error("%s: read config failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "read config failed\n");
 		return 1;
 	}
 
@@ -202,7 +197,7 @@ an_attach(struct an_softc *sc)
 	buflen = sizeof(sc->sc_caps);
 	if (an_read_rid(sc, AN_RID_CAPABILITIES, &sc->sc_caps, &buflen) != 0) {
 		splx(s);
-		aprint_error("%s: read caps failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "read caps failed\n");
 		return 1;
 	}
 
@@ -249,11 +244,11 @@ an_attach(struct an_softc *sc)
 		buflen = sizeof(struct an_rid_wepkey);
 	}
 
-	aprint_normal("%s: %s %s (firmware %s)\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(sc->sc_dev, "%s %s (firmware %s)\n",
 	    sc->sc_caps.an_manufname, sc->sc_caps.an_prodname,
 	    sc->sc_caps.an_prodvers);
 
-	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_NOTRAILERS | IFF_SIMPLEX |
@@ -324,10 +319,8 @@ an_attach(struct an_softc *sc)
 	/*
 	 * radiotap BPF device
 	 */
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
+	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
 	    sizeof(struct ieee80211_frame) + 64, &sc->sc_drvbpf);
-#endif
 
 	memset(&sc->sc_rxtapu, 0, sizeof(sc->sc_rxtapu));
 	sc->sc_rxtap.ar_ihdr.it_len = htole16(sizeof(sc->sc_rxtapu));
@@ -348,7 +341,7 @@ an_attach(struct an_softc *sc)
 /*
  * Setup sysctl(3) MIB, hw.an.*
  *
- * TBD condition CTLFLAG_PERMANENT on being an LKM or not
+ * TBD condition CTLFLAG_PERMANENT on being a module or not
  */
 SYSCTL_SETUP(sysctl_an, "sysctl an(4) subtree setup")
 {
@@ -418,7 +411,6 @@ an_detach(struct an_softc *sc)
 		return 0;
 
 	s = splnet();
-	sc->sc_invalid = 1;
 	an_stop(ifp, 1);
 	ieee80211_ifdetach(ic);
 	if_detach(ifp);
@@ -427,25 +419,17 @@ an_detach(struct an_softc *sc)
 }
 
 int
-an_activate(struct device *self, enum devact act)
+an_activate(device_t self, enum devact act)
 {
-	struct an_softc *sc = (struct an_softc *)self;
-	int s, error = 0;
+	struct an_softc *sc = device_private(self);
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
-		sc->sc_invalid = 1;
 		if_deactivate(&sc->sc_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-
-	return error;
 }
 
 int
@@ -456,8 +440,7 @@ an_intr(void *arg)
 	int i;
 	u_int16_t status;
 
-	if (!sc->sc_enabled || sc->sc_invalid ||
-	    !device_is_active(&sc->sc_dev) ||
+	if (!sc->sc_enabled || !device_is_active(sc->sc_dev) ||
 	    (ifp->if_flags & IFF_RUNNING) == 0)
 		return 0;
 
@@ -469,12 +452,12 @@ an_intr(void *arg)
 
 	/* maximum 10 loops per interrupt */
 	for (i = 0; i < 10; i++) {
-		if (!sc->sc_enabled || sc->sc_invalid)
+		if (!sc->sc_enabled || !device_is_active(sc->sc_dev))
 			return 1;
 		if (CSR_READ_2(sc, AN_SW0) != AN_MAGIC) {
 			DPRINTF(("an_intr: magic number changed: %x\n",
 			    CSR_READ_2(sc, AN_SW0)));
-			sc->sc_invalid = 1;
+			config_deactivate(sc->sc_dev);
 			return 1;
 		}
 		status = CSR_READ_2(sc, AN_EVENT_STAT);
@@ -635,7 +618,7 @@ an_init(struct ifnet *ifp)
 
 	/* Enable the MAC */
 	if (an_cmd(sc, AN_CMD_ENABLE, 0)) {
-		printf("%s: failed to enable MAC\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "failed to enable MAC\n");
 		an_stop(ifp, 1);
 		return ENXIO;
 	}
@@ -666,7 +649,7 @@ an_stop(struct ifnet *ifp, int disable)
 
 	s = splnet();
 	ieee80211_new_state(&sc->sc_ic, IEEE80211_S_INIT, -1);
-	if (!sc->sc_invalid) {
+	if (device_is_active(sc->sc_dev)) {
 		an_cmd(sc, AN_CMD_FORCE_SYNCLOSS, 0);
 		CSR_WRITE_2(sc, AN_INT_EN, 0);
 		an_cmd(sc, AN_CMD_DISABLE, 0);
@@ -700,9 +683,9 @@ an_start(struct ifnet *ifp)
 	u_int16_t len;
 	int cur, fid;
 
-	if (!sc->sc_enabled || sc->sc_invalid) {
+	if (!sc->sc_enabled || !device_is_active(sc->sc_dev)) {
 		DPRINTF(("an_start: noop: enabled %d invalid %d\n",
-		    sc->sc_enabled, sc->sc_invalid));
+		    sc->sc_enabled, !device_is_active(sc->sc_dev)));
 		return;
 	}
 
@@ -726,10 +709,7 @@ an_start(struct ifnet *ifp)
 		}
 		IFQ_DEQUEUE(&ifp->if_snd, m);
 		ifp->if_opackets++;
-#if NBPFILTER > 0
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif
+		bpf_mtap(ifp, m);
 		eh = mtod(m, struct ether_header *);
 		ni = ieee80211_find_txnode(ic, eh->ether_dhost);
 		if (ni == NULL) {
@@ -739,10 +719,7 @@ an_start(struct ifnet *ifp)
 		if ((m = ieee80211_encap(ic, m, ni)) == NULL)
 			goto bad;
 		ieee80211_free_node(ni);
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf)
-			bpf_mtap(ic->ic_rawbpf, m);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m);
 
 		wh = mtod(m, struct ieee80211_frame *);
 		if (ic->ic_flags & IEEE80211_F_PRIVACY)
@@ -782,7 +759,6 @@ an_start(struct ifnet *ifp)
 			frmhdr.an_tx_rate = 0;
 
 		/* XXX radiotap for tx must be completed */
-#if NBPFILTER > 0
 		if (sc->sc_drvbpf) {
 			struct an_tx_radiotap_header *tap = &sc->sc_txtap;
 			tap->at_rate = ic->ic_bss->ni_rates.rs_rates[ic->ic_bss->ni_txrate];
@@ -791,7 +767,6 @@ an_start(struct ifnet *ifp)
 			/* TBD tap->wt_flags */
 			bpf_mtap2(sc->sc_drvbpf, tap, tap->at_ihdr.it_len, m);
 		}
-#endif
 
 #ifdef AN_DEBUG
 		if ((ifp->if_flags & (IFF_DEBUG|IFF_LINK2)) ==
@@ -849,7 +824,7 @@ an_reset(struct an_softc *sc)
 	an_cmd(sc, AN_CMD_NOOP2, 0);
 
 	if (an_cmd(sc, AN_CMD_FORCE_SYNCLOSS, 0) == ETIMEDOUT) {
-		printf("%s: reset failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "reset failed\n");
 		return ETIMEDOUT;
 	}
 
@@ -883,13 +858,15 @@ an_ioctl(struct ifnet *ifp, u_long command, void *data)
 	struct an_softc *sc = ifp->if_softc;
 	int s, error = 0;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return ENXIO;
 
 	s = splnet();
 
 	switch (command) {
 	case SIOCSIFFLAGS:
+		if ((error = ifioctl_common(ifp, command, data)) != 0)
+			break;
 		if (ifp->if_flags & IFF_UP) {
 			if (sc->sc_enabled) {
 				/*
@@ -1110,7 +1087,7 @@ an_set_nwkey_wep(struct an_softc *sc, struct ieee80211_nwkey *nwkey)
 	}
 	DPRINTF(("an_set_nwkey_wep: %s: %sold(%d:%d,%d,%d,%d) "
 	    "pers(%d:%d,%d,%d,%d) new(%d:%d,%d,%d,%d)\n",
-	    sc->sc_dev.dv_xname,
+	    device_xname(sc->sc_dev),
 	    ((nwkey->i_wepon & IEEE80211_NWKEY_PERSIST) ? "persist: " : ""),
 	    sc->sc_tx_key,
 	    sc->sc_wepkeys[0].an_wep_keylen, sc->sc_wepkeys[1].an_wep_keylen,
@@ -1264,8 +1241,11 @@ an_get_nwkey(struct an_softc *sc, struct ieee80211_nwkey *nwkey)
 		if (nwkey->i_key[i].i_keydat == NULL)
 			continue;
 		/* do not show any keys to non-root user */
-		if ((error = kauth_authorize_generic(curlwp->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+		/* XXX-elad: why is this inside a loop? */
+		if ((error = kauth_authorize_network(curlwp->l_cred,
+		    KAUTH_NETWORK_INTERFACE,
+		    KAUTH_REQ_NETWORK_INTERFACE_GETPRIV, sc->sc_ic.ic_ifp,
+		    KAUTH_ARG(SIOCG80211NWKEY), NULL)) != 0)
 			break;
 		nwkey->i_key[i].i_keylen = sc->sc_wepkeys[i].an_wep_keylen;
 		if (nwkey->i_key[i].i_keylen < 0) {
@@ -1466,7 +1446,6 @@ an_rx_intr(struct an_softc *sc)
 	m->m_pkthdr.rcvif = ifp;
 	CSR_WRITE_2(sc, AN_EVENT_ACK, AN_EV_RX);
 
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf) {
 		struct an_rx_radiotap_header *tap = &sc->sc_rxtap;
 
@@ -1481,7 +1460,6 @@ an_rx_intr(struct an_softc *sc)
 
 		bpf_mtap2(sc->sc_drvbpf, tap, tap->ar_ihdr.it_len, m);
 	}
-#endif
 	wh = mtod(m, struct ieee80211_frame_min *);
 	if (wh->i_fc[1] & IEEE80211_FC1_WEP) {
 		/*
@@ -1493,7 +1471,7 @@ an_rx_intr(struct an_softc *sc)
 
 #ifdef AN_DEBUG
 	if (an_debug > 1)
-		an_dump_pkt(sc->sc_dev.dv_xname, m);
+		an_dump_pkt(device_xname(sc->sc_dev), m);
 #endif /* AN_DEBUG */
 
 	ni = ieee80211_find_rxnode(ic, wh);
@@ -1535,7 +1513,7 @@ an_tx_intr(struct an_softc *sc, int status)
 		if (ifp->if_flags & IFF_DEBUG)
 			printf("%s: tx mismatch: "
 			    "expected %x(%d), actual %x(%d)\n",
-			    sc->sc_dev.dv_xname,
+			    device_xname(sc->sc_dev),
 			    sc->sc_txd[sc->sc_txcur].d_fid, sc->sc_txcur,
 			    fid, cur);
 	}
@@ -1572,7 +1550,7 @@ an_cmd(struct an_softc *sc, int cmd, int val)
 	/* make sure that previous command completed */
 	if (CSR_READ_2(sc, AN_COMMAND) & AN_CMD_BUSY) {
 		if (sc->sc_if.if_flags & IFF_DEBUG)
-			printf("%s: command 0x%x busy\n", sc->sc_dev.dv_xname,
+			printf("%s: command 0x%x busy\n", device_xname(sc->sc_dev),
 			    CSR_READ_2(sc, AN_COMMAND));
 		CSR_WRITE_2(sc, AN_EVENT_ACK, AN_EV_CLR_STUCK_BUSY);
 	}
@@ -1605,14 +1583,14 @@ an_cmd(struct an_softc *sc, int cmd, int val)
 	if (i == AN_TIMEOUT) {
 		if (sc->sc_if.if_flags & IFF_DEBUG)
 			printf("%s: command 0x%x param 0x%x timeout\n",
-			    sc->sc_dev.dv_xname, cmd, val);
+			    device_xname(sc->sc_dev), cmd, val);
 		return ETIMEDOUT;
 	}
 	if (status & AN_STAT_CMD_RESULT) {
 		if (sc->sc_if.if_flags & IFF_DEBUG)
 			printf("%s: command 0x%x param 0x%x status 0x%x "
 			    "resp 0x%x 0x%x 0x%x\n",
-			    sc->sc_dev.dv_xname, cmd, val, status,
+			    device_xname(sc->sc_dev), cmd, val, status,
 			    CSR_READ_2(sc, AN_RESP0), CSR_READ_2(sc, AN_RESP1),
 			    CSR_READ_2(sc, AN_RESP2));
 		return EIO;
@@ -1653,15 +1631,15 @@ an_seek_bap(struct an_softc *sc, int id, int off)
 			break;
 		if (i == AN_TIMEOUT) {
 			printf("%s: timeout in an_seek_bap to 0x%x/0x%x\n",
-			    sc->sc_dev.dv_xname, id, off);
+			    device_xname(sc->sc_dev), id, off);
 			sc->sc_bap_off = AN_OFF_ERR;	/* invalidate */
 			return ETIMEDOUT;
 		}
 		DELAY(10);
 	}
 	if (status & AN_OFF_ERR) {
-		printf("%s: failed in an_seek_bap to 0x%x/0x%x\n",
-		    sc->sc_dev.dv_xname, id, off);
+		aprint_error_dev(sc->sc_dev, "failed in an_seek_bap to 0x%x/0x%x\n",
+		    id, off);
 		sc->sc_bap_off = AN_OFF_ERR;	/* invalidate */
 		return EIO;
 	}
@@ -1751,8 +1729,8 @@ an_alloc_fid(struct an_softc *sc, int len, int *idp)
 	int i;
 
 	if (an_cmd(sc, AN_CMD_ALLOC_MEM, len)) {
-		printf("%s: failed to allocate %d bytes on NIC\n",
-		    sc->sc_dev.dv_xname, len);
+		aprint_error_dev(sc->sc_dev, "failed to allocate %d bytes on NIC\n",
+		    len);
 		return ENOMEM;
 	}
 
@@ -1760,7 +1738,7 @@ an_alloc_fid(struct an_softc *sc, int len, int *idp)
 		if (CSR_READ_2(sc, AN_EVENT_STAT) & AN_EV_ALLOC)
 			break;
 		if (i == AN_TIMEOUT) {
-			printf("%s: timeout in alloc\n", sc->sc_dev.dv_xname);
+			printf("%s: timeout in alloc\n", device_xname(sc->sc_dev));
 			return ETIMEDOUT;
 		}
 		DELAY(10);
@@ -1789,9 +1767,9 @@ an_read_rid(struct an_softc *sc, int rid, void *buf, int *buflenp)
 
 	len = le16toh(len) - 2;
 	if (*buflenp < len) {
-		printf("%s: record buffer is too small, "
+		aprint_error_dev(sc->sc_dev, "record buffer is too small, "
 		    "rid=%x, size=%d, len=%d\n",
-		    sc->sc_dev.dv_xname, rid, *buflenp, len);
+		    rid, *buflenp, len);
 		return ENOSPC;
 	}
 	*buflenp = len;
@@ -1855,7 +1833,7 @@ an_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 		    ni->ni_esslen);
 		ni->ni_rates = ic->ic_sup_rates[IEEE80211_MODE_11B];	/*XXX*/
 		if (ic->ic_ifp->if_flags & IFF_DEBUG) {
-			printf("%s: ", sc->sc_dev.dv_xname);
+			printf("%s: ", device_xname(sc->sc_dev));
 			if (ic->ic_opmode == IEEE80211_M_STA)
 				printf("associated ");
 			else

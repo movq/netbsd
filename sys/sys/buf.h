@@ -1,7 +1,7 @@
-/*     $NetBSD: buf.h,v 1.102 2008/01/02 11:49:07 ad Exp $ */
+/*     $NetBSD: buf.h,v 1.116 2011/04/27 09:47:25 hannken Exp $ */
 
 /*-
- * Copyright (c) 1999, 2000, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2000, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -91,28 +84,6 @@ struct kauth_cred;
 
 #define NOLIST ((struct buf *)0x87654321)
 
-/*
- * To avoid including <ufs/ffs/softdep.h>
- */
-LIST_HEAD(workhead, worklist);
-
-/*
- * These are currently used only by the soft dependency code, hence
- * are stored once in a global variable. If other subsystems wanted
- * to use these hooks, a pointer to a set of bio_ops could be added
- * to each buffer.
- */
-struct bio_ops {
- 	void	(*io_start)(struct buf *);
- 	void	(*io_complete)(struct buf *);
- 	void	(*io_deallocate)(struct buf *);
- 	int	(*io_fsync)(struct vnode *, int);
- 	int	(*io_sync)(struct mount *);
-	void	(*io_movedeps)(struct buf *, struct buf *);
-	int	(*io_countdeps)(struct buf *, int);
-	void	(*io_pageiodone)(struct buf *);
-};
-
 extern kmutex_t bufcache_lock;
 extern kmutex_t buffer_lock;
 
@@ -121,9 +92,10 @@ extern kmutex_t buffer_lock;
  *
  * Field markings and the corresponding locks:
  *
- * b	owner (thread that holds BB_BUSY) and/or thread calling biodone()
+ * b	thread of execution that holds BC_BUSY, does not correspond
+ *	  directly to any particular LWP
  * c	bufcache_lock
- * l	b_objlock
+ * o	b_objlock
  *
  * For buffers associated with a vnode, b_objlock points to vp->v_interlock.
  * If not associated with a vnode, it points to the generic buffer_lock.
@@ -164,10 +136,11 @@ struct buf {
 
 	kcondvar_t		b_busy;		/* c: threads waiting on buf */
 	u_int			b_refcnt;	/* c: refcount for b_busy */
-	struct workhead		b_dep;		/* c: softdep */
+	void			*b_unused;	/*  : unused */
 	LIST_ENTRY(buf)		b_hash;		/* c: hash chain */
 	LIST_ENTRY(buf)		b_vnbufs;	/* c: associated vnode */
 	TAILQ_ENTRY(buf)	b_freelist;	/* c: position if not active */
+	LIST_ENTRY(buf)		b_wapbllist;	/* c: transaction buffer list */
 	daddr_t			b_lblkno;	/* c: logical block number */
 	int			b_freelistindex;/* c: free list index (BQ_) */
 	u_int			b_cflags;	/* c: BC_* flags */
@@ -189,9 +162,7 @@ struct buf {
  */
 #define	BC_AGE		0x00000001	/* Move to age queue when I/O done. */
 #define	BC_BUSY		0x00000010	/* I/O in progress. */
-#define BC_SCANNED	0x00000020	/* Block already pushed during sync */
 #define	BC_INVAL	0x00002000	/* Does not contain valid info. */
-#define	BC_LOCKED	0x00004000	/* Locked in core (not reusable). */
 #define	BC_NOCACHE	0x00008000	/* Do not cache block after use. */
 #define	BC_WANTED	0x00800000	/* Process wants this buffer. */
 #define	BC_VFLUSH	0x04000000	/* Buffer is being synced. */
@@ -201,21 +172,22 @@ struct buf {
  */
 #define	BO_DELWRI	0x00000080	/* Delay I/O until buffer reused. */
 #define	BO_DONE		0x00000200	/* I/O completed. */
-#define	BO_COWDONE	0x00000400	/* Copy-on-write already done. */
 
 /*
  * These flags are kept in b_flags (owned by buffer holder).
  */
 #define	B_WRITE		0x00000000	/* Write buffer (pseudo flag). */
 #define	B_ASYNC		0x00000004	/* Start I/O, do not wait. */
+#define	B_COWDONE	0x00000400	/* Copy-on-write already done. */
 #define	B_GATHERED	0x00001000	/* LFS: already in a segment. */
+#define	B_LOCKED	0x00004000	/* Locked in core (not reusable). */
 #define	B_PHYS		0x00040000	/* I/O to user memory. */
 #define	B_RAW		0x00080000	/* Set by physio for raw transfers. */
 #define	B_READ		0x00100000	/* Read buffer. */
 #define	B_DEVPRIVATE	0x02000000	/* Device driver private flag. */
 
 #define BUF_FLAGBITS \
-    "\20\1AGE\3ASYNC\4BAD\5BUSY\6SCANNED\10DELWRI" \
+    "\20\1AGE\3ASYNC\4BAD\5BUSY\10DELWRI" \
     "\12DONE\13COWDONE\15GATHERED\16INVAL\17LOCKED\20NOCACHE" \
     "\23PHYS\24RAW\25READ\32DEVPRIVATE\33VFLUSH"
 
@@ -250,6 +222,10 @@ do {									\
 #define B_CLRBUF	0x01	/* Request allocated buffer be cleared. */
 #define B_SYNC		0x02	/* Do all allocations synchronously. */
 #define B_METAONLY	0x04	/* Return indirect block buffer. */
+#define B_CONTIG	0x08	/* Allocate file contiguously. */
+
+/* Flags to bread() and breadn(). */
+#define B_MODIFY	0x01	/* Hint: caller might modify buffer */
 
 #ifdef _KERNEL
 
@@ -263,21 +239,35 @@ do {									\
 #define	BPRIO_TIMENONCRITICAL	0
 #define	BPRIO_DEFAULT		BPRIO_TIMELIMITED
 
-extern	struct bio_ops *bioopsp;
 extern	u_int nbuf;		/* The number of buffer headers */
+
+/*
+ * Definitions for the buffer free lists.
+ */
+#define	BQUEUES		4		/* number of free buffer queues */
+
+#define	BQ_LOCKED	0		/* super-blocks &c */
+#define	BQ_LRU		1		/* lru, useful buffers */
+#define	BQ_AGE		2		/* rubbish */
+#define	BQ_EMPTY	3		/* buffer headers with no memory */
+
+struct bqueue {
+	TAILQ_HEAD(, buf) bq_queue;
+	uint64_t bq_bytes;
+	buf_t *bq_marker;
+};
+
+extern struct bqueue bufqueues[BQUEUES];
 
 __BEGIN_DECLS
 int	allocbuf(buf_t *, int, int);
 void	bawrite(buf_t *);
-void	bdirty(buf_t *);
 void	bdwrite(buf_t *);
 void	biodone(buf_t *);
 int	biowait(buf_t *);
-int	bread(struct vnode *, daddr_t, int, struct kauth_cred *, buf_t **);
-int	breada(struct vnode *, daddr_t, int, daddr_t, int, struct kauth_cred *,
-	       buf_t **);
+int	bread(struct vnode *, daddr_t, int, struct kauth_cred *, int, buf_t **);
 int	breadn(struct vnode *, daddr_t, int, daddr_t *, int *, int,
-	       struct kauth_cred *, buf_t **);
+	       struct kauth_cred *, int, buf_t **);
 void	brelsel(buf_t *, int);
 void	brelse(buf_t *, int);
 void	bremfree(buf_t *);
@@ -299,14 +289,14 @@ int	buf_syncwait(void);
 u_long	buf_memcalc(void);
 int	buf_drain(int);
 int	buf_setvalimit(vsize_t);
-#ifdef DDB
+#if defined(DDB) || defined(DEBUGPRINT)
 void	vfs_buf_print(buf_t *, int, void (*)(const char *, ...));
 #endif
 buf_t	*getiobuf(struct vnode *, bool);
 void	putiobuf(buf_t *);
 void	buf_init(buf_t *);
 void	buf_destroy(buf_t *);
-int	bbusy(buf_t *, bool, int);
+int	bbusy(buf_t *, bool, int, kmutex_t *);
 
 void	nestiobuf_iodone(buf_t *);
 void	nestiobuf_setup(buf_t *, buf_t *, int, size_t);

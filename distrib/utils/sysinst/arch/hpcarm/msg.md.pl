@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.pl,v 1.1 2005/12/30 11:40:23 rjs Exp $	*/
+/*	$NetBSD: msg.md.pl,v 1.6 2011/04/04 08:30:30 mbalmer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -14,11 +14,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -39,59 +35,20 @@
 /* MD Message catalog -- Polish, hpcarm version */
 
 message md_hello
-{Jesli uruchomiles komputer z dyskietki, mozesz ja teraz wyciagnac.
+{
+}
 
+message md_may_remove_boot_medium
+{Jesli uruchomiles komputer z dyskietki, mozesz ja teraz wyciagnac.
 }
 
 message dobad144
 {Instalowanie tablicy zlych blokow ...
 }
 
-message getboottype
-{Czy chcesz zainstalowac normalne bootbloki, czy te do uzycia z zewn. konsola?
-}
-
-message dobootblks
-{Instalowanie bootblokow na %s....
-}
-
-message onebiosmatch
-{Ten dysk odpowiada ponizszemu dyskowi BIOS:
-
-}
-
-message onebiosmatch_header
-{BIOS # cylindry  glowice sektory
------- ---------- ------- -------
-}
-
-message onebiosmatch_row
-{%-6x %-10d %-7d %d\n}
-
-message biosmultmatch
-{Ten dysk odpowiada ponizszym dyskom BIOS:
-
-}
-
-message biosmultmatch_header
-{   BIOS # cylindry  glowice sektory
-   ------ ---------- ------- -------
-}
-
-message biosmultmatch_row
-{%-1d: %-6x %-10d %-7d %d\n}
-
-message pickdisk
-{Wybierz dysk: }
-
-message partabovechs
-{Czesc NetBSD dysku lezy poza obszarem, ktory BIOS w twojej maszynie moze
-zaadresowac. Nie mozliwe bedzie bootowanie z tego dysku. Jestes pewien, ze
-chcesz to zrobic?
-
-(Odpowiedz 'nie' zabierze cie spowrotem do menu edycji partycji.)}
-
 message set_kernel_1
-{Kernel (GENERIC)}
+{Kernel (IPAQ)}
 message set_kernel_2
-{Kernel (TX3912)}
+{Kernel (JORNADA720)}
+message set_kernel_3
+{Kernel (WZERO3)}

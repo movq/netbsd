@@ -1,7 +1,7 @@
-/*	$NetBSD: linux_file.c,v 1.90 2007/12/20 23:02:54 dsl Exp $	*/
+/*	$NetBSD: linux_file.c,v 1.103 2011/04/14 00:59:06 christos Exp $	*/
 
 /*-
- * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,13 +35,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.90 2007/12/20 23:02:54 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.103 2011/04/14 00:59:06 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/file.h>
+#include <sys/fcntl.h>
 #include <sys/stat.h>
 #include <sys/filedesc.h>
 #include <sys/ioctl.h>
@@ -77,11 +71,11 @@ __KERNEL_RCSID(0, "$NetBSD: linux_file.c,v 1.90 2007/12/20 23:02:54 dsl Exp $");
 
 static int linux_to_bsd_ioflags(int);
 static int bsd_to_linux_ioflags(int);
-static void bsd_to_linux_flock(struct flock *, struct linux_flock *);
-static void linux_to_bsd_flock(struct linux_flock *, struct flock *);
 #ifndef __amd64__
 static void bsd_to_linux_stat(struct stat *, struct linux_stat *);
 #endif
+
+conv_linux_flock(linux, flock)
 
 /*
  * Some file-related calls are handled here. The usual flag conversion
@@ -108,6 +102,8 @@ linux_to_bsd_ioflags(int lflags)
 	res |= cvtto_bsd_mask(lflags, LINUX_O_SYNC, O_FSYNC);
 	res |= cvtto_bsd_mask(lflags, LINUX_FASYNC, O_ASYNC);
 	res |= cvtto_bsd_mask(lflags, LINUX_O_APPEND, O_APPEND);
+	res |= cvtto_bsd_mask(lflags, LINUX_O_DIRECTORY, O_DIRECTORY);
+	res |= cvtto_bsd_mask(lflags, LINUX_O_CLOEXEC, O_CLOEXEC);
 
 	return res;
 }
@@ -128,6 +124,8 @@ bsd_to_linux_ioflags(int bflags)
 	res |= cvtto_linux_mask(bflags, O_FSYNC, LINUX_O_SYNC);
 	res |= cvtto_linux_mask(bflags, O_ASYNC, LINUX_FASYNC);
 	res |= cvtto_linux_mask(bflags, O_APPEND, LINUX_O_APPEND);
+	res |= cvtto_linux_mask(bflags, O_DIRECTORY, LINUX_O_DIRECTORY);
+	res |= cvtto_linux_mask(bflags, O_CLOEXEC, LINUX_O_CLOEXEC);
 
 	return res;
 }
@@ -191,70 +189,19 @@ linux_sys_open(struct lwp *l, const struct linux_sys_open_args *uap, register_t 
 	 * this the controlling terminal.
 	 */
         if (!(fl & O_NOCTTY) && SESS_LEADER(p) && !(p->p_lflag & PL_CONTROLT)) {
-                struct filedesc *fdp = p->p_fd;
-                struct file     *fp;
+                file_t *fp;
 
-		fp = fd_getfile(fdp, *retval);
+		fp = fd_getfile(*retval);
 
                 /* ignore any error, just give it a try */
                 if (fp != NULL) {
-			FILE_USE(fp);
 			if (fp->f_type == DTYPE_VNODE) {
-				(fp->f_ops->fo_ioctl) (fp, TIOCSCTTY,
-				    (void *) 0, l);
+				(fp->f_ops->fo_ioctl) (fp, TIOCSCTTY, NULL);
 			}
-			FILE_UNUSE(fp, l);
+			fd_putfile(*retval);
 		}
         }
 	return 0;
-}
-
-/*
- * The next two functions take care of converting the flock
- * structure back and forth between Linux and NetBSD format.
- * The only difference in the structures is the order of
- * the fields, and the 'whence' value.
- */
-static void
-bsd_to_linux_flock(struct flock *bfp, struct linux_flock *lfp)
-{
-
-	lfp->l_start = bfp->l_start;
-	lfp->l_len = bfp->l_len;
-	lfp->l_pid = bfp->l_pid;
-	lfp->l_whence = bfp->l_whence;
-	switch (bfp->l_type) {
-	case F_RDLCK:
-		lfp->l_type = LINUX_F_RDLCK;
-		break;
-	case F_UNLCK:
-		lfp->l_type = LINUX_F_UNLCK;
-		break;
-	case F_WRLCK:
-		lfp->l_type = LINUX_F_WRLCK;
-		break;
-	}
-}
-
-static void
-linux_to_bsd_flock(struct linux_flock *lfp, struct flock *bfp)
-{
-
-	bfp->l_start = lfp->l_start;
-	bfp->l_len = lfp->l_len;
-	bfp->l_pid = lfp->l_pid;
-	bfp->l_whence = lfp->l_whence;
-	switch (lfp->l_type) {
-	case LINUX_F_RDLCK:
-		bfp->l_type = F_RDLCK;
-		break;
-	case LINUX_F_UNLCK:
-		bfp->l_type = F_UNLCK;
-		break;
-	case LINUX_F_WRLCK:
-		bfp->l_type = F_WRLCK;
-		break;
-	}
 }
 
 /*
@@ -275,32 +222,32 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 	int fd, cmd, error;
 	u_long val;
 	void *arg;
-	struct linux_flock lfl;
-	struct flock bfl;
 	struct sys_fcntl_args fca;
-	struct filedesc *fdp;
-	struct file *fp;
+	file_t *fp;
 	struct vnode *vp;
 	struct vattr va;
-	const struct cdevsw *cdev;
 	long pgid;
 	struct pgrp *pgrp;
-	struct tty *tp, *(*d_tty)(dev_t);
+	struct tty *tp;
 
 	fd = SCARG(uap, fd);
 	cmd = SCARG(uap, cmd);
-	arg = (void *) SCARG(uap, arg);
+	arg = SCARG(uap, arg);
 
 	switch (cmd) {
+
 	case LINUX_F_DUPFD:
 		cmd = F_DUPFD;
 		break;
+
 	case LINUX_F_GETFD:
 		cmd = F_GETFD;
 		break;
+
 	case LINUX_F_SETFD:
 		cmd = F_SETFD;
 		break;
+
 	case LINUX_F_GETFL:
 		SCARG(&fca, fd) = fd;
 		SCARG(&fca, cmd) = F_GETFL;
@@ -309,8 +256,9 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 			return error;
 		retval[0] = bsd_to_linux_ioflags(retval[0]);
 		return 0;
+
 	case LINUX_F_SETFL: {
-		struct file	*fp1 = NULL;
+		file_t	*fp1 = NULL;
 
 		val = linux_to_bsd_ioflags((unsigned long)SCARG(uap, arg));
 		/*
@@ -330,18 +278,15 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 		 * so that F_GETFL would report the ASYNC i/o is on.
 		 */
 		if (val & O_ASYNC) {
-			if (((fp1 = fd_getfile(p->p_fd, fd)) == NULL))
+			if (((fp1 = fd_getfile(fd)) == NULL))
 			    return (EBADF);
-
-			FILE_USE(fp1);
-
 			if (((fp1->f_type == DTYPE_SOCKET) && fp1->f_data
 			      && ((struct socket *)fp1->f_data)->so_state & SS_ISAPIPE)
 			    || (fp1->f_type == DTYPE_PIPE))
 				val &= ~O_ASYNC;
 			else {
 				/* not a pipe, do not modify anything */
-				FILE_UNUSE(fp1, l);
+				fd_putfile(fd);
 				fp1 = NULL;
 			}
 		}
@@ -354,30 +299,23 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 
 		/* Now set the FASYNC flag for pipes */
 		if (fp1) {
-			if (!error)
+			if (!error) {
+				mutex_enter(&fp1->f_lock);
 				fp1->f_flag |= FASYNC;
-			FILE_UNUSE(fp1, l);
+				mutex_exit(&fp1->f_lock);
+			}
+			fd_putfile(fd);
 		}
 
 		return (error);
 	    }
+
 	case LINUX_F_GETLK:
-		if ((error = copyin(arg, &lfl, sizeof lfl)))
-			return error;
-		linux_to_bsd_flock(&lfl, &bfl);
-		error = do_fcntl_lock(l, fd, F_GETLK, &bfl);
-		if (error)
-			return error;
-		bsd_to_linux_flock(&bfl, &lfl);
-		return copyout(&lfl, arg, sizeof lfl);
+		do_linux_getlk(fd, cmd, arg, linux, flock);
 
 	case LINUX_F_SETLK:
 	case LINUX_F_SETLKW:
-		cmd = (cmd == LINUX_F_SETLK ? F_SETLK : F_SETLKW);
-		if ((error = copyin(arg, &lfl, sizeof lfl)))
-			return error;
-		linux_to_bsd_flock(&lfl, &bfl);
-		return do_fcntl_lock(l, fd, cmd, &bfl);
+		do_linux_setlk(fd, cmd, arg, linux, flock, LINUX_F_SETLK);
 
 	case LINUX_F_SETOWN:
 	case LINUX_F_GETOWN:
@@ -387,16 +325,14 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 		 * restrictive for Linux F_{G,S}ETOWN. For non-tty descriptors,
 		 * this is not a problem.
 		 */
-		fdp = p->p_fd;
-		if ((fp = fd_getfile(fdp, fd)) == NULL)
+		if ((fp = fd_getfile(fd)) == NULL)
 			return EBADF;
-		FILE_USE(fp);
 
 		/* Check it's a character device vnode */
 		if (fp->f_type != DTYPE_VNODE
 		    || (vp = (struct vnode *)fp->f_data) == NULL
 		    || vp->v_type != VCHR) {
-			FILE_UNUSE(fp, l);
+			fd_putfile(fd);
 
 	    not_tty:
 			/* Not a tty, proceed with common fcntl() */
@@ -406,39 +342,38 @@ linux_sys_fcntl(struct lwp *l, const struct linux_sys_fcntl_args *uap, register_
 
 		error = VOP_GETATTR(vp, &va, l->l_cred);
 
-		FILE_UNUSE(fp, l);
+		fd_putfile(fd);
 
 		if (error)
 			return error;
 
-		cdev = cdevsw_lookup(va.va_rdev);
-		if (cdev == NULL)
-			return (ENXIO);
-		d_tty = cdev->d_tty;
-		if (!d_tty || (!(tp = (*d_tty)(va.va_rdev))))
+		if ((tp = cdev_tty(va.va_rdev)) == NULL)
 			goto not_tty;
 
 		/* set tty pg_id appropriately */
+		mutex_enter(proc_lock);
 		if (cmd == LINUX_F_GETOWN) {
 			retval[0] = tp->t_pgrp ? tp->t_pgrp->pg_id : NO_PGID;
+			mutex_exit(proc_lock);
 			return 0;
 		}
-		mutex_enter(&proclist_lock);
 		if ((long)arg <= 0) {
 			pgid = -(long)arg;
 		} else {
-			struct proc *p1 = p_find((long)arg, PFIND_LOCKED | PFIND_UNLOCK_FAIL);
-			if (p1 == NULL)
+			struct proc *p1 = proc_find((long)arg);
+			if (p1 == NULL) {
+				mutex_exit(proc_lock);
 				return (ESRCH);
+			}
 			pgid = (long)p1->p_pgrp->pg_id;
 		}
-		pgrp = pg_find(pgid, PFIND_LOCKED);
+		pgrp = pgrp_find(pgid);
 		if (pgrp == NULL || pgrp->pg_session != p->p_session) {
-			mutex_exit(&proclist_lock);
+			mutex_exit(proc_lock);
 			return EPERM;
 		}
 		tp->t_pgrp = pgrp;
-		mutex_exit(&proclist_lock);
+		mutex_exit(proc_lock);
 		return 0;
 
 	default:
@@ -503,7 +438,7 @@ linux_sys_fstat(struct lwp *l, const struct linux_sys_fstat_args *uap, register_
 	struct stat tmpst;
 	int error;
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &tmpst);
+	error = do_sys_fstat(SCARG(uap, fd), &tmpst);
 	if (error != 0)
 		return error;
 	bsd_to_linux_stat(&tmpst, &tmplst);
@@ -512,13 +447,13 @@ linux_sys_fstat(struct lwp *l, const struct linux_sys_fstat_args *uap, register_
 }
 
 static int
-linux_stat1(struct lwp *l, const struct linux_sys_stat_args *uap, register_t *retval, int flags)
+linux_stat1(const struct linux_sys_stat_args *uap, register_t *retval, int flags)
 {
 	struct linux_stat tmplst;
 	struct stat tmpst;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), flags, &tmpst);
+	error = do_sys_stat(SCARG(uap, path), flags, &tmpst);
 	if (error != 0)
 		return error;
 
@@ -535,7 +470,7 @@ linux_sys_stat(struct lwp *l, const struct linux_sys_stat_args *uap, register_t 
 		syscallarg(struct linux_stat *) sp;
 	} */
 
-	return linux_stat1(l, uap, retval, FOLLOW);
+	return linux_stat1(uap, retval, FOLLOW);
 }
 
 /* Note: this is "newlstat" in the Linux sources */
@@ -548,7 +483,7 @@ linux_sys_lstat(struct lwp *l, const struct linux_sys_lstat_args *uap, register_
 		syscallarg(struct linux_stat *) sp;
 	} */
 
-	return linux_stat1(l, (const void *)uap, retval, NOFOLLOW);
+	return linux_stat1((const void *)uap, retval, NOFOLLOW);
 }
 #endif /* !__amd64__ */
 
@@ -561,7 +496,8 @@ linux_sys_unlink(struct lwp *l, const struct linux_sys_unlink_args *uap, registe
 	/* {
 		syscallarg(const char *) path;
 	} */
-	int error;
+	int error, error2;
+	struct pathbuf *pb;
 	struct nameidata nd;
 
 	error = sys_unlink(l, (const void *)uap, retval);
@@ -573,18 +509,24 @@ linux_sys_unlink(struct lwp *l, const struct linux_sys_unlink_args *uap, registe
 	 * We return EPERM in such cases. To emulate correct behaviour,
 	 * check if the path points to directory and return EISDIR if this
 	 * is the case.
+	 *
+	 * XXX this should really not copy in the path buffer twice...
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, UIO_USERSPACE,
-	    SCARG(uap, path));
+	error2 = pathbuf_copyin(SCARG(uap, path), &pb);
+	if (error2) {
+		return error2;
+	}
+	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, pb);
 	if (namei(&nd) == 0) {
 		struct stat sb;
 
-		if (vn_stat(nd.ni_vp, &sb, l) == 0
+		if (vn_stat(nd.ni_vp, &sb) == 0
 		    && S_ISDIR(sb.st_mode))
 			error = EISDIR;
 
 		vput(nd.ni_vp);
 	}
+	pathbuf_destroy(pb);
 
 	return (error);
 }
@@ -608,80 +550,17 @@ linux_sys_mknod(struct lwp *l, const struct linux_sys_mknod_args *uap, register_
 		SCARG(&bma, mode) = SCARG(uap, mode);
 		return sys_mkfifo(l, &bma, retval);
 	} else {
-		struct sys_mknod_args bma;
 
-		SCARG(&bma, path) = SCARG(uap, path);
-		SCARG(&bma, mode) = SCARG(uap, mode);
 		/*
 		 * Linux device numbers uses 8 bits for minor and 8 bits
 		 * for major. Due to how we map our major and minor,
 		 * this just fits into our dev_t. Just mask off the
 		 * upper 16bit to remove any random junk.
 		 */
-		SCARG(&bma, dev) = SCARG(uap, dev) & 0xffff;
-		return sys_mknod(l, &bma, retval);
+		return do_sys_mknod(l, SCARG(uap, path), SCARG(uap, mode),
+		    SCARG(uap, dev) & 0xffff, retval, UIO_USERSPACE);
 	}
 }
-
-#if defined(__i386__) || defined(__m68k__) || \
-    defined(__arm__)
-int
-linux_sys_chown16(struct lwp *l, const struct linux_sys_chown16_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(const char *) path;
-		syscallarg(int) uid;
-		syscallarg(int) gid;
-	} */
-	struct sys___posix_chown_args bca;
-
-	SCARG(&bca, path) = SCARG(uap, path);
-	SCARG(&bca, uid) = ((linux_uid_t)SCARG(uap, uid) == (linux_uid_t)-1) ?
-		(uid_t)-1 : SCARG(uap, uid);
-	SCARG(&bca, gid) = ((linux_gid_t)SCARG(uap, gid) == (linux_gid_t)-1) ?
-		(gid_t)-1 : SCARG(uap, gid);
-
-	return sys___posix_chown(l, &bca, retval);
-}
-
-int
-linux_sys_fchown16(struct lwp *l, const struct linux_sys_fchown16_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(int) fd;
-		syscallarg(int) uid;
-		syscallarg(int) gid;
-	} */
-	struct sys___posix_fchown_args bfa;
-
-	SCARG(&bfa, fd) = SCARG(uap, fd);
-	SCARG(&bfa, uid) = ((linux_uid_t)SCARG(uap, uid) == (linux_uid_t)-1) ?
-		(uid_t)-1 : SCARG(uap, uid);
-	SCARG(&bfa, gid) = ((linux_gid_t)SCARG(uap, gid) == (linux_gid_t)-1) ?
-		(gid_t)-1 : SCARG(uap, gid);
-
-	return sys___posix_fchown(l, &bfa, retval);
-}
-
-int
-linux_sys_lchown16(struct lwp *l, const struct linux_sys_lchown16_args *uap, register_t *retval)
-{
-	/* {
-		syscallarg(char *) path;
-		syscallarg(int) uid;
-		syscallarg(int) gid;
-	} */
-	struct sys___posix_lchown_args bla;
-
-	SCARG(&bla, path) = SCARG(uap, path);
-	SCARG(&bla, uid) = ((linux_uid_t)SCARG(uap, uid) == (linux_uid_t)-1) ?
-		(uid_t)-1 : SCARG(uap, uid);
-	SCARG(&bla, gid) = ((linux_gid_t)SCARG(uap, gid) == (linux_gid_t)-1) ?
-		(gid_t)-1 : SCARG(uap, gid);
-
-	return sys___posix_lchown(l, &bla, retval);
-}
-#endif /* __i386__ || __m68k__ || __arm__ || __amd64__ */
 
 /*
  * This is just fsync() for now (just as it is in the Linux kernel)
@@ -743,6 +622,25 @@ linux_sys_pwrite(struct lwp *l, const struct linux_sys_pwrite_args *uap, registe
 	return sys_pwrite(l, &pra, retval);
 }
 
+int
+linux_sys_dup3(struct lwp *l, const struct linux_sys_dup3_args *uap,
+    register_t *retval)
+{
+	/* {
+		syscallarg(int) from;
+		syscallarg(int) to;
+		syscallarg(int) flags;
+	} */
+	int error;
+	if ((error = sys_dup2(l, (const struct sys_dup2_args *)uap, retval)))
+		return error;
+
+	if (SCARG(uap, flags) & LINUX_O_CLOEXEC)
+		fd_set_exclose(l, SCARG(uap, to), true);
+
+	return 0;
+}
+
 #define LINUX_NOT_SUPPORTED(fun) \
 int \
 fun(struct lwp *l, const struct fun##_args *uap, register_t *retval) \
@@ -765,4 +663,3 @@ LINUX_NOT_SUPPORTED(linux_sys_flistxattr)
 LINUX_NOT_SUPPORTED(linux_sys_removexattr)
 LINUX_NOT_SUPPORTED(linux_sys_lremovexattr)
 LINUX_NOT_SUPPORTED(linux_sys_fremovexattr)
-

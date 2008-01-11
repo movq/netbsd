@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $	*/
+/*	$NetBSD: cpu.c,v 1.54 2010/12/20 00:25:37 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 Tsubai Masanari.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.54 2010/12/20 00:25:37 matt Exp $");
 
 #include "opt_ppcparam.h"
 #include "opt_multiprocessor.h"
@@ -45,15 +45,14 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.48 2007/11/17 18:02:42 macallan Exp $");
 #include <sys/device.h>
 #include <sys/types.h>
 #include <sys/lwp.h>
-#include <sys/user.h>
 
-#include <uvm/uvm_extern.h>
 #include <dev/ofw/openfirm.h>
 #include <powerpc/oea/hid.h>
 #include <powerpc/oea/bat.h>
 #include <powerpc/openpic.h>
 #include <powerpc/atomic.h>
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 #ifdef ALTIVEC
 #include <powerpc/altivec.h>
 #endif
@@ -98,10 +97,7 @@ extern void openpic_set_priority(int, int);
 #endif
 
 int
-cpumatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+cpumatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct confargs *ca = aux;
 	int *reg = ca->ca_reg;
@@ -159,9 +155,7 @@ cpu_OFgetspeed(struct device *self, struct cpu_info *ci)
 }
 
 void
-cpuattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+cpuattach(struct device *parent, struct device *self, void *aux)
 {
 	struct cpu_info *ci;
 	struct confargs *ca = aux;
@@ -191,7 +185,7 @@ cpuattach(parent, self, aux)
 #define CACHE_REG 0xf8000000
 
 void
-ohare_init()
+ohare_init(void)
 {
 	volatile uint32_t *cache_reg, x;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_bmap.c,v 1.23 2008/01/02 11:49:08 ad Exp $	*/
+/*	$NetBSD: ext2fs_bmap.c,v 1.25 2009/10/19 18:41:17 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -48,11 +48,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -70,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_bmap.c,v 1.23 2008/01/02 11:49:08 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_bmap.c,v 1.25 2009/10/19 18:41:17 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -248,7 +243,7 @@ ext2fs_bmaparray(struct vnode *vp, daddr_t bn, daddr_t *bnp, struct indir *ap,
 			bp->b_blkno = blkptrtodb(ump, daddr);
 			bp->b_flags |= B_READ;
 			VOP_STRATEGY(vp, bp);
-			curproc->p_stats->p_ru.ru_inblock++;	/* XXX */
+			curlwp->l_ru.ru_inblock++;	/* XXX */
 			if ((error = biowait(bp)) != 0) {
 				brelse(bp, 0);
 				return (error);

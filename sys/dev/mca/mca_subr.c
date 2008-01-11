@@ -1,4 +1,4 @@
-/*	$NetBSD: mca_subr.c,v 1.8 2005/12/11 12:22:18 christos Exp $	*/
+/*	$NetBSD: mca_subr.c,v 1.10 2009/03/14 15:36:18 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mca_subr.c,v 1.8 2005/12/11 12:22:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mca_subr.c,v 1.10 2009/03/14 15:36:18 dsl Exp $");
 
 #include "opt_mcaverbose.h"
 
@@ -67,10 +60,7 @@ struct mca_knowndev {
 #endif /* MCAVERBOSE */
 
 void
-mca_devinfo(id, cp, l)
-	int id;
-	char *cp;
-	size_t l;
+mca_devinfo(int id, char *cp, size_t l)
 {
 #ifdef MCAVERBOSE
 	const struct mca_knowndev *kdp;
@@ -91,8 +81,7 @@ mca_devinfo(id, cp, l)
  * designed this way.
  */
 int
-mca_match_disabled(id)
-	int id;
+mca_match_disabled(int id)
 {
 	switch (id) {
 	case MCA_PRODUCT_SKNETG:

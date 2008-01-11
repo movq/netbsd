@@ -1,4 +1,4 @@
-/*	$NetBSD: opendisk.c,v 1.9 2001/12/10 22:41:52 lukem Exp $	*/
+/*	$NetBSD: opendisk.c,v 1.12 2009/10/13 22:00:31 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: opendisk.c,v 1.9 2001/12/10 22:41:52 lukem Exp $");
+__RCSID("$NetBSD: opendisk.c,v 1.12 2009/10/13 22:00:31 pooka Exp $");
 #endif
 
 #include <sys/param.h>
@@ -51,8 +44,9 @@ __RCSID("$NetBSD: opendisk.c,v 1.9 2001/12/10 22:41:52 lukem Exp $");
 #include <stdio.h>
 #include <string.h>
 
-int
-opendisk(const char *path, int flags, char *buf, size_t buflen, int iscooked)
+static int
+__opendisk(const char *path, int flags, char *buf, size_t buflen, int iscooked,
+	int (*ofn)(const char *, int, ...))
 {
 	int f, rawpart;
 
@@ -71,12 +65,12 @@ opendisk(const char *path, int flags, char *buf, size_t buflen, int iscooked)
 	if (rawpart < 0)
 		return (-1);	/* sysctl(3) in getrawpartition sets errno */
 
-	f = open(buf, flags);
+	f = ofn(buf, flags, 0);
 	if (f != -1 || errno != ENOENT)
 		return (f);
 
 	snprintf(buf, buflen, "%s%c", path, 'a' + rawpart);
-	f = open(buf, flags);
+	f = ofn(buf, flags, 0);
 	if (f != -1 || errno != ENOENT)
 		return (f);
 
@@ -84,12 +78,27 @@ opendisk(const char *path, int flags, char *buf, size_t buflen, int iscooked)
 		return (-1);
 
 	snprintf(buf, buflen, "%s%s%s", _PATH_DEV, iscooked ? "" : "r", path);
-	f = open(buf, flags);
+	f = ofn(buf, flags, 0);
 	if (f != -1 || errno != ENOENT)
 		return (f);
 
 	snprintf(buf, buflen, "%s%s%s%c", _PATH_DEV, iscooked ? "" : "r", path,
 	    'a' + rawpart);
-	f = open(buf, flags);
+	f = ofn(buf, flags, 0);
 	return (f);
+}
+
+int
+opendisk(const char *path, int flags, char *buf, size_t buflen, int iscooked)
+{
+
+	return __opendisk(path, flags, buf, buflen, iscooked, open);
+}
+
+int
+opendisk1(const char *path, int flags, char *buf, size_t buflen, int iscooked,
+	int (*ofn)(const char *, int, ...))
+{
+
+	return __opendisk(path, flags, buf, buflen, iscooked, ofn);
 }

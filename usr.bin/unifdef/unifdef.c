@@ -1,4 +1,4 @@
-/*	$NetBSD: unifdef.c,v 1.13 2006/04/30 23:56:42 christos Exp $	*/
+/*	$NetBSD: unifdef.c,v 1.19 2011/01/20 15:24:24 ginsbach Exp $	*/
 
 /*
  * Copyright (c) 1985, 1993
@@ -77,7 +77,7 @@ static const char copyright[] =
 #endif
 #ifdef __IDSTRING
 __IDSTRING(Berkeley, "@(#)unifdef.c	8.1 (Berkeley) 6/6/93");
-__IDSTRING(NetBSD, "$NetBSD: unifdef.c,v 1.13 2006/04/30 23:56:42 christos Exp $");
+__IDSTRING(NetBSD, "$NetBSD: unifdef.c,v 1.19 2011/01/20 15:24:24 ginsbach Exp $");
 __IDSTRING(dotat, "$dotat: things/unifdef.c,v 1.161 2003/07/01 15:32:48 fanf2 Exp $");
 #endif
 #endif /* not lint */
@@ -102,11 +102,15 @@ __FBSDID("$FreeBSD: src/usr.bin/unifdef/unifdef.c,v 1.18 2003/07/01 15:30:43 fan
 
 #include <ctype.h>
 #include <err.h>
+#include <libgen.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <sys/param.h>
+#include <sys/stat.h>
 
 #include "stdbool.h"
 
@@ -216,8 +220,12 @@ static bool             ignore[MAXSYMS];	/* -iDsym or -iUsym */
 static int              nsyms;			/* number of symbols */
 
 static FILE            *input;			/* input file pointer */
+static FILE            *output;			/* output file pointer */
 static const char      *filename;		/* input file name */
+static char            *ofilename;		/* output file name */
+static char             tmpname[MAXPATHLEN];	/* used when overwriting */
 static int              linenum;		/* current line number */
+static int              overwriting;		/* output overwrites input */
 
 static char             tline[MAXLINE+EDITSLOP];/* input buffer plus space */
 static char            *keyword;		/* used for editing #elif's */
@@ -238,7 +246,7 @@ static void             done(void);
 static void             error(const char *);
 static int              findsym(const char *);
 static void             flushline(bool);
-static Linetype         getline(void);
+static Linetype         get_line(void);
 static Linetype         ifeval(const char **);
 static void             ignoreoff(void);
 static void             ignoreon(void);
@@ -260,8 +268,9 @@ int
 main(int argc, char *argv[])
 {
 	int opt;
+	struct stat isb, osb;
 
-	while ((opt = getopt(argc, argv, "i:D:U:I:cdeklst")) != -1)
+	while ((opt = getopt(argc, argv, "i:D:U:I:o:cdeklst")) != -1)
 		switch (opt) {
 		case 'i': /* treat stuff controlled by these symbols as text */
 			/*
@@ -301,6 +310,9 @@ main(int argc, char *argv[])
 		case 'l': /* blank deleted lines instead of omitting them */
 			lnblank = true;
 			break;
+		case 'o': /* output to a file */
+			ofilename = optarg;
+			break;
 		case 's': /* only output list of symbols that control #ifs */
 			symlist = true;
 			break;
@@ -327,6 +339,32 @@ main(int argc, char *argv[])
 		filename = "[stdin]";
 		input = stdin;
 	}
+	if (ofilename == NULL) {
+		output = stdout;
+	} else {
+		if (stat(ofilename, &osb) == 0) {
+			if (fstat(fileno(input), &isb) != 0)
+				err(2, "can't fstat %s", filename);
+
+			overwriting = (osb.st_dev == isb.st_dev &&
+			    osb.st_ino == isb.st_ino);
+		}
+		if (overwriting) {
+			int ofd;
+
+			snprintf(tmpname, sizeof(tmpname), "%s/unifdef.XXXXXX",
+				 dirname(ofilename));
+			if ((ofd = mkstemp(tmpname)) != -1)
+				output = fdopen(ofd, "w+");
+			if (output == NULL)
+				err(2, "can't create temporary file");
+			fchmod(ofd, isb.st_mode & ACCESSPERMS);
+		} else {
+			output = fopen(ofilename, "w");
+			if (output == NULL)
+				err(2, "can't open %s", ofilename);
+		}
+	}
 	process();
 	abort(); /* bug */
 }
@@ -334,7 +372,7 @@ main(int argc, char *argv[])
 static void
 usage(void)
 {
-	fprintf(stderr, "usage: unifdef [-cdeklst]"
+	fprintf(stderr, "usage: unifdef [-cdeklst] [-o output]"
 	    " [-Dsym[=val]] [-Usym] [-iDsym[=val]] [-iUsym] ... [file]\n");
 	exit(2);
 }
@@ -465,6 +503,16 @@ done(void)
 {
 	if (incomment)
 		error("EOF in comment");
+	if (fclose(output)) {
+		if (overwriting) {
+			unlink(tmpname);
+			errx(2, "%s unchanged", ofilename);
+		}
+	}
+	if (overwriting && rename(tmpname, ofilename)) {
+		unlink(tmpname);
+		errx(2, "%s unchanged", ofilename);
+	}
 	exit(exitstat);
 }
 static void
@@ -506,10 +554,10 @@ flushline(bool keep)
 	if (symlist)
 		return;
 	if (keep ^ complement)
-		fputs(tline, stdout);
+		fputs(tline, output);
 	else {
 		if (lnblank)
-			putc('\n', stdout);
+			putc('\n', output);
 		exitstat = 1;
 	}
 }
@@ -524,7 +572,7 @@ process(void)
 
 	for (;;) {
 		linenum++;
-		lineval = getline();
+		lineval = get_line();
 		trans_table[ifstate[depth]][lineval]();
 		debug("process %s -> %s depth %d",
 		    linetype_name[lineval],
@@ -538,7 +586,7 @@ process(void)
  * help from skipcomment().
  */
 static Linetype
-getline(void)
+get_line(void)
 {
 	const char *cp;
 	int cursym;
@@ -712,7 +760,7 @@ eval_unary(const struct ops *ops, int *valp, const char **cpp)
 			return (LT_IF);
 		cp = skipcomment(cp);
 		sym = findsym(cp);
-		if (sym < 0 || !symlist)
+		if (sym < 0 || symlist)
 			return (LT_IF);
 		*valp = (value[sym] != NULL);
 		cp = skipsym(cp);
@@ -723,7 +771,7 @@ eval_unary(const struct ops *ops, int *valp, const char **cpp)
 	} else if (!endsym(*cp)) {
 		debug("eval%d symbol", ops - eval_ops);
 		sym = findsym(cp);
-		if (sym < 0 || !symlist)
+		if (sym < 0 || symlist)
 			return (LT_IF);
 		if (value[sym] == NULL)
 			*valp = 0;
@@ -888,7 +936,7 @@ skipsym(const char *cp)
 }
 
 /*
- * Look for the symbol in the symbol table. If is is found, we return
+ * Look for the symbol in the symbol table. If it is found, we return
  * the symbol table index, else we return -1.
  */
 static int
@@ -983,5 +1031,10 @@ error(const char *msg)
 	else
 		warnx("%s: %d: %s (#if line %d depth %d)",
 		    filename, linenum, msg, stifline[depth], depth);
+	fclose(output);
+	if (overwriting) {
+		unlink(tmpname);
+		errx(2, "%s unchanged", ofilename);
+	}
 	errx(2, "output may be truncated");
 }

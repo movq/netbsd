@@ -1,4 +1,4 @@
-/*	$NetBSD: csc.c,v 1.13 2005/12/11 12:16:05 christos Exp $	*/
+/*	$NetBSD: csc.c,v 1.16 2009/05/12 06:54:10 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: csc.c,v 1.13 2005/12/11 12:16:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: csc.c,v 1.16 2009/05/12 06:54:10 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,10 +77,7 @@ void csc_set_dma_mode(struct sfas_softc *, int);
  * if we are a Cumana SCSI-2 card
  */
 int
-cscmatch(pdp, cf, auxp)
-	struct device	*pdp;
-	struct cfdata	*cf;
-	void		*auxp;
+cscmatch(struct device *pdp, struct cfdata *cf, void *auxp)
 {
 	struct podule_attach_args *pa = (struct podule_attach_args *)auxp;
 
@@ -105,10 +95,7 @@ cscmatch(pdp, cf, auxp)
 }
 
 void
-cscattach(pdp, dp, auxp)
-	struct device	*pdp;
-	struct device	*dp;
-	void		*auxp;
+cscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct csc_softc *sc = (struct csc_softc *)dp;
 	struct podule_attach_args  *pa;
@@ -197,7 +184,7 @@ cscattach(pdp, dp, auxp)
 
 #if CSC_POLL == 0
 	evcnt_attach_dynamic(&sc->sc_softc.sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-	    dp->dv_xname, "intr");
+	    device_xname(dp), "intr");
 	sc->sc_softc.sc_ih = podulebus_irq_establish(pa->pa_ih, IPL_BIO,
 	    csc_intr, &sc->sc_softc, &sc->sc_softc.sc_intrcnt);
 	if (sc->sc_softc.sc_ih == NULL)
@@ -214,8 +201,7 @@ cscattach(pdp, dp, auxp)
 
 
 int
-csc_intr(arg)
-	void *arg;
+csc_intr(void *arg)
 {
 	struct sfas_softc *dev = arg;
 	csc_regmap_p	      rp;
@@ -244,18 +230,14 @@ csc_intr(arg)
 
 /* Load transfer address into DMA register */
 void
-csc_set_dma_adr(sc, ptr)
-	struct sfas_softc *sc;
-	void		 *ptr;
+csc_set_dma_adr(struct sfas_softc *sc, void *ptr)
 {
 	return;
 }
 
 /* Set DMA transfer counter */
 void
-csc_set_dma_tc(sc, len)
-	struct sfas_softc *sc;
-	unsigned int	  len;
+csc_set_dma_tc(struct sfas_softc *sc, unsigned int len)
 {
 	*sc->sc_fas->sfas_tc_low  = len; len >>= 8;
 	*sc->sc_fas->sfas_tc_mid  = len; len >>= 8;
@@ -264,19 +246,13 @@ csc_set_dma_tc(sc, len)
 
 /* Set DMA mode */
 void
-csc_set_dma_mode(sc, mode)
-	struct sfas_softc *sc;
-	int		  mode;
+csc_set_dma_mode(struct sfas_softc *sc, int mode)
 {
 }
 
 /* Initialize DMA for transfer */
 int
-csc_setup_dma(sc, ptr, len, mode)
-	void	 *sc;
-	void	 *ptr;
-	int	  len;
-	int	  mode;
+csc_setup_dma(void *sc, void *ptr, int len, int mode)
 {
 
 	return (0);
@@ -284,10 +260,7 @@ csc_setup_dma(sc, ptr, len, mode)
 
 /* Check if address and len is ok for DMA transfer */
 int
-csc_need_bump(sc, ptr, len)
-	void	 *sc;
-	void	 *ptr;
-	int	  len;
+csc_need_bump(void *sc, void *ptr, int len)
 {
 	int	p;
 
@@ -305,20 +278,14 @@ csc_need_bump(sc, ptr, len)
 
 /* Interrupt driven routines */
 int
-csc_build_dma_chain(sc, chain, p, l)
-	void	*sc;
-	void	*chain;
-	void	*p;
-	int	 l;
+csc_build_dma_chain(void *sc, void *chain, void *p, int l)
 {
 	return(0);
 }
 
 /* Turn on/off led */
 void
-csc_led(v, mode)
-	void	 *v;
-	int	  mode;
+csc_led(void *v, int mode)
 {
 	struct sfas_softc *sc = v;
 	csc_regmap_p		rp;

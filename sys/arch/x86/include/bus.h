@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.15 2007/10/17 19:58:14 garbled Exp $	*/
+/*	$NetBSD: bus.h,v 1.20 2010/04/28 19:17:04 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -84,11 +77,20 @@
 /*
  * Bus address and size types
  */
-typedef u_long bus_addr_t;
-typedef u_long bus_size_t;
+typedef paddr_t bus_addr_t;
+typedef size_t bus_size_t;
 
-typedef	int bus_space_tag_t;
-typedef	u_long bus_space_handle_t;
+struct bus_space_tag {
+	int bst_type;
+};
+
+typedef	struct bus_space_tag *bus_space_tag_t;
+typedef	vaddr_t bus_space_handle_t;
+
+extern bus_space_tag_t x86_bus_space_mem;
+extern bus_space_tag_t x86_bus_space_io;
+
+bool	bus_space_is_equal(bus_space_tag_t, bus_space_tag_t);
 
 int	_x86_memio_map(bus_space_tag_t t, bus_addr_t addr,
 	    bus_size_t size, int flags, bus_space_handle_t *bshp);
@@ -98,7 +100,7 @@ void	_x86_memio_unmap(bus_space_tag_t t, bus_space_handle_t bsh,
 typedef struct x86_bus_dma_tag		*bus_dma_tag_t;
 typedef struct x86_bus_dmamap		*bus_dmamap_t;
 
-#define BUS_DMA_TAG_VALID(t)    ((t) != (bus_dma_tag_t)0)
+#define BUS_DMA_TAG_VALID(__t)    ((__t) != NULL)
 
 /*
  *	bus_dma_segment_t

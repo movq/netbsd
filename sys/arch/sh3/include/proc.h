@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.12 2007/02/09 21:55:12 ad Exp $	*/
+/*	$NetBSD: proc.h,v 1.16 2011/01/26 23:26:37 uwe Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
@@ -58,6 +58,7 @@ struct mdlwp {
 
 /* md_flags */
 #define	MDP_USEDFPU	0x0001	/* has used the FPU */
+#define	MDP_SSTEP	0x0002	/* single-stepped with PT_STEP */
 
 struct lwp;
 
@@ -68,7 +69,6 @@ struct mdproc {
 #ifdef _KERNEL
 #ifndef _LOCORE
 extern void sh_proc0_init(void);
-extern struct md_upte *curupte;	/* SH3 wired u-area hack */
 #endif /* _LOCORE */
 #endif /* _KERNEL */
 #endif /* !_SH3_PROC_H_ */

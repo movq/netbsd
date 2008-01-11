@@ -1,4 +1,4 @@
-/*	$NetBSD: __cmsg_alignbytes.c,v 1.1 2005/12/20 19:28:51 christos Exp $	*/
+/*	$NetBSD: __cmsg_alignbytes.c,v 1.3 2009/03/16 05:59:21 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: __cmsg_alignbytes.c,v 1.1 2005/12/20 19:28:51 christos Exp $");
+__RCSID("$NetBSD: __cmsg_alignbytes.c,v 1.3 2009/03/16 05:59:21 cegger Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -54,7 +47,7 @@ __RCSID("$NetBSD: __cmsg_alignbytes.c,v 1.1 2005/12/20 19:28:51 christos Exp $")
 #endif
 
 int
-__cmsg_alignbytes()
+__cmsg_alignbytes(void)
 {
 	static int alignbytes = -1;
 #ifdef HW_ALIGNBYTES

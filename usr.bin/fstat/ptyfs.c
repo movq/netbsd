@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs.c,v 1.3 2006/05/11 11:56:38 yamt Exp $	*/
+/*	$NetBSD: ptyfs.c,v 1.6 2009/04/12 06:36:12 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ptyfs.c,v 1.3 2006/05/11 11:56:38 yamt Exp $");
+__RCSID("$NetBSD: ptyfs.c,v 1.6 2009/04/12 06:36:12 lukem Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -46,6 +39,8 @@ __RCSID("$NetBSD: ptyfs.c,v 1.3 2006/05/11 11:56:38 yamt Exp $");
 #include <sys/stat.h>
 #include <sys/vnode.h>
 #include <sys/mount.h>
+
+#include <stdbool.h>
 
 #define _KERNEL
 #include <miscfs/specfs/specdev.h>
@@ -62,7 +57,7 @@ int
 ptyfs_filestat(struct vnode *vp, struct filestat *fsp)
 {
 	struct ptyfsnode pn;
-	struct specinfo si;
+	struct specnode sn;
 	struct mount mt;
 
 	if (!KVM_READ(VTOPTYFS(vp), &pn, sizeof(pn))) {
@@ -76,18 +71,18 @@ ptyfs_filestat(struct vnode *vp, struct filestat *fsp)
 		return 0;
 	}
 	fsp->fsid = mt.mnt_stat.f_fsidx.__fsid_val[0];
-	fsp->fileid = (long)pn.ptyfs_fileno;
+	fsp->fileid = pn.ptyfs_fileno;
 	fsp->mode = pn.ptyfs_mode;
 	fsp->size = 0;
 	switch (pn.ptyfs_type) {
 	    case PTYFSpts:
 	    case PTYFSptc:
-		if (!KVM_READ(vp->v_specinfo, &si, sizeof(si))) {
-			dprintf("can't read specinfo at %p for pid %d",
-				VTOPTYFS(vp), Pid);
+		if (!KVM_READ(vp->v_specnode, &sn, sizeof(sn))) {
+			dprintf("can't read specnode at %p for pid %d",
+				vp->v_specnode, Pid);
 			return 0;
 		}
-		fsp->rdev = si.si_rdev;
+		fsp->rdev = sn.sn_rdev;
 		fsp->mode |= S_IFCHR;
 		break;
 	    case PTYFSroot:

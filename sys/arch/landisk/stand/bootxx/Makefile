@@ -1,6 +1,6 @@
-# $NetBSD: Makefile,v 1.2 2006/11/14 14:09:54 drochner Exp $
+# $NetBSD: Makefile,v 1.6 2010/05/27 06:58:14 dholland Exp $
 
-SUBDIR=	bootxx_ffsv1
+SUBDIR=	bootxx_ffsv1 .WAIT bootxx_ffsv2 bootxx_ustarfs
 
 LIBOBJ= ${.OBJDIR}
 .MAKEOVERRIDES+= LIBOBJ
@@ -8,7 +8,7 @@ LIBOBJ= ${.OBJDIR}
 .include <bsd.subdir.mk>
 .include <bsd.obj.mk>
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib

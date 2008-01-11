@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.9 2007/12/02 15:55:09 skrll Exp $	*/
+/*	$NetBSD: asm.h,v 1.13 2011/02/12 16:31:32 matt Exp $	*/
 
 /*	$OpenBSD: asm.h,v 1.12 2001/03/29 02:15:57 mickey Exp $	*/
 
@@ -39,6 +39,8 @@
 #endif
 
 #define _C_LABEL(x)	x
+
+#define _ASM_LS_CHAR	!
 
 #define	LEAF_ENTRY_NOPROFILE(x)				!\
 	 ! .text ! .align 4				!\
@@ -95,9 +97,9 @@
 #define ALTENTRY(x) ! .export x, entry ! .label x
 #define EXIT(x) ! .exit ! .procend ! .size x, .-x
 
-#define RCSID(x)	.text				!\
+#define RCSID(x)	.pushsection ".ident"		!\
 			.asciz x			!\
-			.align	4
+			.popsection
 
 #define WEAK_ALIAS(alias,sym)				\
 	.weak alias !					\
@@ -133,15 +135,17 @@
 
 #ifdef __STDC__
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg ## ,30,0,0,0 ;					\
-	.stabs __STRING(sym) ## ,1,0,0,0
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
 #else
 #define	WARN_REFERENCES(sym,msg)					\
-	.stabs msg,30,0,0,0 ;						\
-	.stabs __STRING(sym),1,0,0,0
-#endif
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
+#endif /* __STDC__ */
 
-#define	BSS(n,s)	! .data ! .label n ! .comm s
+#define	BSS(n,s)	.comm n, s
 #define	SZREG	4
 
 #endif /* _HPPA_ASM_H_ */

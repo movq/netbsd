@@ -1,4 +1,4 @@
-/*	$NetBSD: com_ebus.c,v 1.26 2006/07/13 22:56:02 gdamore Exp $	*/
+/*	$NetBSD: com_ebus.c,v 1.31 2011/03/15 11:22:18 mrg Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_ebus.c,v 1.26 2006/07/13 22:56:02 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_ebus.c,v 1.31 2011/03/15 11:22:18 mrg Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -56,20 +54,21 @@ __KERNEL_RCSID(0, "$NetBSD: com_ebus.c,v 1.26 2006/07/13 22:56:02 gdamore Exp $"
 #include "kbd.h"
 #include "ms.h"
 
-int	com_ebus_match(struct device *, struct cfdata *, void *);
-void	com_ebus_attach(struct device *, struct device *, void *);
+int	com_ebus_match(device_t, cfdata_t , void *);
+void	com_ebus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(com_ebus, sizeof(struct com_softc),
+CFATTACH_DECL_NEW(com_ebus, sizeof(struct com_softc),
     com_ebus_match, com_ebus_attach, NULL, NULL);
 
 static const char *com_names[] = {
 	"su",
 	"su_pnp",
+	"rsc-console",
 	NULL
 };
 
 int
-com_ebus_match(struct device *parent, struct cfdata *match, void *aux)
+com_ebus_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct ebus_attach_args *ea = aux;
 	int i;
@@ -84,6 +83,7 @@ com_ebus_match(struct device *parent, struct cfdata *match, void *aux)
 		/* Could be anything. */
 		compat = prom_getpropstring(ea->ea_node, "compatible");
 		if (strcmp(compat, "su16550") == 0 ||
+		    strcmp(compat, "su16552") == 0 ||
 		    strcmp(compat, "su") == 0) {
 			return (1);
 		}
@@ -94,9 +94,9 @@ com_ebus_match(struct device *parent, struct cfdata *match, void *aux)
 #define BAUD_BASE       (1846200)
 
 void
-com_ebus_attach(struct device *parent, struct device *self, void *aux)
+com_ebus_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_softc *sc = (void *)self;
+	struct com_softc *sc = device_private(self);
 	struct ebus_attach_args *ea = aux;
 	struct kbd_ms_tty_attach_args kma;
 #if (NKBD > 0) || (NMS > 0)
@@ -110,6 +110,7 @@ com_ebus_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_tag_t iot;
 	bus_addr_t iobase;
 
+	sc->sc_dev = self;
 	iot = ea->ea_bustag;
 	iobase = EBUS_ADDR_FROM_REG(&ea->ea_reg[0]);
 
@@ -130,7 +131,7 @@ com_ebus_attach(struct device *parent, struct device *self, void *aux)
 			&ioh);
 	else if (bus_space_map(iot, iobase,
 		ea->ea_reg[0].size, 0, &ioh) != 0) {
-		printf(": can't map register space\n");
+		aprint_error(": can't map register space\n");
 		return;
 	}
 	COM_INIT_REGS(sc->sc_regs, iot, ioh, iobase);
@@ -149,30 +150,32 @@ com_ebus_attach(struct device *parent, struct device *self, void *aux)
 	com_is_output = (ea->ea_node == prom_instance_to_package(prom_stdout()));
 
 	if (com_is_input || com_is_output) {
-		extern struct consdev comcons;
 		struct consdev *cn_orig;
 
 		/* Record some info to attach console. */
-		kma.kmta_baud = 9600;
+		if (strcmp(ea->ea_name, "rsc-console") == 0)
+			kma.kmta_baud = 115200;
+		else
+			kma.kmta_baud = 9600;
 		kma.kmta_cflag = (CREAD | CS8 | HUPCL);
 
 		/* Attach com as the console. */
 		cn_orig = cn_tab;
 		if (comcnattach(iot, iobase, kma.kmta_baud,
 			sc->sc_frequency, COM_TYPE_NORMAL, kma.kmta_cflag)) {
-			printf("Error: comcnattach failed\n");
+			aprint_error("Error: comcnattach failed\n");
 		}
-		cn_tab = cn_orig;
 		if (com_is_input) {
-			cn_tab->cn_dev = comcons.cn_dev;
-			cn_tab->cn_probe = comcons.cn_probe;
-			cn_tab->cn_init = comcons.cn_init;
-			cn_tab->cn_getc = comcons.cn_getc;
-			cn_tab->cn_pollc = comcons.cn_pollc;
+			cn_orig->cn_dev = cn_tab->cn_dev;
+			cn_orig->cn_probe = cn_tab->cn_probe;
+			cn_orig->cn_init = cn_tab->cn_init;
+			cn_orig->cn_getc = cn_tab->cn_getc;
+			cn_orig->cn_pollc = cn_tab->cn_pollc;
 		}
 		if (com_is_output) {
-			cn_tab->cn_putc = comcons.cn_putc;
+			cn_orig->cn_putc = cn_tab->cn_putc;
 		}
+		cn_tab = cn_orig;
 		kma.kmta_consdev = cn_tab;
 	}
 	/* Now attach the driver */
@@ -185,7 +188,7 @@ com_ebus_attach(struct device *parent, struct device *self, void *aux)
 	/* locate the major number */
 	maj = cdevsw_lookup_major(&com_cdevsw);
 
-	kma.kmta_dev = makedev(maj, device_unit(&sc->sc_dev));
+	kma.kmta_dev = makedev(maj, device_unit(sc->sc_dev));
 
 /* Attach 'em if we got 'em. */
 #if (NKBD > 0)

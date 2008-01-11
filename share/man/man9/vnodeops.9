@@ -1,4 +1,4 @@
-.\"     $NetBSD: vnodeops.9,v 1.70 2007/12/01 19:46:56 wiz Exp $
+.\"     $NetBSD: vnodeops.9,v 1.80 2010/06/24 13:03:06 hannken Exp $
 .\"
 .\" Copyright (c) 2001, 2005, 2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 26, 2007
+.Dd June 24, 2010
 .Dt VNODEOPS 9
 .Os
 .Sh NAME
@@ -84,6 +77,7 @@
 .Nm VOP_GETEXTATTR ,
 .Nm VOP_SETEXTATTR ,
 .Nm VOP_LISTEXTATTR ,
+.Nm VOP_DELETEEXTATTR
 .Nd vnode operations
 .Sh SYNOPSIS
 .In sys/param.h
@@ -175,7 +169,7 @@
 .Ft int
 .Fn VOP_LOCK "struct vnode *vp" "int flags"
 .Ft int
-.Fn VOP_UNLOCK "struct vnode *vp" "int flags"
+.Fn VOP_UNLOCK "struct vnode *vp"
 .Ft int
 .Fn VOP_ISLOCKED "struct vnode *vp"
 .Ft int
@@ -213,6 +207,9 @@
 .Ft int
 .Fn VOP_LISTEXTATTR "struct vnode *vp" "int attrnamespace" "struct uio *uio" \
 "size_t *size" "kauth_cred_t cred"
+.Ft int
+.Fn VOP_DELETEEXTATTR "struct vnode *vp" "int attrnamespace" \
+"const char *name" "kauth_cred_t cred"
 .Pp
 Not all header files are required for each function.
 .Sh DESCRIPTION
@@ -229,60 +226,57 @@ associated with the operation being invoked.
 .Pp
 Functions in the vnode operations vector are invoked using specialized
 macros.
-The following table lists the elements of the vnode operations vector,
-the corresponding invocation macro, and a description of the element.
+The following table gives a summary of the operations.
 .Pp
-.nf
-.ta \w'int (*vop_listextattr)()'u+2n +\w'VOP_LISTEXTATTR'u+2n +\w'Map file into user address space'u
-\fIVector element\fP	\fIMacro\fP	\fIDescription\fP
-.ta \w'int (*vop_listextattr)()'u+2n +\w'VOP_LISTEXTATTR'u+2n +\w'Map file into user address space'u+6nC
-.sp 5p
-int (*vop_lookup)() 	VOP_LOOKUP	Lookup file name in name cache
-int (*vop_create)() 	VOP_CREATE	Create a new file
-int (*vop_mknod)() 	VOP_MKNOD	Make a new device
-int (*vop_open)() 	VOP_OPEN	Open a file
-int (*vop_close)() 	VOP_CLOSE	Close a file
-int (*vop_access)() 	VOP_ACCESS	Determine file accessibility
-int (*vop_getattr)() 	VOP_GETATTR	Get file attributes
-int (*vop_setattr)() 	VOP_SETATTR	Set file attributes
-int (*vop_read)() 	VOP_READ	Read from a file
-int (*vop_write)() 	VOP_WRITE	Write to a file
-int (*vop_ioctl)() 	VOP_IOCTL	Perform device-specific I/O
-int (*vop_fcntl)() 	VOP_FCNTL	Perform file control
-int (*vop_poll)() 	VOP_POLL	Test if poll event has occurred
-int (*vop_kqfilter)()	VOP_KQFILTER	Register a knote
-int (*vop_revoke)() 	VOP_REVOKE	Eliminate vode activity
-int (*vop_mmap)() 	VOP_MMAP	Map file into user address space
-int (*vop_fsync)() 	VOP_FSYNC	Flush pending data to disk
-int (*vop_seek)() 	VOP_SEEK	Test if file is seekable
-int (*vop_remove)() 	VOP_REMOVE	Remove a file
-int (*vop_link)() 	VOP_LINK	Link a file
-int (*vop_rename)() 	VOP_RENAME	Rename a file
-int (*vop_mkdir)() 	VOP_MKDIR	Make a new directory
-int (*vop_rmdir)() 	VOP_RMDIR	Remove a directory
-int (*vop_symlink)() 	VOP_SYMLINK	Create a symbolic link
-int (*vop_readdir)() 	VOP_READDIR	Read directory entry
-int (*vop_readlink)() 	VOP_READLINK	Read contents of a symlink
-int (*vop_abortop)() 	VOP_ABORTOP	Abort pending operation
-int (*vop_inactive)() 	VOP_INACTIVE	Release the inactive vnode
-int (*vop_reclaim)() 	VOP_RECLAIM	Reclaim vnode for another file
-int (*vop_lock)() 	VOP_LOCK	Sleep until vnode lock is free
-int (*vop_unlock)() 	VOP_UNLOCK	Wake up process sleeping on lock
-int (*vop_islocked)() 	VOP_ISLOCKED	Test if vnode is locked
-int (*vop_bmap)() 	VOP_BMAP	Logical block number conversion
-int (*vop_print)() 	VOP_PRINT	Print debugging information
-int (*vop_pathconf)() 	VOP_PATHCONF	Return POSIX pathconf data
-int (*vop_advlock)() 	VOP_ADVLOCK	Advisory record locking
-int (*vop_lease)() 	VOP_LEASE	Validate vnode credentials
-int (*vop_whiteout)() 	VOP_WHITEOUT	Whiteout vnode
-int (*vop_getpages)() 	VOP_GETPAGES	Read VM pages from file
-int (*vop_putpages)() 	VOP_PUTPAGES	Write VM pages to file
-int (*vop_strategy)() 	VOP_STRATEGY	Read/write a file system buffer
-int (*vop_bwrite)() 	VOP_BWRITE	Write a file system buffer
-int (*vop_getextattr)()	VOP_GETEXTATTR	Get extended attribute
-int (*vop_setextattr)()	VOP_SETEXTATTR	Set extended attribute
-int (*vop_listextattr)()	VOP_LISTEXTATTR	List extended attributes
-.fi
+.Bl -column "VOP_DELETEEXTATTR" "Wake up process sleeping on lock" -compact
+.It Sy Macro Ta Sy Description
+.It VOP_LOOKUP	Lookup file name in name cache
+.It VOP_CREATE	Create a new file
+.It VOP_MKNOD	Make a new device
+.It VOP_OPEN	Open a file
+.It VOP_CLOSE	Close a file
+.It VOP_ACCESS	Determine file accessibility
+.It VOP_GETATTR	Get file attributes
+.It VOP_SETATTR	Set file attributes
+.It VOP_READ	Read from a file
+.It VOP_WRITE	Write to a file
+.It VOP_IOCTL	Perform device-specific I/O
+.It VOP_FCNTL	Perform file control
+.It VOP_POLL	Test if poll event has occurred
+.It VOP_KQFILTER	Register a knote
+.It VOP_REVOKE	Eliminate vode activity
+.It VOP_MMAP	Map file into user address space
+.It VOP_FSYNC	Flush pending data to disk
+.It VOP_SEEK	Test if file is seekable
+.It VOP_REMOVE	Remove a file
+.It VOP_LINK	Link a file
+.It VOP_RENAME	Rename a file
+.It VOP_MKDIR	Make a new directory
+.It VOP_RMDIR	Remove a directory
+.It VOP_SYMLINK	Create a symbolic link
+.It VOP_READDIR	Read directory entry
+.It VOP_READLINK	Read contents of a symlink
+.It VOP_ABORTOP	Abort pending operation
+.It VOP_INACTIVE	Release the inactive vnode
+.It VOP_RECLAIM	Reclaim vnode for another file
+.It VOP_LOCK	Sleep until vnode lock is free
+.It VOP_UNLOCK	Wake up process sleeping on lock
+.It VOP_ISLOCKED	Test if vnode is locked
+.It VOP_BMAP	Logical block number conversion
+.It VOP_PRINT	Print debugging information
+.It VOP_PATHCONF	Return POSIX pathconf data
+.It VOP_ADVLOCK	Advisory record locking
+.It VOP_LEASE	Validate vnode credentials
+.It VOP_WHITEOUT	Whiteout vnode
+.It VOP_GETPAGES	Read VM pages from file
+.It VOP_PUTPAGES	Write VM pages to file
+.It VOP_STRATEGY	Read/write a file system buffer
+.It VOP_BWRITE	Write a file system buffer
+.It VOP_GETEXTATTR	Get extended attribute
+.It VOP_SETEXTATTR	Set extended attribute
+.It VOP_LISTEXTATTR	List extended attributes
+.It VOP_DELETEEXTATTR	Remove extended attribute
+.El
 .Pp
 The implementation details of the vnode operations vector are not
 quite what is described here.
@@ -303,18 +297,17 @@ struct componentname {
         /*
          * Arguments to lookup.
          */
-        u_long  cn_nameiop;     /* namei operation */
-        u_long  cn_flags;       /* flags to namei */
-        struct  lwp *cn_lwp;    /* lwp requesting lookup */
+        uint32_t cn_nameiop;    /* namei operation */
+        uint32_t cn_flags;      /* flags to namei */
         kauth_cred_t cn_cred;   /* credentials */
         /*
          * Shared between lookup and commit routines.
          */
         char    *cn_pnbuf;      /* pathname buffer */
         const char *cn_nameptr; /* pointer to looked up name */
-        long    cn_namelen;     /* length of looked up component */
+        size_t  cn_namelen;     /* length of looked up component */
         u_long  cn_hash;        /* hash value of looked up name */
-        long    cn_consume;     /* chars to consume in lookup() */
+        size_t  cn_consume;     /* chars to consume in lookup() */
 };
 .Ed
 .Pp
@@ -991,23 +984,11 @@ appropriate error code is returned.
 The directory should be locked on entry and will remain locked on
 return.
 .Pp
-If
-.Fn VOP_READDIR
-is called from the NFS server, the extra arguments
-.Fa eofflag ,
+In case
 .Fa ncookies
 and
 .Fa cookies
-are used.
-The value of
-.Fa *eofflag
-will be set to
-.Dv true
-if the end of the directory is reached while
-reading.
-The directory seek cookies are returned to the NFS client and may be
-used later to restart a directory read part way through the directory.
-There should be one cookie returned per directory entry.
+are supplied, one cookie should be returned per directory entry.
 The value of the cookie for each directory entry should be the offset
 within the directory where the on-disk version of the following
 directory entry starts.
@@ -1038,8 +1019,13 @@ code is returned.
 The vnode should be locked on entry and will remain locked on return.
 .It Fn VOP_ABORTOP "dvp" "cnp"
 Abort pending operation on vnode
-.Fa dvp .
-This operation is rarely implemented in file systems.
+.Fa dvp
+and free resources allocated in
+.Fa cnp .
+.Pp
+This operation is rarely implemented in file systems and
+.Fn genfs_abortop
+is typically used instead.
 .It Fn VOP_INACTIVE "vp"
 Release the inactive vnode.
 .Fn VOP_INACTIVE
@@ -1077,9 +1063,16 @@ The argument
 is the vnode of the file to be locked.
 The argument
 .Fa flags
-is a set of
-.Xr lockmgr 9
-flags.
+is
+.Dv LK_EXCLUSIVE
+to take the lock exclusively or
+.Dv LK_SHARED
+to take a shared lock.
+If
+.Fa flags
+contains
+.Dv LK_NOWAIT
+and the lock is busy, the operation will return immediately with an error code.
 If the operation is successful zero is returned, otherwise an
 appropriate error code is returned.
 .Fn VOP_LOCK
@@ -1090,16 +1083,11 @@ Kernel code should use
 to lock a vnode rather than calling
 .Fn VOP_LOCK
 directly.
-.It Fn VOP_UNLOCK "vp" "flags"
+.It Fn VOP_UNLOCK "vp"
 Wake up process sleeping on lock.
 The argument
 .Fa vp
 is the vnode of the file to be unlocked.
-The argument
-.Fa flags
-is a set of
-.Xr lockmgr 9
-flags.
 If the operation is successful zero is returned, otherwise an
 appropriate error code is returned.
 .Fn VOP_UNLOCK
@@ -1109,14 +1097,24 @@ writes to the same file from happening at the same time.
 Test if the vnode
 .Fa vp
 is locked.
-A non-zero value is returned if the vnode is not locked, otherwise
-zero is returned.
+Possible return values are
+.Dv LK_EXCLUSIVE ,
+.Dv LK_SHARED
+or 0 for lock held exclusively by the calling thread, shared lock held
+by anyone or unlocked, respectively.
+.Pp
+This function must never be used to make locking decisions at run time:
+it is provided only for diagnostic purposes.
 .It Fn VOP_BMAP "vp" "bn" "vpp" "bnp" "runp"
 Convert the logical block number
 .Fa bn
 of a file specified by vnode
 .Fa vp
 to its physical block number on the disk.
+The physical block is returned in
+.Fa bnp .
+In case the logical block is not allocated, \-1 is used.
+.Pp
 If
 .Fa vpp
 is not
@@ -1412,33 +1410,45 @@ is not, and vice versa.
 The argument
 .Fa cred
 specifies the user credentials to use when authorizing the request.
+.It Fn VOP_DELETEEXTATTR "vp" "attrnamespace" "name" "cred"
+Remove attribute
+.Fa name
+from file associated with
+.Fa vp .
+The argument
+.Fa attrnamespace
+specifies the extended attribute namespace.
+If full removal is not supported, the file system should return
+.Er EOPNOTSUPP
+to allow the caller to zero out the value with
+.Fn VOP_SETEXTATTR .
 .El
 .Sh ERRORS
 .Bl -tag -width Er
-.It Bq Er ENOATTR
-The requested attribute is not defined for this vnode.
-.It Bq Er ENOTDIR
-The vnode does not represent a directory.
-.It Bq Er ENOENT
-The component was not found in the directory.
-.It Bq Er ENOSPC
-The file system is full.
-.It Bq Er EDQUOT
-Quota exceeded.
 .It Bq Er EACCES
 Access for the specified operation is denied.
-.It Bq Er EJUSTRETURN
-A CREATE or RENAME operation would be successful.
-.It Bq Er EPERM
-an attempt was made to change an immutable file
-.It Bq Er ENOTEMPTY
-attempt to remove a directory which is not empty
+.It Bq Er EDQUOT
+Quota exceeded.
 .It Bq Er EINVAL
 attempt to read from an illegal offset in the directory; unrecognized
 input
 .It Bq Er EIO
 a read error occurred while reading the directory or reading the
 contents of a symbolic link
+.It Bq Er EJUSTRETURN
+A CREATE or RENAME operation would be successful.
+.It Bq Er ENOATTR
+The requested attribute is not defined for this vnode.
+.It Bq Er ENOENT
+The component was not found in the directory.
+.It Bq Er ENOSPC
+The file system is full.
+.It Bq Er ENOTDIR
+The vnode does not represent a directory.
+.It Bq Er ENOTEMPTY
+attempt to remove a directory which is not empty
+.It Bq Er EPERM
+an attempt was made to change an immutable file
 .It Bq Er EROFS
 the file system is read-only
 .El

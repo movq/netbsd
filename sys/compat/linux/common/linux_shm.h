@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_shm.h,v 1.10 2007/12/20 23:02:56 dsl Exp $	*/
+/*	$NetBSD: linux_shm.h,v 1.12 2008/04/28 20:23:44 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -60,13 +53,19 @@ struct linux_shmid_ds {
 
 struct linux_shmid64_ds {
 	struct linux_ipc64_perm	l_shm_perm;
-	uint			l_shm_segsz;
+	size_t			l_shm_segsz;
 	linux_time_t		l_shm_atime;
+#ifndef _LP64
 	u_long			l____unused1;
+#endif
 	linux_time_t		l_shm_dtime;
+#ifndef _LP64
 	u_long			l____unused2;
+#endif
 	linux_time_t		l_shm_ctime;
+#ifndef _LP64
 	u_long			l____unused3;
+#endif
 	int			l_shm_cpid;
 	int			l_shm_lpid;
 	u_long			l_shm_nattch;

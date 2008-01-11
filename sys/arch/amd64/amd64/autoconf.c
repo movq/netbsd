@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.18 2007/12/09 20:27:43 jmcneill Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.23 2011/02/22 06:37:24 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -46,16 +46,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.18 2007/12/09 20:27:43 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.23 2011/02/22 06:37:24 dholland Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 
 #include <machine/pte.h>
-#include <machine/cpu.h>
+#include <machine/cpufunc.h>
 
 #include "ioapic.h"
 #include "lapic.h"
@@ -81,7 +83,7 @@ extern void platform_init(void);
  * Determine i/o configuration for a machine.
  */
 void
-cpu_configure()
+cpu_configure(void)
 {
 
 	startrtclock();
@@ -101,15 +103,12 @@ cpu_configure()
 #endif
 
 #if NIOAPIC > 0
-	lapic_set_lvt();
 	ioapic_enable();
 #endif
 
 #ifdef MULTIPROCESSOR
 	cpu_init_idle_lwps();
 #endif
-
-	init_TSC_tc();
 
 	spl0();
 	lcr8(0);

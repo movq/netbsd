@@ -1,14 +1,15 @@
-/*	$NetBSD: iplsum.c,v 1.2 2005/12/11 12:17:25 christos Exp $	*/
+/*	$NetBSD: iplsum.c,v 1.5 2011/02/21 02:31:57 itohy Exp $	*/
 
 /*
  * Calculate 32bit checksum of IPL and store in a certain location
  *
- * Written in 2003 by ITOH Yasufumi (itohy@NetBSD.org).
+ * Written in 2003 by ITOH Yasufumi.
  * Public domain
  */
 
 #include <sys/types.h>
 #include <stdio.h>
+#include <string.h>
 #include <netinet/in.h>
 
 #ifndef __BIT_TYPES_DEFINED__
@@ -35,9 +36,7 @@ int main(int, char *[]);
 #endif
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	FILE *fp;
 	int len;

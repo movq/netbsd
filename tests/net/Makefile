@@ -1,10 +1,9 @@
-# $NetBSD: Makefile,v 1.1 2007/12/23 13:50:22 jmmv Exp $
+# $NetBSD: Makefile,v 1.9 2011/02/08 10:11:28 pooka Exp $
 
 .include <bsd.own.mk>
 
 TESTSDIR=	${TESTSBASE}/net
 
-SUBDIR=		sys
+TESTS_SUBDIRS=		bpf carp icmp if if_loop net route sys
 
 .include <bsd.test.mk>
-.include <bsd.subdir.mk>

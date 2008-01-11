@@ -1,4 +1,4 @@
-/*	$NetBSD: wsdisplay_vconsvar.h,v 1.8 2007/08/06 03:11:32 macallan Exp $ */
+/*	$NetBSD: wsdisplay_vconsvar.h,v 1.20 2011/05/25 06:13:30 macallan Exp $ */
 
 /*-
  * Copyright (c) 2005, 2006 Michael Lorenz
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -60,6 +53,14 @@ struct vcons_screen {
 					 * - for drivers that use software
 					 * drawing */
 #define VCONS_DONT_DRAW		8	/* don't draw on this screen at all */
+/*
+ * the following flags are for drivers which either can't accelerate (all) copy 
+ * operations or where drawing characters is faster than the blitter
+ * for example, Sun's Creator boards can't accelerate copycols()
+ */
+#define VCONS_NO_COPYCOLS	0x10	/* use putchar() based copycols() */
+#define VCONS_NO_COPYROWS	0x20	/* use putchar() basec copyrows() */
+#define VCONS_DONT_READ		0x30	/* avoid framebuffer reads */
 	/* status flags used by vcons */
 	uint32_t scr_status;
 #define VCONS_IS_VISIBLE	1	/* this screen is currently visible */
@@ -71,6 +72,9 @@ struct vcons_screen {
 	int scr_line_wanted;
 	int scr_offset_to_zero;
 	int scr_current_offset;
+#endif
+#ifdef VCONS_DRAW_INTR
+	unsigned int scr_dirty;
 #endif
 };
 
@@ -111,16 +115,22 @@ struct vcons_data {
 	/* virtual screen management stuff */
 	void (*switch_cb)(void *, int, int);
 	void *switch_cb_arg;
-#ifdef VCONS_SWITCH_ASYNC
-	lwp_t *redraw_thread;
-	int start_drawing, done_drawing;	/* for the drawing thread */
-#endif
 	struct callout switch_callout;
 	uint32_t switch_pending;
 	LIST_HEAD(, vcons_screen) screens;
 	struct vcons_screen *active, *wanted;
 	const struct wsscreen_descr *currenttype;
 	int switch_poll_count;
+#ifdef VCONS_DRAW_INTR
+	int cells;
+	long *attrs;
+	uint16_t *chars;
+	int cursor_offset;
+	callout_t intr;
+	int intr_valid;
+	void *intr_softint;
+	int use_intr;		/* use intr drawing when non-zero */
+#endif
 };
 
 int	vcons_init(struct vcons_data *, void *cookie, struct wsscreen_descr *,
@@ -129,8 +139,21 @@ int	vcons_init(struct vcons_data *, void *cookie, struct wsscreen_descr *,
 int	vcons_init_screen(struct vcons_data *, struct vcons_screen *, int,
     long *);
 
+/* completely redraw the screen, clear it if RI_FULLCLEAR is set */
 void	vcons_redraw_screen(struct vcons_screen *);
 
+#ifdef VCONS_DRAW_INTR
+/* redraw all dirty character cells */
+void	vcons_update_screen(struct vcons_screen *);
+void	vcons_invalidate_cache(struct vcons_data *);
+#else
+#define vcons_update_screen vcons_redraw_screen
+#endif
 
+void	vcons_replay_msgbuf(struct vcons_screen *);
+
+void	vcons_enable_polling(struct vcons_data *);
+void	vcons_disable_polling(struct vcons_data *);
+void	vcons_hard_switch(struct vcons_screen *);
 
 #endif /* _WSDISPLAY_VCONS_H_ */

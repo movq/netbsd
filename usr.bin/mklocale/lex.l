@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.l,v 1.13 2003/10/27 00:12:43 lukem Exp $	*/
+/*	$NetBSD: lex.l,v 1.18 2010/06/13 04:14:57 tnozaki Exp $	*/
 
 %{
 /*-
@@ -42,13 +42,17 @@
 #if 0
 static char sccsid[] = "@(#)lex.l	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: lex.l,v 1.13 2003/10/27 00:12:43 lukem Exp $");
+__RCSID("$NetBSD: lex.l,v 1.18 2010/06/13 04:14:57 tnozaki Exp $");
 #endif
 #endif /* not lint */
 
-#include "locale/runetype.h"
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "citrus_namespace.h"
+#include "citrus_bcs.h"
+
+#include "runetype_file.h"
 
 #include "ldef.h"
 #include "yacc.h"
@@ -80,11 +84,11 @@ W	[\t\n\r ]
 '\\v'				{ yylval.rune = '\v';
 				  return(RUNE); }
 
-0x{XDIGIT}+			{ yylval.rune = strtoul(yytext, 0, 16);
+0x{XDIGIT}+			{ yylval.rune = _bcs_strtoul(yytext, 0, 16);
 				  return(RUNE); }
-0{ODIGIT}+			{ yylval.rune = strtoul(yytext, 0, 8);
+0{ODIGIT}+			{ yylval.rune = _bcs_strtoul(yytext, 0, 8);
 				  return(RUNE); }
-{DIGIT}+			{ yylval.rune = strtoul(yytext, 0, 10);
+{DIGIT}+			{ yylval.rune = _bcs_strtoul(yytext, 0, 10);
 				  return(RUNE); }
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: uhcivar.h,v 1.41 2007/12/09 20:28:24 jmcneill Exp $	*/
+/*	$NetBSD: uhcivar.h,v 1.48 2010/11/03 22:34:23 dyoung Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/uhcivar.h,v 1.14 1999/11/17 22:33:42 n_hibma Exp $	*/
 
 /*
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -94,6 +87,8 @@ struct uhci_soft_td {
 	uhci_td_t td;			/* The real TD, must be first */
 	uhci_soft_td_qh_t link; 	/* soft version of the td_link field */
 	uhci_physaddr_t physaddr;	/* TD's physical address. */
+	usb_dma_t dma;			/* TD's DMA infos */
+	int offs;			/* TD's offset in usb_dma_t */
 };
 /*
  * Make the size such that it is a multiple of UHCI_TD_ALIGN.  This way
@@ -113,6 +108,8 @@ struct uhci_soft_qh {
 	uhci_soft_td_t *elink;		/* soft version of qh_elink */
 	uhci_physaddr_t physaddr;	/* QH's physical address. */
 	int pos;			/* Timeslot position */
+	usb_dma_t dma;			/* QH's DMA infos */
+	int offs;			/* QH's offset in usb_dma_t */
 };
 /* See comment about UHCI_STD_SIZE. */
 #define UHCI_SQH_SIZE ((sizeof (struct uhci_soft_qh) + UHCI_QH_ALIGN - 1) / UHCI_QH_ALIGN * UHCI_QH_ALIGN)
@@ -130,7 +127,8 @@ struct uhci_vframe {
 };
 
 typedef struct uhci_softc {
-	struct usbd_bus sc_bus;		/* base device */
+	device_t sc_dev;
+	struct usbd_bus sc_bus;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	bus_size_t sc_size;
@@ -172,13 +170,13 @@ typedef struct uhci_softc {
 	/* Info for the root hub interrupt "pipe". */
 	int sc_ival;			/* time between root hub intrs */
 	usbd_xfer_handle sc_intr_xfer;	/* root hub interrupt transfer */
-	usb_callout_t sc_poll_handle;
+	struct callout sc_poll_handle;
 
 	char sc_vendor[32];		/* vendor string for root hub */
 	int sc_id_vendor;		/* vendor ID for root hub */
 
 #if defined(__NetBSD__) || defined(__OpenBSD__)
-	device_ptr_t sc_child;		/* /dev/usb# device */
+	device_t sc_child;		/* /dev/usb# device */
 #endif
 #ifdef __NetBSD__
 	struct usb_dma_reserve sc_dma_reserve;
@@ -189,8 +187,9 @@ usbd_status	uhci_init(uhci_softc_t *);
 int		uhci_intr(void *);
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 int		uhci_detach(uhci_softc_t *, int);
-int		uhci_activate(device_ptr_t, enum devact);
-bool		uhci_resume(device_t);
-bool		uhci_suspend(device_t);
+void		uhci_childdet(device_t, device_t);
+int		uhci_activate(device_t, enum devact);
+bool		uhci_resume(device_t, const pmf_qual_t *);
+bool		uhci_suspend(device_t, const pmf_qual_t *);
 #endif
 

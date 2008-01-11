@@ -1,4 +1,4 @@
-/*	$NetBSD: userret.h,v 1.7 2007/11/05 20:37:48 ad Exp $ */
+/*	$NetBSD: userret.h,v 1.9 2009/10/17 08:50:49 nakayama Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -63,14 +63,6 @@ userret(struct lwp *l, int pc, u_quad_t oticks)
 
 	mi_userret(l);
 
-	if (want_ast) {
-		want_ast = 0;
-		if (l->l_pflag & LP_OWEUPC) {
-			l->l_pflag &= ~LP_OWEUPC;
-			ADDUPROF(l);
-		}
-	}
-
 	/*
 	 * If profiling, charge recent system time to the trapped pc.
 	 */
@@ -90,7 +82,6 @@ static __inline void share_fpu(struct lwp *, struct trapframe64 *);
 static __inline void
 share_fpu(struct lwp *l, struct trapframe64 *tf)
 {
-	if (!(tf->tf_tstate & (PSTATE_PRIV << TSTATE_PSTATE_SHIFT)) &&
-	    fplwp != l)
-		tf->tf_tstate &= ~(PSTATE_PEF << TSTATE_PSTATE_SHIFT);
+	if (!(tf->tf_tstate & TSTATE_PRIV) && fplwp != l)
+		tf->tf_tstate &= ~TSTATE_PEF;
 }

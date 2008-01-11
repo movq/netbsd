@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_amap.h,v 1.33 2007/07/21 19:21:53 ad Exp $	*/
+/*	$NetBSD: uvm_amap.h,v 1.36 2011/04/23 18:14:12 rmind Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -202,10 +195,10 @@ struct vm_amap {
  */
 
 /*
- * defines for handling of large sparce amaps:
+ * defines for handling of large, sparse amaps:
  *
  * one of the problems of array-based amaps is that if you allocate a
- * large sparcely-used area of virtual memory you end up allocating
+ * large, sparsely-used area of virtual memory you end up allocating
  * large arrays that, for the most part, don't get used.  this is a
  * problem for BSD in that the kernel likes to make these types of
  * allocations to "reserve" memory for possible future use.
@@ -215,7 +208,7 @@ struct vm_amap {
  * of this VM is actually used.  since the stack is anonymous memory
  * it makes sense for it to live in an amap, but if we allocated an
  * amap for the entire stack range we could end up wasting a large
- * amount of malloc'd KVM.
+ * amount of allocated KVM.
  *
  * for example, on the i386 at boot time we allocate two amaps for the stack
  * of /sbin/init:

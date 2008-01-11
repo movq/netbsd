@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.3 2007/02/18 17:00:08 dsl Exp $	*/
+/*	$NetBSD: syscall.c,v 1.7 2009/10/21 13:56:36 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: syscall.c,v 1.3 2007/02/18 17:00:08 dsl Exp $");
+__RCSID("$NetBSD: syscall.c,v 1.7 2009/10/21 13:56:36 wiz Exp $");
 
 /* System call stats */
 
@@ -41,7 +38,6 @@ __RCSID("$NetBSD: syscall.c,v 1.3 2007/02/18 17:00:08 dsl Exp $");
 #include <sys/user.h>
 #include <sys/namei.h>
 #include <sys/sysctl.h>
-#include <sys/device.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -163,7 +159,7 @@ putuint64(uint64_t v, int row, int col, int width)
 	len = snprintf(buf, sizeof buf, "%" PRIu64, v);
 	if (len > width) {
 		i = (len - width) / 3;
-		if (i >= sizeof suffix) {
+		if (i >= (int)sizeof(suffix)) {
 			memset(buf, '*', width);
 			len = width;
 		} else {
@@ -205,9 +201,8 @@ showsyscall(void)
 		etime = cur.cp_etime;
 		/* < 5 ticks - ignore this trash */
 		if ((etime * hertz) < 1.0) {
-			if (failcnt++ > MAXFAIL)
+			if (failcnt++ <= MAXFAIL)
 				return;
-			failcnt = 0;
 			clear();
 			mvprintw(2, 10, "The alternate system clock has died!");
 			mvprintw(3, 10, "Reverting to ``pigs'' display.");
@@ -227,7 +222,7 @@ showsyscall(void)
 	show_vmstat_top(&s.Total, &s.uvmexp, &s1.uvmexp);
 
 	/* Sort out the values we are going to display */
-	for (i = 0; i < nelem(s.counts); i++) {
+	for (i = 0; i < (int)nelem(s.counts); i++) {
 		switch (show) {
 		default:
 		case SHOW_COUNTS:
@@ -268,12 +263,12 @@ showsyscall(void)
 	l = SYSCALLROW;
 	c = 0;
 	move(l, c);
-	for (ii = 0; ii < nelem(s.counts); ii++) {
+	for (ii = 0; ii < (int)nelem(s.counts); ii++) {
 		i = syscall_sort[ii];
 		if (val[i] == 0 && irf[i] == 0)
 			continue;
 
-		if (i < nelem(syscallnames)) {
+		if (i < (int)nelem(syscallnames)) {
 			const char *name = syscallnames[i];
 			while (name[0] == '_')
 				name++;
@@ -365,7 +360,7 @@ syscall_order(char *args)
 		goto usage;
 
 	/* Undo all the sorting */
-	for (i = 0; i < nelem(syscall_sort); i++)
+	for (i = 0; i < (int)nelem(syscall_sort); i++)
 		syscall_sort[i] = i;
 
 	if (sort_order == NAMES) {

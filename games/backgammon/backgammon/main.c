@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.23 2007/12/15 19:44:38 perry Exp $	*/
+/*	$NetBSD: main.c,v 1.28 2010/03/22 05:10:19 mrg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.23 2007/12/15 19:44:38 perry Exp $");
+__RCSID("$NetBSD: main.c,v 1.28 2010/03/22 05:10:19 mrg Exp $");
 #endif
 #endif				/* not lint */
 
@@ -52,16 +52,16 @@ __RCSID("$NetBSD: main.c,v 1.23 2007/12/15 19:44:38 perry Exp $");
 
 extern const char   *const instr[];		/* text of instructions */
 extern const char   *const message[];		/* update message */
-short ospeed;			/* tty output speed */
+extern short ospeed;			/* tty output speed */
 
-const char   *const helpm[] = {		/* help message */
+static const char *const helpm[] = {		/* help message */
 	"Enter a space or newline to roll, or",
 	"     R   to reprint the board\tD   to double",
 	"     S   to save the game\tQ   to quit",
 	0
 };
 
-const char   *const contin[] = {		/* pause message */
+static const char *const contin[] = {		/* pause message */
 	"(Type a newline to continue.)",
 	"",
 	0
@@ -93,7 +93,7 @@ main(int argc __unused, char **argv)
 	int     i;		/* non-descript index */
 	int     l;		/* non-descript index */
 	char    c;		/* non-descript character storage */
-	long    t;		/* time for random num generator */
+	time_t  t;		/* time for random num generator */
 
 	/* revoke setgid privileges */
 	setgid(getgid());
@@ -133,15 +133,15 @@ main(int argc __unused, char **argv)
 
 	/* check if restored game and save flag for later */
 	if ((rfl = rflag) != 0) {
-		text(message);	/* print message */
-		text(contin);
+		wrtext(message);	/* print message */
+		wrtext(contin);
 		wrboard();	/* print board */
 		/* if new game, pretend to be a non-restored game */
 		if (cturn == 0)
 			rflag = 0;
 	} else {
 		rscore = wscore = 0;	/* zero score */
-		text(message);	/* update message without pausing */
+		wrtext(message);	/* update message without pausing */
 
 		if (aflag) {	/* print rules */
 			writel(rules);
@@ -158,7 +158,7 @@ main(int argc __unused, char **argv)
 				writel(need);
 				if (yorn(0)) {	/* print instructions */
 					clear();
-					text(instr);
+					wrtext(instr);
 				}
 			}
 		}
@@ -223,7 +223,7 @@ main(int argc __unused, char **argv)
 		} else
 			if (!aflag)
 				/* pause to read message */
-				text(contin);
+				wrtext(contin);
 
 		wrboard();	/* print board */
 
@@ -416,7 +416,7 @@ main(int argc __unused, char **argv)
 						curmove(20, 0);
 					else
 						writec('\n');
-					text(helpm);
+					wrtext(helpm);
 					if (tflag)
 						curmove(cturn == -1 ? 
 						    18 : 19, 0);

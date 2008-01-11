@@ -1,4 +1,4 @@
-/* $NetBSD: lemac.c,v 1.34 2007/10/19 11:59:55 ad Exp $ */
+/* $NetBSD: lemac.c,v 1.39 2010/11/13 13:52:01 uebayasi Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1997 Matt Thomas <matt@3am-software.com>
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.34 2007/10/19 11:59:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.39 2010/11/13 13:52:01 uebayasi Exp $");
 
 #include "opt_inet.h"
 #include "rnd.h"
@@ -76,12 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.34 2007/10/19 11:59:55 ad Exp $");
 #include <i386/isa/decether.h>
 #endif
 
-#include <uvm/uvm_extern.h>
-
-#include "bpfilter.h"
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 static void lemac_init(lemac_softc_t *sc);
 static void lemac_ifstart(struct ifnet *ifp);
@@ -310,10 +305,9 @@ lemac_input(
 	if (length & 1)
 	    m->m_data[length - 1] = LEMAC_GET8(sc, offset + length - 1);
     }
-#if NBPFILTER > 0
     if (sc->sc_if.if_bpf != NULL) {
 	m->m_pkthdr.len = m->m_len = length;
-	bpf_mtap(sc->sc_if.if_bpf, m);
+	bpf_mtap(&sc->sc_if, m);
     }
     /*
      * If this is single cast but not to us
@@ -324,7 +318,6 @@ lemac_input(
 	m_freem(m);
 	return;
     }
-#endif
     m->m_pkthdr.len = m->m_len = length;
     m->m_pkthdr.rcvif = &sc->sc_if;
     (*sc->sc_if.if_input)(&sc->sc_if, m);
@@ -735,10 +728,7 @@ lemac_ifstart(
 	}
 
 	LEMAC_OUTB(sc, LEMAC_REG_TQ, tx_pg);	/* tell chip to transmit this packet */
-#if NBPFILTER > 0
-	if (sc->sc_if.if_bpf != NULL)
-	    bpf_mtap(sc->sc_if.if_bpf, m);
-#endif
+	bpf_mtap(&sc->sc_if, m);
 	m_freem(m);			/* free the mbuf */
     }
     LEMAC_INTR_ENABLE(sc);
@@ -757,7 +747,7 @@ lemac_ifioctl(
     s = splnet();
 
     switch (cmd) {
-	case SIOCSIFADDR: {
+	case SIOCINITIFADDR: {
 	    struct ifaddr *ifa = (struct ifaddr *)data;
 
 	    ifp->if_flags |= IFF_UP;
@@ -779,6 +769,8 @@ lemac_ifioctl(
 	}
 
 	case SIOCSIFFLAGS: {
+	    if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+		break;
 	    lemac_init(sc);
 	    break;
 	}
@@ -805,7 +797,7 @@ lemac_ifioctl(
 	}
 
 	default: {
-	    error = EINVAL;
+	    error = ether_ioctl(ifp, cmd, data);
 	    break;
 	}
     }
@@ -991,7 +983,7 @@ lemac_ifattach(
 {
     struct ifnet * const ifp = &sc->sc_if;
 
-    strcpy(ifp->if_xname, sc->sc_dv.dv_xname);
+    strlcpy(ifp->if_xname, device_xname(&sc->sc_dv), IFNAMSIZ);
 
     lemac_reset(sc);
 
@@ -1025,7 +1017,7 @@ lemac_ifattach(
 	ether_ifattach(ifp, sc->sc_enaddr);
 
 #if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dv.dv_xname,
+	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dv),
 			  RND_TYPE_NET, 0);
 #endif
 

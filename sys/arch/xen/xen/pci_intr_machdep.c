@@ -1,4 +1,4 @@
-/*      $NetBSD: pci_intr_machdep.c,v 1.3 2007/11/22 16:17:07 bouyer Exp $      */
+/*      $NetBSD: pci_intr_machdep.c,v 1.14 2011/04/04 20:37:55 dyoung Exp $      */
 
 /*
  * Copyright (c) 2005 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,6 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.14 2011/04/04 20:37:55 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,7 +43,7 @@
 #include "locators.h"
 #include "opt_ddb.h"
 #include "ioapic.h"
-#include "acpi.h"
+#include "acpica.h"
 #include "opt_mpbios.h"
 #include "opt_acpi.h"
 
@@ -59,14 +57,13 @@
 #include <machine/mpbiosvar.h>
 #endif
 
-#if NACPI > 0
+#if NACPICA > 0
 #include <machine/mpacpi.h>
 #endif
 
 int
-pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
-	pcireg_t intr;
 	int pin;
 	int line;
 
@@ -76,20 +73,8 @@ pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 	int bus, dev, func;
 #endif
 
-#ifndef XEN3
-	physdev_op_t physdev_op;
-	/* initialise device, to get the real IRQ */
-	physdev_op.cmd = PHYSDEVOP_PCI_INITIALISE_DEVICE;
-	physdev_op.u.pci_initialise_device.bus = pa->pa_bus;
-	physdev_op.u.pci_initialise_device.dev = pa->pa_device;
-	physdev_op.u.pci_initialise_device.func = pa->pa_function;
-	if (HYPERVISOR_physdev_op(&physdev_op) < 0)
-		panic("HYPERVISOR_physdev_op(PHYSDEVOP_PCI_INITIALISE_DEVICE)");
-#endif /* !XEN3 */
-
-	intr = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_INTERRUPT_REG);
 	pin = pa->pa_intrpin;
-	pa->pa_intrline = line = PCI_INTERRUPT_LINE(intr);
+	line = pa->pa_intrline;
 #if 0 /* XXXX why is it always 0 ? */
 	if (pin == 0) {
 		/* No IRQ used */
@@ -106,8 +91,12 @@ pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 	pci_decompose_tag(pc, pa->pa_tag, &bus, &dev, &func);
 	if (mp_busses != NULL) {
 		if (intr_find_mpmapping(bus, (dev<<2)|(rawpin-1), ihp) == 0) {
-			if ((ihp->pirq & 0xff) == 0)
+			if (ihp->pirq & APIC_INT_VIA_APIC) {
+				/* make sure a new IRQ will be allocated */
+				ihp->pirq &= ~0xff;
+			} else {
 				ihp->pirq |= line;
+			}
 			goto end;
 		}
 		/*
@@ -122,11 +111,12 @@ pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 		    '@' + pin, line);
 		goto bad;
 	}
-#ifdef XEN3
+#ifdef DOM0OPS
 	if (line >= NUM_LEGACY_IRQS) {
 		printf("pci_intr_map: bad interrupt line %d\n", line);
 		goto bad;
 	}
+#endif
 	if (line == 2) {
 		printf("pci_intr_map: changed line 2 to line 9\n");
 		line = 9;
@@ -143,7 +133,6 @@ pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 		printf("pci_intr_map: no MP mapping found\n");
 	}
 #endif /* NIOAPIC */
-#endif /* XEN3 */
 
 	ihp->pirq = line;
 
@@ -167,16 +156,17 @@ const char
 {
 	static char buf[64];
 #if NIOAPIC > 0
-	struct pic *pic;
+	struct ioapic_softc *pic;
 	if (ih.pirq & APIC_INT_VIA_APIC) {
-		pic = (struct pic *)ioapic_find(APIC_IRQ_APIC(ih.pirq));
+		pic = ioapic_find(APIC_IRQ_APIC(ih.pirq));
 		if (pic == NULL) {
 			printf("pci_intr_string: bad ioapic %d\n",
 			    APIC_IRQ_APIC(ih.pirq));
 			return NULL;
 		}
 		snprintf(buf, 64, "%s pin %d, event channel %d",
-		    pic->pic_name, APIC_IRQ_PIN(ih.pirq), ih.evtch);
+		    device_xname(pic->sc_dev), APIC_IRQ_PIN(ih.pirq),
+		    ih.evtch);
 		return buf;
 	}
 #endif
@@ -191,22 +181,35 @@ pci_intr_evcnt(pci_chipset_tag_t pcitag, pci_intr_handle_t intrh)
 	return NULL;
 }
 
+int
+pci_intr_setattr(pci_chipset_tag_t pc, pci_intr_handle_t *ih,
+		 int attr, uint64_t data)
+{
+
+	switch (attr) {
+	case PCI_INTR_MPSAFE:
+		return 0;
+	default:
+		return ENODEV;
+	}
+}
+
 void *
 pci_intr_establish(pci_chipset_tag_t pcitag, pci_intr_handle_t intrh,
     int level, int (*func)(void *), void *arg)
 {
 	char evname[16];
 #if NIOAPIC > 0
-	struct pic *pic;
+	struct ioapic_softc *pic;
 	if (intrh.pirq & APIC_INT_VIA_APIC) {
-		pic = (struct pic *)ioapic_find(APIC_IRQ_APIC(intrh.pirq));
+		pic = ioapic_find(APIC_IRQ_APIC(intrh.pirq));
 		if (pic == NULL) {
 			printf("pci_intr_establish: bad ioapic %d\n",
 			    APIC_IRQ_APIC(intrh.pirq));
 			return NULL;
 		}
 		snprintf(evname, sizeof(evname), "%s pin %d",
-		    pic->pic_name, APIC_IRQ_PIN(intrh.pirq));
+		    device_xname(pic->sc_dev), APIC_IRQ_PIN(intrh.pirq));
 	} else
 #endif
 		snprintf(evname, sizeof(evname), "irq%d", intrh.pirq);

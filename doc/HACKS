@@ -1,4 +1,4 @@
-# $NetBSD: HACKS,v 1.94 2007/12/31 14:10:41 ad Exp $
+# $NetBSD: HACKS,v 1.115 2011/03/12 08:03:06 matt Exp $
 #
 # This file is intended to document workarounds for currently unsolved
 # (mostly) compiler bugs.
@@ -84,18 +84,6 @@ descr
 	symbols should be consistent across all ports.
 kcah
 
-hack	GCC2 isn't C99
-cdate	5 December 2003
-who	mrg
-file	gnu/dist/binutils/ld/ldlex.c: r1.2
-descr
-	ldlex.c is generated from ldlex.l and we get macro redefinition
-	errors from it if __STDC_VERSION__ is not C99 compliant.  This
-	hack forces NetBSD 1.6 and later systems to also include <stdint.h>
-	to get the relevant definitions.  This hack should be backed out
-	when all platforms have switched away from GCC2.
-kcah
-
 hack	gcc-strict-aliasing
 cdate	6 August 2004
 who	junyoung
@@ -108,18 +96,6 @@ descr
 	is due to use of type casting in a non-standard way in the code and
 	not a compiler bug. Once a new release of KAME with a proper fix
 	applied is imported this should be backed out.
-kcah
-
-hack	gcc 3.3.3 wrong uninitialised variable
-mdate	12 May 2006
-who	he
-file	usr.bin/msgc/msg_sys.def : 1.33-1.34
-file	distrib/utils/sysinst/aout2elf.c : 1.11
-descr
-	Gcc 3.3.3 gets some -Wuninitialized warnings wrong.  This is
-	just one of many in the tree, marked with
-	/* XXX -Wuninitialized [arch] */
-	in the source.
 kcah
 
 hack	gcc4 wrong uninitialized variable
@@ -191,6 +167,7 @@ file	sys/ufs/lfs/lfs_vfsops.c	: 1.207 [also (char *)]
 file	usr.bin/ftp/ftp.c		: 1.140
 file	usr.bin/find/function.c		: 1.54
 file	usr.bin/mail/tty.c		: 1.20
+file	usr.bin/msgc/msg_sys.def	: 1.33-1.34
 file	usr.bin/nl/nl.c			: 1.7
 file	usr.bin/systat/keyboard.c	: 1.23
 file	usr.bin/usbhidctl/usbhid.c	: 1.29
@@ -303,7 +280,68 @@ descr
 	-fno-strict-aliasing.
 kcah
 
+hack	cross-building hack on Darwin
+mdate	20 July 2008
+who	agc
+file	src/distrib/common/Makefile.mdset	: 1.33
+descr
+	Darwin has problems with getopt() when used in mdsetimage -v,
+	due to the difference between BSD and libiberty() getopt
+	implementations, more fully described in
+	http://mail-index.netbsd.org/current-users/2008/06/27/msg003242.html
+	and the subsequent thread.  For just now, we just have an ugly
+	workaround not to call mdsetimage with the -v argument on Darwin
+kcah
+
+hack	avoid rebuilding asn1 libraries
+mdate	03 August 2008
+who	veego
+file	src/crypto/dist/heimdal/lib/asn1/gen.c	: 1.10
+file	src/lib/libasn1/Makefile	: 1.32
+file	src/lib/libhdb/Makefile	: 1.23
+file	src/lib/libgssapi/Makefile	: 1.20
+file	src/lib/libhx509/Makefile	: 1.3
+pr	9702 39185
+descr
+	asn1_compile does not check if generated header files do not have to
+	be rebuild.
+	Generate .hx files and copy it in the Makefiles if they changed.
+kcah
+
+hack	avoid gcc4 -O1 bug in loop optimize
+cdate	29 November 2008
+who	tsutsui
+file	src/sbin/ifconfig/Makefile	: 1.39
+pr	40036 40066
+descr
+	gcc -O1 seems to generate wrong code in loop optimize so that
+	ifconfig lo0 inet6 doesn't return error even if a kernel
+	doesn't have IPv6 support. (see the above PRs for details)
+	For workaround, specify -fno-loop-optimize on m68000,
+	which uses -O1 by default.
+kcah
+
+hack	MKPIE ldscript for /usr.sbin/crash
+cdate	22 April 2010
+who	christos
+file	src/usr.sbin/crash/Makefile	: 1.5
+file	src/usr.sbin/crash/ldscript.crash	: 1.1
+pr	N/A
+descr
+	fixed in binutils-2.20.1. Linking with MKPIE=yes causes overlapping
+	sections
+kcah
+
 port	vax
+
+	hack	gcc4/vax ICE
+	cdate	
+	who	tsutsui
+	file	sys/arch/vax/conf/Makefile.vax
+	descr
+		GCC4 on vax gets ICE on compiling sys/ddb/db_command.c.
+		-fno-tree-ter prevents it so add it to COPTS.
+	kcah
 
 	hack	gcc4/vax compiler crash
 	cdate	Fri Jun 30 22:39:12 PDT 2006
@@ -346,7 +384,7 @@ port	vax
 		added this feature to GCC 3 so it can be removed when switching.
 	kcah
 
-	hack	gcc-vax-libbz2
+	hack	gcc 2.95/vax libbz2
 	mdate	27 Jun 2002
 	who	thorpej
 	file	lib/libbz2/Makefile
@@ -423,6 +461,51 @@ port	vax
 		PR#32907.
 	kcah
 
+	hack	pcc 0.9.9 large string literals
+	cdat	8 July 2008
+	who	gmcgarry
+	file	sys/conf/param.c : 1.58
+	descr
+		Workaround for pcc 0.9.9 not handling large string literals
+		which causes kernels with 'options INCLUDE_CONFIG_FILE' to
+		fail compilation.
+		There is a proposal on the pcc mailing list to stuff config
+		file in ELF section.
+	kcah
+
+	hack	xorg warnings
+	cdat	30 July 2008
+	who	mrg
+	file	external/mit/xorg/lib/libSM/Makefile : 1.2
+		external/mit/xorg/lib/libX11/Makefile.libx11 : 1.2
+		external/mit/xorg/lib/libXext/Makefile : 1.2
+		external/mit/xorg/lib/libXfont/Makefile : 1.2
+	descr
+		Disable several warnings or use -Wno-error across Xorg sources
+		while we get them working
+	kcah
+
+	hack	32 bit time leftovers
+	cdat	11 January 2009
+	who	christos
+	file	lib/libc/time/localtime.c : 1.41
+		lib/libc/time/zic.c : 1.23
+	descr
+		The timezone compiled files still contain 32 bit time_t
+		quantities. I did not want to version the files because
+		the ``parser'' is too ugly for words. What needs to be
+		done, is to rewrite the parser from scratch also to avoid
+		potential core-dumps from parsing invalid files.
+	kcah
+
+	hack	32 bit time leftovers
+	cdat	11 January 2009
+	who	christos
+	file	various
+	descr
+		Many filesystem on-disk formats have 32 bit times.
+	kcah
+
 port	arm
 
 	hack	gcc-unsigned-compare
@@ -443,117 +526,41 @@ port	arm
 		really should be enough, but turns out not to be.
 	kcah
 
-	hack	gcc 3.3.2/arm sys/kern/uipc_socket.c
-	cdate	Tue Oct 28 18:02:16 GMT 2003
-	who	skrll
-	pr	23044
-	file	sys/arch/arm/conf/Makefile.arm : 1.19
-	descr
-		Performing a build.sh tools on a CATS with NFS mounted 
-		obj and src directories results in "panic: receive 1"
-		The hack is to compile sys/kern/uipc_socket.c with
-		-fno-strict-aliasing
-	kcah
-
-
-port	pc532
-
-	hack	egcs-pc532-ip6_mroute
-	cdate	09 Jul 2002
-	who	simonb
-	file	sys/arch/pc532/conf/Makefile.pc532 : 1.70
-	file	sys/arch/pc532/conf/files.pc532 : 1.47
-	descr
-		egcs 1.1.2 gets an "internal error--insn does not satisfy its
-		constraints" error compiling ip6_mroute.c with -O2 or greater.
-		-O1 works around this problem.
-	kcah
-
-	hack	gcc-pc532-duffs_device
-	cdate	Mon Oct 27 07:23:05 UTC 2003
-	who	simonb
-	file	sys/arch/pc532/conf/Makefile.pc532 : 1.71
-	file	sys/arch/pc532/conf/files.pc532 : 1.52
-	pr	GCC PR optimization/5230
-	descr
-		gcc incorrectly gives an "unreachable code at beginning of
-		switch statement" for a Duff's device construct in
-		arch/pc532/dev/ncr.c.  There is no way to disable just this
-		warning, so -Wno-error is turned on for this file.
-	kcah
-
-	hack	gcc332-cppmacro-ice
-	cdate	Sun Dec  7 12:48:33 UTC 2003
-	who	simonb
-	file	gnu/usr.bin/gcc3/libcpp/Makefile : 1.2
-	descr
-		gcc 3.3.2 gets an ICE when compiling cppmacro.c with -O2.
-		The hack is to use -O1 for this file.  Fixed in gcc
-		-current mainline, unable to work out where the fix is
-		right now.
-	kcah
-
 
 port	sh3
 
 	hack	gcc4-sh3-bz2
-	mdate	20 May 2006
-	who	mrg
+	cdate	Sun May 21 03:34:57 UTC 2006
+	mdate	Fri May 16 13:13:00 UTC 2008
+	who	mrg, tsutsui
 	file	lib/libbz2/Makefile	: 1.10
 	descr
 		The in-tree GCC 4.1-based compiler generated too-far
-		pc-relative addresses.  Hack is to build with -O0.
-	kcah
-
-
-port	sun2
-
-	hack	gcc 3.3.2/mdsetimage
-	cdate	Tue Oct 28 18:43:05 EST 2003
-	who	fredette
-	file	gnu/usr.sbin/mdsetimage/Makefile : 1.15
-	descr
-		mdsetimage.c causes cc1 to barf for as-yet unknown reasons.
-		this hack uses -O0 to avoid the problem.
-	kcah
-
-	hack	gcc 3.3.2/installboot/ffs.c
-	cdate	Tue Oct 28 18:43:05 EST 2003
-	who	fredette
-	file	usr.sbin/installboot/Makefile : 1.26
-	descr
-		ffs.c causes cc1 to barf for as-yet unknown reasons.  this
-		hack uses -O0 to avoid the problem.
-	kcah
-
-	hack	gcc 4.1.1/fsck_ffs/pass1.c
-	cdate	Fri Jun 23 10:30:25 PDT 2006
-	who	mrg
-	file	sbin/fsck_ffs/Makefile : 1.30
-	file	sbin/fsdb/Makefile : 1.19
-	file	sbin/dump_lfs/Makefile : 1.9
-	file	usr.sbin/ndbootd/Makefile : 1.2
-	descr
-		pass1.c causes cc1 to barf for as-yet unknown reasons.  this
-		hack uses -O0 to avoid the problem. (these all seem to be the
-		same problem.)
+		pc-relative addresses.  Hack is to build with
+		-fno-loop-optimize.
 	kcah
 
 
 port	m68000
 
-	hack	gcc 3.3.2/gcc/ra-colorize.c
-	cdate	Wed Nov  5 11:03:13 EST 2003
-	who	mrg
-	file	gnu/usr.bin/gcc3/backend/Makefile : 1.11
+	hack	gcc4-m68000
+	cdate	Fri Feb  8 10:29:37 PST 2008
+	mdate	Sun May  4 15:37:19 UTC 2008
+	who	mrg, tsutsui
+	file	rescue/Makefile	: 1.21
+	file	sbin/dump_lfs/Makefile	: 1.9
+	file	sbin/fsck_ffs/Makefile	: 1.35
+	file	sbin/fsdb/Makefile	: 1.22
+	file	share/mk/sys.mk	: 1.96
+	file	usr.sbin/ndbootd/Makefile	: 1.5
 	descr
-		ra-colorize.c causes a whole spew of unreferenced .L* local
-		symbols.  using -O0 (or even -O2 reportedly) avoids the problem.
-		Note this has been fixed in 3.3.3 at least on m68k,
-		but it hasn't been confirmed on sun2/m68000.
-		(it's too slow even on emulator and unlikely to build
-		 toolchains on sun2 with its maximum 4MB RAM)
+		Several internal compiler errors with gcc -O1
+		around 64bit integer arithmetic.
+		This hack uses -O1 and adds some -fno-tree-foo options
+		to avoid the problem.
+		This might be related with GCC Bugzilla Bug 32424.
 	kcah
+
 
 port	sparc64
 
@@ -565,20 +572,6 @@ port	sparc64
 	descr
 		The sparc compiler miscompiles uvm_bio.c when using
 		any optimization. This results in ubc_release panics.
-	kcah
-
-port	macppc
-
-	hack	remove inline from rotate_{left,right}
-	cdate	Tue Feb 22 13:43:25 EST 2005
-	who	christos
-	file	src/dist/bind/lib/dns/rbt.c
-	descr
-		The macppc gcc-3.3 compiler miscompiles rbt.c when these
-		functions are inlined. The error is:
-		.* named[368]: rbt.c:1584: INSIST(child != (void *)0) >failed
-		.* named[368]: exiting (due to assertion failure)
-		This is reportedly fixed in gcc-3.4
 	kcah
 
 port	mips
@@ -607,6 +600,18 @@ port	mips
 		macro.
 	kcah
 
+	hack	mips-mcount-assembler-warning
+	cdate	Tue Jul 29 14:16:52 UTC 2008
+	who	lukem
+	file	src/lib/libc/gmon/Makefile.inc : 1.8
+	descr
+		Workaround for PR port-mips/39192.
+		common/lib/libc/gmon/mcount.c generates a (fatal)
+		assembler warning on MIPS:
+			Warning: No .cprestore pseudo-op used in PIC code
+		Add COPTS.count.c+=-Wa,--no-warn to avoid -Wa,--fatal-warnings
+	kcah
+
 port	i386
 
 	hack	use volatile intermediate variable to enforce rounding
@@ -617,4 +622,25 @@ port	i386
 	descr
 		gcc-4 does subsequent operations on "float" values within
 		the i387 FPU without rounding the intermediate results
+	kcah
+
+port	powerpc
+
+	hack	avoid using __builtin_return_address(0) because it fails in
+		Xorg's module loader
+	cdate	Sat Sep 27 03:52:05 UTC 2008
+	who	macallan
+	file	src/libexec/ld.elf_so/rtld.c : 1.121
+	descr
+		workaround for PR port-macppc/37812
+	kcah
+
+	hack	define TARGET_SECURE_PLT and HAVE_AS_TLS because when
+		building the native compiler via build.sh those don't defined
+		properly.
+	cdate	Sat Mar 12 08:00:00 UTC 2011
+	who	matt
+	file	src/gnu/dist/gcc4/gcc/config/rs6000/netbsd.h
+	descr
+		see above
 	kcah

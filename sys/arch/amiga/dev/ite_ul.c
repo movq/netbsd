@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_ul.c,v 1.12 2007/03/05 20:29:07 he Exp $ */
+/*	$NetBSD: ite_ul.c,v 1.14 2009/03/14 15:36:01 dsl Exp $ */
 
 /*-
  * Copyright (c) 1995 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite_ul.c,v 1.12 2007/03/05 20:29:07 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite_ul.c,v 1.14 2009/03/14 15:36:01 dsl Exp $");
 
 #include "grful.h"
 #if NGRFUL > 0
@@ -461,9 +454,7 @@ void ulowell_scroll(struct ite_softc *ip, int sy, int sx, int count, int dir)
 
 #ifdef DEBUG_UL
 void
-gsp_dump(cmd,len)
-	u_int16_t *cmd;
-	int len;
+gsp_dump(u_int16_t *cmd,int len)
 {
 	printf("gsp");
 	while (len-- > 0)

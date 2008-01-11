@@ -1,20 +1,22 @@
-#	$NetBSD: Makefile,v 1.56 2007/09/25 01:13:56 lukem Exp $
+#	$NetBSD: Makefile,v 1.63 2010/01/27 19:10:31 drochner Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/4/93
 
 USE_SHLIBDIR=	yes
 
 .include <bsd.own.mk>
 
-WARNS=3
+.include "${NETBSDSRCDIR}/common/lib/libutil/Makefile.inc"
+
+WARNS=	4
 LIB=	util
-CPPFLAGS+=-DLIBC_SCCS
+CPPFLAGS+=-DLIBC_SCCS -I${.CURDIR}
 SRCS=	efun.c getbootfile.c getlabelsector.c getmaxpartitions.c \
 	getmntopts.c getrawpartition.c \
 	disklabel_dkcksum.c disklabel_scan.c \
 	if_media.c \
 	login.c loginx.c login_cap.c login_tty.c logout.c logoutx.c \
 	logwtmp.c logwtmpx.c opendisk.c parsedate.y \
-	passwd.c pw_scan.c pw_policy.c pidfile.c pidlock.c pty.c \
+	passwd.c pw_scan.c pidfile.c pidlock.c pty.c \
 	raise_default_signal.c \
 	secure_path.c snprintb.c sockaddr_snprintf.c stat_flags.c \
 	ttyaction.c ttymsg.c
@@ -25,12 +27,15 @@ MAN=	efun.3 getbootfile.3 getlabelsector.3 getmaxpartitions.3 \
 	login.3 login_cap.3 loginx.3 \
 	disklabel_dkcksum.3 disklabel_scan.3 \
 	opendisk.3 openpty.3 parsedate.3 pidfile.3 pidlock.3 \
-	pw_getconf.3 pw_init.3 pw_lock.3 pw_policy.3 secure_path.3 \
+	pw_getconf.3 pw_init.3 pw_lock.3 secure_path.3 \
 	raise_default_signal.3 \
 	snprintb.3 sockaddr_snprintf.3 stat_flags.3 ttyaction.3 \
 	ttymsg.3 util.3
 
+YPREFIX=__pd
 .PATH:	${NETBSDSRCDIR}/lib/libc/gen
+
+.include "compat/Makefile.inc"
 
 MLINKS+=getlabelsector.3 getlabeloffset.3
 MLINKS+=login.3 logout.3
@@ -47,9 +52,11 @@ MLINKS+=login_cap.3 setusercontext.3
 MLINKS+=loginx.3 logoutx.3 loginx.3 logwtmpx.3
 MLINKS+=openpty.3 login_tty.3
 MLINKS+=openpty.3 forkpty.3
+MLINKS+=pw_getconf.3 pw_getpwconf.3
 MLINKS+=pw_init.3 pw_edit.3
 MLINKS+=pw_init.3 pw_prompt.3
 MLINKS+=pw_init.3 pw_copy.3
+MLINKS+=pw_init.3 pw_copyx.3
 MLINKS+=pw_init.3 pw_scan.3
 MLINKS+=pw_init.3 pw_error.3
 MLINKS+=pw_lock.3 pw_mkdb.3
@@ -71,5 +78,6 @@ MLINKS+=efun.3 efopen.3
 MLINKS+=efun.3 evasprintf.3
 MLINKS+=stat_flags.3 string_to_flags.3
 MLINKS+=stat_flags.3 flags_to_string.3
+MLINKS+=snprintb.3 snprintb_m.3
 
 .include <bsd.lib.mk>

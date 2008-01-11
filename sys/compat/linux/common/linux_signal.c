@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_signal.c,v 1.58 2007/12/20 23:02:56 dsl Exp $	*/
+/*	$NetBSD: linux_signal.c,v 1.71 2010/07/07 01:30:35 chs Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -55,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_signal.c,v 1.58 2007/12/20 23:02:56 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_signal.c,v 1.71 2010/07/07 01:30:35 chs Exp $");
 
 #define COMPAT_LINUX 1
 
@@ -70,14 +63,13 @@ __KERNEL_RCSID(0, "$NetBSD: linux_signal.c,v 1.58 2007/12/20 23:02:56 dsl Exp $"
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 #include <sys/malloc.h>
+#include <sys/wait.h>
 
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
-#include <compat/linux/common/linux_exec.h> /* For emul_linux */
-#include <compat/linux/common/linux_machdep.h> /* For LINUX_NPTL */
-#include <compat/linux/common/linux_emuldata.h> /* for linux_emuldata */
+#include <compat/linux/common/linux_emuldata.h>
 #include <compat/linux/common/linux_siginfo.h>
 #include <compat/linux/common/linux_sigevent.h>
 #include <compat/linux/common/linux_util.h>
@@ -89,9 +81,9 @@ __KERNEL_RCSID(0, "$NetBSD: linux_signal.c,v 1.58 2007/12/20 23:02:56 dsl Exp $"
 /* Locally used defines (in bsd<->linux conversion functions): */
 #define	linux_sigemptyset(s)	memset((s), 0, sizeof(*(s)))
 #define	linux_sigismember(s, n)	((s)->sig[((n) - 1) / LINUX__NSIG_BPW]	\
-					& (1 << ((n) - 1) % LINUX__NSIG_BPW))
+					& (1L << ((n) - 1) % LINUX__NSIG_BPW))
 #define	linux_sigaddset(s, n)	((s)->sig[((n) - 1) / LINUX__NSIG_BPW]	\
-					|= (1 << ((n) - 1) % LINUX__NSIG_BPW))
+					|= (1L << ((n) - 1) % LINUX__NSIG_BPW))
 
 #ifdef DEBUG_LINUX
 #define DPRINTF(a)	uprintf a
@@ -357,10 +349,10 @@ linux_sigprocmask1(struct lwp *l, int how, const linux_old_sigset_t *set, linux_
 			return (error);
 		linux_old_to_native_sigset(&nbss, &nlss);
 	}
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	error = sigprocmask1(l, how,
 	    set ? &nbss : NULL, oset ? &obss : NULL);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	if (error)
 		return (error);
 	if (oset) {
@@ -413,10 +405,10 @@ linux_sys_rt_sigprocmask(struct lwp *l, const struct linux_sys_rt_sigprocmask_ar
 			return (error);
 		linux_to_native_sigset(&nbss, &nlss);
 	}
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	error = sigprocmask1(l, how,
 	    set ? &nbss : NULL, oset ? &obss : NULL);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	if (!error && oset) {
 		native_to_linux_sigset(&olss, &obss);
 		error = copyout(&olss, oset, sizeof(olss));
@@ -504,14 +496,19 @@ linux_sys_rt_sigsuspend(struct lwp *l, const struct linux_sys_rt_sigsuspend_args
 int
 linux_sys_rt_queueinfo(struct lwp *l, const struct linux_sys_rt_queueinfo_args *uap, register_t *retval)
 {
-	/* XXX XAX This isn't this really int, int, siginfo_t *, is it? */
-#if 0
-	struct linux_sys_rt_queueinfo_args /* {
+	/*
 		syscallarg(int) pid;
 		syscallarg(int) signum;
-		syscallarg(siginfo_t *) uinfo;
-	} */ *uap = v;
-#endif
+		syscallarg(linix_siginfo_t *) uinfo;
+	*/
+	int error;
+	linux_siginfo_t info;
+
+	error = copyin(SCARG(uap, uinfo), &info, sizeof(info));
+	if (error)
+		return error;
+	if (info.lsi_code >= 0)
+		return EPERM;
 
 	/* XXX To really implement this we need to	*/
 	/* XXX keep a list of queued signals somewhere.	*/
@@ -590,7 +587,7 @@ linux_sys_sigaltstack(struct lwp *l, const struct linux_sys_sigaltstack_args *ua
 			return error;
 		linux_to_native_sigaltstack(&nss, &ss);
 
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 
 		if (nss.ss_flags & ~SS_ALLBITS)
 			error = EINVAL;
@@ -603,14 +600,55 @@ linux_sys_sigaltstack(struct lwp *l, const struct linux_sys_sigaltstack_args *ua
 		if (error == 0)
 			l->l_sigstk = nss;
 
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 	}
 
 	return error;
 }
 #endif /* LINUX_SS_ONSTACK */
 
-#ifdef LINUX_NPTL
+static int
+linux_do_tkill(struct lwp *l, int tgid, int tid, int signum)
+{
+	struct proc *p;
+	struct lwp *t;
+	ksiginfo_t ksi;
+	int error;
+
+	if (signum < 0 || signum >= LINUX__NSIG)
+		return EINVAL;
+	signum = linux_to_native_signo[signum];
+
+	if (tgid == -1) {
+		tgid = tid;
+	}
+
+	KSI_INIT(&ksi);
+	ksi.ksi_signo = signum;
+	ksi.ksi_code = SI_LWP;
+	ksi.ksi_pid = l->l_proc->p_pid;
+	ksi.ksi_uid = kauth_cred_geteuid(l->l_cred);
+	ksi.ksi_lid = tid;
+
+	mutex_enter(proc_lock);
+	p = proc_find(tgid);
+	if (p == NULL) {
+		mutex_exit(proc_lock);
+		return ESRCH;
+	}
+	mutex_enter(p->p_lock);
+	error = kauth_authorize_process(l->l_cred,
+	    KAUTH_PROCESS_SIGNAL, p, KAUTH_ARG(signum), NULL, NULL);
+	if ((t = lwp_find(p, ksi.ksi_lid)) == NULL)
+		error = ESRCH;
+	else if (signum != 0)
+		kpsignal2(p, &ksi);
+	mutex_exit(p->p_lock);
+	mutex_exit(proc_lock);
+
+	return error;
+}
+
 int
 linux_sys_tkill(struct lwp *l, const struct linux_sys_tkill_args *uap, register_t *retval)
 {
@@ -618,13 +656,11 @@ linux_sys_tkill(struct lwp *l, const struct linux_sys_tkill_args *uap, register_
 		syscallarg(int) tid;
 		syscallarg(int) sig;
 	} */
-	struct linux_sys_kill_args cup;
 
-	/* We use the PID as the TID ... */
-	SCARG(&cup, pid) = SCARG(uap, tid);
-	SCARG(&cup, signum) = SCARG(uap, sig);
+	if (SCARG(uap, tid) <= 0)
+		return EINVAL;
 
-	return linux_sys_kill(l, &cup, retval);
+	return linux_do_tkill(l, -1, SCARG(uap, tid), SCARG(uap, sig));
 }
 
 int
@@ -635,28 +671,47 @@ linux_sys_tgkill(struct lwp *l, const struct linux_sys_tgkill_args *uap, registe
 		syscallarg(int) tid;
 		syscallarg(int) sig;
 	} */
-	struct linux_sys_kill_args cup;
-	struct linux_emuldata *led;
-	struct proc *p;
 
-	SCARG(&cup, pid) = SCARG(uap, tid);
-	SCARG(&cup, signum) = SCARG(uap, sig);
+	if (SCARG(uap, tid) <= 0 || SCARG(uap, tgid) < -1)
+		return EINVAL;
 
-	if (SCARG(uap, tgid) == -1)
-		return linux_sys_kill(l, &cup, retval);
-
-	/* We use the PID as the TID, but make sure the group ID is right */
-	if ((p = pfind(SCARG(uap, tid))) == NULL)
-		return ESRCH;
-
-	if (p->p_emul != &emul_linux)
-		return ESRCH;
-
-	led = p->p_emuldata;
-
-	if (led->s->group_pid != SCARG(uap, tgid))
-		return ESRCH;
-
-	return linux_sys_kill(l, &cup, retval);
+	return linux_do_tkill(l, SCARG(uap, tgid), SCARG(uap, tid), SCARG(uap, sig));
 }
-#endif /* LINUX_NPTL */
+
+int
+native_to_linux_si_code(int code)
+{
+	int si_codes[] = {
+	    LINUX_SI_USER, LINUX_SI_QUEUE, LINUX_SI_TIMER, LINUX_SI_ASYNCIO,
+	    LINUX_SI_MESGQ, LINUX_SI_TKILL /* SI_LWP */
+	};
+
+	if (code <= 0 && -code < __arraycount(si_codes))
+		return si_codes[-code];
+
+	return code;
+}
+
+int
+native_to_linux_si_status(int code, int status)
+{
+	int sts;
+
+	switch (code) {
+	case CLD_CONTINUED:
+		sts = LINUX_SIGCONT;
+		break;
+	case CLD_EXITED:
+		sts = WEXITSTATUS(status);
+		break;
+	case CLD_STOPPED:
+	case CLD_TRAPPED:
+	case CLD_DUMPED:
+	case CLD_KILLED:
+	default:
+		sts = native_to_linux_signo[WTERMSIG(status)];
+		break;
+	}
+
+	return sts;
+}

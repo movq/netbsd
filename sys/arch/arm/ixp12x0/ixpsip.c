@@ -1,4 +1,4 @@
-/*	$NetBSD: ixpsip.c,v 1.10 2005/12/11 12:16:51 christos Exp $ */
+/*	$NetBSD: ixpsip.c,v 1.12 2009/10/21 14:15:50 rmind Exp $ */
 
 /*
  * Copyright (c) 2002
@@ -13,12 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -34,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixpsip.c,v 1.10 2005/12/11 12:16:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixpsip.c,v 1.12 2009/10/21 14:15:50 rmind Exp $");
 
 /*
  * Slow peripheral bus of ixp12x0 Processor
@@ -82,11 +76,7 @@ ixpsip_attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-ixpsip_search(parent, cf, ldesc, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	const int *ldesc;
-	void *aux;
+ixpsip_search(struct device *parent, struct cfdata *cf, const int *ldesc, void *aux)
 {
 	struct ixpsip_softc *sc = (struct ixpsip_softc *)parent;
 	struct ixpsip_attach_args sa;
@@ -103,9 +93,7 @@ ixpsip_search(parent, cf, ldesc, aux)
 }
 
 static int
-ixpsip_print(aux, name)
-	void *aux;
-	const char *name;
+ixpsip_print(void *aux, const char *name)
 {
         struct ixpsip_attach_args *sa = (struct ixpsip_attach_args*)aux;
 

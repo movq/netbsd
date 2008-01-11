@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.26 2005/12/24 22:45:40 perry Exp $ */
+/*	$NetBSD: boot.c,v 1.31 2011/01/22 19:19:24 joerg Exp $ */
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -35,6 +35,7 @@
 #include <sys/boot_flag.h>
 
 #include <lib/libsa/stand.h>
+#include <lib/libsa/net.h>
 #include <lib/libsa/loadfile.h>
 #include <lib/libkern/libkern.h>
 
@@ -57,7 +58,6 @@ extern	unsigned opendev;
 void	usage(char *), boot(char *), halt(char *);
 void	Xmain(void);
 void	autoconf(void);
-int	getsecs(void);
 int	setjmp(int *);
 int	testkey(void);
 void	loadpcs(void);
@@ -96,15 +96,14 @@ Xmain(void)
 	int io;
 	int j, nu;
 	u_long marks[MARK_MAX];
-	extern const char bootprog_rev[], bootprog_date[];
+	extern const char bootprog_rev[];
 
 	io = 0;
 	skip = 1;
 	autoconf();
 
 	askname = bootrpb.rpb_bootr5 & RB_ASKNAME;
-	printf("\n\r>> NetBSD/vax boot [%s %s] <<\n", bootprog_rev,
-		bootprog_date);
+	printf("\n\r>> NetBSD/vax boot [%s] <<\n", bootprog_rev);
 	printf(">> Press any key to abort autoboot  ");
 	sluttid = getsecs() + 5;
 	senast = 0;
@@ -265,7 +264,7 @@ load:
 
 
 void
-loadpcs()
+loadpcs(void)
 {
 	static int pcsdone = 0;
 	int mid = mfpr(PR_SID);
@@ -280,7 +279,7 @@ loadpcs()
 		if (*cp == ')' || *cp == ':')
 			break;
 	if (*cp) {
-		bcopy(line, pcs, 99);
+		memcpy(pcs, line, 99);
 		pcs[99] = 0;
 		i = cp - line + 1;
 	} else

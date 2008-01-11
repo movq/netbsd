@@ -1,4 +1,4 @@
-/*	$NetBSD: glob.h,v 1.22 2007/12/05 20:25:54 christos Exp $	*/
+/*	$NetBSD: glob.h,v 1.26 2010/09/06 14:38:56 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -88,10 +88,13 @@ typedef struct {
 #define	GLOB_BRACE	0x0080	/* Expand braces ala csh. */
 #define	GLOB_MAGCHAR	0x0100	/* Pattern had globbing characters. */
 #define	GLOB_NOMAGIC	0x0200	/* GLOB_NOCHECK without magic chars (csh). */
-#define GLOB_LIMIT	0x0400	/* Limit memory used by matches to ARG_MAX */
+#define	GLOB_LIMIT	0x0400	/* Limit memory used by matches to ARG_MAX */
 #define	GLOB_TILDE	0x0800	/* Expand tilde names from the passwd file. */
-#define	GLOB_PERIOD	0x1000	/* Allow metachars to match leading periods. */
-#define	GLOB_QUOTE	0		/* source compatibility */
+/*	GLOB_NOESCAPE	0x1000	above */
+#define	GLOB_PERIOD	0x2000	/* Allow metachars to match leading periods. */
+#define	GLOB_NO_DOTDIRS	0x4000	/* Make . and .. vanish from wildcards. */
+#define	GLOB_STAR	0x8000	/* Use glob ** to recurse directories */
+#define	GLOB_QUOTE	0	/* source compatibility */
 
 #define	GLOB_ABEND	GLOB_ABORTED	/* source compatibility */
 #endif
@@ -101,6 +104,9 @@ __BEGIN_DECLS
 int	glob(const char * __restrict, int,
     int (*)(const char *, int), glob_t * __restrict)	 __RENAME(__glob30);
 void	globfree(glob_t *)				 __RENAME(__globfree30);
+#endif
+#ifdef _NETBSD_SOURCE
+int	glob_pattern_p(const char *, int);
 #endif
 __END_DECLS
 

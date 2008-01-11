@@ -1,4 +1,5 @@
-/*	$NetBSD: pccbbreg.h,v 1.13 2007/11/16 18:36:52 dyoung Exp $	*/
+/*	$NetBSD: pccbbreg.h,v 1.15 2009/12/15 22:17:12 snj Exp $	*/
+
 /*
  * Copyright (c) 1999 HAYAKAWA Koichi.  All rights reserved.
  *
@@ -10,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by HAYAKAWA Koichi.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -28,7 +24,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 #ifndef _DEV_PCI_PCCBBREG_H_
 #define	_DEV_PCI_PCCBBREG_H_
 
@@ -36,6 +31,7 @@
 
 
 #define PCI_SOCKBASE 0x10	/* Socket Base Address Register */
+#define PCI_CBB_SECSTATUS 0x14	/* secondary status (starts at 0x16) */
 #define PCI_BUSNUM   0x18	/* latency timer, Subordinate bus number */
 #define PCI_LEGACY 0x44		/* legacy IO register address (32 bits) */
 #define	PCI_SYSCTRL 0x80	/* System control */
@@ -43,6 +39,8 @@
 
 #define PCI_CLASS_INTERFACE_MASK  0xffffff00
 #define PCI_CLASS_INTERFACE_YENTA 0x06070000
+
+#define CBB_SECSTATUS_CBMABORT	0x20000000
 
 #define CB_SOCKET_EVENT 0x00	/* offset of cardbus socket event reg */
 #define CB_SOCKET_MASK  0x04	/* offset of cardbus socket mask register */

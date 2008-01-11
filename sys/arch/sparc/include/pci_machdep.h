@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.h,v 1.6 2006/03/04 02:56:21 uwe Exp $ */
+/*	$NetBSD: pci_machdep.h,v 1.8 2011/04/04 20:37:54 dyoung Exp $ */
 
 /*
  * Copyright (c) 1999 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -85,7 +83,8 @@ void		pci_decompose_tag(pci_chipset_tag_t, pcitag_t,
 				  int *, int *, int *);
 pcireg_t	pci_conf_read(pci_chipset_tag_t, pcitag_t, int);
 void		pci_conf_write(pci_chipset_tag_t, pcitag_t, int, pcireg_t);
-int		pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
+int		pci_intr_map(const struct pci_attach_args *,
+		             pci_intr_handle_t *);
 const char	*pci_intr_string(pci_chipset_tag_t, pci_intr_handle_t);
 const struct evcnt *pci_intr_evcnt(pci_chipset_tag_t, pci_intr_handle_t);
 void		*pci_intr_establish(pci_chipset_tag_t, pci_intr_handle_t,

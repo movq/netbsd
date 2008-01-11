@@ -1,4 +1,4 @@
-/* $NetBSD: boot.c,v 1.3 2005/12/11 12:18:51 christos Exp $ */
+/* $NetBSD: boot.c,v 1.6 2011/01/22 19:19:22 joerg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -92,7 +92,6 @@ main(long fwhandle,long fd,long fwentry)
 	printf("\n");
 	printf("NetBSD/sbmips " NETBSD_VERS " " BOOT_TYPE_NAME " Bootstrap, Revision %s\n",
 	    bootprog_rev);
-	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 	printf("\n");
 
 	/* set up the booted device descriptor */
@@ -124,12 +123,15 @@ main(long fwhandle,long fd,long fwentry)
 	}
 
 	memset(marks, 0, sizeof marks);
-	if (boot_file[0] != '\0')
-		win = loadfile(name = boot_file, marks, LOAD_KERNEL) == 0;
-	else
+	if (boot_file[0] != '\0') {
+		name = boot_file;
+		win = loadfile(name, marks, LOAD_KERNEL) == 0;
+	} else {
+		name = NULL;	/* XXX gcc -Wuninitialized */
 		for (namep = kernelnames, win = 0; *namep != NULL && !win;
 		    namep++)
 			win = loadfile(name = *namep, marks, LOAD_KERNEL) == 0;
+	}
 
 	entry = marks[MARK_ENTRY];
 	booted_dev_close();
@@ -141,7 +143,7 @@ main(long fwhandle,long fd,long fwentry)
 
 	cfe_flushcache(0);
 
-	bzero(&bootinfo,sizeof(bootinfo));
+	memset(&bootinfo, 0,sizeof(bootinfo));
 	bootinfo.version = BOOTINFO_VERSION;
 	bootinfo.reserved = 0;
 	bootinfo.ssym = marks[MARK_SYM];

@@ -1,4 +1,4 @@
-/*	$NetBSD: keysock.c,v 1.45 2007/12/07 19:46:19 elad Exp $	*/
+/*	$NetBSD: keysock.c,v 1.53 2009/05/09 11:36:17 mlelstv Exp $	*/
 /*	$KAME: keysock.c,v 1.32 2003/08/22 05:45:08 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.45 2007/12/07 19:46:19 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.53 2009/05/09 11:36:17 mlelstv Exp $");
 
 #include "opt_inet.h"
 
@@ -58,18 +58,17 @@ __KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.45 2007/12/07 19:46:19 elad Exp $");
 #include <netkey/key.h>
 #include <netkey/keysock.h>
 #include <netkey/key_debug.h>
+#include <netkey/key_private.h>
 
 #include <machine/stdarg.h>
 
 struct sockaddr key_dst = { .sa_len = 2, .sa_family = PF_KEY, };
 struct sockaddr key_src = { .sa_len = 2, .sa_family = PF_KEY, };
 
-struct pfkeystat pfkeystat;
+static int key_receive(struct socket *, struct mbuf **, struct uio *,
+	struct mbuf **, struct mbuf **, int *);
 
-static int key_receive __P((struct socket *, struct mbuf **, struct uio *,
-	struct mbuf **, struct mbuf **, int *));
-
-static int key_sendup0 __P((struct rawcb *, struct mbuf *, int, int));
+static int key_sendup0(struct rawcb *, struct mbuf *, int, int);
 
 static int
 key_receive(struct socket *so, struct mbuf **paddr, struct uio *uio,
@@ -78,7 +77,6 @@ key_receive(struct socket *so, struct mbuf **paddr, struct uio *uio,
 	struct rawcb *rp = sotorawcb(so);
 	struct keycb *kp = (struct keycb *)rp;
 	int error;
-	int s;
 
 	error = (*kp->kp_receive)(so, paddr, uio, mp0, controlp, flagsp);
 
@@ -86,7 +84,8 @@ key_receive(struct socket *so, struct mbuf **paddr, struct uio *uio,
 	 * now we might have enough receive buffer space.
 	 * pull packets from kp_queue as many as possible.
 	 */
-	s = splsoftnet();
+	mutex_enter(softnet_lock);
+	KERNEL_LOCK(1, NULL);
 	while (/*CONSTCOND*/ 1) {
 		struct mbuf *m;
 
@@ -98,7 +97,8 @@ key_receive(struct socket *so, struct mbuf **paddr, struct uio *uio,
 		if (key_sendup0(rp, m, 0, 1))
 			break;
 	}
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
 
 	return error;
 }
@@ -108,11 +108,7 @@ key_receive(struct socket *so, struct mbuf **paddr, struct uio *uio,
  * derived from net/rtsock.c:route_usrreq()
  */
 int
-key_usrreq(so, req, m, nam, control, l)
-	struct socket *so;
-	int req;
-	struct mbuf *m, *nam, *control;
-	struct lwp *l;
+key_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam, struct mbuf *control, struct lwp *l)
 {
 	int error = 0;
 	struct keycb *kp = (struct keycb *)sotorawcb(so);
@@ -120,6 +116,7 @@ key_usrreq(so, req, m, nam, control, l)
 
 	s = splsoftnet();
 	if (req == PRU_ATTACH) {
+		sosetlock(so);
 		kp = (struct keycb *)malloc(sizeof(*kp), M_PCB,
 		    M_WAITOK|M_ZERO);
 		so->so_pcb = (void *)kp;
@@ -150,7 +147,7 @@ key_usrreq(so, req, m, nam, control, l)
 	if (req == PRU_ATTACH && kp) {
 		int af = kp->kp_raw.rcb_proto.sp_protocol;
 		if (error) {
-			pfkeystat.sockerr++;
+			PFKEY_STATINC(PFKEY_STAT_SOCKERR);
 			free((void *)kp, M_PCB);
 			so->so_pcb = (void *) 0;
 			splx(s);
@@ -190,19 +187,23 @@ key_output(struct mbuf *m, ...)
 	if (m == 0)
 		panic("key_output: NULL pointer was passed.");
 
-	pfkeystat.out_total++;
-	pfkeystat.out_bytes += m->m_pkthdr.len;
+	{
+		uint64_t *ps = PFKEY_STAT_GETREF();
+		ps[PFKEY_STAT_OUT_TOTAL]++;
+		ps[PFKEY_STAT_OUT_BYTES] += m->m_pkthdr.len;
+		PFKEY_STAT_PUTREF();
+	}
 
 	len = m->m_pkthdr.len;
 	if (len < sizeof(struct sadb_msg)) {
-		pfkeystat.out_tooshort++;
+		PFKEY_STATINC(PFKEY_STAT_OUT_TOOSHORT);
 		error = EINVAL;
 		goto end;
 	}
 
 	if (m->m_len < sizeof(struct sadb_msg)) {
 		if ((m = m_pullup(m, sizeof(struct sadb_msg))) == 0) {
-			pfkeystat.out_nomem++;
+			PFKEY_STATINC(PFKEY_STAT_OUT_NOMEM);
 			error = ENOBUFS;
 			goto end;
 		}
@@ -214,9 +215,9 @@ key_output(struct mbuf *m, ...)
 	KEYDEBUG(KEYDEBUG_KEY_DUMP, kdebug_mbuf(m));
 
 	msg = mtod(m, struct sadb_msg *);
-	pfkeystat.out_msgtype[msg->sadb_msg_type]++;
+	PFKEY_STATINC(PFKEY_STAT_OUT_MSGTYPE + msg->sadb_msg_type);
 	if (len != PFKEY_UNUNIT64(msg->sadb_msg_len)) {
-		pfkeystat.out_invlen++;
+		PFKEY_STATINC(PFKEY_STAT_OUT_INVLEN);
 		error = EINVAL;
 		goto end;
 	}
@@ -236,11 +237,7 @@ end:
  * send message to the socket.
  */
 static int
-key_sendup0(rp, m, promisc, canwait)
-	struct rawcb *rp;
-	struct mbuf *m;
-	int promisc;
-	int canwait;
+key_sendup0(struct rawcb *rp, struct mbuf *m, int promisc, int canwait)
 {
 	struct keycb *kp = (struct keycb *)rp;
 	struct mbuf *n;
@@ -253,19 +250,19 @@ key_sendup0(rp, m, promisc, canwait)
 		if (m && m->m_len < sizeof(struct sadb_msg))
 			m = m_pullup(m, sizeof(struct sadb_msg));
 		if (!m) {
-			pfkeystat.in_nomem++;
+			PFKEY_STATINC(PFKEY_STAT_OUT_NOMEM);
 			return ENOBUFS;
 		}
 		m->m_pkthdr.len += sizeof(*pmsg);
 
 		pmsg = mtod(m, struct sadb_msg *);
-		bzero(pmsg, sizeof(*pmsg));
+		memset(pmsg, 0, sizeof(*pmsg));
 		pmsg->sadb_msg_version = PF_KEY_V2;
 		pmsg->sadb_msg_type = SADB_X_PROMISC;
 		pmsg->sadb_msg_len = PFKEY_UNIT64(m->m_pkthdr.len);
 		/* pid and seq? */
 
-		pfkeystat.in_msgtype[pmsg->sadb_msg_type]++;
+		PFKEY_STATINC(PFKEY_STAT_IN_MSGTYPE + pmsg->sadb_msg_type);
 	}
 
 	if (canwait) {
@@ -294,7 +291,7 @@ key_sendup0(rp, m, promisc, canwait)
 
 		if (!sbappendaddr(&rp->rcb_socket->so_rcv,
 		    (struct sockaddr *)&key_src, m, NULL)) {
-			pfkeystat.in_nomem++;
+			PFKEY_STATINC(PFKEY_STAT_IN_NOMEM);
 			error = ENOBUFS;
 			goto recovery;
 		} else {
@@ -334,10 +331,7 @@ recovery:
 
 /* so can be NULL if target != KEY_SENDUP_ONE */
 int
-key_sendup_mbuf(so, m, target)
-	struct socket *so;
-	struct mbuf *m;
-	int target;
+key_sendup_mbuf(struct socket *so, struct mbuf *m, int target)
 {
 	struct mbuf *n;
 	struct keycb *kp;
@@ -354,19 +348,23 @@ key_sendup_mbuf(so, m, target)
 	canwait = target & KEY_SENDUP_CANWAIT;
 	target &= ~KEY_SENDUP_CANWAIT;
 
-	pfkeystat.in_total++;
-	pfkeystat.in_bytes += m->m_pkthdr.len;
+	{
+		uint64_t *ps = PFKEY_STAT_GETREF();
+		ps[PFKEY_STAT_IN_TOTAL]++;
+		ps[PFKEY_STAT_IN_BYTES] += m->m_pkthdr.len;
+		PFKEY_STAT_PUTREF();
+	}
 	if (m->m_len < sizeof(struct sadb_msg)) {
 		m = m_pullup(m, sizeof(struct sadb_msg));
 		if (m == NULL) {
-			pfkeystat.in_nomem++;
+			PFKEY_STATINC(PFKEY_STAT_IN_NOMEM);
 			return ENOBUFS;
 		}
 	}
 	if (m->m_len >= sizeof(struct sadb_msg)) {
 		struct sadb_msg *msg;
 		msg = mtod(m, struct sadb_msg *);
-		pfkeystat.in_msgtype[msg->sadb_msg_type]++;
+		PFKEY_STATINC(PFKEY_STAT_IN_MSGTYPE + msg->sadb_msg_type);
 	}
 
 	for (rp = rawcb.lh_first; rp; rp = rp->rcb_list.le_next)
@@ -411,14 +409,14 @@ key_sendup_mbuf(so, m, target)
 				sendup++;
 			break;
 		}
-		pfkeystat.in_msgtarget[target]++;
+		PFKEY_STATINC(PFKEY_STAT_IN_MSGTARGET + target);
 
 		if (!sendup)
 			continue;
 
 		if ((n = m_copy(m, 0, (int)M_COPYALL)) == NULL) {
 			m_freem(m);
-			pfkeystat.in_nomem++;
+			PFKEY_STATINC(PFKEY_STAT_IN_NOMEM);
 			return ENOBUFS;
 		}
 
@@ -448,6 +446,10 @@ key_sendup_mbuf(so, m, target)
  */
 
 DOMAIN_DEFINE(keydomain);
+
+PR_WRAP_USRREQ(key_usrreq)
+
+#define	key_usrreq	key_usrreq_wrapper
 
 const struct protosw keysw[] = {
 { .pr_type = SOCK_RAW,

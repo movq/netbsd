@@ -1,4 +1,4 @@
-/*	$NetBSD: kgmon.c,v 1.22 2007/05/04 22:07:16 dogcow Exp $	*/
+/*	$NetBSD: kgmon.c,v 1.25 2010/10/17 16:13:56 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1983, 1992, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "from: @(#)kgmon.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: kgmon.c,v 1.22 2007/05/04 22:07:16 dogcow Exp $");
+__RCSID("$NetBSD: kgmon.c,v 1.25 2010/10/17 16:13:56 uebayasi Exp $");
 #endif
 #endif /* not lint */
 
@@ -280,7 +280,7 @@ setprof(struct kvmvars *kvp, int state)
 			return;
 		}
 		(void)seteuid(getuid());
-	} else if (kvm_write(kvp->kd, (u_long)&p->state, (void *)&state, sz) 
+	} else if ((size_t)kvm_write(kvp->kd, (u_long)&p->state, (void *)&state, sz) 
 	    == sz)
 		return;
 bad:
@@ -348,7 +348,7 @@ dumpstate(struct kvmvars *kvp)
 		    kcountsize, i,
 		    kflag ? kvm_geterr(kvp->kd) : strerror(errno));
 	if ((fwrite(tickbuf, kcountsize, 1, fp)) != 1)
-		err(EXIT_FAILURE, "writing tocks to gmon.out");
+		err(EXIT_FAILURE, "writing ticks to gmon.out");
 	free(tickbuf);
 
 	/*
@@ -462,15 +462,15 @@ reset(struct kvmvars *kvp)
 		err(EXIT_FAILURE, "cannot allocate zbuf space");
 	(void)memset(zbuf, 0, biggest);
 	if (kflag) {
-		if (kvm_write(kvp->kd, (u_long)kvp->gpm.kcount, zbuf,
+		if ((size_t)kvm_write(kvp->kd, (u_long)kvp->gpm.kcount, zbuf,
 		    (size_t)kvp->gpm.kcountsize) != kvp->gpm.kcountsize)
 			errx(EXIT_FAILURE, "tickbuf zero: %s",
 			     kvm_geterr(kvp->kd));
-		if (kvm_write(kvp->kd, (u_long)kvp->gpm.froms, zbuf,
+		if ((size_t)kvm_write(kvp->kd, (u_long)kvp->gpm.froms, zbuf,
 		    (size_t)kvp->gpm.fromssize) != kvp->gpm.fromssize)
 			errx(EXIT_FAILURE, "froms zero: %s",
 			     kvm_geterr(kvp->kd));
-		if (kvm_write(kvp->kd, (u_long)kvp->gpm.tos, zbuf,
+		if ((size_t)kvm_write(kvp->kd, (u_long)kvp->gpm.tos, zbuf,
 		    (size_t)kvp->gpm.tossize) != kvp->gpm.tossize)
 			errx(EXIT_FAILURE, "tos zero: %s", kvm_geterr(kvp->kd));
 		free(zbuf);

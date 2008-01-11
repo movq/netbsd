@@ -1,4 +1,4 @@
-/*	$NetBSD: eisa_machdep.c,v 1.29 2007/02/22 04:38:03 matt Exp $	*/
+/*	$NetBSD: eisa_machdep.c,v 1.34 2009/11/17 23:51:59 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.29 2007/02/22 04:38:03 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.34 2009/11/17 23:51:59 dyoung Exp $");
 
 #include "ioapic.h"
 
@@ -82,7 +75,6 @@ __KERNEL_RCSID(0, "$NetBSD: eisa_machdep.c,v 1.29 2007/02/22 04:38:03 matt Exp $
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <sys/extent.h>
 
 #include <machine/bus.h>
 #include <machine/bus_private.h>
@@ -124,7 +116,7 @@ struct x86_bus_dma_tag eisa_bus_dma_tag = {
 };
 
 void
-eisa_attach_hook(struct device *parent, struct device *self,
+eisa_attach_hook(device_t parent, device_t self,
     struct eisabus_attach_args *eba)
 {
 	extern int eisa_has_been_seen; 
@@ -233,7 +225,7 @@ eisa_intr_establish(eisa_chipset_tag_t ec, eisa_intr_handle_t ih,
 	}
 #endif
 
-	return intr_establish(irq, pic, pin, type, level, func, arg);
+	return intr_establish(irq, pic, pin, type, level, func, arg, false);
 }
 
 void
@@ -241,27 +233,6 @@ eisa_intr_disestablish(eisa_chipset_tag_t ec, void *cookie)
 {
 
 	intr_disestablish(cookie);
-}
-
-int
-eisa_mem_alloc(bus_space_tag_t t, bus_size_t size, bus_size_t align,
-    bus_addr_t boundary, int cacheable,
-    bus_addr_t *addrp, bus_space_handle_t *bahp)
-{
-	extern struct extent *iomem_ex;
-
-	/*
-	 * Allocate physical address space after the ISA hole.
-	 */
-	return bus_space_alloc(t, IOM_END, iomem_ex->ex_end, size, align,
-	    boundary, cacheable, addrp, bahp);
-}
-
-void
-eisa_mem_free(bus_space_tag_t t, bus_space_handle_t bah, bus_size_t size)
-{
-
-	bus_space_free(t, bah, size);
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: kd.c,v 1.53 2007/11/19 18:51:44 ad Exp $	*/
+/*	$NetBSD: kd.c,v 1.56 2011/04/24 16:26:58 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.53 2007/11/19 18:51:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.56 2011/04/24 16:26:58 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -115,7 +108,7 @@ kd_init(struct kd_softc *kd)
 {
 	struct tty *tp;
 
-	tp = ttymalloc();
+	tp = tty_alloc();
 	callout_setfunc(&tp->t_rstrt_ch, kd_later, tp);
 
 	tp->t_oproc = kdstart;
@@ -458,7 +451,7 @@ kdcninit(struct consdev *cn)
 	kbd_xlate_init(ks);
 
 	/* Set up initial PROM input channel for /dev/console */
-	prom_cons_channel.cc_dev = NULL;
+	prom_cons_channel.cc_private = NULL;
 	prom_cons_channel.cc_iopen = kd_rom_iopen;
 	prom_cons_channel.cc_iclose = kd_rom_iclose;
 	cons_attach_input(&prom_cons_channel, cn);

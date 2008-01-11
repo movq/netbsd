@@ -1,5 +1,5 @@
 #!/bin/sh -
-# $NetBSD: makelintstub,v 1.20 2007/11/13 09:07:33 he Exp $
+# $NetBSD: makelintstub,v 1.23 2008/08/05 02:08:13 lukem Exp $
 #
 # Copyright (c) 1996, 1997 Christopher G. Demetriou
 # All rights reserved.
@@ -37,7 +37,13 @@ usage()
 {
 
 cat << _EOF 1>&2
-Usage: $PROG [-n|-p] [-o filename] object ...
+Usage: $PROG [-n|-p] [-o filename] [-s syscall.h] object ...
+	-n		Create SYSCALL_NOERROR.
+	-p		Create PSEUDO_NOERROR.
+			(also removes leading "_" on syscall name).
+	-o filename	Output to filename.
+	-s syscall.h	Header to #include instead of <sys/syscall.h>.
+
 	The CPP environment variable must be set
 	to the path to the C preprocessor.
 _EOF
@@ -68,6 +74,7 @@ header()
 	#include <sys/msg.h>
 	#include <sys/sem.h>
 	#include <sys/shm.h>
+	#include <sys/sched.h>
 	#include <sys/timex.h>
 	#include <sys/socket.h>
 	#include <sys/event.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: ym_pnpbios.c,v 1.13 2006/11/16 01:32:39 christos Exp $ */
+/* $NetBSD: ym_pnpbios.c,v 1.15 2009/05/04 12:13:19 cegger Exp $ */
 /*
  * Copyright (c) 1999
  *	Matthias Drochner.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ym_pnpbios.c,v 1.13 2006/11/16 01:32:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ym_pnpbios.c,v 1.15 2009/05/04 12:13:19 cegger Exp $");
 
 #include "mpu_ym.h"
 
@@ -61,15 +61,15 @@ __KERNEL_RCSID(0, "$NetBSD: ym_pnpbios.c,v 1.13 2006/11/16 01:32:39 christos Exp
 #include <dev/isa/wssreg.h>
 #include <dev/isa/ymvar.h>
 
-int ym_pnpbios_match(struct device *, struct cfdata *, void *);
-void ym_pnpbios_attach(struct device *, struct device *, void *);
+int ym_pnpbios_match(device_t, cfdata_t, void *);
+void ym_pnpbios_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(ym_pnpbios, sizeof(struct ym_softc),
     ym_pnpbios_match, ym_pnpbios_attach, NULL, NULL);
 
 int
-ym_pnpbios_match(struct device *parent,
-    struct cfdata *match, void *aux)
+ym_pnpbios_match(device_t parent,
+    cfdata_t match, void *aux)
 {
 	struct pnpbiosdev_attach_args *aa = aux;
 
@@ -80,10 +80,10 @@ ym_pnpbios_match(struct device *parent,
 }
 
 void
-ym_pnpbios_attach(struct device *parent, struct device *self,
+ym_pnpbios_attach(device_t parent, device_t self,
     void *aux)
 {
-	struct ym_softc *sc = (void *)self;
+	struct ym_softc *sc = device_private(self);
 	struct ad1848_softc *ac = &sc->sc_ad1848.sc_ad1848;
 	struct pnpbiosdev_attach_args *aa = aux;
 
@@ -132,12 +132,12 @@ ym_pnpbios_attach(struct device *parent, struct device *self,
 	printf("\n");
 	pnpbios_print_devres(self, aa);
 
-	printf("%s", self->dv_xname);
+	printf("%s", device_xname(self));
 
 	ac->sc_iot = sc->sc_iot;
 	if (bus_space_subregion(sc->sc_iot, sc->sc_ioh, WSS_CODEC, AD1848_NPORT,
 	    &ac->sc_ioh)) {
-		printf("%s: bus_space_subregion failed\n", self->dv_xname);
+		aprint_error_dev(self, "bus_space_subregion failed\n");
 		return;
 	}
 	ac->mode = 2;

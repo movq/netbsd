@@ -1,4 +1,4 @@
-/*	$NetBSD: hack.lev.c,v 1.6 2003/04/02 18:36:37 jsm Exp $	*/
+/*	$NetBSD: hack.lev.c,v 1.11 2009/08/12 07:28:40 dholland Exp $	*/
 
 /*
  * Copyright (c) 1985, Stichting Centrum voor Wiskunde en Informatica,
@@ -63,7 +63,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hack.lev.c,v 1.6 2003/04/02 18:36:37 jsm Exp $");
+__RCSID("$NetBSD: hack.lev.c,v 1.11 2009/08/12 07:28:40 dholland Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>
@@ -78,10 +78,11 @@ __RCSID("$NetBSD: hack.lev.c,v 1.6 2003/04/02 18:36:37 jsm Exp $");
 
 boolean         level_exists[MAXLEVEL + 1];
 
+static void savegoldchn(int, struct gold *);
+static void savetrapchn(int, struct trap *);
+
 void
-savelev(fd, lev)
-	int             fd;
-	xchar           lev;
+savelev(int fd, xchar lev)
 {
 #ifndef NOWORM
 	struct wseg    *wtmp, *wtmp2;
@@ -130,20 +131,15 @@ savelev(fd, lev)
 }
 
 void
-bwrite(fd, loc, num)
-	int fd;
-	const void     *loc;
-	unsigned        num;
+bwrite(int fd, const void *loc, size_t num)
 {
 	/* lint wants the 3rd arg of write to be an int; lint -p an unsigned */
-	if (write(fd, loc, (int) num) != num)
-		panic("cannot write %u bytes to file #%d", num, fd);
+	if ((size_t)write(fd, loc, num) != num)
+		panic("cannot write %zu bytes to file #%d", num, fd);
 }
 
 void
-saveobjchn(fd, otmp)
-	int fd;
-	struct obj     *otmp;
+saveobjchn(int fd, struct obj *otmp)
 {
 	struct obj     *otmp2;
 	unsigned        xl;
@@ -161,9 +157,7 @@ saveobjchn(fd, otmp)
 }
 
 void
-savemonchn(fd, mtmp)
-	int fd;
-	struct monst   *mtmp;
+savemonchn(int fd, struct monst *mtmp)
 {
 	struct monst   *mtmp2;
 	unsigned        xl;
@@ -185,10 +179,8 @@ savemonchn(fd, mtmp)
 	bwrite(fd, (char *) &minusone, sizeof(int));
 }
 
-void
-savegoldchn(fd, gold)
-	int fd;
-	struct gold    *gold;
+static void
+savegoldchn(int fd, struct gold *gold)
 {
 	struct gold    *gold2;
 	while (gold) {
@@ -200,10 +192,8 @@ savegoldchn(fd, gold)
 	bwrite(fd, nul, sizeof(struct gold));
 }
 
-void
-savetrapchn(fd, trap)
-	int fd;
-	struct trap    *trap;
+static void
+savetrapchn(int fd, struct trap *trap)
 {
 	struct trap    *trap2;
 	while (trap) {
@@ -216,9 +206,7 @@ savetrapchn(fd, trap)
 }
 
 void
-getlev(fd, pid, lev)
-	int             fd, pid;
-	xchar           lev;
+getlev(int fd, int pid, xchar lev)
 {
 	struct gold    *gold;
 	struct trap    *trap;
@@ -320,15 +308,12 @@ getlev(fd, pid, lev)
 }
 
 void
-mread(fd, buf, len)
-	int fd;
-	char           *buf;
-	unsigned        len;
+mread(int fd, char *buf, unsigned len)
 {
 	int             rlen;
 
-	rlen = read(fd, buf, (int) len);
-	if (rlen != len) {
+	rlen = read(fd, buf, len);
+	if (rlen < 0 || (size_t)rlen != len) {
 		pline("Read %d instead of %u bytes.\n", rlen, len);
 		if (restoring) {
 			(void) unlink(SAVEF);
@@ -339,7 +324,7 @@ mread(fd, buf, len)
 }
 
 void
-mklev()
+mklev(void)
 {
 	if (getbones())
 		return;

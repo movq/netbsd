@@ -1,4 +1,4 @@
-/*	$NetBSD: icpvar.h,v 1.9 2007/03/11 22:16:32 ad Exp $	*/
+/*	$NetBSD: icpvar.h,v 1.12 2009/05/12 14:25:17 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,7 +46,7 @@
 #define	ICP_UCMD_SCRATCH_SIZE	4096
 #define ICP_SCRATCH_SIZE	(8192 + ICP_UCMD_SCRATCH_SIZE)
 #define	ICP_SCRATCH_SENSE \
-    (ICP_SCRATCH_SIZE - sizeof(struct scsi_sense_data) * ICP_NCCBS)
+    (ICP_SCRATCH_SIZE - sizeof(struct scsi_sense_data) * (ICP_NCCBS + ICP_NCCB_RESERVE))
 #define	ICP_SCRATCH_UCMD	(ICP_SCRATCH_SENSE - ICP_UCMD_SCRATCH_SIZE)
 
 #define	ICP_NCCBS		ICP_MAX_CMDS
@@ -109,7 +102,7 @@ struct icp_cachedrv {
  * icpsp for raw service).
  */
 struct icp_servicecb {
-	void	(*iscb_openings)(struct device *, int);
+	void	(*iscb_openings)(device_t, int);
 };
 
 /*

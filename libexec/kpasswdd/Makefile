@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.14 2006/05/11 23:16:29 mrg Exp $
+# $NetBSD: Makefile,v 1.16 2008/08/29 00:02:23 gmcgarry Exp $
 
 NOLINT=		# defined
 
@@ -23,16 +23,18 @@ CPPFLAGS+= -I.					\
 CPPFLAGS+=-DHAVE_IPV6
 .endif
 
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 COPTS.kpasswdd.c+=	-fno-strict-aliasing
 .endif
 
 VERS!=		cd ${NETBSDSRCDIR}/lib/libvers && ${PRINTOBJDIR}
 
-LDADD+=		-lkadm5srv -lhdb -lkrb5 -lcrypto -lasn1 \
+LDADD+=		-lkadm5srv -lhdb -lkrb5 -lhx509 \
+		-lcrypto -lasn1 \
 		-lcom_err -L${VERS} -lvers -lroken -lcrypt \
 		-lutil
-DPADD+=		${LIBKADM5SRV} ${LIBHDB} ${LIBKRB5} ${LIBCRYPTO} ${LIBASN1} \
+DPADD+=		${LIBKADM5SRV} ${LIBHDB} ${LIBKRB5} ${LIBHX509} \
+		${LIBCRYPTO} ${LIBASN1} \
 		${LIBCOM_ERR} ${VERS}/libvers.a ${LIBROKEN} ${LIBCRYPT} \
 		${LIBUTIL}
 

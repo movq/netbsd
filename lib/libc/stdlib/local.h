@@ -1,4 +1,4 @@
-/*	$NetBSD: local.h,v 1.1 1997/07/13 20:16:46 christos Exp $	*/
+/*	$NetBSD: local.h,v 1.6 2010/11/14 18:11:43 tron Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Christos Zoulas.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,4 +24,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-char *__findenv __P((const char *, int *));
+/* Environment handling. */
+
+#include <sys/types.h>
+#include <stdbool.h>
+
+extern size_t __envvarnamelen(const char *str, bool withequal);
+
+extern void __freeenvvar(char *envvar);
+extern char *__allocenvvar(size_t length);
+extern bool __canoverwriteenvvar(char *envvar, size_t length);

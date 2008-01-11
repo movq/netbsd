@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ix.c,v 1.27 2007/10/19 12:00:18 ad Exp $	*/
+/*	$NetBSD: if_ix.c,v 1.33 2009/05/12 09:10:15 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ix.c,v 1.27 2007/10/19 12:00:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ix.c,v 1.33 2009/05/12 09:10:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -109,16 +102,14 @@ static void	ix_eeprom_outbits(bus_space_tag_t, bus_space_handle_t, int, int);
 static int	ix_eeprom_inbits (bus_space_tag_t, bus_space_handle_t);
 static void	ix_eeprom_clock  (bus_space_tag_t, bus_space_handle_t, int);
 
-int ix_match(struct device *, struct cfdata *, void *);
-void ix_attach(struct device *, struct device *, void *);
+int ix_match(device_t, cfdata_t, void *);
+void ix_attach(device_t, device_t, void *);
 
 /*
  * EtherExpress/16 support routines
  */
 static void
-ix_reset(sc, why)
-	struct ie_softc *sc;
-	int why;
+ix_reset(struct ie_softc *sc, int why)
 {
 	struct ix_softc* isc = (struct ix_softc *) sc;
 
@@ -144,10 +135,7 @@ ix_atten(struct ie_softc *sc, int why)
 }
 
 static u_int16_t
-ix_read_eeprom(iot, ioh, location)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	int location;
+ix_read_eeprom(bus_space_tag_t iot, bus_space_handle_t ioh, int location)
 {
 	int ectrl, edata;
 
@@ -168,10 +156,7 @@ ix_read_eeprom(iot, ioh, location)
 }
 
 static void
-ix_eeprom_outbits(iot, ioh, edata, count)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	int edata, count;
+ix_eeprom_outbits(bus_space_tag_t iot, bus_space_handle_t ioh, int edata, int count)
 {
 	int ectrl, i;
 
@@ -193,9 +178,7 @@ ix_eeprom_outbits(iot, ioh, edata, count)
 }
 
 static int
-ix_eeprom_inbits(iot, ioh)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
+ix_eeprom_inbits(bus_space_tag_t iot, bus_space_handle_t ioh)
 {
 	int ectrl, edata, i;
 
@@ -214,10 +197,7 @@ ix_eeprom_inbits(iot, ioh)
 }
 
 static void
-ix_eeprom_clock(iot, ioh, state)
-	bus_space_tag_t iot;
-	bus_space_handle_t ioh;
-	int state;
+ix_eeprom_clock(bus_space_tag_t iot, bus_space_handle_t ioh, int state)
 {
 	int ectrl;
 
@@ -231,9 +211,7 @@ ix_eeprom_clock(iot, ioh, state)
 }
 
 static int
-ix_intrhook(sc, where)
-	struct ie_softc *sc;
-	int where;
+ix_intrhook(struct ie_softc *sc, int where)
 {
 	struct ix_softc* isc = (struct ix_softc *) sc;
 
@@ -256,11 +234,7 @@ ix_intrhook(sc, where)
 
 
 static void
-ix_copyin (sc, dst, offset, size)
-        struct ie_softc *sc;
-        void *dst;
-        int offset;
-        size_t size;
+ix_copyin (struct ie_softc *sc, void *dst, int offset, size_t size)
 {
 	int i, dribble;
 	u_int8_t* bptr = dst;
@@ -312,11 +286,7 @@ ix_copyin (sc, dst, offset, size)
 }
 
 static void
-ix_copyout (sc, src, offset, size)
-        struct ie_softc *sc;
-        const void *src;
-        int offset;
-        size_t size;
+ix_copyout (struct ie_softc *sc, const void *src, int offset, size_t size)
 {
 	int i, dribble;
 	int osize = size;
@@ -372,9 +342,7 @@ ix_copyout (sc, src, offset, size)
 }
 
 static void
-ix_bus_barrier(sc, offset, length, flags)
-        struct ie_softc *sc;
-        int offset, length, flags;
+ix_bus_barrier(struct ie_softc *sc, int offset, int length, int flags)
 {
 	struct ix_softc* isc = (struct ix_softc *) sc;
 
@@ -385,9 +353,7 @@ ix_bus_barrier(sc, offset, length, flags)
 }
 
 static u_int16_t
-ix_read_16 (sc, offset)
-        struct ie_softc *sc;
-        int offset;
+ix_read_16 (struct ie_softc *sc, int offset)
 {
 	struct ix_softc* isc = (struct ix_softc *) sc;
 
@@ -409,10 +375,7 @@ ix_read_16 (sc, offset)
 }
 
 static void
-ix_write_16 (sc, offset, value)
-        struct ie_softc *sc;
-        int offset;
-        u_int16_t value;
+ix_write_16 (struct ie_softc *sc, int offset, u_int16_t value)
 {
 	struct ix_softc* isc = (struct ix_softc *) sc;
 
@@ -433,9 +396,7 @@ ix_write_16 (sc, offset, value)
 }
 
 static void
-ix_write_24 (sc, offset, addr)
-        struct ie_softc *sc;
-        int offset, addr;
+ix_write_24 (struct ie_softc *sc, int offset, int addr)
 {
 	char* ptr;
 	struct ix_softc* isc = (struct ix_softc *) sc;
@@ -462,9 +423,7 @@ ix_write_24 (sc, offset, addr)
 }
 
 static void
-ix_zeromem(sc, offset, count)
-        struct ie_softc *sc;
-        int offset, count;
+ix_zeromem(struct ie_softc *sc, int offset, int count)
 {
 	int i;
 	int dribble;
@@ -498,9 +457,7 @@ ix_zeromem(sc, offset, count)
 }
 
 static void
-ix_mediastatus(sc, ifmr)
-        struct ie_softc *sc;
-        struct ifmediareq *ifmr;
+ix_mediastatus(struct ie_softc *sc, struct ifmediareq *ifmr)
 {
         struct ifmedia *ifm = &sc->sc_media;
 
@@ -511,7 +468,7 @@ ix_mediastatus(sc, ifmr)
 }
 
 int
-ix_match(struct device *parent, struct cfdata *cf, void *aux)
+ix_match(device_t parent, cfdata_t cf, void *aux)
 {
 	int i;
 	int rv = 0;
@@ -715,7 +672,7 @@ out:
 }
 
 void
-ix_attach(struct device *parent, struct device *self, void *aux)
+ix_attach(device_t parent, device_t self, void *aux)
 {
 	struct ix_softc *isc = (void *)self;
 	struct ie_softc *sc = &isc->sc_ie;
@@ -744,7 +701,7 @@ ix_attach(struct device *parent, struct device *self, void *aux)
 			  ia->ia_io[0].ir_size, 0, &ioh) != 0) {
 
 		DPRINTF(("\n%s: can't map i/o space 0x%x-0x%x\n",
-			  sc->sc_dev.dv_xname, ia->ia_[0].ir_addr,
+			  device_xname(&sc->sc_dev), ia->ia_[0].ir_addr,
 			  ia->ia_io[0].ir_addr + ia->ia_io[0].ir_size - 1));
 		return;
 	}
@@ -754,7 +711,7 @@ ix_attach(struct device *parent, struct device *self, void *aux)
 	if (bus_space_map(ia->ia_memt, ia->ia_iomem[0].ir_addr,
 			  ia->ia_iomem[0].ir_size, 0, &memh) != 0) {
 		DPRINTF(("\n%s: can't map iomem space 0x%x-0x%x\n",
-			sc->sc_dev.dv_xname, ia->ia_iomem[0].ir_addr,
+			device_xname(&sc->sc_dev), ia->ia_iomem[0].ir_addr,
 			ia->ia_iomem[0].ir_addr + ia->ia_iomem[0].ir_size - 1));
 		bus_space_unmap(iot, ioh, ia->ia_io[0].ir_size);
 		return;
@@ -892,7 +849,7 @@ ix_attach(struct device *parent, struct device *self, void *aux)
 		/* Memory tests failed, punt... */
 		if (memsize == 0)  {
 			DPRINTF(("\n%s: can't determine size of on-card RAM\n",
-				sc->sc_dev.dv_xname));
+				device_xname(&sc->sc_dev)));
 			bus_space_unmap(iot, ioh, ia->ia_io[0].ir_size);
 			return;
 		}
@@ -956,7 +913,7 @@ ix_attach(struct device *parent, struct device *self, void *aux)
 
 	if (!i82586_proberam(sc)) {
 		DPRINTF(("\n%s: Can't talk to i82586!\n",
-			sc->sc_dev.dv_xname));
+			device_xname(&sc->sc_dev)));
 		bus_space_unmap(iot, ioh, ia->ia_io[0].ir_size);
 
 		if (ia->ia_iomem[0].ir_size)
@@ -1000,13 +957,13 @@ ix_attach(struct device *parent, struct device *self, void *aux)
 		      ix_media, NIX_MEDIA, media);
 
 	if (isc->use_pio)
-		printf("%s: unsupported memory config, using PIO to access %d bytes of memory\n", sc->sc_dev.dv_xname, sc->sc_msize);
+		aprint_error_dev(&sc->sc_dev, "unsupported memory config, using PIO to access %d bytes of memory\n", sc->sc_msize);
 
 	isc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_NET, i82586_intr, sc);
 	if (isc->sc_ih == NULL) {
 		DPRINTF(("\n%s: can't establish interrupt\n",
-			sc->sc_dev.dv_xname));
+			device_xname(&sc->sc_dev)));
 	}
 }
 

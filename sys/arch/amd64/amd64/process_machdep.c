@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.13 2008/01/05 12:01:34 dsl Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.18 2010/12/20 00:25:24 matt Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -60,18 +53,15 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.13 2008/01/05 12:01:34 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.18 2010/12/20 00:25:24 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/vnode.h>
 #include <sys/ptrace.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/psl.h>
 #include <machine/reg.h>
@@ -95,8 +85,9 @@ process_frame(struct lwp *l)
 static inline struct fxsave64 *
 process_fpframe(struct lwp *l)
 {
+	struct pcb *pcb = lwp_getpcb(l);
 
-	return (&l->l_addr->u_pcb.pcb_savefpu.fp_fxsave);
+	return &pcb->pcb_savefpu.fp_fxsave;
 }
 
 int
@@ -117,10 +108,10 @@ process_read_fpregs(struct lwp *l, struct fpreg *regs)
 	struct fxsave64 *frame = process_fpframe(l);
 
 	if (l->l_md.md_flags & MDP_USEDFPU) {
-		fpusave_lwp(l, 1);
+		fpusave_lwp(l, true);
 	} else {
-		u_int16_t cw;
-		u_int32_t mxcsr, mxcsr_mask;
+		uint16_t cw;
+		uint32_t mxcsr, mxcsr_mask;
 
 		/*
 		 * Fake a FNINIT.
@@ -172,7 +163,7 @@ process_write_fpregs(struct lwp *l, const struct fpreg *regs)
 	struct fxsave64 *frame = process_fpframe(l);
 
 	if (l->l_md.md_flags & MDP_USEDFPU) {
-		fpusave_lwp(l, 0);
+		fpusave_lwp(l, false);
 	} else {
 		l->l_md.md_flags |= MDP_USEDFPU;
 	}
@@ -199,9 +190,9 @@ process_set_pc(struct lwp *l, void *addr)
 {
 	struct trapframe *tf = process_frame(l);
 
-	if ((u_int64_t)addr > VM_MAXUSER_ADDRESS)
+	if ((uint64_t)addr > VM_MAXUSER_ADDRESS)
 		return EINVAL;
-	tf->tf_rip = (u_int64_t)addr;
+	tf->tf_rip = (uint64_t)addr;
 
 	return (0);
 }

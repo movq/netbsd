@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.4 2005/12/24 20:07:04 perry Exp $	*/
+/*	$NetBSD: main.c,v 1.9 2009/03/18 16:00:11 cegger Exp $	*/
 
 /*
  * Copyright (c) 2003 ITOH Yasufumi.
@@ -39,13 +39,12 @@
 #define DEV_CL_MASK	0xf
 #define DEV_CL_SEQU	0x2	/* sequential record access media */
 
-static char *hexstr __P((char *, unsigned));
-void ipl_main __P((unsigned /*interactive*/,
-    unsigned /*sptop*/, unsigned /*psw*/));
-void load_file __P((const char *, unsigned /*loadadr*/,
-    unsigned /*interactive*/, int /*part*/));
-void load_file_ino __P((ino32_t, const char *, unsigned /*loadadr*/,
-    unsigned /*interactive*/, int /*part*/));
+static char *hexstr(char *, unsigned);
+void ipl_main(unsigned /*interactive*/, unsigned /*sptop*/, unsigned /*psw*/);
+void load_file(const char *, unsigned /*loadadr*/, unsigned /*interactive*/,
+    int /*part*/);
+void load_file_ino(ino32_t, const char *, unsigned /*loadadr*/,
+    unsigned /*interactive*/, int /*part*/);
 
 struct loadinfo {
 	void *sec_image;
@@ -55,17 +54,18 @@ struct loadinfo {
 #endif
 	unsigned entry_offset;
 };
-static inline void xi_elf32 __P((struct loadinfo *, Elf32_Ehdr *));
-static inline void xi_elf64 __P((struct loadinfo *, Elf64_Ehdr *));
-int xi_load __P((struct loadinfo *, void *));
+static inline void xi_elf32(struct loadinfo *, Elf32_Ehdr *);
+static inline void xi_elf64(struct loadinfo *, Elf64_Ehdr *);
+int xi_load(struct loadinfo *, void *);
 
-void reboot __P((void)), halt __P((void));
-void dispatch __P((unsigned /*interactive*/, unsigned /*top*/,
-    unsigned /*end*/, int /*part*/, unsigned /*entry*/));
-void print __P((const char *));
-void putch __P((int));
-int getch __P((void));
-int boot_input __P((void *, int /*len*/, int /*pos*/));
+void reboot(void);
+void halt(void);
+void dispatch(unsigned /*interactive*/, unsigned /*top*/,
+    unsigned /*end*/, int /*part*/, unsigned /*entry*/);
+void print(const char *);
+void putch(int);
+int getch(void);
+int boot_input(void *, int /*len*/, int /*pos*/);
 
 /* to make generated code relocatable, do NOT mark them as const */
 extern char str_seekseq[], str_bit_firmware[];
@@ -81,9 +81,9 @@ extern char str_ukfmt[];
 #ifdef __GNUC__
 #define memcpy(d, s, n)	__builtin_memcpy(d, s, n)
 #else
-void *memcpy __P((void *, const void *, size_t));
+void *memcpy(void *, const void *, size_t);
 #endif
-void *memmove __P((void *, const void *, size_t));
+void *memmove(void *, const void *, size_t);
 
 /* disklabel */
 union {
@@ -99,10 +99,7 @@ extern char diskbuf[2048];
 #define MASK_BLK_PER_READ	(BLK_PER_READ - 1)
 
 void
-RAW_READ(buf, blkpos, bytelen)
-	void *buf;
-	daddr_t blkpos;
-	size_t bytelen;
+RAW_READ(void *buf, daddr_t blkpos, size_t bytelen)
 {
 	char *b = buf;
 	size_t off, readlen;
@@ -156,9 +153,7 @@ RAW_READ(buf, blkpos, bytelen)
  * buf must have enough space
  */
 static char *
-hexstr(buf, val)
-	char *buf;
-	unsigned val;
+hexstr(char *buf, unsigned val)
 {
 	unsigned v;
 	char rev[16];
@@ -180,10 +175,10 @@ hexstr(buf, val)
 }
 
 void
-ipl_main(interactive, sptop, psw)
-	unsigned interactive;		/* parameters from PDC */
-	unsigned sptop;			/* value of sp on function entry */
-	unsigned psw;			/* PSW on startup */
+ipl_main(unsigned interactive, unsigned sptop, unsigned psw)
+	/* interactive:		 parameters from PDC */
+	/* sptop:			 value of sp on function entry */
+	/* psw:			 PSW on startup */
 {
 	char buf[32];
 	int part = 0;		/* default partition "a" */
@@ -265,8 +260,7 @@ ipl_main(interactive, sptop, psw)
 		}
 
 		/* boot partition must be below 2GB */
-		if (partoff + partsz >=
-		    (unsigned)((unsigned)2*1024*1024*1024 -1 + secsz) / secsz) {
+		if (partoff + partsz > ((unsigned)2*1024*1024*1024) / secsz) {
 			/* "boot partition exceeds 2GB boundary\r\n" */
 			print(str_warn_2GB);
 			goto select_partition;
@@ -300,10 +294,7 @@ ipl_main(interactive, sptop, psw)
 }
 
 void
-load_file(path, loadadr, interactive, part)
-	const char *path;
-	unsigned loadadr, interactive;
-	int part;
+load_file(const char *path, unsigned loadadr, unsigned interactive, int part)
 {
 
 	/* look-up the file */
@@ -314,11 +305,8 @@ load_file(path, loadadr, interactive, part)
 }
 
 void
-load_file_ino(ino, fn, loadadr, interactive, part)
-	ino32_t ino;
-	const char *fn;		/* for message only */
-	unsigned loadadr, interactive;
-	int part;
+load_file_ino(ino32_t ino, const char *fn, unsigned loadadr, unsigned interactive, int part)
+	/* fn:		 for message only */
 {
 	union ufs_dinode dinode;
 	size_t sz;
@@ -356,9 +344,7 @@ load_file_ino(ino, fn, loadadr, interactive, part)
  * fill in loading information from an ELF executable
  */
 static inline void
-xi_elf32(inf, hdr)
-	struct loadinfo *inf;
-	Elf32_Ehdr *hdr;
+xi_elf32(struct loadinfo *inf, Elf32_Ehdr *hdr)
 {
 	char *top = (void *) hdr;
 	Elf32_Phdr *ph;
@@ -375,9 +361,7 @@ xi_elf32(inf, hdr)
 }
 
 static inline void
-xi_elf64(inf, hdr)
-	struct loadinfo *inf;
-	Elf64_Ehdr *hdr;
+xi_elf64(struct loadinfo *inf, Elf64_Ehdr *hdr)
 {
 	char *top = (void *) hdr;
 	Elf64_Phdr *ph;
@@ -398,9 +382,7 @@ xi_elf64(inf, hdr)
 }
 
 int
-xi_load(inf, buf)
-	struct loadinfo *inf;
-	void *buf;
+xi_load(struct loadinfo *inf, void *buf)
 {
 	Elf32_Ehdr *e32hdr = buf;
 	Elf64_Ehdr *e64hdr = buf;
@@ -446,7 +428,7 @@ xi_load(inf, buf)
 	memmove(buf, inf->sec_image, inf->sec_size);
 
 #if 0	/* XXX bss clear is done by the secondary boot itself */
-	bzero((char *) buf + inf->sec_size, inf->sec_pad);
+	memset((char *) buf + inf->sec_size, 0, inf->sec_pad);
 #endif
 
 	return 0;

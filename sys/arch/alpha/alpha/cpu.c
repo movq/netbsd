@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.c,v 1.80 2007/11/28 17:40:02 ad Exp $ */
+/* $NetBSD: cpu.c,v 1.90 2010/12/17 02:36:35 joerg Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.80 2007/11/28 17:40:02 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.90 2010/12/17 02:36:35 joerg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -76,13 +69,12 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.80 2007/11/28 17:40:02 ad Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/atomic.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/atomic.h>
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
 #include <machine/cpuvar.h>
 #include <machine/rpb.h>
 #include <machine/prom.h>
@@ -105,7 +97,7 @@ volatile u_long cpus_booted;
 volatile u_long cpus_running;
 volatile u_long cpus_paused;
 
-void	cpu_boot_secondary __P((struct cpu_info *));
+void	cpu_boot_secondary(struct cpu_info *);
 #endif /* MULTIPROCESSOR */
 
 /*
@@ -163,10 +155,10 @@ struct cputable_struct {
  *
  * As we find processors during the autoconfiguration sequence, all
  * processors have idle stacks and PCBs created for them, including
- * the primary (although the primary idles on proc0's PCB until its
+ * the primary (although the primary idles on lwp0's PCB until its
  * idle PCB is created).
  *
- * Right before calling uvm_scheduler(), main() calls, on proc0's
+ * Right before calling uvm_scheduler(), main() calls, on lwp0's
  * context, cpu_boot_secondary_processors().  This is our key to
  * actually spin up the additional processor's we've found.  We
  * run through our cpu_info[] array looking for secondary processors
@@ -184,10 +176,7 @@ struct cputable_struct {
  */
 
 static int
-cpumatch(parent, cfdata, aux)
-	struct device *parent;
-	struct cfdata *cfdata;
-	void *aux;
+cpumatch(struct device *parent, struct cfdata *cfdata, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -202,10 +191,7 @@ cpumatch(parent, cfdata, aux)
 }
 
 static void
-cpuattach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+cpuattach(struct device *parent, struct device *self, void *aux)
 {
 	struct cpu_softc *sc = (void *) self;
 	struct mainbus_attach_args *ma = aux;
@@ -324,8 +310,8 @@ recognized:
 		cpu_announce_extensions(ci);
 #if defined(MULTIPROCESSOR)
 		ci->ci_flags |= CPUF_PRIMARY|CPUF_RUNNING;
-		atomic_setbits_ulong(&cpus_booted, (1UL << ma->ma_slot));
-		atomic_setbits_ulong(&cpus_running, (1UL << ma->ma_slot));
+		atomic_or_ulong(&cpus_booted, (1UL << ma->ma_slot));
+		atomic_or_ulong(&cpus_running, (1UL << ma->ma_slot));
 #endif /* MULTIPROCESSOR */
 	} else {
 #if defined(MULTIPROCESSOR)
@@ -344,6 +330,12 @@ recognized:
 		 * on its merry way.
 		 */
 		cpu_boot_secondary(ci);
+
+		/*
+		 * Link the processor into the list.
+		 */
+		ci->ci_next = cpu_info_list->ci_next;
+		cpu_info_list->ci_next = ci;
 #else /* ! MULTIPROCESSOR */
 		printf("%s: processor off-line; multiprocessor support "
 		    "not present in kernel\n", sc->sc_dev.dv_xname);
@@ -385,10 +377,12 @@ cpu_announce_extensions(struct cpu_info *ci)
 		cpu_amask &= amask;
 	}
 
-	if (amask)
+	if (amask) {
+		snprintb(bits, sizeof(bits),
+		    ALPHA_AMASK_BITS, cpu_amask);
 		printf("%s: Architecture extensions: %s\n",
-		    ci->ci_softc->sc_dev.dv_xname, bitmask_snprintf(cpu_amask,
-		    ALPHA_AMASK_BITS, bits, sizeof(bits)));
+		    ci->ci_softc->sc_dev.dv_xname, bits);
+	}
 }
 
 #if defined(MULTIPROCESSOR)
@@ -415,12 +409,10 @@ cpu_boot_secondary_processors(void)
 		}
 
 		/*
-		 * Link the processor into the list, and launch it.
+		 * Launch the processor.
 		 */
-		ci->ci_next = cpu_info_list->ci_next;
-		cpu_info_list->ci_next = ci;
-		atomic_setbits_ulong(&ci->ci_flags, CPUF_RUNNING);
-		atomic_setbits_ulong(&cpus_running, (1U << i));
+		atomic_or_ulong(&ci->ci_flags, CPUF_RUNNING);
+		atomic_or_ulong(&cpus_running, (1U << i));
 	}
 }
 
@@ -432,7 +424,7 @@ cpu_boot_secondary(struct cpu_info *ci)
 	struct pcb *pcb;
 	u_long cpumask;
 
-	pcb = &ci->ci_data.cpu_idlelwp->l_addr->u_pcb;
+	pcb = lwp_getpcb(ci->ci_data.cpu_idlelwp);
 	primary_pcsp = LOCATE_PCS(hwrpb, hwrpb->rpb_primary_cpu_id);
 	pcsp = LOCATE_PCS(hwrpb, ci->ci_cpuid);
 	cpumask = (1UL << ci->ci_cpuid);
@@ -502,10 +494,10 @@ cpu_pause_resume(u_long cpu_id, int pause)
 	u_long cpu_mask = (1UL << cpu_id);
 
 	if (pause) {
-		atomic_setbits_ulong(&cpus_paused, cpu_mask);
+		atomic_or_ulong(&cpus_paused, cpu_mask);
 		alpha_send_ipi(cpu_id, ALPHA_IPI_PAUSE);
 	} else
-		atomic_clearbits_ulong(&cpus_paused, cpu_mask);
+		atomic_and_ulong(&cpus_paused, ~cpu_mask);
 }
 
 void
@@ -533,8 +525,8 @@ cpu_halt(void)
 	pcsp->pcs_flags &= ~(PCS_RC | PCS_HALT_REQ);
 	pcsp->pcs_flags |= PCS_HALT_STAY_HALTED;
 
-	atomic_clearbits_ulong(&cpus_running, (1UL << cpu_id));
-	atomic_clearbits_ulong(&cpus_booted, (1U << cpu_id));
+	atomic_and_ulong(&cpus_running, ~(1UL << cpu_id));
+	atomic_and_ulong(&cpus_booted, ~(1U << cpu_id));
 
 	alpha_pal_halt();
 	/* NOTREACHED */
@@ -547,7 +539,7 @@ cpu_hatch(struct cpu_info *ci)
 	u_long cpumask = (1UL << cpu_id);
 
 	/* Mark the kernel pmap active on this processor. */
-	atomic_setbits_ulong(&pmap_kernel()->pm_cpus, cpumask);
+	atomic_or_ulong(&pmap_kernel()->pm_cpus, cpumask);
 
 	/* Initialize trap vectors for this processor. */
 	trap_init();
@@ -555,7 +547,7 @@ cpu_hatch(struct cpu_info *ci)
 	/* Yahoo!  We're running kernel code!  Announce it! */
 	cpu_announce_extensions(ci);
 
-	atomic_setbits_ulong(&cpus_booted, cpumask);
+	atomic_or_ulong(&cpus_booted, cpumask);
 
 	/*
 	 * Spin here until we're told we can start.
@@ -594,11 +586,12 @@ cpu_iccb_send(long cpu_id, const char *msg)
 
 	/*
 	 * Copy the message into the ICCB, and tell the secondary console
-	 * that it's there.  The atomic operation performs a memory barrier.
+	 * that it's there.
 	 */
 	strcpy(pcsp->pcs_iccb.iccb_rxbuf, msg);
 	pcsp->pcs_iccb.iccb_rxlen = strlen(msg);
-	atomic_setbits_ulong(&hwrpb->rpb_rxrdy, cpumask);
+	atomic_or_ulong(&hwrpb->rpb_rxrdy, cpumask);
+	membar_sync();
 
 	/* Wait for the message to be received. */
 	for (timeout = 10000; timeout != 0; timeout--) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.10 2007/10/17 19:54:00 garbled Exp $	*/
+/*	$NetBSD: param.h,v 1.12 2011/03/06 20:34:57 he Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -42,10 +42,15 @@
 /*
  * Machine dependent constants for PowerPC (32-bit only currently)
  */
+#ifdef _KERNEL
 #define	MACHINE		"bebox"
+#endif
 
 #define	__NO_FIXED_MSGBUF
 
 #define	KERNBASE	0x3100
 
 #include <powerpc/param.h>
+
+/* at this offset we mmap() the PCI IO range in display drivers */
+#define PCI_MAGIC_IO_RANGE	0xf2000000

@@ -1,4 +1,4 @@
-/* $NetBSD: spiflash.c,v 1.6 2007/07/29 12:15:44 ad Exp $ */
+/* $NetBSD: spiflash.c,v 1.10 2009/01/13 13:35:54 yamt Exp $ */
 
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spiflash.c,v 1.6 2007/07/29 12:15:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spiflash.c,v 1.10 2009/01/13 13:35:54 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -72,7 +72,6 @@ __KERNEL_RCSID(0, "$NetBSD: spiflash.c,v 1.6 2007/07/29 12:15:44 ad Exp $");
  */
 
 struct spiflash_softc {
-	struct device		sc_dev;
 	struct disk		sc_dk;
 
 	struct spiflash_hw_if	sc_hw;
@@ -108,8 +107,8 @@ struct spiflash_attach_args {
 };
 
 #define	STATIC
-STATIC int spiflash_match(struct device *, struct cfdata *, void *);
-STATIC void spiflash_attach(struct device *, struct device *, void *);
+STATIC int spiflash_match(device_t , cfdata_t , void *);
+STATIC void spiflash_attach(device_t , device_t , void *);
 STATIC int spiflash_print(void *, const char *);
 STATIC int spiflash_common_erase(spiflash_handle_t, size_t, size_t);
 STATIC int spiflash_common_write(spiflash_handle_t, size_t, size_t,
@@ -123,7 +122,7 @@ STATIC int spiflash_nsectors(spiflash_handle_t, struct buf *);
 STATIC int spiflash_nsectors(spiflash_handle_t, struct buf *);
 STATIC int spiflash_sector(spiflash_handle_t, struct buf *);
 
-CFATTACH_DECL(spiflash, sizeof(struct spiflash_softc),
+CFATTACH_DECL_NEW(spiflash, sizeof(struct spiflash_softc),
 	      spiflash_match, spiflash_attach, NULL, NULL);
 
 #ifdef	SPIFLASH_DEBUG
@@ -169,7 +168,7 @@ static struct dkdriver spiflash_dkdriver = { spiflash_strategy, NULL };
 
 spiflash_handle_t
 spiflash_attach_mi(const struct spiflash_hw_if *hw, void *cookie,
-    struct device *dev)
+    device_t dev)
 {
 	struct spiflash_attach_args sfa;
 	sfa.hw = hw;
@@ -188,14 +187,14 @@ spiflash_print(void *aux, const char *pnp)
 }
 
 int
-spiflash_match(struct device *parent, struct cfdata *cf, void *aux)
+spiflash_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return 1;
 }
 
 void
-spiflash_attach(struct device *parent, struct device *self, void *aux)
+spiflash_attach(device_t parent, device_t self, void *aux)
 {
 	struct spiflash_softc *sc = device_private(self);
 	struct spiflash_attach_args *sfa = aux;
@@ -221,8 +220,8 @@ spiflash_attach(struct device *parent, struct device *self, void *aux)
 	aprint_naive(": SPI flash\n");
 	aprint_normal(": %s SPI flash\n", sc->sc_name);
 	/* XXX: note that this has to change for boot-sectored flash */
-	aprint_normal("%s: %d KB, %d sectors of %d KB each\n",
-	    sc->sc_dev.dv_xname, sc->sc_device_size / 1024,
+	aprint_normal_dev(self, "%d KB, %d sectors of %d KB each\n",
+	    sc->sc_device_size / 1024,
 	    sc->sc_device_size / sc->sc_erase_size,
 	    sc->sc_erase_size / 1024);
 
@@ -232,7 +231,7 @@ spiflash_attach(struct device *parent, struct device *self, void *aux)
 	bufq_alloc(&sc->sc_doneq, "fcfs", BUFQ_SORT_RAWBLOCK);
 
 	sc->sc_dk.dk_driver = &spiflash_dkdriver;
-	sc->sc_dk.dk_name = sc->sc_dev.dv_xname;
+	sc->sc_dk.dk_name = device_xname(self);
 
 	disk_attach(&sc->sc_dk);
 
@@ -246,7 +245,8 @@ spiflash_open(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	spiflash_handle_t sc;
 
-	if ((sc = device_lookup(&spiflash_cd, DISKUNIT(dev))) == NULL)
+	sc = device_lookup_private(&spiflash_cd, DISKUNIT(dev));
+	if (sc == NULL)
 		return ENXIO;
 
 	/*
@@ -269,7 +269,8 @@ spiflash_close(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	spiflash_handle_t sc;
 
-	if ((sc = device_lookup(&spiflash_cd, DISKUNIT(dev))) == NULL)
+	sc = device_lookup_private(&spiflash_cd, DISKUNIT(dev));
+	if (sc == NULL)
 		return ENXIO;
 
 	return 0;
@@ -294,7 +295,8 @@ spiflash_ioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
 	spiflash_handle_t sc;
 
-	if ((sc = device_lookup(&spiflash_cd, DISKUNIT(dev))) == NULL)
+	sc = device_lookup_private(&spiflash_cd, DISKUNIT(dev));
+	if (sc == NULL)
 		return ENXIO;
 
 	return EINVAL;
@@ -306,7 +308,7 @@ spiflash_strategy(struct buf *bp)
 	spiflash_handle_t sc;
 	int	s;
 
-	sc = device_lookup(&spiflash_cd, DISKUNIT(bp->b_dev));
+	sc = device_lookup_private(&spiflash_cd, DISKUNIT(bp->b_dev));
 	if (sc == NULL) {
 		bp->b_error = ENXIO;
 		biodone(bp);
@@ -336,7 +338,7 @@ spiflash_strategy(struct buf *bp)
 
 	/* all ready, hand off to thread for async processing */
 	s = splbio();
-	BUFQ_PUT(sc->sc_waitq, bp);
+	bufq_put(sc->sc_waitq, bp);
 	wakeup(&sc->sc_thread);
 	splx(s);
 }
@@ -348,7 +350,7 @@ spiflash_process_done(spiflash_handle_t sc, int err)
 	int		cnt = 0;
 	int		flag = 0;
 
-	while ((bp = BUFQ_GET(sc->sc_doneq)) != NULL) {
+	while ((bp = bufq_get(sc->sc_doneq)) != NULL) {
 		flag = bp->b_flags & B_READ;
 		if ((bp->b_error = err) == 0)
 			bp->b_resid = 0;
@@ -365,12 +367,12 @@ spiflash_process_read(spiflash_handle_t sc)
 	int		err = 0;
 
 	disk_busy(&sc->sc_dk);
-	while ((bp = BUFQ_GET(sc->sc_workq)) != NULL) {
+	while ((bp = bufq_get(sc->sc_workq)) != NULL) {
 		size_t addr = bp->b_blkno * DEV_BSIZE;
 		uint8_t *data = bp->b_data;
 		int cnt = bp->b_resid;
 
-		BUFQ_PUT(sc->sc_doneq, bp);
+		bufq_put(sc->sc_doneq, bp);
 
 		DPRINTF(("read from addr %x, cnt %d\n", (unsigned)addr, cnt));
 
@@ -405,7 +407,7 @@ spiflash_process_write(spiflash_handle_t sc)
 	 * to save.
 	 */
 
-	bp = BUFQ_PEEK(sc->sc_workq);
+	bp = bufq_peek(sc->sc_workq);
 	len = spiflash_nsectors(sc, bp)  * sc->sc_erase_size;
 	blkno = bp->b_blkno;
 	base = (blkno * DEV_BSIZE) & ~ (sc->sc_erase_size - 1);
@@ -426,7 +428,7 @@ spiflash_process_write(spiflash_handle_t sc)
 	 * now coalesce the writes into the save area, but also
 	 * check to see if we need to do an erase
 	 */
-	while ((bp = BUFQ_GET(sc->sc_workq)) != NULL) {
+	while ((bp = bufq_get(sc->sc_workq)) != NULL) {
 		uint8_t	*data, *dst;
 		int resid = bp->b_resid;
 
@@ -448,7 +450,7 @@ spiflash_process_write(spiflash_handle_t sc)
 			resid--;
 		}
 
-		BUFQ_PUT(sc->sc_doneq, bp);
+		bufq_put(sc->sc_doneq, bp);
 	}
 	
 	/*
@@ -512,12 +514,12 @@ spiflash_thread(void *arg)
 
 	s = splbio();
 	for (;;) {
-		if ((bp = BUFQ_GET(sc->sc_waitq)) == NULL) {
+		if ((bp = bufq_get(sc->sc_waitq)) == NULL) {
 			tsleep(&sc->sc_thread, PRIBIO, "spiflash_thread", 0);
 			continue;
 		}
 
-		BUFQ_PUT(sc->sc_workq, bp);
+		bufq_put(sc->sc_workq, bp);
 
 		if (bp->b_flags & B_READ) {
 			/* just do the read */
@@ -542,7 +544,7 @@ spiflash_thread(void *arg)
 		if (sector < 0)
 			goto dowrite;
 
-		while ((bp = BUFQ_PEEK(sc->sc_waitq)) != NULL) {
+		while ((bp = bufq_peek(sc->sc_waitq)) != NULL) {
 			/* can't deal with read requests! */
 			if (bp->b_flags & B_READ)
 				break;
@@ -551,8 +553,8 @@ spiflash_thread(void *arg)
 			if (spiflash_sector(sc, bp) != sector)
 				break;
 
-			bp = BUFQ_GET(sc->sc_waitq);
-			BUFQ_PUT(sc->sc_workq, bp);
+			bp = bufq_get(sc->sc_waitq);
+			bufq_put(sc->sc_workq, bp);
 		}
 
 	dowrite:

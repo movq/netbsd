@@ -1,4 +1,4 @@
-/*	$NetBSD: biovar.h,v 1.6 2008/01/02 23:45:03 xtraeme Exp $ */
+/*	$NetBSD: biovar.h,v 1.8 2009/05/07 12:15:33 cegger Exp $ */
 /*	$OpenBSD: biovar.h,v 1.26 2007/03/19 03:02:08 marco Exp $	*/
 
 /*
@@ -37,6 +37,7 @@
 #define _DEV_BIOVAR_H_
 
 #include <sys/types.h>
+#include <sys/device.h>
 
 #ifndef _KERNEL
 #include <stdbool.h>
@@ -54,8 +55,8 @@ struct bio_locate {
 };
 
 #ifdef _KERNEL
-int	bio_register(struct device *, int (*)(struct device *, u_long, void *));
-void	bio_unregister(struct device *);
+int	bio_register(device_t, int (*)(device_t, u_long, void *));
+void	bio_unregister(device_t);
 #endif
 
 #define BIOCINQ _IOWR('B', 32, struct bioc_inq)
@@ -158,6 +159,8 @@ struct bioc_vol {
 #define BIOC_SVINVALID_S	"Invalid"
 	uint64_t	bv_size;	/* size of the disk */
 	int		bv_level;	/* raid level */
+#define BIOC_SVOL_RAID01	0x0e
+#define BIOC_SVOL_RAID10	0x1e
 #define BIOC_SVOL_UNUSED	0xaa
 #define BIOC_SVOL_HOTSPARE	0xbb
 #define BIOC_SVOL_PASSTHRU	0xcc

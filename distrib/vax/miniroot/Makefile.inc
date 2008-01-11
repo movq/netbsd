@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.16 2003/07/10 10:34:17 lukem Exp $
+# $NetBSD: Makefile.inc,v 1.20 2010/02/11 09:06:51 roy Exp $
 
 IMAGESIZE=	7m
 MAKEFS_FLAGS=	-o density=4k
@@ -7,10 +7,8 @@ MAKEDEVTARGETS=	all
 LISTS+=		${DISTRIBDIR}/common/list.sysinst
 IMAGEDEPENDS+=	${ARCHDIR}/../install.md \
 		${ARCHDIR}/dot.profile \
-		${DESTDIR}/etc/disktab \
 		${DESTDIR}/usr/mdec/boot \
-		${KERNOBJDIR}/GENERIC/netbsd \
-		${NETBSDSRCDIR}/share/termcap/termcap.src
+		${KERNOBJDIR}/GENERIC/netbsd
 
 IMAGEPOSTBUILD=	${TOOL_INSTALLBOOT} -v -m ${MACHINE} ${IMAGE} \
 		    ${DESTDIR}/usr/mdec/xxboot

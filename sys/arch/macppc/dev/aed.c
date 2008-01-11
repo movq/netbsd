@@ -1,4 +1,4 @@
-/*	$NetBSD: aed.c,v 1.20 2007/10/17 19:55:17 garbled Exp $	*/
+/*	$NetBSD: aed.c,v 1.25 2009/11/01 01:51:35 snj Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Bradley A. Grantham.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.20 2007/10/17 19:55:17 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.25 2009/11/01 01:51:35 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -56,13 +51,13 @@ __KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.20 2007/10/17 19:55:17 garbled Exp $");
 /*
  * Function declarations.
  */
-static int	aedmatch __P((struct device *, struct cfdata *, void *));
-static void	aedattach __P((struct device *, struct device *, void *));
-static void	aed_emulate_mouse __P((adb_event_t *event));
-static void	aed_kbdrpt __P((void *kstate));
-static void	aed_dokeyupdown __P((adb_event_t *event));
-static void	aed_handoff __P((adb_event_t *event));
-static void	aed_enqevent __P((adb_event_t *event));
+static int	aedmatch(struct device *, struct cfdata *, void *);
+static void	aedattach(struct device *, struct device *, void *);
+static void	aed_emulate_mouse(adb_event_t *event);
+static void	aed_kbdrpt(void *kstate);
+static void	aed_dokeyupdown(adb_event_t *event);
+static void	aed_handoff(adb_event_t *event);
+static void	aed_enqevent(adb_event_t *event);
 
 /*
  * Global variables.
@@ -94,10 +89,7 @@ const struct cdevsw aed_cdevsw = {
 };
 
 static int
-aedmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+aedmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)aux;
 	static int aed_matched = 0;
@@ -111,14 +103,13 @@ aedmatch(parent, cf, aux)
 }
 
 static void
-aedattach(parent, self, aux)
-	struct device *parent, *self;
-	void   *aux;
+aedattach(struct device *parent, struct device *self, void *aux)
 {
 	struct adb_attach_args *aa_args = (struct adb_attach_args *)aux;
 	struct aed_softc *sc = (struct aed_softc *)self;
 
 	callout_init(&sc->sc_repeat_ch, 0);
+	selinit(&sc->sc_selinfo);
 
 	sc->origaddr = aa_args->origaddr;
 	sc->adbaddr = aa_args->adbaddr;
@@ -154,8 +145,7 @@ aedattach(parent, self, aux)
  * the handoff function.
  */
 void
-aed_input(event)
-        adb_event_t *event;
+aed_input(adb_event_t *event)
 {
         adb_event_t new_event = *event;
 
@@ -186,8 +176,7 @@ aed_input(event)
  * the corresponding mouse button event.
  */
 static void 
-aed_emulate_mouse(event)
-	adb_event_t *event;
+aed_emulate_mouse(adb_event_t *event)
 {
 	static int emulmodkey_down = 0;
 	adb_event_t new_event;
@@ -323,8 +312,7 @@ aed_emulate_mouse(event)
  * ticks in the future.
  */
 static void 
-aed_kbdrpt(kstate)
-	void *kstate;
+aed_kbdrpt(void *kstate)
 {
 	struct aed_softc *sc = (struct aed_softc *)kstate;
 
@@ -349,8 +337,7 @@ aed_kbdrpt(kstate)
  * appropriate subsystem.
  */
 static void 
-aed_dokeyupdown(event)
-	adb_event_t *event;
+aed_dokeyupdown(adb_event_t *event)
 {
 	int     kbd_key;
 
@@ -379,8 +366,7 @@ aed_dokeyupdown(event)
  * and we are not polling.
  */
 static void
-aed_handoff(event)
-	adb_event_t *event;
+aed_handoff(adb_event_t *event)
 {
 	if (aed_sc->sc_open && !adb_polling)
 		aed_enqevent(event);
@@ -390,8 +376,7 @@ aed_handoff(event)
  * Place the event in the event queue and wakeup any waiting processes.
  */
 static void 
-aed_enqevent(event)
-    adb_event_t *event;
+aed_enqevent(adb_event_t *event)
 {
 	int     s;
 
@@ -413,7 +398,7 @@ aed_enqevent(event)
 	    AED_MAX_EVENTS] = *event;
 	aed_sc->sc_evq_len++;
 
-	selnotify(&aed_sc->sc_selinfo, 0);
+	selnotify(&aed_sc->sc_selinfo, 0, 0);
 	if (aed_sc->sc_ioproc)
 		psignal(aed_sc->sc_ioproc, SIGIO);
 
@@ -421,10 +406,7 @@ aed_enqevent(event)
 }
 
 int 
-aedopen(dev, flag, mode, l)
-    dev_t dev;
-    int flag, mode;
-    struct lwp *l;
+aedopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	int unit;
 	int error = 0;
@@ -451,10 +433,7 @@ aedopen(dev, flag, mode, l)
 
 
 int 
-aedclose(dev, flag, mode, l)
-    dev_t dev;
-    int flag, mode;
-    struct lwp *l;
+aedclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	int s = spladb();
 
@@ -467,10 +446,7 @@ aedclose(dev, flag, mode, l)
 
 
 int 
-aedread(dev, uio, flag)
-    dev_t dev;
-    struct uio *uio;
-    int flag;
+aedread(dev_t dev, struct uio *uio, int flag)
 {
 	int s, error;
 	int willfit;
@@ -515,12 +491,7 @@ aedread(dev, uio, flag)
 }
 
 int 
-aedioctl(dev, cmd, data, flag, l)
-    dev_t dev;
-    u_long cmd;
-    void *data;
-    int flag;
-    struct lwp *l;
+aedioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	switch (cmd) {
 	case ADBIOCDEVSINFO: {
@@ -584,10 +555,7 @@ aedioctl(dev, cmd, data, flag, l)
 
 
 int 
-aedpoll(dev, events, l)
-	dev_t dev;
-	int events;
-	struct lwp *l;
+aedpoll(dev_t dev, int events, struct lwp *l)
 {
 	int s, revents;
 

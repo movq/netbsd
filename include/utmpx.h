@@ -1,4 +1,4 @@
-/*	$NetBSD: utmpx.h,v 1.14 2006/09/22 21:31:55 christos Exp $	 */
+/*	$NetBSD: utmpx.h,v 1.17 2009/01/11 19:09:29 christos Exp $	 */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -95,6 +88,18 @@
 #define ut_user ut_name
 #define ut_xtime ut_tv.tv_sec
 
+/*
+ * This should be:
+ * 40 - (sizeof(struct timeval) - sizeof(struct { long s; long u; })))
+ * but g++ does not like it, to retain size compatibility with v1.00,
+ * so we do it manually.
+ */
+#ifdef _LP64
+#define _UTX_PADSIZE 36
+#else
+#define _UTX_PADSIZE 40
+#endif
+
 struct utmpx {
 	char ut_name[_UTX_USERSIZE];	/* login name */
 	char ut_id[_UTX_IDSIZE];	/* inittab id */
@@ -109,7 +114,7 @@ struct utmpx {
 	} ut_exit;
 	struct sockaddr_storage ut_ss;	/* address where entry was made from */
 	struct timeval ut_tv;		/* time entry was created */
-	uint32_t ut_pad[10];		/* reserved for future use */
+	uint8_t ut_pad[_UTX_PADSIZE];	/* reserved for future use */
 };
 
 #if defined(_NETBSD_SOURCE)
@@ -125,21 +130,25 @@ __BEGIN_DECLS
 
 void setutxent(void);
 void endutxent(void);
-struct utmpx *getutxent(void);
-struct utmpx *getutxid(const struct utmpx *);
-struct utmpx *getutxline(const struct utmpx *);
-struct utmpx *pututxline(const struct utmpx *);
+
+#ifndef __LIBC12_SOURCE__
+struct utmpx *getutxent(void) __RENAME(__getutxent50);
+struct utmpx *getutxid(const struct utmpx *) __RENAME(__getutxid50);
+struct utmpx *getutxline(const struct utmpx *) __RENAME(__getutxline50);
+struct utmpx *pututxline(const struct utmpx *) __RENAME(__pututxline50);
+#endif
 
 #if defined(_NETBSD_SOURCE)
-int updwtmpx(const char *, const struct utmpx *);
 #ifndef __LIBC12_SOURCE__
+int updwtmpx(const char *, const struct utmpx *) __RENAME(__updwtmpx50);
 struct lastlogx *getlastlogx(const char *, uid_t, struct lastlogx *)
-    __RENAME(__getlastlogx13);
-#endif
-int updlastlogx(const char *, uid_t, struct lastlogx *);
+    __RENAME(__getlastlogx50);
+int updlastlogx(const char *, uid_t, struct lastlogx *)
+    __RENAME(__updlastlogx50);
 struct utmp;
-void getutmp(const struct utmpx *, struct utmp *);
-void getutmpx(const struct utmp *, struct utmpx *);
+void getutmp(const struct utmpx *, struct utmp *) __RENAME(__getutmp50);
+void getutmpx(const struct utmp *, struct utmpx *) __RENAME(__getutmpx50);
+#endif
 
 int utmpxname(const char *);
 

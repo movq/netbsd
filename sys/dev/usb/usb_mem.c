@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_mem.c,v 1.33 2007/10/19 12:01:22 ad Exp $	*/
+/*	$NetBSD: usb_mem.c,v 1.46 2011/03/20 17:38:11 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.33 2007/10/19 12:01:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.46 2011/03/20 17:38:11 tsutsui Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_usb.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,10 +51,10 @@ __KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.33 2007/10/19 12:01:22 ad Exp $");
 #include <sys/queue.h>
 #include <sys/device.h>		/* for usbdivar.h */
 #include <sys/bus.h>
+#include <sys/cpu.h>
 
 #ifdef __NetBSD__
 #include <sys/extent.h>
-#include <uvm/uvm_extern.h>
 #endif
 
 #ifdef DIAGNOSTIC
@@ -70,17 +67,13 @@ __KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.33 2007/10/19 12:01:22 ad Exp $");
 #include <dev/usb/usb_mem.h>
 
 #ifdef USB_DEBUG
-#define DPRINTF(x)	if (usbdebug) logprintf x
-#define DPRINTFN(n,x)	if (usbdebug>(n)) logprintf x
+#define DPRINTF(x)	if (usbdebug) printf x
+#define DPRINTFN(n,x)	if (usbdebug>(n)) printf x
 extern int usbdebug;
 #else
 #define DPRINTF(x)
 #define DPRINTFN(n,x)
 #endif
-
-MALLOC_DEFINE(M_USB, "USB", "USB misc. memory");
-MALLOC_DEFINE(M_USBDEV, "USB device", "USB device driver");
-MALLOC_DEFINE(M_USBHC, "USB HC", "USB host controller");
 
 #define USB_MEM_SMALL 64
 #define USB_MEM_CHUNKS 64
@@ -116,7 +109,7 @@ usb_block_allocmem(bus_dma_tag_t tag, size_t size, size_t align,
 		     (u_long)size, (u_long)align));
 
 #ifdef DIAGNOSTIC
-	if (!curproc) {
+	if (cpu_intr_p()) {
 		printf("usb_block_allocmem: in interrupt context, size=%lu\n",
 		    (unsigned long) size);
 	}
@@ -124,7 +117,7 @@ usb_block_allocmem(bus_dma_tag_t tag, size_t size, size_t align,
 
 	s = splusb();
 	/* First check the free list. */
-	for (p = LIST_FIRST(&usb_blk_freelist); p; p = LIST_NEXT(p, next)) {
+	LIST_FOREACH(p, &usb_blk_freelist, next) {
 		if (p->tag == tag && p->size >= size && p->align >= align) {
 			LIST_REMOVE(p, next);
 			usb_blk_nfree--;
@@ -138,7 +131,7 @@ usb_block_allocmem(bus_dma_tag_t tag, size_t size, size_t align,
 	splx(s);
 
 #ifdef DIAGNOSTIC
-	if (!curproc) {
+	if (cpu_intr_p()) {
 		printf("usb_block_allocmem: in interrupt context, failed\n");
 		return (USBD_NOMEM);
 	}
@@ -174,6 +167,9 @@ usb_block_allocmem(bus_dma_tag_t tag, size_t size, size_t align,
 		goto destroy;
 
 	*dmap = p;
+#ifdef USB_FRAG_DMA_WORKAROUND
+	memset(p->kaddr, 0, p->size);
+#endif
 	return (USBD_NORMAL_COMPLETION);
 
  destroy:
@@ -192,7 +188,7 @@ void
 usb_block_real_freemem(usb_dma_block_t *p)
 {
 #ifdef DIAGNOSTIC
-	if (!curproc) {
+	if (cpu_intr_p()) {
 		printf("usb_block_real_freemem: in interrupt context\n");
 		return;
 	}
@@ -246,9 +242,10 @@ usb_allocmem(usbd_bus_handle bus, size_t size, size_t align, usb_dma_t *p)
 
 	s = splusb();
 	/* Check for free fragments. */
-	for (f = LIST_FIRST(&usb_frag_freelist); f; f = LIST_NEXT(f, next))
+	LIST_FOREACH(f, &usb_frag_freelist, next) {
 		if (f->block->tag == tag)
 			break;
+	}
 	if (f == NULL) {
 		DPRINTFN(1, ("usb_allocmem: adding fragments\n"));
 		err = usb_block_allocmem(tag, USB_MEM_BLOCK, USB_MEM_SMALL,&b);
@@ -262,11 +259,17 @@ usb_allocmem(usbd_bus_handle bus, size_t size, size_t align, usb_dma_t *p)
 			f->block = b;
 			f->offs = i;
 			LIST_INSERT_HEAD(&usb_frag_freelist, f, next);
+#ifdef USB_FRAG_DMA_WORKAROUND
+			i += 1 * USB_MEM_SMALL;
+#endif
 		}
 		f = LIST_FIRST(&usb_frag_freelist);
 	}
 	p->block = f->block;
 	p->offs = f->offs;
+#ifdef USB_FRAG_DMA_WORKAROUND
+	p->offs += USB_MEM_SMALL;
+#endif
 	p->block->flags &= ~USB_DMA_RESERVE;
 	LIST_REMOVE(f, next);
 	splx(s);
@@ -285,13 +288,27 @@ usb_freemem(usbd_bus_handle bus, usb_dma_t *p)
 		usb_block_freemem(p->block);
 		return;
 	}
+	//usb_syncmem(p, 0, USB_MEM_SMALL, BUS_DMASYNC_POSTREAD);
 	f = KERNADDR(p, 0);
+#ifdef USB_FRAG_DMA_WORKAROUND
+	f = (void *)((uintptr_t)f - USB_MEM_SMALL);
+#endif
 	f->block = p->block;
 	f->offs = p->offs;
+#ifdef USB_FRAG_DMA_WORKAROUND
+	f->offs -= USB_MEM_SMALL;
+#endif
 	s = splusb();
 	LIST_INSERT_HEAD(&usb_frag_freelist, f, next);
 	splx(s);
 	DPRINTFN(5, ("usb_freemem: frag=%p\n", f));
+}
+
+void
+usb_syncmem(usb_dma_t *p, bus_addr_t offset, bus_size_t len, int ops)
+{
+	bus_dmamap_sync(p->block->tag, p->block->map, p->offs + offset,
+	    len, ops);
 }
 
 
@@ -303,7 +320,7 @@ usb_reserve_allocm(struct usb_dma_reserve *rs, usb_dma_t *dma, u_int32_t size)
 	u_long start;
 	bus_addr_t baddr;
 
-	if (rs->vaddr == 0)
+	if (rs->vaddr == 0 || size > USB_MEM_RESERVE)
 		return USBD_NOMEM;
 
 	dma->block = malloc(sizeof *dma->block, M_USB, M_ZERO | M_NOWAIT);
@@ -314,8 +331,9 @@ usb_reserve_allocm(struct usb_dma_reserve *rs, usb_dma_t *dma, u_int32_t size)
 	    EX_NOWAIT, &start);
 
 	if (error != 0) {
-		printf("%s: usb_reserve_allocm of size %u failed (error %d)\n",
-		    ((struct device *)rs->softc)->dv_xname, size, error);
+		aprint_error_dev(rs->dv,
+		    "usb_reserve_allocm of size %u failed (error %d)\n",
+		    size, error);
 		return USBD_NOMEM;
 	}
 
@@ -345,16 +363,15 @@ usb_reserve_freem(struct usb_dma_reserve *rs, usb_dma_t *dma)
 }
 
 int
-usb_setup_reserve(void *softc, struct usb_dma_reserve *rs, bus_dma_tag_t dtag,
+usb_setup_reserve(device_t dv, struct usb_dma_reserve *rs, bus_dma_tag_t dtag,
 		  size_t size)
 {
 	int error, nseg;
 	bus_dma_segment_t seg;
-	struct device *dv = softc;
 
 	rs->dtag = dtag;
 	rs->size = size;
-	rs->softc = softc;
+	rs->dv = dv;
 
 	error = bus_dmamem_alloc(dtag, USB_MEM_RESERVE, PAGE_SIZE, 0,
 	    &seg, 1, &nseg, BUS_DMA_NOWAIT);
@@ -377,8 +394,8 @@ usb_setup_reserve(void *softc, struct usb_dma_reserve *rs, bus_dma_tag_t dtag,
 		goto destroy;
 
 	rs->paddr = rs->map->dm_segs[0].ds_addr;
-	rs->extent = extent_create(dv->dv_xname, (u_long)rs->paddr,
-	    (u_long)(rs->paddr + USB_MEM_RESERVE),
+	rs->extent = extent_create(device_xname(dv), (u_long)rs->paddr,
+	    (u_long)(rs->paddr + USB_MEM_RESERVE - 1),
 	    M_USB, 0, 0, 0);
 	if (rs->extent == NULL) {
 		rs->vaddr = 0;

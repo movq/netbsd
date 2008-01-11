@@ -1,4 +1,4 @@
-/* $NetBSD: ispreg.h,v 1.31 2007/05/24 21:30:44 mjacob Exp $ */
+/* $NetBSD: ispreg.h,v 1.34 2010/03/26 20:52:01 mjacob Exp $ */
 /*
  * Copyright (C) 1997, 1998, 1999 National Aeronautics & Space Administration
  * All rights reserved.
@@ -365,11 +365,12 @@
 #define	BIU2400_REQOUTP		(BIU_BLOCK+0x20) /* Request Queue Out */
 #define	BIU2400_RSPINP		(BIU_BLOCK+0x24) /* Response Queue In */
 #define	BIU2400_RSPOUTP		(BIU_BLOCK+0x28) /* Response Queue Out */
-#define	BIU2400_PRI_RQINP 	(BIU_BLOCK+0x2C) /* Priority Request Q In */
-#define	BIU2400_PRI_RSPINP 	(BIU_BLOCK+0x30) /* Priority Request Q Out */
 
-#define	BIU2400_ATIO_RSPINP	(BIU_BLOCK+0x3C)	/* ATIO Queue In */
-#define	BIU2400_ATIO_REQINP	(BIU_BLOCK+0x40)	/* ATIO Queue Out */
+#define	BIU2400_PRI_REQINP 	(BIU_BLOCK+0x2C) /* Priority Request Q In */
+#define	BIU2400_PRI_REQOUTP 	(BIU_BLOCK+0x30) /* Priority Request Q Out */
+
+#define	BIU2400_ATIO_RSPINP	(BIU_BLOCK+0x3C) /* ATIO Queue In */
+#define	BIU2400_ATIO_RSPOUTP	(BIU_BLOCK+0x40) /* ATIO Queue Out */
 
 #define	BIU2400_R2HSTSLO	(BIU_BLOCK+0x44)
 #define	BIU2400_R2HSTSHI	(BIU_BLOCK+0x46)
@@ -472,10 +473,21 @@ typedef struct {
 	uint16_t param[MAILBOX_STORAGE];
 	uint16_t ibits;
 	uint16_t obits;
-	uint32_t	: 28,
+	uint32_t
+		lineno	: 16,
+			: 12,
 		logval	: 4;
 	uint32_t timeout;
+	const char *func;
 } mbreg_t;
+#define	MBSINIT(mbxp, code, loglev, timo)	\
+	ISP_MEMZERO((mbxp), sizeof (mbreg_t));	\
+	(mbxp)->param[0] = code;		\
+	(mbxp)->lineno = __LINE__;		\
+	(mbxp)->func = __func__;		\
+	(mbxp)->logval = loglev;		\
+	(mbxp)->timeout = timo
+
 
 /*
  * Fibre Protocol Module and Frame Buffer Register Offsets/Definitions (2X00).
@@ -667,13 +679,13 @@ typedef struct {
 #define	SXP_PINS_LVD_MODE		0x1000
 #define	SXP_PINS_HVD_MODE		0x0800
 #define	SXP_PINS_SE_MODE		0x0400
+#define	SXP_PINS_MODE_MASK		(SXP_PINS_LVD_MODE|SXP_PINS_HVD_MODE|SXP_PINS_SE_MODE)
 
 /* The above have to be put together with the DIFFM pin to make sense */
 #define	ISP1080_LVD_MODE		(SXP_PINS_LVD_MODE)
 #define	ISP1080_HVD_MODE		(SXP_PINS_HVD_MODE|SXP_PINS_DIFF_MODE)
 #define	ISP1080_SE_MODE			(SXP_PINS_SE_MODE)
-#define	ISP1080_MODE_MASK	\
-    (SXP_PINS_LVD_MODE|SXP_PINS_HVD_MODE|SXP_PINS_SE_MODE|SXP_PINS_DIFF_MODE)
+#define	ISP1080_MODE_MASK		(SXP_PINS_MODE_MASK|SXP_PINS_DIFF_MODE)
 
 /*
  * RISC and Host Command and Control Block Register Offsets

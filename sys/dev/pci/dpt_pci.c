@@ -1,4 +1,4 @@
-/*	$NetBSD: dpt_pci.c,v 1.20 2007/10/19 12:00:43 ad Exp $	*/
+/*	$NetBSD: dpt_pci.c,v 1.25 2009/11/26 15:17:09 njoly Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Andrew Doran <ad@NetBSD.org>
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpt_pci.c,v 1.20 2007/10/19 12:00:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpt_pci.c,v 1.25 2009/11/26 15:17:09 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,15 +56,14 @@ __KERNEL_RCSID(0, "$NetBSD: dpt_pci.c,v 1.20 2007/10/19 12:00:43 ad Exp $");
 #define	PCI_CBMA	0x14	/* Configuration base memory address */
 #define	PCI_CBIO	0x10	/* Configuration base I/O address */
 
-static int	dpt_pci_match(struct device *, struct cfdata *, void *);
-static void	dpt_pci_attach(struct device *, struct device *, void *);
+static int	dpt_pci_match(device_t, cfdata_t, void *);
+static void	dpt_pci_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(dpt_pci, sizeof(struct dpt_softc),
     dpt_pci_match, dpt_pci_attach, NULL, NULL);
 
 static int
-dpt_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+dpt_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -78,7 +77,7 @@ dpt_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-dpt_pci_attach(struct device *parent, struct device *self, void *aux)
+dpt_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa;
 	struct dpt_softc *sc;
@@ -90,7 +89,7 @@ dpt_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_naive(": Storage controller\n");
 
-	sc = (struct dpt_softc *)self;
+	sc = device_private(self);
 	pa = (struct pci_attach_args *)aux;
 	pc = pa->pa_pc;
 	aprint_normal(": ");
@@ -124,15 +123,14 @@ dpt_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (sc->sc_ih == NULL) {
 		aprint_error("can't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 
 	/* Read the EATA configuration. */
 	if (dpt_readcfg(sc)) {
-		aprint_error("%s: readcfg failed - see dpt(4)\n",
-		    sc->sc_dv.dv_xname);
+		aprint_error_dev(&sc->sc_dv, "readcfg failed - see dpt(4)\n");
 		return;
 	}
 

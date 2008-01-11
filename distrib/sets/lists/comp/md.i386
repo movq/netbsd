@@ -1,5 +1,20 @@
-# $NetBSD: md.i386,v 1.102 2007/12/20 23:46:10 ad Exp $
-./usr/include/emmintrin.h			comp-c-include		gcccmds
+# $NetBSD: md.i386,v 1.118 2011/05/12 14:56:22 joerg Exp $
+./usr/include/clang-3.0/avxintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/emmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/immintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/mm3dnow.h		comp-c-include		llvm
+./usr/include/clang-3.0/mmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/mm_malloc.h		comp-c-include		llvm
+./usr/include/clang-3.0/pmmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/smmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/tmmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/xmmintrin.h		comp-c-include		llvm
+./usr/include/emmintrin.h			comp-obsolete		obsolete
+./usr/include/gcc-4.1/emmintrin.h		comp-c-include		gcccmds,gcc=4
+./usr/include/gcc-4.1/mmintrin.h		comp-c-include		gcccmds,gcc=4
+./usr/include/gcc-4.1/mm_malloc.h		comp-c-include		gcccmds,gcc=4
+./usr/include/gcc-4.1/pmmintrin.h		comp-c-include		gcccmds,gcc=4
+./usr/include/gcc-4.1/xmmintrin.h		comp-c-include		gcccmds,gcc=4
 ./usr/include/i386				comp-c-include
 ./usr/include/i386/_G_config.h			comp-obsolete		obsolete
 ./usr/include/i386/ansi.h			comp-c-include
@@ -23,6 +38,7 @@
 ./usr/include/i386/elf_machdep.h		comp-c-include
 ./usr/include/i386/endian.h			comp-c-include
 ./usr/include/i386/endian_machdep.h		comp-c-include
+./usr/include/i386/fenv.h			comp-c-include
 ./usr/include/i386/float.h			comp-c-include
 ./usr/include/i386/frame.h			comp-c-include
 ./usr/include/i386/freebsd_machdep.h		comp-c-include
@@ -78,15 +94,17 @@
 ./usr/include/i386/vmparam.h			comp-c-include
 ./usr/include/i386/wchar_limits.h		comp-c-include
 ./usr/include/ieeefp.h				comp-c-include
-./usr/include/mmintrin.h			comp-c-include		gcccmds
-./usr/include/mm_malloc.h			comp-c-include		gcccmds,gcc=4
+./usr/include/mmintrin.h			comp-obsolete		obsolete
+./usr/include/mm_malloc.h			comp-obsolete		obsolete
 ./usr/include/pmc.h				comp-c-include
+./usr/include/pmmintrin.h			comp-obsolete		obsolete
 ./usr/include/x86				comp-c-include
 ./usr/include/x86/aout_machdep.h		comp-c-include
 ./usr/include/x86/autoconf.h			comp-obsolete		obsolete
 ./usr/include/x86/bootinfo.h			comp-c-include
 ./usr/include/x86/bus.h				comp-c-include
 ./usr/include/x86/cacheinfo.h			comp-c-include
+./usr/include/x86/cpu.h				comp-c-include
 ./usr/include/x86/cputypes.h			comp-c-include
 ./usr/include/x86/cpuvar.h			comp-c-include
 ./usr/include/x86/float.h			comp-c-include
@@ -100,24 +118,37 @@
 ./usr/include/x86/mutex.h			comp-c-include
 ./usr/include/x86/pio.h				comp-c-include
 ./usr/include/x86/pmap.h			comp-c-include
+./usr/include/x86/pmap_pv.h			comp-c-include
 ./usr/include/x86/psl.h				comp-c-include
+./usr/include/x86/pte.h				comp-c-include
 ./usr/include/x86/rwlock.h			comp-c-include
 ./usr/include/x86/specialreg.h			comp-c-include
 ./usr/include/x86/sysarch.h			comp-c-include
 ./usr/include/x86/trap.h			comp-c-include
-./usr/include/xmmintrin.h			comp-c-include		gcccmds
+./usr/include/x86/via_padlock.h			comp-c-include
+./usr/include/xen				comp-c-include
+./usr/include/xen/xenio.h			comp-c-include
+./usr/include/xen/xenio3.h			comp-c-include
+./usr/include/xmmintrin.h			comp-obsolete		obsolete
 ./usr/lib/libi386.a				comp-c-lib
+./usr/lib/libi386_g.a				-unknown-		debuglib
 ./usr/lib/libi386_p.a				comp-c-proflib		profile
-./usr/lib/libi386_pic.a				comp-c-piclib
+./usr/lib/libi386_pic.a				comp-c-piclib		pic
 ./usr/lib/libm387.a				comp-c-lib
+./usr/lib/libm387_g.a				-unknown-		debuglib
 ./usr/lib/libm387_p.a				comp-c-proflib		profile
-./usr/lib/libm387_pic.a				comp-c-piclib
+./usr/lib/libm387_pic.a				comp-c-piclib		pic
 ./usr/lib/libpmc.a				comp-c-lib
+./usr/lib/libpmc_g.a				-unknown-		debuglib
 ./usr/lib/libpmc_p.a				comp-c-proflib		profile
-./usr/lib/libpmc_pic.a				comp-c-piclib
-./usr/libdata/debug/sbin/ldconfig.debug		comp-sysutil-debug	debug
+./usr/lib/libpmc_pic.a				comp-c-piclib		pic
+./usr/libdata/debug/sbin/ldconfig.debug		comp-sysutil-debug	debug,pic
 ./usr/libdata/debug/usr/bin/fdformat.debug	comp-util-debug		debug
+./usr/libdata/debug/usr/bin/iasl.debug		comp-util-debug		debug
 ./usr/libdata/debug/usr/bin/pmc.debug		comp-util-debug		debug
+./usr/libdata/debug/usr/lib/libi386.so.1.0.debug	comp-sys-debug	pic,debug
+./usr/libdata/debug/usr/lib/libm387.so.0.1.debug	comp-sys-debug	pic,debug
+./usr/libdata/debug/usr/lib/libpmc.so.1.0.debug		comp-sys-debug	pic,debug
 ./usr/libdata/debug/usr/sbin/acpidump.debug	comp-sysutil-debug	debug
 ./usr/libdata/debug/usr/sbin/amldb.debug	comp-sysutil-debug	debug
 ./usr/libdata/debug/usr/sbin/apm.debug		comp-sysutil-debug	debug

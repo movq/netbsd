@@ -1,4 +1,4 @@
-/*	$NetBSD: ping.c,v 1.87 2008/01/08 20:03:09 seanb Exp $	*/
+/*	$NetBSD: ping.c,v 1.93 2011/03/11 09:59:56 pooka Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -58,7 +58,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ping.c,v 1.87 2008/01/08 20:03:09 seanb Exp $");
+__RCSID("$NetBSD: ping.c,v 1.93 2011/03/11 09:59:56 pooka Exp $");
 #endif
 
 #include <stdio.h>
@@ -78,18 +78,6 @@ __RCSID("$NetBSD: ping.c,v 1.87 2008/01/08 20:03:09 seanb Exp $");
 #include <math.h>
 #include <string.h>
 #include <err.h>
-#ifdef sgi
-#include <bstring.h>
-#include <getopt.h>
-#include <sys/prctl.h>
-#ifndef PRE_KUDZU
-#include <cap_net.h>
-#else
-#define cap_socket socket
-#endif
-#else
-#define cap_socket socket
-#endif
 
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
@@ -103,6 +91,8 @@ __RCSID("$NetBSD: ping.c,v 1.87 2008/01/08 20:03:09 seanb Exp $");
 #ifdef IPSEC
 #include <netinet6/ipsec.h>
 #endif /*IPSEC*/
+
+#include "prog_ops.h"
 
 #define FLOOD_INTVL	0.01		/* default flood output interval */
 #define	MAXPACKET	(IP_MAXPACKET-60-8)	/* max packet size */
@@ -155,6 +145,7 @@ struct tv32 {
 u_char	*packet;
 int	packlen;
 int	pingflags = 0, options;
+int	pongflags = 0;
 char	*fill_pat;
 
 int s;					/* Socket file descriptor */
@@ -255,19 +246,22 @@ main(int argc, char *argv[])
 	struct sigaction sa;
 #endif
 
-	if ((s = cap_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+	if (prog_init && prog_init() == -1)
+		err(1, "init failed");
+
+	if ((s = prog_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
 		err(1, "Cannot create socket");
-	if ((sloop = cap_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+	if ((sloop = prog_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
 		err(1, "Cannot create socket");
 
 	/*
 	 * sloop is never read on.  This prevents packets from
 	 * queueing in its recv buffer.
 	 */
-	if (shutdown(sloop, SHUT_RD) == -1)
+	if (prog_shutdown(sloop, SHUT_RD) == -1)
 		warn("Cannot shutdown for read");
 
-	if (setuid(getuid()) == -1)
+	if (prog_setuid(prog_getuid()) == -1)
 		err(1, "setuid");
 
 	setprogname(argv[0]);
@@ -343,11 +337,12 @@ main(int argc, char *argv[])
 			options |= SO_DONTROUTE;
 			break;
 		case 's':		/* size of packet to send */
-			datalen = strtol(optarg, &p, 0);
-			if (*p != '\0' || datalen < 0)
+			l = strtol(optarg, &p, 0);
+			if (*p != '\0' || l < 0)
 				errx(1, "Bad/invalid packet size %s", optarg);
-			if (datalen > MAXPACKET)
+			if (l > MAXPACKET)
 				errx(1, "packet size is too large");
+			datalen = (int)l;
 			break;
 		case 'v':
 			pingflags |= F_VERBOSE;
@@ -415,11 +410,11 @@ main(int argc, char *argv[])
 	if (interval == 0)
 		interval = (pingflags & F_FLOOD) ? FLOOD_INTVL : 1.0;
 #ifndef sgi
-	if (pingflags & F_FLOOD && getuid())
+	if (pingflags & F_FLOOD && prog_getuid())
 		errx(1, "Must be superuser to use -f");
-	if (interval < 1.0 && getuid())
+	if (interval < 1.0 && prog_getuid())
 		errx(1, "Must be superuser to use < 1 sec ping interval");
-	if (preload > 0 && getuid())
+	if (preload > 0 && prog_getuid())
 		errx(1, "Must be superuser to use -l");
 #endif
 	sec_to_timeval(interval, &interval_tv);
@@ -452,7 +447,7 @@ main(int argc, char *argv[])
 	loc_addr.sin_len = sizeof(struct sockaddr_in);
 	loc_addr.sin_addr.s_addr = htonl((127<<24)+1);
 
-	if (datalen >= PHDR_LEN)	/* can we time them? */
+	if (datalen >= (int)PHDR_LEN)	/* can we time them? */
 		pingflags |= F_TIMING;
 	packlen = datalen + 60 + 76;	/* MAXIP + MAXICMP */
 	if ((packet = (u_char *)malloc(packlen)) == NULL)
@@ -470,23 +465,23 @@ main(int argc, char *argv[])
 	ident = arc4random() & 0xFFFF;
 
 	if (options & SO_DEBUG) {
-		if (setsockopt(s, SOL_SOCKET, SO_DEBUG,
+		if (prog_setsockopt(s, SOL_SOCKET, SO_DEBUG,
 			       (char *)&on, sizeof(on)) == -1)
 			warn("Can't turn on socket debugging");
 	}
 	if (options & SO_DONTROUTE) {
-		if (setsockopt(s, SOL_SOCKET, SO_DONTROUTE,
+		if (prog_setsockopt(s, SOL_SOCKET, SO_DONTROUTE,
 			       (char *)&on, sizeof(on)) == -1)
 			warn("SO_DONTROUTE");
 	}
 
 	if (options & SO_DEBUG) {
-		if (setsockopt(sloop, SOL_SOCKET, SO_DEBUG,
+		if (prog_setsockopt(sloop, SOL_SOCKET, SO_DEBUG,
 			       (char *)&on, sizeof(on)) == -1)
 			warn("Can't turn on socket debugging");
 	}
 	if (options & SO_DONTROUTE) {
-		if (setsockopt(sloop, SOL_SOCKET, SO_DONTROUTE,
+		if (prog_setsockopt(sloop, SOL_SOCKET, SO_DONTROUTE,
 			       (char *)&on, sizeof(on)) == -1)
 			warn("SO_DONTROUTE");
 	}
@@ -511,7 +506,8 @@ main(int argc, char *argv[])
 				 - optlen);
 	(void) memcpy(opack_ip + 1, optspace, optlen);
 
-	if (setsockopt(s,IPPROTO_IP,IP_HDRINCL, (char *) &on, sizeof(on)) < 0)
+	if (prog_setsockopt(s,IPPROTO_IP,IP_HDRINCL,
+	    (char *) &on, sizeof(on)) < 0)
 		err(1, "Can't set special IP header");
 
 	opack_ip->ip_v = IPVERSION;
@@ -526,24 +522,25 @@ main(int argc, char *argv[])
 	if (pingflags & F_MCAST) {
 		if (pingflags & F_MCAST_NOLOOP) {
 			u_char loop = 0;
-			if (setsockopt(s, IPPROTO_IP, IP_MULTICAST_LOOP,
+			if (prog_setsockopt(s, IPPROTO_IP,
+			    IP_MULTICAST_LOOP,
 			    (char *) &loop, 1) < 0)
 				err(1, "Can't disable multicast loopback");
 		}
 
 		if (ttl != 0
-		    && setsockopt(s, IPPROTO_IP, IP_MULTICAST_TTL,
+		    && prog_setsockopt(s, IPPROTO_IP, IP_MULTICAST_TTL,
 		    (char *) &ttl, 1) < 0)
 			err(1, "Can't set multicast time-to-live");
 
 		if ((pingflags & F_SOURCE_ADDR)
-		    && setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF,
+		    && prog_setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF,
 				  (char *) &src_addr.sin_addr,
 				  sizeof(src_addr.sin_addr)) < 0)
 			err(1, "Can't set multicast source interface");
 
 	} else if (pingflags & F_SOURCE_ADDR) {
-		if (setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF,
+		if (prog_setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF,
 			       (char *) &src_addr.sin_addr,
 			       sizeof(src_addr.sin_addr)) < 0)
 			err(1, "Can't set source interface/address");
@@ -557,7 +554,7 @@ main(int argc, char *argv[])
 			buf = ipsec_set_policy(policy_in, strlen(policy_in));
 			if (buf == NULL)
 				errx(1, "%s", ipsec_strerror());
-			if (setsockopt(s, IPPROTO_IP, IP_IPSEC_POLICY,
+			if (prog_setsockopt(s, IPPROTO_IP, IP_IPSEC_POLICY,
 					buf, ipsec_get_policylen(buf)) < 0) {
 				err(1, "ipsec policy cannot be configured");
 			}
@@ -567,7 +564,7 @@ main(int argc, char *argv[])
 			buf = ipsec_set_policy(policy_out, strlen(policy_out));
 			if (buf == NULL)
 				errx(1, "%s", ipsec_strerror());
-			if (setsockopt(s, IPPROTO_IP, IP_IPSEC_POLICY,
+			if (prog_setsockopt(s, IPPROTO_IP, IP_IPSEC_POLICY,
 					buf, ipsec_get_policylen(buf)) < 0) {
 				err(1, "ipsec policy cannot be configured");
 			}
@@ -577,7 +574,7 @@ main(int argc, char *argv[])
 	buf = ipsec_set_policy("out bypass", strlen("out bypass"));
 	if (buf == NULL)
 		errx(1, "%s", ipsec_strerror());
-	if (setsockopt(sloop, IPPROTO_IP, IP_IPSEC_POLICY,
+	if (prog_setsockopt(sloop, IPPROTO_IP, IP_IPSEC_POLICY,
 			buf, ipsec_get_policylen(buf)) < 0) {
 #if 0
 		warnx("ipsec is not configured");
@@ -593,27 +590,27 @@ main(int argc, char *argv[])
 	if (pingflags & F_AUTHHDR) {
 		optval = IPSEC_LEVEL_REQUIRE;
 #ifdef IP_AUTH_TRANS_LEVEL
-		(void)setsockopt(s, IPPROTO_IP, IP_AUTH_TRANS_LEVEL,
+		(void)prog_setsockopt(s, IPPROTO_IP, IP_AUTH_TRANS_LEVEL,
 			(char *)&optval, sizeof(optval));
 #else
-		(void)setsockopt(s, IPPROTO_IP, IP_AUTH_LEVEL,
+		(void)prog_setsockopt(s, IPPROTO_IP, IP_AUTH_LEVEL,
 			(char *)&optval, sizeof(optval));
 #endif
 	}
 	if (pingflags & F_ENCRYPT) {
 		optval = IPSEC_LEVEL_REQUIRE;
-		(void)setsockopt(s, IPPROTO_IP, IP_ESP_TRANS_LEVEL,
+		(void)prog_setsockopt(s, IPPROTO_IP, IP_ESP_TRANS_LEVEL,
 			(char *)&optval, sizeof(optval));
 	}
 	optval = IPSEC_LEVEL_BYPASS;
 #ifdef IP_AUTH_TRANS_LEVEL
-	(void)setsockopt(sloop, IPPROTO_IP, IP_AUTH_TRANS_LEVEL,
+	(void)prog_setsockopt(sloop, IPPROTO_IP, IP_AUTH_TRANS_LEVEL,
 		(char *)&optval, sizeof(optval));
 #else
-	(void)setsockopt(sloop, IPPROTO_IP, IP_AUTH_LEVEL,
+	(void)prog_setsockopt(sloop, IPPROTO_IP, IP_AUTH_LEVEL,
 		(char *)&optval, sizeof(optval));
 #endif
-	(void)setsockopt(sloop, IPPROTO_IP, IP_ESP_TRANS_LEVEL,
+	(void)prog_setsockopt(sloop, IPPROTO_IP, IP_ESP_TRANS_LEVEL,
 		(char *)&optval, sizeof(optval));
     }
 #endif /*IPSEC_POLICY_IPSEC*/
@@ -627,7 +624,7 @@ main(int argc, char *argv[])
 	 * are trying to stress the ethernet, or just want to
 	 * fill the arp cache to get some stuff for /etc/ethers.
 	 */
-	while (0 > setsockopt(s, SOL_SOCKET, SO_RCVBUF,
+	while (0 > prog_setsockopt(s, SOL_SOCKET, SO_RCVBUF,
 			      (char*)&bufspace, sizeof(bufspace))) {
 		if ((bufspace -= 4096) <= 0)
 			err(1, "Cannot set the receive buffer size");
@@ -636,7 +633,7 @@ main(int argc, char *argv[])
 	/* make it possible to send giant probes, but do not worry now
 	 * if it fails, since we probably won't send giant probes.
 	 */
-	(void)setsockopt(s, SOL_SOCKET, SO_SNDBUF,
+	(void)prog_setsockopt(s, SOL_SOCKET, SO_SNDBUF,
 			 (char*)&bufspace, sizeof(bufspace));
 
 	(void)signal(SIGINT, prefinish);
@@ -715,7 +712,7 @@ doit(void)
 
 		fdmaskp[0].fd = s;
 		fdmaskp[0].events = POLLIN;
-		cc = poll(fdmaskp, 1, (int)(sec * 1000));
+		cc = prog_poll(fdmaskp, 1, (int)(sec * 1000));
 		if (cc <= 0) {
 			if (cc < 0) {
 				if (errno == EINTR)
@@ -727,7 +724,7 @@ doit(void)
 		}
 
 		fromlen  = sizeof(from);
-		cc = recvfrom(s, (char *) packet, packlen,
+		cc = prog_recvfrom(s, (char *) packet, packlen,
 			      0, (struct sockaddr *)&from,
 			      &fromlen);
 		if (cc < 0) {
@@ -836,10 +833,11 @@ pinger(void)
 		opack_icmp.icmp_cksum = in_cksum((u_int16_t *)&opack_icmp,
 		    PHDR_LEN);
 		sw = 0;
-		if (setsockopt(sloop,IPPROTO_IP,IP_HDRINCL,
+		if (prog_setsockopt(sloop,IPPROTO_IP,IP_HDRINCL,
 			       (char *)&sw,sizeof(sw)) < 0)
 			err(1, "Can't turn off special IP header");
-		if (sendto(sloop, (char *) &opack_icmp, PHDR_LEN, MSG_DONTROUTE,
+		if (prog_sendto(sloop, (char *) &opack_icmp,
+			   PHDR_LEN, MSG_DONTROUTE,
 			   (struct sockaddr *)&loc_addr,
 			   sizeof(struct sockaddr_in)) < 0) {
 			/*
@@ -852,7 +850,7 @@ pinger(void)
 				warn("failed to clear cached route");
 		}
 		sw = 1;
-		if (setsockopt(sloop,IPPROTO_IP,IP_HDRINCL,
+		if (prog_setsockopt(sloop,IPPROTO_IP,IP_HDRINCL,
 			       (char *)&sw, sizeof(sw)) < 0)
 			err(1, "Can't set special IP header");
 		
@@ -871,7 +869,7 @@ pinger(void)
 
 	cc += opack_ip->ip_hl<<2;
 	opack_ip->ip_len = cc;
-	i = sendto(s, (char *) opack_ip, cc, 0,
+	i = prog_sendto(s, (char *) opack_ip, cc, 0,
 		   (struct sockaddr *)&send_addr, sizeof(struct sockaddr_in));
 	if (i != cc) {
 		jiggle_flush(1);
@@ -1017,8 +1015,31 @@ pr_pack(u_char *buf,
 
 		if (tot_len != opack_ip->ip_len) {
 			PR_PACK_SUB();
-			(void)printf("\nwrong total length %d instead of %d",
-				     tot_len, opack_ip->ip_len);
+			switch (opack_ip->ip_len - tot_len) {
+			case MAX_IPOPTLEN:
+				if ((pongflags & F_RECORD_ROUTE) != 0)
+					break;
+				if ((pingflags & F_RECORD_ROUTE) == 0)
+					goto out;
+				pongflags |= F_RECORD_ROUTE;
+				(void)printf("\nremote host does not "
+				    "support record route");
+				break;
+			case 8:
+				if ((pongflags & F_SOURCE_ROUTE) != 0)
+					break;
+				if ((pingflags & F_SOURCE_ROUTE) == 0)
+					goto out;
+				pongflags |= F_SOURCE_ROUTE;
+				(void)printf("\nremote host does not "
+				    "support source route");
+				break;
+			default:
+			out:
+				(void)printf("\nwrong total length %d "
+				    "instead of %d", tot_len, opack_ip->ip_len);
+				break;
+			}
 		}
 
 		if (!dupflag) {
@@ -1046,7 +1067,7 @@ pr_pack(u_char *buf,
 			PR_PACK_SUB();
 
 		/* check the data */
-		if (datalen > PHDR_LEN
+		if (datalen > (int)PHDR_LEN
 		    && !(pingflags & F_PING_RANDOM)
 		    && memcmp(&icp->icmp_data[PHDR_LEN],
 			    &opack_icmp.icmp_data[PHDR_LEN],

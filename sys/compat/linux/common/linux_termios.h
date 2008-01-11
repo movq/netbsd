@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_termios.h,v 1.16 2007/12/04 18:40:17 dsl Exp $	*/
+/*	$NetBSD: linux_termios.h,v 1.19 2009/03/15 15:55:51 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -144,7 +137,7 @@ struct linux_termios {
 #define LINUX_TIOCLINUX_KERNMSG		11
 #define LINUX_TIOCLINUX_CURCONS		12
 
-static speed_t linux_speeds[] = {
+static linux_speed_t linux_speeds[] = {
 	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
 	9600, 19200, 38400, 57600, 115200, 230400
 };
@@ -192,13 +185,9 @@ static void bsd_termios_to_linux_termios(struct termios *,
 
 static void
 #ifdef COMPAT_LINUX32
-linux32_termio_to_bsd_termios(lt, bts)
-	struct linux32_termio *lt;
-	struct termios *bts;
+linux32_termio_to_bsd_termios(struct linux32_termio *lt, struct termios *bts)
 #else
-linux_termio_to_bsd_termios(lt, bts)
-	struct linux_termio *lt;
-	struct termios *bts;
+linux_termio_to_bsd_termios(struct linux_termio *lt, struct termios *bts)
 #endif
 {
 	int index;
@@ -281,13 +270,9 @@ linux_termio_to_bsd_termios(lt, bts)
 
 static void
 #ifdef COMPAT_LINUX32
-bsd_termios_to_linux32_termio(bts, lt)
-	struct termios *bts;
-	struct linux32_termio *lt;
+bsd_termios_to_linux32_termio(struct termios *bts, struct linux32_termio *lt)
 #else
-bsd_termios_to_linux_termio(bts, lt)
-	struct termios *bts;
-	struct linux_termio *lt;
+bsd_termios_to_linux_termio(struct termios *bts, struct linux_termio *lt)
 #endif
 {
 	int i, mask;
@@ -350,7 +335,7 @@ bsd_termios_to_linux_termio(bts, lt)
 	lt->c_lflag |= cvtto_linux_mask(bts->c_lflag, IEXTEN, LINUX_IEXTEN);
 
 	mask = LINUX_B9600;	/* XXX default value should this be 0? */
-	for (i = 0; i < sizeof (linux_speeds) / sizeof (speed_t); i++) {
+	for (i = 0; i < sizeof (linux_speeds) / sizeof (linux_speed_t); i++) {
 		if (bts->c_ospeed == linux_speeds[i]) {
 			mask = linux_spmasks[i];
 			break;
@@ -373,13 +358,9 @@ bsd_termios_to_linux_termio(bts, lt)
 
 static void
 #ifdef COMPAT_LINUX32
-linux32_termios_to_bsd_termios(lts, bts)
-	struct linux32_termios *lts;
-	struct termios *bts;
+linux32_termios_to_bsd_termios(struct linux32_termios *lts, struct termios *bts)
 #else
-linux_termios_to_bsd_termios(lts, bts)
-	struct linux_termios *lts;
-	struct termios *bts;
+linux_termios_to_bsd_termios(struct linux_termios *lts, struct termios *bts)
 #endif
 {
 	int index;
@@ -474,13 +455,9 @@ linux_termios_to_bsd_termios(lts, bts)
 
 static void
 #ifdef COMPAT_LINUX32
-bsd_termios_to_linux32_termios(bts, lts)
-	struct termios *bts;
-	struct linux32_termios *lts;
+bsd_termios_to_linux32_termios(struct termios *bts, struct linux32_termios *lts)
 #else
-bsd_termios_to_linux_termios(bts, lts)
-	struct termios *bts;
-	struct linux_termios *lts;
+bsd_termios_to_linux_termios(struct termios *bts, struct linux_termios *lts)
 #endif
 {
 	int i, mask;
@@ -547,7 +524,7 @@ bsd_termios_to_linux_termios(bts, lts)
 	lts->c_lflag |= cvtto_linux_mask(bts->c_lflag, IEXTEN, LINUX_IEXTEN);
 
 	mask = LINUX_B9600;	/* XXX default value */
-	for (i = 0; i < sizeof (linux_speeds) / sizeof (speed_t); i++) {
+	for (i = 0; i < sizeof (linux_speeds) / sizeof (linux_speed_t); i++) {
 		if (bts->c_ospeed == linux_speeds[i]) {
 			mask = linux_spmasks[i];
 			break;

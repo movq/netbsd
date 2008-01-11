@@ -1,4 +1,4 @@
-/*	$NetBSD: cltp_usrreq.c,v 1.32 2007/03/04 06:03:31 christos Exp $	*/
+/*	$NetBSD: cltp_usrreq.c,v 1.40 2009/04/18 14:58:06 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cltp_usrreq.c,v 1.32 2007/03/04 06:03:31 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cltp_usrreq.c,v 1.40 2009/04/18 14:58:06 tsutsui Exp $");
 
 #ifndef CLTPOVAL_SRC		/* XXX -- till files gets changed */
 #include <sys/param.h>
@@ -67,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: cltp_usrreq.c,v 1.32 2007/03/04 06:03:31 christos Ex
  * Per ISO 8602, December, 1987.
  */
 void
-cltp_init()
+cltp_init(void)
 {
 
 	cltb.isop_next = cltb.isop_prev = &cltb;
@@ -118,7 +118,7 @@ cltp_input(struct mbuf *m0, ...)
 					goto bad;
 				m_src->m_len = src->siso_len;
 				src = mtod(m_src, struct sockaddr_iso *);
-				bcopy((void *) srcsa, (void *) src, srcsa->sa_len);
+				memcpy((void *) src, (void *) srcsa, srcsa->sa_len);
 			}
 			memcpy(WRITABLE_TSEL(src), (char *)up + 2, up[1]);
 			up += 2 + src->siso_tlen;
@@ -151,7 +151,7 @@ cltp_input(struct mbuf *m0, ...)
 			goto bad;
 		}
 		if (isop->isop_laddr &&
-		    bcmp(TSEL(isop->isop_laddr), dtsap, dlen) == 0)
+		    memcmp(TSEL(isop->isop_laddr), dtsap, dlen) == 0)
 			break;
 	}
 	m = m0;
@@ -175,8 +175,7 @@ bad:
  * just wake up so that he can collect error status.
  */
 void
-cltp_notify(isop)
-	struct isopcb *isop;
+cltp_notify(struct isopcb *isop)
 {
 
 	sorwakeup(isop->isop_socket);
@@ -254,12 +253,12 @@ cltp_output(struct mbuf *m, ...)
 	up[2] = CLTPOVAL_SRC;
 	up[3] = (siso = isop->isop_laddr)->siso_tlen;
 	up += 4;
-	bcopy(TSEL(siso), (void *) up, siso->siso_tlen);
+	memcpy((void *) up, TSEL(siso), siso->siso_tlen);
 	up += siso->siso_tlen;
 	up[0] = CLTPOVAL_DST;
 	up[1] = (siso = isop->isop_faddr)->siso_tlen;
 	up += 2;
-	bcopy(TSEL(siso), (void *) up, siso->siso_tlen);
+	memcpy((void *) up, TSEL(siso), siso->siso_tlen);
 	/*
 	 * Stuff checksum and output datagram.
 	 */
@@ -283,11 +282,7 @@ u_long          cltp_recvspace = 40 * (1024 + sizeof(struct sockaddr_iso));
 
 /* ARGSUSED */
 int
-cltp_usrreq(so, req, m, nam, control, l)
-	struct socket *so;
-	int req;
-	struct mbuf *m, *nam, *control;
-	struct lwp *l;
+cltp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam, struct mbuf *control, struct lwp *l)
 {
 	struct isopcb *isop;
 	int s;
@@ -298,7 +293,9 @@ cltp_usrreq(so, req, m, nam, control, l)
 		    (struct ifnet *)control, l));
 
 	if (req == PRU_PURGEIF) {
+		mutex_enter(softnet_lock);
 		iso_purgeif((struct ifnet *)control);
+		mutex_exit(softnet_lock);
 		return (0);
 	}
 
@@ -316,6 +313,7 @@ cltp_usrreq(so, req, m, nam, control, l)
 	switch (req) {
 
 	case PRU_ATTACH:
+		sosetlock(so);
 		if (isop != 0) {
 			error = EISCONN;
 			break;

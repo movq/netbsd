@@ -1,7 +1,7 @@
-/*	$NetBSD: vfs_xattr.c,v 1.15 2007/12/20 23:03:13 dsl Exp $	*/
+/*	$NetBSD: vfs_xattr.c,v 1.23 2010/11/19 06:44:45 dholland Exp $	*/
 
 /*-
- * Copyright (c) 2005 The NetBSD Foundation, Inc.
+ * Copyright (c) 2005, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_xattr.c,v 1.15 2007/12/20 23:03:13 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_xattr.c,v 1.23 2010/11/19 06:44:45 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -135,7 +128,7 @@ vfs_stdextattrctl(struct mount *mp, int cmt, struct vnode *vp,
 {
 
 	if (vp != NULL)
-		VOP_UNLOCK(vp, 0);
+		VOP_UNLOCK(vp);
 	return (EOPNOTSUPP);
 }
 
@@ -156,8 +149,9 @@ sys_extattrctl(struct lwp *l, const struct sys_extattrctl_args *uap, register_t 
 		syscallarg(int) attrnamespace;
 		syscallarg(const char *) attrname;
 	} */
-	struct vnode *vp;
-	struct nameidata nd;
+	struct vnode *path_vp, *file_vp;
+	struct pathbuf *file_pb;
+	struct nameidata file_nd;
 	char attrname[EXTATTR_MAXNAMELEN];
 	int error;
 
@@ -168,30 +162,37 @@ sys_extattrctl(struct lwp *l, const struct sys_extattrctl_args *uap, register_t 
 			return (error);
 	}
 
-	vp = NULL;
-	if (SCARG(uap, filename) != NULL) {
-		NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE,
-		    SCARG(uap, filename));
-		error = namei(&nd);
-		if (error)
-			return (error);
-		vp = nd.ni_vp;
-	}
-
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_NOEMULROOT, &path_vp);
 	if (error) {
-		if (vp != NULL)
-			vput(vp);
 		return (error);
 	}
 
-	error = VFS_EXTATTRCTL(nd.ni_vp->v_mount, SCARG(uap, cmd), vp,
+	file_vp = NULL;
+	if (SCARG(uap, filename) != NULL) {
+		error = pathbuf_copyin(SCARG(uap, filename), &file_pb);
+		if (error) {
+			vrele(path_vp);
+			return (error);
+		}
+		NDINIT(&file_nd, LOOKUP, FOLLOW | LOCKLEAF, file_pb);
+		error = namei(&file_nd);
+		if (error) {
+			pathbuf_destroy(file_pb);
+			vrele(path_vp);
+			return (error);
+		}
+		file_vp = file_nd.ni_vp;
+		pathbuf_destroy(file_pb);
+	}
+
+	error = VFS_EXTATTRCTL(path_vp->v_mount, SCARG(uap, cmd), file_vp,
 	    SCARG(uap, attrnamespace),
 	    SCARG(uap, attrname) != NULL ? attrname : NULL);
 
-	if (vp != NULL)
-		vrele(vp);
+	if (file_vp != NULL)
+		vrele(file_vp);
+	vrele(path_vp);
 
 	return (error);
 }
@@ -218,7 +219,6 @@ extattr_set_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 	ssize_t cnt;
 	int error;
 
-	VOP_LEASE(vp, l->l_cred, LEASE_WRITE);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 
 	aiov.iov_base = __UNCONST(data);	/* XXXUNCONST kills const */
@@ -241,7 +241,7 @@ extattr_set_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 	retval[0] = cnt;
 
  done:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (error);
 }
 
@@ -260,7 +260,6 @@ extattr_get_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 	size_t size, *sizep;
 	int error;
 
-	VOP_LEASE(vp, l->l_cred, LEASE_READ);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 
 	/*
@@ -299,7 +298,7 @@ extattr_get_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 		retval[0] = size;
 
  done:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (error);
 }
 
@@ -314,7 +313,6 @@ extattr_delete_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 {
 	int error;
 
-	VOP_LEASE(vp, l->l_cred, LEASE_WRITE);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 
 	error = VOP_DELETEEXTATTR(vp, attrnamespace, attrname, l->l_cred);
@@ -322,7 +320,7 @@ extattr_delete_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 		error = VOP_SETEXTATTR(vp, attrnamespace, attrname, NULL,
 		    l->l_cred);
 
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (error);
 }
 
@@ -341,7 +339,6 @@ extattr_list_vp(struct vnode *vp, int attrnamespace, void *data, size_t nbytes,
 	ssize_t cnt;
 	int error;
 
-	VOP_LEASE(vp, l->l_cred, LEASE_READ);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 
 	auiop = NULL;
@@ -374,7 +371,7 @@ extattr_list_vp(struct vnode *vp, int attrnamespace, void *data, size_t nbytes,
 		retval[0] = size;
 
  done:
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 	return (error);
 }
 
@@ -402,7 +399,7 @@ sys_extattr_set_fd(struct lwp *l, const struct sys_extattr_set_fd_args *uap, reg
 	if (error)
 		return (error);
 
-	error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp);
+	error = fd_getvnode(SCARG(uap, fd), &fp);
 	if (error)
 		return (error);
 	vp = (struct vnode *) fp->f_data;
@@ -410,7 +407,7 @@ sys_extattr_set_fd(struct lwp *l, const struct sys_extattr_set_fd_args *uap, reg
 	error = extattr_set_vp(vp, SCARG(uap, attrnamespace), attrname,
 	    SCARG(uap, data), SCARG(uap, nbytes), l, retval);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -424,7 +421,7 @@ sys_extattr_set_file(struct lwp *l, const struct sys_extattr_set_file_args *uap,
 		syscallarg(const void *) data;
 		syscallarg(size_t) nbytes;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[EXTATTR_MAXNAMELEN];
 	int error;
 
@@ -433,15 +430,15 @@ sys_extattr_set_file(struct lwp *l, const struct sys_extattr_set_file_args *uap,
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_set_vp(nd.ni_vp, SCARG(uap, attrnamespace), attrname,
+	error = extattr_set_vp(vp, SCARG(uap, attrnamespace), attrname,
 	    SCARG(uap, data), SCARG(uap, nbytes), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -455,7 +452,7 @@ sys_extattr_set_link(struct lwp *l, const struct sys_extattr_set_link_args *uap,
 		syscallarg(const void *) data;
 		syscallarg(size_t) nbytes;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[EXTATTR_MAXNAMELEN];
 	int error;
 
@@ -464,15 +461,15 @@ sys_extattr_set_link(struct lwp *l, const struct sys_extattr_set_link_args *uap,
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_NOFOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_set_vp(nd.ni_vp, SCARG(uap, attrnamespace), attrname,
+	error = extattr_set_vp(vp, SCARG(uap, attrnamespace), attrname,
 	    SCARG(uap, data), SCARG(uap, nbytes), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -496,7 +493,7 @@ sys_extattr_get_fd(struct lwp *l, const struct sys_extattr_get_fd_args *uap, reg
 	if (error)
 		return (error);
 
-	error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp);
+	error = fd_getvnode(SCARG(uap, fd), &fp);
 	if (error)
 		return (error);
 	vp = (struct vnode *) fp->f_data;
@@ -504,7 +501,7 @@ sys_extattr_get_fd(struct lwp *l, const struct sys_extattr_get_fd_args *uap, reg
 	error = extattr_get_vp(vp, SCARG(uap, attrnamespace), attrname,
 	    SCARG(uap, data), SCARG(uap, nbytes), l, retval);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -518,7 +515,7 @@ sys_extattr_get_file(struct lwp *l, const struct sys_extattr_get_file_args *uap,
 		syscallarg(void *) data;
 		syscallarg(size_t) nbytes;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[EXTATTR_MAXNAMELEN];
 	int error;
 
@@ -527,15 +524,15 @@ sys_extattr_get_file(struct lwp *l, const struct sys_extattr_get_file_args *uap,
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_get_vp(nd.ni_vp, SCARG(uap, attrnamespace), attrname,
+	error = extattr_get_vp(vp, SCARG(uap, attrnamespace), attrname,
 	    SCARG(uap, data), SCARG(uap, nbytes), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -549,7 +546,7 @@ sys_extattr_get_link(struct lwp *l, const struct sys_extattr_get_link_args *uap,
 		syscallarg(void *) data;
 		syscallarg(size_t) nbytes;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[EXTATTR_MAXNAMELEN];
 	int error;
 
@@ -558,15 +555,15 @@ sys_extattr_get_link(struct lwp *l, const struct sys_extattr_get_link_args *uap,
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_NOFOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_get_vp(nd.ni_vp, SCARG(uap, attrnamespace), attrname,
+	error = extattr_get_vp(vp, SCARG(uap, attrnamespace), attrname,
 	    SCARG(uap, data), SCARG(uap, nbytes), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -588,14 +585,14 @@ sys_extattr_delete_fd(struct lwp *l, const struct sys_extattr_delete_fd_args *ua
 	if (error)
 		return (error);
 
-	error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp);
+	error = fd_getvnode(SCARG(uap, fd), &fp);
 	if (error)
 		return (error);
 	vp = (struct vnode *) fp->f_data;
 
 	error = extattr_delete_vp(vp, SCARG(uap, attrnamespace), attrname, l);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -607,7 +604,7 @@ sys_extattr_delete_file(struct lwp *l, const struct sys_extattr_delete_file_args
 		syscallarg(int) attrnamespace;
 		syscallarg(const char *) attrname;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[EXTATTR_MAXNAMELEN];
 	int error;
 
@@ -616,15 +613,14 @@ sys_extattr_delete_file(struct lwp *l, const struct sys_extattr_delete_file_args
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_delete_vp(nd.ni_vp, SCARG(uap, attrnamespace), attrname,
-	    l);
+	error = extattr_delete_vp(vp, SCARG(uap, attrnamespace), attrname, l);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -636,7 +632,7 @@ sys_extattr_delete_link(struct lwp *l, const struct sys_extattr_delete_link_args
 		syscallarg(int) attrnamespace;
 		syscallarg(const char *) attrname;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[EXTATTR_MAXNAMELEN];
 	int error;
 
@@ -645,15 +641,14 @@ sys_extattr_delete_link(struct lwp *l, const struct sys_extattr_delete_link_args
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_NOFOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_delete_vp(nd.ni_vp, SCARG(uap, attrnamespace), attrname,
-	    l);
+	error = extattr_delete_vp(vp, SCARG(uap, attrnamespace), attrname, l);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -670,7 +665,7 @@ sys_extattr_list_fd(struct lwp *l, const struct sys_extattr_list_fd_args *uap, r
 	struct vnode *vp;
 	int error;
 
-	error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp);
+	error = fd_getvnode(SCARG(uap, fd), &fp);
 	if (error)
 		return (error);
 	vp = (struct vnode *) fp->f_data;
@@ -678,7 +673,7 @@ sys_extattr_list_fd(struct lwp *l, const struct sys_extattr_list_fd_args *uap, r
 	error = extattr_list_vp(vp, SCARG(uap, attrnamespace),
 	    SCARG(uap, data), SCARG(uap, nbytes), l, retval);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -691,18 +686,18 @@ sys_extattr_list_file(struct lwp *l, const struct sys_extattr_list_file_args *ua
 		syscallarg(void *) data;
 		syscallarg(size_t) nbytes;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	int error;
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_list_vp(nd.ni_vp, SCARG(uap, attrnamespace),
+	error = extattr_list_vp(vp, SCARG(uap, attrnamespace),
 	    SCARG(uap, data), SCARG(uap, nbytes), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -715,18 +710,18 @@ sys_extattr_list_link(struct lwp *l, const struct sys_extattr_list_link_args *ua
 		syscallarg(void *) data;
 		syscallarg(size_t) nbytes;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	int error;
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_NOFOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_list_vp(nd.ni_vp, SCARG(uap, attrnamespace),
+	error = extattr_list_vp(vp, SCARG(uap, attrnamespace),
 	    SCARG(uap, data), SCARG(uap, nbytes), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -744,7 +739,7 @@ sys_setxattr(struct lwp *l, const struct sys_setxattr_args *uap, register_t *ret
 		syscallarg(size_t) size;
 		syscallarg(int) flags;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[XATTR_NAME_MAX];
 	int error;
 
@@ -753,17 +748,17 @@ sys_setxattr(struct lwp *l, const struct sys_setxattr_args *uap, register_t *ret
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
 	/* XXX flags */
 
-	error = extattr_set_vp(nd.ni_vp, EXTATTR_NAMESPACE_USER,
+	error = extattr_set_vp(vp, EXTATTR_NAMESPACE_USER,
 	    attrname, SCARG(uap, value), SCARG(uap, size), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -777,7 +772,7 @@ sys_lsetxattr(struct lwp *l, const struct sys_lsetxattr_args *uap, register_t *r
 		syscallarg(size_t) size;
 		syscallarg(int) flags;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[XATTR_NAME_MAX];
 	int error;
 
@@ -786,17 +781,17 @@ sys_lsetxattr(struct lwp *l, const struct sys_lsetxattr_args *uap, register_t *r
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_NOFOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
 	/* XXX flags */
 
-	error = extattr_set_vp(nd.ni_vp, EXTATTR_NAMESPACE_USER,
+	error = extattr_set_vp(vp, EXTATTR_NAMESPACE_USER,
 	    attrname, SCARG(uap, value), SCARG(uap, size), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -820,7 +815,7 @@ sys_fsetxattr(struct lwp *l, const struct sys_fsetxattr_args *uap, register_t *r
 	if (error)
 		return (error);
 
-	error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp);
+	error = fd_getvnode(SCARG(uap, fd), &fp);
 	if (error)
 		return (error);
 	vp = (struct vnode *) fp->f_data;
@@ -830,7 +825,7 @@ sys_fsetxattr(struct lwp *l, const struct sys_fsetxattr_args *uap, register_t *r
 	error = extattr_set_vp(vp, EXTATTR_NAMESPACE_USER,
 	    attrname, SCARG(uap, value), SCARG(uap, size), l, retval);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -843,7 +838,7 @@ sys_getxattr(struct lwp *l, const struct sys_getxattr_args *uap, register_t *ret
 		syscallarg(void *) value;
 		syscallarg(size_t) size;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[XATTR_NAME_MAX];
 	int error;
 
@@ -852,15 +847,15 @@ sys_getxattr(struct lwp *l, const struct sys_getxattr_args *uap, register_t *ret
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_get_vp(nd.ni_vp, EXTATTR_NAMESPACE_USER,
+	error = extattr_get_vp(vp, EXTATTR_NAMESPACE_USER,
 	    attrname, SCARG(uap, value), SCARG(uap, size), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -873,7 +868,7 @@ sys_lgetxattr(struct lwp *l, const struct sys_lgetxattr_args *uap, register_t *r
 		syscallarg(void *) value;
 		syscallarg(size_t) size;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[XATTR_NAME_MAX];
 	int error;
 
@@ -882,15 +877,15 @@ sys_lgetxattr(struct lwp *l, const struct sys_lgetxattr_args *uap, register_t *r
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_NOFOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_get_vp(nd.ni_vp, EXTATTR_NAMESPACE_USER,
+	error = extattr_get_vp(vp, EXTATTR_NAMESPACE_USER,
 	    attrname, SCARG(uap, value), SCARG(uap, size), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -913,7 +908,7 @@ sys_fgetxattr(struct lwp *l, const struct sys_fgetxattr_args *uap, register_t *r
 	if (error)
 		return (error);
 
-	error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp);
+	error = fd_getvnode(SCARG(uap, fd), &fp);
 	if (error)
 		return (error);
 	vp = (struct vnode *) fp->f_data;
@@ -921,7 +916,7 @@ sys_fgetxattr(struct lwp *l, const struct sys_fgetxattr_args *uap, register_t *r
 	error = extattr_get_vp(vp, EXTATTR_NAMESPACE_USER,
 	    attrname, SCARG(uap, value), SCARG(uap, size), l, retval);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -933,18 +928,18 @@ sys_listxattr(struct lwp *l, const struct sys_listxattr_args *uap, register_t *r
 		syscallarg(char *) list;
 		syscallarg(size_t) size;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	int error;
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_list_vp(nd.ni_vp, EXTATTR_NAMESPACE_USER,
+	error = extattr_list_vp(vp, EXTATTR_NAMESPACE_USER,
 	    SCARG(uap, list), SCARG(uap, size), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -956,18 +951,18 @@ sys_llistxattr(struct lwp *l, const struct sys_llistxattr_args *uap, register_t 
 		syscallarg(char *) list;
 		syscallarg(size_t) size;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	int error;
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_NOFOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_list_vp(nd.ni_vp, EXTATTR_NAMESPACE_USER,
+	error = extattr_list_vp(vp, EXTATTR_NAMESPACE_USER,
 	    SCARG(uap, list), SCARG(uap, size), l, retval);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -983,7 +978,7 @@ sys_flistxattr(struct lwp *l, const struct sys_flistxattr_args *uap, register_t 
 	struct vnode *vp;
 	int error;
 
-	error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp);
+	error = fd_getvnode(SCARG(uap, fd), &fp);
 	if (error)
 		return (error);
 	vp = (struct vnode *) fp->f_data;
@@ -991,7 +986,7 @@ sys_flistxattr(struct lwp *l, const struct sys_flistxattr_args *uap, register_t 
 	error = extattr_list_vp(vp, EXTATTR_NAMESPACE_USER,
 	    SCARG(uap, list), SCARG(uap, size), l, retval);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }
 
@@ -1002,7 +997,7 @@ sys_removexattr(struct lwp *l, const struct sys_removexattr_args *uap, register_
 		syscallarg(const char *) path;
 		syscallarg(const char *) name;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[XATTR_NAME_MAX];
 	int error;
 
@@ -1011,15 +1006,15 @@ sys_removexattr(struct lwp *l, const struct sys_removexattr_args *uap, register_
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_FOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_delete_vp(nd.ni_vp, EXTATTR_NAMESPACE_USER,
+	error = extattr_delete_vp(vp, EXTATTR_NAMESPACE_USER,
 	    attrname, l);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -1030,7 +1025,7 @@ sys_lremovexattr(struct lwp *l, const struct sys_lremovexattr_args *uap, registe
 		syscallarg(const char *) path;
 		syscallarg(const char *) name;
 	} */
-	struct nameidata nd;
+	struct vnode *vp;
 	char attrname[XATTR_NAME_MAX];
 	int error;
 
@@ -1039,15 +1034,15 @@ sys_lremovexattr(struct lwp *l, const struct sys_lremovexattr_args *uap, registe
 	if (error)
 		return (error);
 
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_USERSPACE, SCARG(uap, path));
-	error = namei(&nd);
+	error = namei_simple_user(SCARG(uap, path),
+				NSM_NOFOLLOW_NOEMULROOT, &vp);
 	if (error)
 		return (error);
 
-	error = extattr_delete_vp(nd.ni_vp, EXTATTR_NAMESPACE_USER,
+	error = extattr_delete_vp(vp, EXTATTR_NAMESPACE_USER,
 	    attrname, l);
 
-	vrele(nd.ni_vp);
+	vrele(vp);
 	return (error);
 }
 
@@ -1068,7 +1063,7 @@ sys_fremovexattr(struct lwp *l, const struct sys_fremovexattr_args *uap, registe
 	if (error)
 		return (error);
 
-	error = getvnode(l->l_proc->p_fd, SCARG(uap, fd), &fp);
+	error = fd_getvnode(SCARG(uap, fd), &fp);
 	if (error)
 		return (error);
 	vp = (struct vnode *) fp->f_data;
@@ -1076,6 +1071,6 @@ sys_fremovexattr(struct lwp *l, const struct sys_fremovexattr_args *uap, registe
 	error = extattr_delete_vp(vp, EXTATTR_NAMESPACE_USER,
 	    attrname, l);
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return (error);
 }

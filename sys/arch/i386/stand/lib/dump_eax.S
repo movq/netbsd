@@ -1,4 +1,4 @@
-/*	$NetBSD: dump_eax.S,v 1.1 2003/04/16 13:24:09 dsl Exp $	*/
+/*	$NetBSD: dump_eax.S,v 1.4 2009/11/19 22:08:14 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,9 +39,6 @@
 ENTRY(dump_eax)
 	.code16
 	pusha					/* saves bottom 16 bits only! */
-	push	%es				/* allow for %es != %ds */
-	push	%ds
-	pop	%es
 	movw	$dump_eax_buff, %si
 	mov	%si, %di
 	movw	$8, %cx
@@ -59,12 +49,11 @@ ENTRY(dump_eax)
 #if 1 /* 5 bytes to generate real hex... */
 	daa					/* 30..39, 40..45 */
 	addb	$0xc0, %al			/* f0..f9, 00..05 */
-	adcb	$0x40, %al			/* 30..39, 41..45 */
+	adcb	$0x40, %al			/* 30..39, 41..46 */
 #endif
-	stosb
+	mov	%al,(%di)
+	inc	%di
 	pop	%ax
 	loop	1b
-	movw	$0x20, %ax			/* space + null */
-	stosw
-	pop	%es
+	movw	$0x20,(%di)			/* space + NIL */
 	jmp	message_1

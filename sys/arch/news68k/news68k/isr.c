@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.16 2007/12/03 15:34:03 ad Exp $	*/
+/*	$NetBSD: isr.c,v 1.21 2010/12/20 00:25:40 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.16 2007/12/03 15:34:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.21 2010/12/20 00:25:40 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -205,22 +198,19 @@ isrdispatch_autovec(int evec)
 	int handled = 0, ipl, vec;
 	static int straycount, unexpected;
 
-	idepth++;
-
 	vec = (evec & 0xfff) >> 2;
 	if ((vec < ISRAUTOVEC) || (vec >= (ISRAUTOVEC + NISRAUTOVEC)))
 		panic("isrdispatch_autovec: bad vec 0x%x", vec);
 	ipl = vec - ISRAUTOVEC;
 
 	intrcnt[ipl]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	list = &isr_autovec[ipl];
 	if (LIST_EMPTY(list)) {
 		printf("isrdispatch_autovec: ipl %d unexpected\n", ipl);
 		if (++unexpected > 10)
 			panic("too many unexpected interrupts");
-		idepth--;
 		return;
 	}
 
@@ -235,8 +225,6 @@ isrdispatch_autovec(int evec)
 		panic("isr_dispatch_autovec: too many stray interrupts");
 	else
 		printf("isrdispatch_autovec: stray level %d interrupt\n", ipl);
-
-	idepth--;
 }
 
 /*
@@ -249,13 +237,11 @@ isrdispatch_vectored(int pc, int evec, void *frame)
 	struct isr_vectored *isr;
 	int ipl, vec;
 
-	idepth++;
-
 	vec = (evec & 0xfff) >> 2;
 	ipl = (getsr() >> 8) & 7;
 
 	intrcnt[ipl]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	if ((vec < ISRVECTORED) || (vec >= (ISRVECTORED + NISRVECTORED)))
 		panic("isrdispatch_vectored: bad vec 0x%x", vec);
@@ -264,7 +250,6 @@ isrdispatch_vectored(int pc, int evec, void *frame)
 	if (isr->isr_func == NULL) {
 		printf("isrdispatch_vectored: no handler for vec 0x%x\n", vec);
 		vectab[vec] = badtrap;
-		idepth--;
 		return;
 	}
 
@@ -273,14 +258,6 @@ isrdispatch_vectored(int pc, int evec, void *frame)
 	 */
 	if ((*isr->isr_func)(isr->isr_arg ? isr->isr_arg : frame) == 0)
 		printf("isrdispatch_vectored: vec 0x%x not claimed\n", vec);
-	idepth--;
-}
-
-bool
-cpu_intr_p(void)
-{
-
-	return idepth != 0;
 }
 
 void
@@ -311,19 +288,13 @@ get_vector_entry(int entry)
 	return (void *)vectab[entry];
 }
 
-static const int ipl2psl_table[] = {
-	[IPL_NONE] = PSL_IPL0,
-	[IPL_SOFTBIO] = PSL_IPL2,
-	[IPL_SOFTCLOCK] = PSL_IPL2,
-	[IPL_SOFTNET] = PSL_IPL2,
-	[IPL_SOFTSERIAL] = PSL_IPL2,
-	[IPL_VM] = PSL_IPL5,
-	[IPL_SCHED] = PSL_IPL7,
+const uint16_t ipl2psl_table[NIPL] = {
+	[IPL_NONE]       = PSL_S | PSL_IPL0,
+	[IPL_SOFTCLOCK]  = PSL_S | PSL_IPL2,
+	[IPL_SOFTBIO]    = PSL_S | PSL_IPL2,
+	[IPL_SOFTNET]    = PSL_S | PSL_IPL2,
+	[IPL_SOFTSERIAL] = PSL_S | PSL_IPL2,
+	[IPL_VM]         = PSL_S | PSL_IPL5,
+	[IPL_SCHED]      = PSL_S | PSL_IPL7,
+	[IPL_HIGH]       = PSL_S | PSL_IPL7,
 };
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._psl = ipl2psl_table[ipl] | PSL_S};
-}

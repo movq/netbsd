@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.21 2006/12/11 00:55:02 christos Exp $
+# $NetBSD: Makefile,v 1.24 2008/04/15 21:50:22 mlelstv Exp $
 
 NOLINT=		# defined
 NOMAN=		# defined
@@ -10,6 +10,11 @@ DIST=		${NETBSDSRCDIR}/crypto/dist
 
 PROG=		asn1_compile
 
+.if ${USETOOLS} != "yes"
+LDADD+= -lutil
+DPADD+= ${LIBUTIL}
+.endif
+
 WARNS?=		1
 
 asn1_compile_SRCS = 				\
@@ -20,6 +25,7 @@ asn1_compile_SRCS = 				\
 	gen_free.c				\
 	gen_glue.c				\
 	gen_length.c				\
+	gen_seq.c				\
 	hash.c					\
 	lex.l					\
 	main.c					\
@@ -27,7 +33,6 @@ asn1_compile_SRCS = 				\
 	symbol.c
 
 roken_SRCS =					\
-	emalloc.c				\
 	getarg.c				\
 	print_version.c				\
 	warnerr.c				\

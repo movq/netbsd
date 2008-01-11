@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.14 2007/12/22 03:26:34 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.32 2010/12/20 04:27:35 christos Exp $	*/
 
 /*-
  * Copyright (c) 2007 YAMAMOTO Takashi,
@@ -29,12 +29,15 @@
 #ifndef _SYS_CPU_H_
 #define _SYS_CPU_H_
 
+#ifndef _LOCORE
+
 #include <machine/cpu.h>
 
 #include <sys/lwp.h>
 
 struct cpu_info;
 
+#ifdef _KERNEL
 #ifndef cpu_idle
 void cpu_idle(void);
 #endif
@@ -48,8 +51,9 @@ void cpu_idle(void);
 void cpu_need_resched(struct cpu_info *, int);
 #endif
 
-/* flags for cpu_need_resched */
-#define	RESCHED_IMMED	1
+#ifndef cpu_did_resched
+#define	cpu_did_resched(l)	/* nothing */
+#endif
 
 #ifndef CPU_INFO_ITERATOR
 #define	CPU_INFO_ITERATOR		int
@@ -57,18 +61,52 @@ void cpu_need_resched(struct cpu_info *, int);
     (void)cii, ci = curcpu(); ci != NULL; ci = NULL
 #endif
 
-lwp_t	*cpu_switchto(lwp_t *, lwp_t *, bool);
-struct	cpu_info *cpu_lookup(cpuid_t);
-struct	cpu_info *cpu_lookup_byindex(u_int);
-int	cpu_setonline(struct cpu_info *, bool);
-bool	cpu_intr_p(void);
+#ifndef CPU_IS_PRIMARY
+#define	CPU_IS_PRIMARY(ci)	((void)ci, 1)
+#endif
 
+#ifdef __HAVE_MD_CPU_OFFLINE
+void	cpu_offline_md(void);
+#endif
+
+struct lwp *cpu_switchto(struct lwp *, struct lwp *, bool);
+struct	cpu_info *cpu_lookup(u_int);
+int	cpu_setstate(struct cpu_info *, bool);
+int	cpu_setintr(struct cpu_info *, bool);
+bool	cpu_intr_p(void);
+bool	cpu_softintr_p(void);
+bool	cpu_kpreempt_enter(uintptr_t, int);
+void	cpu_kpreempt_exit(uintptr_t);
+bool	cpu_kpreempt_disabled(void);
+int	cpu_lwp_setprivate(struct lwp *, void *);
+void	cpu_intr_redistribute(void);
+u_int	cpu_intr_count(struct cpu_info *);
+#endif
+
+CIRCLEQ_HEAD(cpuqueue, cpu_info);
+
+#ifdef _KERNEL
 extern kmutex_t cpu_lock;
+extern u_int maxcpus;
+extern struct cpuqueue cpu_queue;
   
 static inline u_int
 cpu_index(struct cpu_info *ci)
 {
 	return ci->ci_index;
 }
+
+static inline char *
+cpu_name(struct cpu_info *ci)
+{
+	return ci->ci_data.cpu_name;
+}
+#endif
+#endif	/* !_LOCORE */
+
+/* flags for cpu_need_resched */
+#define	RESCHED_LAZY		0x01	/* request a ctx switch */
+#define	RESCHED_IMMED		0x02	/* request an immediate ctx switch */
+#define	RESCHED_KPREEMPT	0x04	/* request in-kernel preemption */
 
 #endif	/* !_SYS_CPU_H_ */

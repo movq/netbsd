@@ -1,4 +1,4 @@
-.\"	$NetBSD: canfield.6,v 1.10 2005/09/15 02:09:41 wiz Exp $
+.\"	$NetBSD: canfield.6,v 1.12 2010/01/01 11:45:34 wiz Exp $
 .\"
 .\" Copyright (c) 1983, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)canfield.6	8.1 (Berkeley) 5/31/93
 .\"
-.Dd May 31, 1993
+.Dd January 1, 2010
 .Dt CANFIELD 6
 .Os
 .Sh NAME
@@ -39,21 +39,24 @@
 .Sh SYNOPSIS
 .Nm
 .Nm cfscores
-.Op Fl a
 .Op Ar user
+.Nm cfscores
+.Fl a
 .Sh DESCRIPTION
 If you have never played solitaire before, it is recommended
-that you consult a solitaire instruction book. In
-Canfield, tableau cards may be built on each other downward
-in alternate colors. An entire pile must be moved as a unit
-in building. Top cards of the piles are available
-to be played on foundations, but never into empty spaces.
+that you consult a solitaire instruction book.
+In Canfield, tableau cards may be built on each other downward in
+alternate colors.
+An entire pile must be moved as a unit in building.
+Top cards of the piles are available to be played on foundations,
+but never into empty spaces.
 .Pp
-Spaces must be filled from the stock. The top card of
-the stock also is available to be played on foundations or
-built on tableau piles. After the stock is exhausted,
-tableau spaces may be filled from the talon and the player may
-keep them open until he wishes to use them.
+Spaces must be filled from the stock.
+The top card of the stock also is available to be played on
+foundations or built on tableau piles.
+After the stock is exhausted, tableau spaces may be filled from
+the talon and the player may keep them open until he wishes to use
+them.
 .Pp
 Cards are dealt from the hand to the talon by threes
 and this repeats until there are no more cards in the hand
@@ -120,3 +123,5 @@ Further random hacking by: Steve Feldman, Kirk McKusick,
 Mikey Olson, and Eric Allman.
 .Sh BUGS
 It is impossible to cheat.
+.Pp
+The score file database is not portable.

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.79 2007/12/31 15:31:55 ad Exp $
+# $NetBSD: GENERIC,v 1.93 2011/01/03 06:07:43 tsutsui Exp $
 #
 # GENERIC machine description file
 #
@@ -31,6 +31,7 @@ options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
 maxusers	32			# estimated number of users
 
+options 	HZ=64			# default clock rate
 
 # System options specific to hpcsh
 
@@ -67,12 +68,12 @@ options 	KLOADER
 
 options 	KTRACE		# system call tracing via ktrace(1)
 
-#options 	SYSVMSG		# System V-like message queues
-#options 	SYSVSEM		# System V-like semaphores
-#options 	SYSVSHM		# System V-like memory sharing
+options 	SYSVMSG		# System V-like message queues
+options 	SYSVSEM		# System V-like semaphores
+options 	SYSVSHM		# System V-like memory sharing
 #options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
-#options 	LKM		# loadable kernel modules
+#options 	MODULAR		# new style module(7) framework
 
 options 	USERCONF		# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
@@ -103,16 +104,16 @@ options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
 #options 	BSDDISKLABEL_EI	# endian independent disklabel support
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # Executable format options
 options 	EXEC_COFF	# 32-bit COFF executables
-options 	EXEC_ELF32	# 32-bit ELF executables
 
 # File systems
 file-system 	FFS		# UFS
-#file-system 	MFS		# memory file system (requires FFS)
+file-system 	MFS		# memory file system (requires FFS)
 #file-system 	EXT2FS		# second extended file system (linux)
 file-system 	MSDOSFS		# MS-DOS file system
 file-system	NFS		# Sun NFS-compatible filesystem client
@@ -120,7 +121,6 @@ file-system	NFS		# Sun NFS-compatible filesystem client
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 #file-system 	OVERLAY		# overlay file system
-#file-system 	PORTAL		# portal filesystem (still experimental)
 #file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 file-system 	PROCFS		# /proc
@@ -133,6 +133,7 @@ file-system	PTYFS		# /dev/pts/N support
 # File system options
 #options 	FFS_EI		# FFS Endian Independent support
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	WAPBL		# File system journaling support - Experimental
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
 				# immutable) behave as system flags.
 
@@ -332,6 +333,10 @@ bthub*	at btuart?
 #btkbd*	at bthidev? reportid ?
 #wskbd*	at btkbd? console ? mux 1
 
+# Bluetooth Apple Magic Mouse
+#btmagic* at bthub?
+#wsmouse* at btmagic? mux 0
+
 # Bluetooth Audio support
 #btsco*	at bthub?
 
@@ -341,7 +346,7 @@ bthub*	at btuart?
 # disk/mass storage pseudo-devices
 #pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	fss		4	# file system snapshot device
+pseudo-device	fss			# file system snapshot device
 
 # network pseudo-devices
 pseudo-device	loop			# network loopback
@@ -351,6 +356,11 @@ pseudo-device	bpfilter		# Berkeley packet filter
 #pseudo-device	ipfilter		# IP filter, NAT
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
+
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals

@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.23 2008/01/05 12:53:54 dsl Exp $ */
+/*	$NetBSD: syscall.c,v 1.39 2011/03/27 18:47:09 martin Exp $ */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,17 +79,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.23 2008/01/05 12:53:54 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.39 2011/03/27 18:47:09 martin Exp $");
 
-#define NEW_FPSTATE
+#include "opt_sa.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/signal.h>
+#include <sys/kmem.h>
 #include <sys/ktrace.h>
 #include <sys/syscall.h>
+#include <sys/syscallvar.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -107,9 +103,6 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.23 2008/01/05 12:53:54 dsl Exp $");
 #include <machine/pmap.h>
 #include <machine/frame.h>
 #include <machine/userret.h>
-
-#include <sparc/fpu/fpu_extern.h>
-#include <sparc64/sparc64/cache.h>
 
 #ifndef offsetof
 #define	offsetof(s, f) ((size_t)&((s *)0)->f)
@@ -134,12 +127,19 @@ void syscall_fancy(struct trapframe64 *, register_t, register_t);
 static inline int
 handle_old(struct trapframe64 *tf, register_t *code)
 {
-	int new = *code & (SYSCALL_G7RFLAG | SYSCALL_G2RFLAG);
-	*code &= ~(SYSCALL_G7RFLAG | SYSCALL_G2RFLAG);
-	if (new)
-		tf->tf_pc = tf->tf_global[new & SYSCALL_G2RFLAG ? 2 : 7];
-	else
+	int new = *code & (SYSCALL_G7RFLAG|SYSCALL_G2RFLAG|SYSCALL_G5RFLAG);
+	*code &= ~(SYSCALL_G7RFLAG|SYSCALL_G2RFLAG|SYSCALL_G5RFLAG);
+	if (new) {
+		/* note that G5RFLAG is multiple bits! */
+		if (__predict_true((new & SYSCALL_G5RFLAG) == SYSCALL_G5RFLAG))
+			tf->tf_pc = tf->tf_global[5];
+		else if (new & SYSCALL_G7RFLAG)
+			tf->tf_pc = tf->tf_global[7];
+		else
+			tf->tf_pc = tf->tf_global[2];
+	} else {
 		tf->tf_pc = tf->tf_npc;
+	}
 	return new;
 }
 
@@ -210,9 +210,7 @@ getargs(struct proc *p, struct trapframe64 *tf, register_t *code,
 		if (__predict_false(i > nap)) {	/* usually false */
 			void *pos = (char *)(u_long)tf->tf_out[6] + BIAS +
 			   offsetof(struct frame64, fr_argx);
-#ifdef DIAGNOSTIC
 			KASSERT(i <= MAXARGS);
-#endif
 			/* Read the whole block in */
 			error = copyin(pos, &args->l[nap],
 			    (i - nap) * sizeof(*argp));
@@ -229,9 +227,7 @@ getargs(struct proc *p, struct trapframe64 *tf, register_t *code,
 		if (__predict_false(i > nap)) {	/* usually false */
 			void *pos = (char *)(u_long)tf->tf_out[6] +
 			    offsetof(struct frame32, fr_argx);
-#ifdef DIAGNOSTIC
 			KASSERT(i <= MAXARGS);
-#endif
 			/* Read the whole block in */
 			error = copyin(pos, &args->i[nap],
 			    (i - nap) * sizeof(*argp));
@@ -299,7 +295,7 @@ syscall_plain(struct trapframe64 *tf, register_t code, register_t pc)
 	int s64;
 
 	LWP_CACHE_CREDS(l, p);
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 	sticks = p->p_sticks;
 	l->l_md.md_tf = tf;
 
@@ -317,17 +313,16 @@ syscall_plain(struct trapframe64 *tf, register_t code, register_t pc)
 	if ((error = getargs(p, tf, &code, &callp, &args, &s64)) != 0)
 		goto bad;
 
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
+
 	rval[0] = 0;
 	rval[1] = tf->tf_out[1];
 
-        /* Lock the kernel if the syscall isn't MP-safe. */
-	if (callp->sy_flags & SYCALL_MPSAFE) {
-		error = (*callp->sy_call)(l, &args, rval);
-	} else {
-		KERNEL_LOCK(1, l);
-		error = (*callp->sy_call)(l, &args, rval);
-		KERNEL_UNLOCK_LAST(l);
-	}
+	error = sy_call(callp, l, &args, rval);
 
 	switch (error) {
 	case 0:
@@ -383,7 +378,7 @@ syscall_fancy(struct trapframe64 *tf, register_t code, register_t pc)
 	int s64;
 
 	LWP_CACHE_CREDS(l, p);
-	uvmexp.syscalls++;
+	curcpu()->ci_data.cpu_nsyscall++;
 	sticks = p->p_sticks;
 	l->l_md.md_tf = tf;
 
@@ -412,9 +407,13 @@ syscall_fancy(struct trapframe64 *tf, register_t code, register_t pc)
 #else
 	ap = &args;
 #endif
-	KERNEL_LOCK(1, l);
-	if ((error = trace_enter(code, code, NULL, ap->r)) != 0) {
-		KERNEL_UNLOCK_LAST(l);
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
+
+	if ((error = trace_enter(code, ap->r, callp->sy_narg)) != 0) {
 		goto out;
 	}
 #ifdef __arch64__
@@ -426,13 +425,7 @@ syscall_fancy(struct trapframe64 *tf, register_t code, register_t pc)
 	rval[0] = 0;
 	rval[1] = tf->tf_out[1];
 
-	if (callp->sy_flags & SYCALL_MPSAFE) {
-		KERNEL_UNLOCK_LAST(l);
-		error = (*callp->sy_call)(l, &args, rval);
-	} else {
-		error = (*callp->sy_call)(l, &args, rval);
-		KERNEL_UNLOCK_LAST(l);
-	}
+	error = sy_call(callp, l, &args, rval);
 out:
 	switch (error) {
 	case 0:
@@ -467,7 +460,7 @@ out:
 	}
 
 	if (ap)
-		trace_exit(code, ap->r, rval, error);
+		trace_exit(code, rval, error);
 
 	userret(l, pc, sticks);
 	share_fpu(l, tf);
@@ -477,39 +470,37 @@ out:
  * Process the tail end of a fork() for the child.
  */
 void
-child_return(arg)
-	void *arg;
+child_return(void *arg)
 {
 	struct lwp *l = arg;
 
 	/*
 	 * Return values in the frame set by cpu_lwp_fork().
 	 */
-	KERNEL_UNLOCK_LAST(l);
 	userret(l, l->l_md.md_tf->tf_pc, 0);
-	ktrsysret((l->l_proc->p_sflag & PS_PPWAIT) ? SYS_vfork : SYS_fork, 0, 0);
+	ktrsysret((l->l_proc->p_lflag & PL_PPWAIT) ? SYS_vfork : SYS_fork, 0, 0);
 }
-
-
 
 /* 
  * Start a new LWP
  */
 void
-startlwp(arg)
-	void *arg;
+startlwp(void *arg)
 {
-	int err;
 	ucontext_t *uc = arg;
-	struct lwp *l = curlwp;
+	lwp_t *l = curlwp;
+	int error;
 
-	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
-#if DIAGNOSTIC
-	if (err) {
-		printf("Error %d from cpu_setmcontext.", err);
-	}
-#endif
-	pool_put(&lwp_uc_pool, uc);
+	error = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
+	KASSERT(error == 0);
+
+	kmem_free(uc, sizeof(ucontext_t));
+	userret(l, 0, 0);
+}
+
+void
+upcallret(struct lwp *l)
+{
 
 	KERNEL_UNLOCK_LAST(l);
 	userret(l, 0, 0);

@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_12.c,v 1.24 2007/12/20 23:02:45 dsl Exp $	*/
+/*	$NetBSD: vfs_syscalls_12.c,v 1.29 2011/01/19 10:21:16 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_12.c,v 1.24 2007/12/20 23:02:45 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_12.c,v 1.29 2011/01/19 10:21:16 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_12.c,v 1.24 2007/12/20 23:02:45 dsl Exp
 #include <sys/stat.h>
 #include <sys/socketvar.h>
 #include <sys/vnode.h>
-#include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/uio.h>
 #include <sys/dirent.h>
@@ -75,9 +74,9 @@ compat_12_stat_conv(const struct stat *st, struct stat12 *ost)
 	ost->st_uid = st->st_uid;
 	ost->st_gid = st->st_gid;
 	ost->st_rdev = st->st_rdev;
-	ost->st_atimespec = st->st_atimespec;
-	ost->st_mtimespec = st->st_mtimespec;
-	ost->st_ctimespec = st->st_ctimespec;
+	timespec_to_timespec50(&st->st_atimespec, &ost->st_atimespec);
+	timespec_to_timespec50(&st->st_mtimespec, &ost->st_mtimespec);
+	timespec_to_timespec50(&st->st_ctimespec, &ost->st_ctimespec);
 	ost->st_size = st->st_size;
 	ost->st_blocks = st->st_blocks;
 	ost->st_blksize = st->st_blksize;
@@ -97,13 +96,12 @@ compat_12_sys_getdirentries(struct lwp *l, const struct compat_12_sys_getdirentr
 		syscallarg(u_int) count;
 		syscallarg(long *) basep;
 	} */
-	struct proc *p = l->l_proc;
 	struct file *fp;
 	int error, done;
 	long loff;
 
-	/* getvnode() will use the descriptor for us */
-	if ((error = getvnode(p->p_fd, SCARG(uap, fd), &fp)) != 0)
+	/* fd_getvnode() will use the descriptor for us */
+	if ((error = fd_getvnode(SCARG(uap, fd), &fp)) != 0)
 		return error;
 	if ((fp->f_flag & FREAD) == 0) {
 		error = EBADF;
@@ -118,7 +116,7 @@ compat_12_sys_getdirentries(struct lwp *l, const struct compat_12_sys_getdirentr
 	error = copyout(&loff, SCARG(uap, basep), sizeof(long));
 	*retval = done;
  out:
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return error;
 }
 
@@ -137,7 +135,7 @@ compat_12_sys_stat(struct lwp *l, const struct compat_12_sys_stat_args *uap, reg
 	struct stat12 osb;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), FOLLOW, &sb);
+	error = do_sys_stat(SCARG(uap, path), FOLLOW, &sb);
 	if (error)
 		return (error);
 	compat_12_stat_conv(&sb, &osb);
@@ -161,7 +159,7 @@ compat_12_sys_lstat(struct lwp *l, const struct compat_12_sys_lstat_args *uap, r
 	struct stat12 osb;
 	int error;
 
-	error = do_sys_stat(l, SCARG(uap, path), NOFOLLOW, &sb);
+	error = do_sys_stat(SCARG(uap, path), NOFOLLOW, &sb);
 	if (error)
 		return (error);
 	compat_12_stat_conv(&sb, &osb);
@@ -180,21 +178,11 @@ compat_12_sys_fstat(struct lwp *l, const struct compat_12_sys_fstat_args *uap, r
 		syscallarg(int) fd;
 		syscallarg(struct stat12 *) sb;
 	} */
-	struct proc *p = l->l_proc;
-	int fd = SCARG(uap, fd);
-	struct filedesc *fdp = p->p_fd;
-	struct file *fp;
 	struct stat ub;
 	struct stat12 oub;
 	int error;
 
-	if ((fp = fd_getfile(fdp, fd)) == NULL)
-		return (EBADF);
-
-	FILE_USE(fp);
-	error = (*fp->f_ops->fo_stat)(fp, &ub, l);
-	FILE_UNUSE(fp, l);
-
+	error = do_sys_fstat(SCARG(uap, fd), &ub);
 	if (error == 0) {
 		compat_12_stat_conv(&ub, &oub);
 		error = copyout(&oub, SCARG(uap, sb), sizeof (oub));

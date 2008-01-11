@@ -1,4 +1,4 @@
-/*	$NetBSD: ss_mustek.c,v 1.36 2007/03/04 06:02:44 christos Exp $	*/
+/*	$NetBSD: ss_mustek.c,v 1.40 2009/11/23 02:13:47 rmind Exp $	*/
 
 /*
  * Copyright (c) 1995 Joachim Koenig-Baltes.  All rights reserved.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ss_mustek.c,v 1.36 2007/03/04 06:02:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ss_mustek.c,v 1.40 2009/11/23 02:13:47 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -58,7 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: ss_mustek.c,v 1.36 2007/03/04 06:02:44 christos Exp 
 #include <sys/buf.h>
 #include <sys/bufq.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/device.h>
 #include <sys/conf.h>		/* for cdevsw */
 #include <sys/scanio.h>
@@ -111,7 +110,7 @@ mustek_attach(struct ss_softc *ss, struct scsipibus_attach_args *sa)
 	SC_DEBUG(periph, SCSIPI_DB1, ("mustek_attach: start\n"));
 	ss->sio.scan_scanner_type = 0;
 
-	printf("\n%s: ", ss->sc_dev.dv_xname);
+	printf("\n%s: ", device_xname(&ss->sc_dev));
 
 	/* first, check the model which determines resolutions */
 	if (!memcmp(sa->sa_inqbuf.product, "MFS-06000CX", 11)) {
@@ -324,7 +323,7 @@ mustek_trigger_scanner(struct ss_softc *ss)
 	SC_DEBUG(periph, SCSIPI_DB1, ("mustek_set_parms: set_window\n"));
 	error = scsipi_command(periph, (void *)&window_cmd, sizeof(window_cmd),
 	    (void *)&window_data, sizeof(window_data),
-	    MUSTEK_RETRIES, 5000, NULL, XS_CTL_DATA_OUT | XS_CTL_DATA_ONSTACK);
+	    MUSTEK_RETRIES, 5000, NULL, XS_CTL_DATA_OUT);
 	if (error)
 		return (error);
 
@@ -363,7 +362,7 @@ mustek_trigger_scanner(struct ss_softc *ss)
 	/* send the command to the scanner */
 	error = scsipi_command(periph, (void *)&mode_cmd, sizeof(mode_cmd),
 	    (void *)&mode_data, sizeof(mode_data),
-	    MUSTEK_RETRIES, 5000, NULL, XS_CTL_DATA_OUT | XS_CTL_DATA_ONSTACK);
+	    MUSTEK_RETRIES, 5000, NULL, XS_CTL_DATA_OUT);
 	if (error)
 		return (error);
 
@@ -496,10 +495,10 @@ mustek_read(struct ss_softc *ss, struct buf *bp)
 		return(0);
 	}
 #ifdef DIAGNOSTIC
-	if (BUFQ_GET(ss->buf_queue) != bp)
+	if (bufq_get(ss->buf_queue) != bp)
 		panic("ssstart(): dequeued wrong buf");
 #else
-	BUFQ_GET(ss->buf_queue);
+	bufq_get(ss->buf_queue);
 #endif
 	error = scsipi_execute_xs(xs);
 	/* with a scsipi_xfer preallocated, scsipi_command can't fail */
@@ -540,7 +539,7 @@ mustek_get_status(struct ss_softc *ss, int timeout, int update)
 		SC_DEBUG(periph, SCSIPI_DB1, ("mustek_get_status: stat_cmd\n"));
 		error = scsipi_command(periph, (void *)&cmd, sizeof(cmd),
 		    (void *)&data, sizeof(data),
-		    MUSTEK_RETRIES, 5000, NULL, XS_CTL_DATA_IN | XS_CTL_DATA_ONSTACK);
+		    MUSTEK_RETRIES, 5000, NULL, XS_CTL_DATA_IN);
 		if (error)
 			return (error);
 		if ((data.ready_busy == MUSTEK_READY) ||

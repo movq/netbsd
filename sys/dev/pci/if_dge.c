@@ -1,4 +1,4 @@
-/*	$NetBSD: if_dge.c,v 1.18 2007/11/07 00:23:18 ad Exp $ */
+/*	$NetBSD: if_dge.c,v 1.31 2010/11/13 13:52:06 uebayasi Exp $ */
 
 /*
  * Copyright (c) 2004, SUNET, Swedish University Computer Network.
@@ -80,9 +80,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.18 2007/11/07 00:23:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.31 2010/11/13 13:52:06 uebayasi Exp $");
 
-#include "bpfilter.h"
 #include "rnd.h"
 
 #include <sys/param.h>
@@ -97,8 +96,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.18 2007/11/07 00:23:18 ad Exp $");
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <uvm/uvm_extern.h>		/* for PAGE_SIZE */
-
 #if NRND > 0
 #include <sys/rnd.h>
 #endif
@@ -108,9 +105,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.18 2007/11/07 00:23:18 ad Exp $");
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <netinet/in.h>			/* XXX for struct ip */
 #include <netinet/in_systm.h>		/* XXX for struct ip */
@@ -258,7 +253,6 @@ struct dge_softc {
 	bus_space_handle_t sc_sh;	/* bus space handle */
 	bus_dma_tag_t sc_dmat;		/* bus DMA tag */
 	struct ethercom sc_ethercom;	/* ethernet common data */
-	void *sc_sdhook;		/* shutdown hook */
 
 	int sc_flags;			/* flags; see below */
 	int sc_bus_speed;		/* PCI/PCIX bus speed */
@@ -492,15 +486,15 @@ dge_alloc_rcvmem(struct dge_softc *sc)
 
 	if (bus_dmamem_alloc(sc->sc_dmat, DGE_RXMEM, PAGE_SIZE, 0,
 	     &seg, 1, &rseg, BUS_DMA_NOWAIT)) {
-		printf("%s: can't alloc rx buffers\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't alloc rx buffers\n");
 		return ENOBUFS;
 	}
 
 	state = 1;
 	if (bus_dmamem_map(sc->sc_dmat, &seg, rseg, DGE_RXMEM, (void **)&kva,
 	    BUS_DMA_NOWAIT)) {
-		printf("%s: can't map DMA buffers (%d bytes)\n",
-		    sc->sc_dev.dv_xname, (int)DGE_RXMEM);
+		aprint_error_dev(&sc->sc_dev, "can't map DMA buffers (%d bytes)\n",
+		    (int)DGE_RXMEM);
 		error = ENOBUFS;
 		goto out;
 	}
@@ -508,7 +502,7 @@ dge_alloc_rcvmem(struct dge_softc *sc)
 	state = 2;
 	if (bus_dmamap_create(sc->sc_dmat, DGE_RXMEM, 1, DGE_RXMEM, 0,
 	    BUS_DMA_NOWAIT, &sc->sc_bugmap)) {
-		printf("%s: can't create DMA map\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't create DMA map\n");
 		error = ENOBUFS;
 		goto out;
 	}
@@ -516,7 +510,7 @@ dge_alloc_rcvmem(struct dge_softc *sc)
 	state = 3;
 	if (bus_dmamap_load(sc->sc_dmat, sc->sc_bugmap,
 	    kva, DGE_RXMEM, NULL, BUS_DMA_NOWAIT)) {
-		printf("%s: can't load DMA map\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't load DMA map\n");
 		error = ENOBUFS;
 		goto out;
 	}
@@ -571,7 +565,7 @@ dge_getbuf(struct dge_softc *sc)
 	entry = SLIST_FIRST(&sc->sc_buglist);
 
 	if (entry == NULL) {
-		printf("%s: no free RX buffers\n", sc->sc_dev.dv_xname);
+		printf("%s: no free RX buffers\n", device_xname(&sc->sc_dev));
 		return(NULL);
 	}
 
@@ -618,7 +612,7 @@ static int	dge_ioctl(struct ifnet *, u_long, void *);
 static int	dge_init(struct ifnet *);
 static void	dge_stop(struct ifnet *, int);
 
-static void	dge_shutdown(void *);
+static bool	dge_shutdown(device_t, int);
 
 static void	dge_reset(struct dge_softc *);
 static void	dge_rxdrain(struct dge_softc *);
@@ -631,8 +625,8 @@ static void	dge_txintr(struct dge_softc *);
 static void	dge_rxintr(struct dge_softc *);
 static void	dge_linkintr(struct dge_softc *, uint32_t);
 
-static int	dge_match(struct device *, struct cfdata *, void *);
-static void	dge_attach(struct device *, struct device *, void *);
+static int	dge_match(device_t, cfdata_t, void *);
+static void	dge_attach(device_t, device_t, void *);
 
 static int	dge_read_eeprom(struct dge_softc *sc);
 static int	dge_eeprom_clockin(struct dge_softc *sc);
@@ -641,7 +635,7 @@ static uint16_t	dge_eeprom_word(struct dge_softc *sc, int addr);
 static int	dge_xgmii_mediachange(struct ifnet *);
 static void	dge_xgmii_mediastatus(struct ifnet *, struct ifmediareq *);
 static void	dge_xgmii_reset(struct dge_softc *);
-static void	dge_xgmii_writereg(struct device *, int, int, int);
+static void	dge_xgmii_writereg(device_t, int, int, int);
 
 
 CFATTACH_DECL(dge, sizeof(struct dge_softc),
@@ -655,7 +649,7 @@ static char (*dge_txseg_evcnt_names)[DGE_NTXSEGS][8 /* "txseg00" + \0 */];
 #endif /* DGE_EVENT_COUNTERS */
 
 static int
-dge_match(struct device *parent, struct cfdata *cf, void *aux)
+dge_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -667,9 +661,9 @@ dge_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-dge_attach(struct device *parent, struct device *self, void *aux)
+dge_attach(device_t parent, device_t self, void *aux)
 {
-	struct dge_softc *sc = (void *) self;
+	struct dge_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	pci_chipset_tag_t pc = pa->pa_pc;
@@ -692,8 +686,7 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 	memtype = pci_mapreg_type(pa->pa_pc, pa->pa_tag, DGE_PCI_BAR);
         if (pci_mapreg_map(pa, DGE_PCI_BAR, memtype, 0,
             &sc->sc_st, &sc->sc_sh, NULL, NULL)) {
-                aprint_error("%s: unable to map device registers\n",
-                    sc->sc_dev.dv_xname);
+                aprint_error_dev(&sc->sc_dev, "unable to map device registers\n");
                 return;
         }
 
@@ -706,21 +699,19 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: unable to map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, dge_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Determine a few things about the bus we're connected to.
@@ -733,8 +724,8 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 	if (pci_get_capability(pa->pa_pc, pa->pa_tag,
 			       PCI_CAP_PCIX,
 			       &sc->sc_pcix_offset, NULL) == 0)
-		aprint_error("%s: unable to find PCIX "
-		    "capability\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to find PCIX "
+		    "capability\n");
 
 	if (sc->sc_flags & DGE_F_PCIX) {
 		switch (reg & STATUS_PCIX_MSK) {
@@ -748,15 +739,14 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 			sc->sc_bus_speed = 133;
 			break;
 		default:
-			aprint_error(
-			    "%s: unknown PCIXSPD %d; assuming 66MHz\n",
-			    sc->sc_dev.dv_xname,
+			aprint_error_dev(&sc->sc_dev,
+			    "unknown PCIXSPD %d; assuming 66MHz\n",
 			    reg & STATUS_PCIX_MSK);
 			sc->sc_bus_speed = 66;
 		}
 	} else
 		sc->sc_bus_speed = (reg & STATUS_BUS64) ? 66 : 33;
-	aprint_verbose("%s: %d-bit %dMHz %s bus\n", sc->sc_dev.dv_xname,
+	aprint_verbose_dev(&sc->sc_dev, "%d-bit %dMHz %s bus\n",
 	    (sc->sc_flags & DGE_F_BUS64) ? 64 : 32, sc->sc_bus_speed,
 	    (sc->sc_flags & DGE_F_PCIX) ? "PCIX" : "PCI");
 
@@ -767,34 +757,34 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
 	    sizeof(struct dge_control_data), PAGE_SIZE, 0, &seg, 1, &rseg,
 	    0)) != 0) {
-		aprint_error(
-		    "%s: unable to allocate control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev,
+		    "unable to allocate control data, error = %d\n",
+		    error);
 		goto fail_0;
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
 	    sizeof(struct dge_control_data), (void **)&sc->sc_control_data,
 	    0)) != 0) {
-		aprint_error("%s: unable to map control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to map control data, error = %d\n",
+		    error);
 		goto fail_1;
 	}
 
 	if ((error = bus_dmamap_create(sc->sc_dmat,
 	    sizeof(struct dge_control_data), 1,
 	    sizeof(struct dge_control_data), 0, 0, &sc->sc_cddmamap)) != 0) {
-		aprint_error("%s: unable to create control data DMA map, "
-		    "error = %d\n", sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to create control data DMA map, "
+		    "error = %d\n", error);
 		goto fail_2;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_cddmamap,
 	    sc->sc_control_data, sizeof(struct dge_control_data), NULL,
 	    0)) != 0) {
-		aprint_error(
-		    "%s: unable to load control data DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev,
+		    "unable to load control data DMA map, error = %d\n",
+		    error);
 		goto fail_3;
 	}
 
@@ -809,8 +799,8 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 		if ((error = bus_dmamap_create(sc->sc_dmat, DGE_MAX_MTU,
 		    DGE_NTXSEGS, MCLBYTES, 0, 0,
 		    &sc->sc_txsoft[i].txs_dmamap)) != 0) {
-			aprint_error("%s: unable to create Tx DMA map %d, "
-			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
+			aprint_error_dev(&sc->sc_dev, "unable to create Tx DMA map %d, "
+			    "error = %d\n", i, error);
 			goto fail_4;
 		}
 	}
@@ -826,8 +816,8 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
 		    MCLBYTES, 0, 0, &sc->sc_rxsoft[i].rxs_dmamap)) != 0) {
 #endif
-			aprint_error("%s: unable to create Rx DMA map %d, "
-			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
+			aprint_error_dev(&sc->sc_dev, "unable to create Rx DMA map %d, "
+			    "error = %d\n", i, error);
 			goto fail_5;
 		}
 		sc->sc_rxsoft[i].rxs_mbuf = NULL;
@@ -855,7 +845,7 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 	 * Read in EEPROM data.
 	 */
 	if (dge_read_eeprom(sc)) {
-		aprint_error("%s: couldn't read EEPROM\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't read EEPROM\n");
 		return;
 	}
 
@@ -869,7 +859,7 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 	enaddr[4] = sc->sc_eeprom[EE_ADDR45] & 0377;
 	enaddr[5] = sc->sc_eeprom[EE_ADDR45] >> 8;
 
-	aprint_normal("%s: Ethernet address %s\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(&sc->sc_dev, "Ethernet address %s\n",
 	    ether_sprintf(enaddr));
 
 	/*
@@ -881,7 +871,7 @@ dge_attach(struct device *parent, struct device *self, void *aux)
         ifmedia_set(&sc->sc_media, IFM_ETHER|IFM_10G_LR);
 
 	ifp = &sc->sc_ethercom.ec_if;
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = dge_ioctl;
@@ -909,7 +899,7 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 	if_attach(ifp);
 	ether_ifattach(ifp, enaddr);
 #if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
+	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dev),
 	    RND_TYPE_NET, 0);
 #endif
 
@@ -925,52 +915,53 @@ dge_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Attach event counters. */
 	evcnt_attach_dynamic(&sc->sc_ev_txsstall, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txsstall");
+	    NULL, device_xname(&sc->sc_dev), "txsstall");
 	evcnt_attach_dynamic(&sc->sc_ev_txdstall, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txdstall");
+	    NULL, device_xname(&sc->sc_dev), "txdstall");
 	evcnt_attach_dynamic(&sc->sc_ev_txforceintr, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txforceintr");
+	    NULL, device_xname(&sc->sc_dev), "txforceintr");
 	evcnt_attach_dynamic(&sc->sc_ev_txdw, EVCNT_TYPE_INTR,
-	    NULL, sc->sc_dev.dv_xname, "txdw");
+	    NULL, device_xname(&sc->sc_dev), "txdw");
 	evcnt_attach_dynamic(&sc->sc_ev_txqe, EVCNT_TYPE_INTR,
-	    NULL, sc->sc_dev.dv_xname, "txqe");
+	    NULL, device_xname(&sc->sc_dev), "txqe");
 	evcnt_attach_dynamic(&sc->sc_ev_rxintr, EVCNT_TYPE_INTR,
-	    NULL, sc->sc_dev.dv_xname, "rxintr");
+	    NULL, device_xname(&sc->sc_dev), "rxintr");
 	evcnt_attach_dynamic(&sc->sc_ev_linkintr, EVCNT_TYPE_INTR,
-	    NULL, sc->sc_dev.dv_xname, "linkintr");
+	    NULL, device_xname(&sc->sc_dev), "linkintr");
 
 	evcnt_attach_dynamic(&sc->sc_ev_rxipsum, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "rxipsum");
+	    NULL, device_xname(&sc->sc_dev), "rxipsum");
 	evcnt_attach_dynamic(&sc->sc_ev_rxtusum, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "rxtusum");
+	    NULL, device_xname(&sc->sc_dev), "rxtusum");
 	evcnt_attach_dynamic(&sc->sc_ev_txipsum, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txipsum");
+	    NULL, device_xname(&sc->sc_dev), "txipsum");
 	evcnt_attach_dynamic(&sc->sc_ev_txtusum, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txtusum");
+	    NULL, device_xname(&sc->sc_dev), "txtusum");
 
 	evcnt_attach_dynamic(&sc->sc_ev_txctx_init, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txctx init");
+	    NULL, device_xname(&sc->sc_dev), "txctx init");
 	evcnt_attach_dynamic(&sc->sc_ev_txctx_hit, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txctx hit");
+	    NULL, device_xname(&sc->sc_dev), "txctx hit");
 	evcnt_attach_dynamic(&sc->sc_ev_txctx_miss, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txctx miss");
+	    NULL, device_xname(&sc->sc_dev), "txctx miss");
 
 	for (i = 0; i < DGE_NTXSEGS; i++)
 		evcnt_attach_dynamic(&sc->sc_ev_txseg[i], EVCNT_TYPE_MISC,
-		    NULL, sc->sc_dev.dv_xname, (*dge_txseg_evcnt_names)[i]);
+		    NULL, device_xname(&sc->sc_dev), (*dge_txseg_evcnt_names)[i]);
 
 	evcnt_attach_dynamic(&sc->sc_ev_txdrop, EVCNT_TYPE_MISC,
-	    NULL, sc->sc_dev.dv_xname, "txdrop");
+	    NULL, device_xname(&sc->sc_dev), "txdrop");
 
 #endif /* DGE_EVENT_COUNTERS */
 
 	/*
 	 * Make sure the interface is shutdown during reboot.
 	 */
-	sc->sc_sdhook = shutdownhook_establish(dge_shutdown, sc);
-	if (sc->sc_sdhook == NULL)
-		aprint_error("%s: WARNING: unable to establish shutdown hook\n",
-		    sc->sc_dev.dv_xname);
+	if (pmf_device_register1(self, NULL, NULL, dge_shutdown))
+		pmf_class_network_register(self, ifp);
+	else
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
 	return;
 
 	/*
@@ -1006,12 +997,15 @@ dge_attach(struct device *parent, struct device *self, void *aux)
  *
  *	Make sure the interface is stopped at reboot time.
  */
-static void
-dge_shutdown(void *arg)
+static bool
+dge_shutdown(device_t self, int howto)
 {
-	struct dge_softc *sc = arg;
+	struct dge_softc *sc;
 
+	sc = device_private(self);
 	dge_stop(&sc->sc_ethercom.ec_if, 1);
+
+	return true;
 }
 
 /*
@@ -1078,7 +1072,7 @@ dge_tx_cksum(struct dge_softc *sc, struct dge_txsoft *txs, uint8_t *fieldsp)
 	}
 	DPRINTF(DGE_DEBUG_CKSUM,
 	    ("%s: CKSUM: offset %d ipcs 0x%x\n",
-	    sc->sc_dev.dv_xname, offset, ipcs));
+	    device_xname(&sc->sc_dev), offset, ipcs));
 
 	offset += iphl;
 
@@ -1100,7 +1094,7 @@ dge_tx_cksum(struct dge_softc *sc, struct dge_txsoft *txs, uint8_t *fieldsp)
 
 	DPRINTF(DGE_DEBUG_CKSUM,
 	    ("%s: CKSUM: offset %d tucs 0x%x\n",
-	    sc->sc_dev.dv_xname, offset, tucs));
+	    device_xname(&sc->sc_dev), offset, tucs));
 
 	if (sc->sc_txctx_ipcs == ipcs &&
 	    sc->sc_txctx_tucs == tucs) {
@@ -1171,7 +1165,7 @@ dge_start(struct ifnet *ifp)
 
 		DPRINTF(DGE_DEBUG_TX,
 		    ("%s: TX: have packet to transmit: %p\n",
-		    sc->sc_dev.dv_xname, m0));
+		    device_xname(&sc->sc_dev), m0));
 
 		/* Get a work queue entry. */
 		if (sc->sc_txsfree < DGE_TXQUEUE_GC) {
@@ -1179,7 +1173,7 @@ dge_start(struct ifnet *ifp)
 			if (sc->sc_txsfree == 0) {
 				DPRINTF(DGE_DEBUG_TX,
 				    ("%s: TX: no free job descriptors\n",
-					sc->sc_dev.dv_xname));
+					device_xname(&sc->sc_dev)));
 				DGE_EVCNT_INCR(&sc->sc_ev_txsstall);
 				break;
 			}
@@ -1203,7 +1197,7 @@ dge_start(struct ifnet *ifp)
 				DGE_EVCNT_INCR(&sc->sc_ev_txdrop);
 				printf("%s: Tx packet consumes too many "
 				    "DMA segments, dropping...\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(&sc->sc_dev));
 				IFQ_DEQUEUE(&ifp->if_snd, m0);
 				m_freem(m0);
 				continue;
@@ -1213,7 +1207,7 @@ dge_start(struct ifnet *ifp)
 			 */
 			DPRINTF(DGE_DEBUG_TX,
 			    ("%s: TX: dmamap load failed: %d\n",
-			    sc->sc_dev.dv_xname, error));
+			    device_xname(&sc->sc_dev), error));
 			break;
 		}
 
@@ -1234,7 +1228,7 @@ dge_start(struct ifnet *ifp)
 			 */
 			DPRINTF(DGE_DEBUG_TX,
 			    ("%s: TX: need %d descriptors, have %d\n",
-			    sc->sc_dev.dv_xname, dmamap->dm_nsegs,
+			    device_xname(&sc->sc_dev), dmamap->dm_nsegs,
 			    sc->sc_txfree - 1));
 			ifp->if_flags |= IFF_OACTIVE;
 			bus_dmamap_unload(sc->sc_dmat, dmamap);
@@ -1254,7 +1248,7 @@ dge_start(struct ifnet *ifp)
 
 		DPRINTF(DGE_DEBUG_TX,
 		    ("%s: TX: packet has %d DMA segments\n",
-		    sc->sc_dev.dv_xname, dmamap->dm_nsegs));
+		    device_xname(&sc->sc_dev), dmamap->dm_nsegs));
 
 		DGE_EVCNT_INCR(&sc->sc_ev_txseg[dmamap->dm_nsegs - 1]);
 
@@ -1310,9 +1304,9 @@ dge_start(struct ifnet *ifp)
 
 			DPRINTF(DGE_DEBUG_TX,
 			    ("%s: TX: desc %d: low 0x%08lx, len 0x%04lx\n",
-			    sc->sc_dev.dv_xname, nexttx,
-			    le32toh(dmamap->dm_segs[seg].ds_addr),
-			    le32toh(dmamap->dm_segs[seg].ds_len)));
+			    device_xname(&sc->sc_dev), nexttx,
+			    (unsigned long)le32toh(dmamap->dm_segs[seg].ds_addr),
+			    (unsigned long)le32toh(dmamap->dm_segs[seg].ds_len)));
 		}
 
 		KASSERT(lasttx != -1);
@@ -1328,7 +1322,7 @@ dge_start(struct ifnet *ifp)
 		txs->txs_lastdesc = lasttx;
 
 		DPRINTF(DGE_DEBUG_TX,
-		    ("%s: TX: desc %d: cmdlen 0x%08x\n", sc->sc_dev.dv_xname,
+		    ("%s: TX: desc %d: cmdlen 0x%08x\n", device_xname(&sc->sc_dev),
 		    lasttx, le32toh(sc->sc_txdescs[lasttx].dt_ctl)));
 
 		/* Sync the descriptors we're using. */
@@ -1339,11 +1333,11 @@ dge_start(struct ifnet *ifp)
 		CSR_WRITE(sc, DGE_TDT, nexttx);
 
 		DPRINTF(DGE_DEBUG_TX,
-		    ("%s: TX: TDT -> %d\n", sc->sc_dev.dv_xname, nexttx));
+		    ("%s: TX: TDT -> %d\n", device_xname(&sc->sc_dev), nexttx));
 
 		DPRINTF(DGE_DEBUG_TX,
 		    ("%s: TX: finished transmitting packet, job %d\n",
-		    sc->sc_dev.dv_xname, sc->sc_txsnext));
+		    device_xname(&sc->sc_dev), sc->sc_txsnext));
 
 		/* Advance the tx pointer. */
 		sc->sc_txfree -= txs->txs_ndesc;
@@ -1352,11 +1346,8 @@ dge_start(struct ifnet *ifp)
 		sc->sc_txsfree--;
 		sc->sc_txsnext = DGE_NEXTTXS(sc->sc_txsnext);
 
-#if NBPFILTER > 0
 		/* Pass the packet to any BPF listeners. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0);
 	}
 
 	if (sc->sc_txsfree == 0 || sc->sc_txfree <= 2) {
@@ -1388,7 +1379,7 @@ dge_watchdog(struct ifnet *ifp)
 
 	if (sc->sc_txfree != DGE_NTXDESC) {
 		printf("%s: device timeout (txfree %d txsfree %d txnext %d)\n",
-		    sc->sc_dev.dv_xname, sc->sc_txfree, sc->sc_txsfree,
+		    device_xname(&sc->sc_dev), sc->sc_txfree, sc->sc_txsfree,
 		    sc->sc_txnext);
 		ifp->if_oerrors++;
 
@@ -1422,17 +1413,19 @@ dge_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFMTU:
-		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > DGE_MAX_MTU) {
+		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > DGE_MAX_MTU)
 			error = EINVAL;
-		} else {
+		else if ((error = ifioctl_common(ifp, cmd, data)) != ENETRESET)
+			break;
+		else if (ifp->if_flags & IFF_UP)
+			error = (*ifp->if_init)(ifp);
+		else
 			error = 0;
-			ifp->if_mtu = ifr->ifr_mtu;
-			if (ifp->if_flags & IFF_UP)
-				error = (*ifp->if_init)(ifp);
-		}
 		break;
 
         case SIOCSIFFLAGS:
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
 		/* extract link flags */
 		if ((ifp->if_flags & IFF_LINK0) == 0 &&
 		    (ifp->if_flags & IFF_LINK1) == 0)
@@ -1454,15 +1447,21 @@ dge_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
                 /* FALLTHROUGH */
 	default:
-		error = ether_ioctl(ifp, cmd, data);
-		if (error == ENETRESET) {
+		if ((error = ether_ioctl(ifp, cmd, data)) != ENETRESET)
+			break;
+
+		error = 0;
+
+		if (cmd == SIOCSIFCAP)
+			error = (*ifp->if_init)(ifp);
+		else if (cmd != SIOCADDMULTI && cmd != SIOCDELMULTI)
+			;
+		else if (ifp->if_flags & IFF_RUNNING) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING)
-				dge_set_filter(sc);
-			error = 0;
+			dge_set_filter(sc);
 		}
 		break;
 	}
@@ -1503,7 +1502,7 @@ dge_intr(void *arg)
 		if (icr & (ICR_RXDMT0|ICR_RXT0)) {
 			DPRINTF(DGE_DEBUG_RX,
 			    ("%s: RX: got Rx intr 0x%08x\n",
-			    sc->sc_dev.dv_xname,
+			    device_xname(&sc->sc_dev),
 			    icr & (ICR_RXDMT0|ICR_RXT0)));
 			DGE_EVCNT_INCR(&sc->sc_ev_rxintr);
 		}
@@ -1514,7 +1513,7 @@ dge_intr(void *arg)
 		if (icr & ICR_TXDW) {
 			DPRINTF(DGE_DEBUG_TX,
 			    ("%s: TX: got TXDW interrupt\n",
-			    sc->sc_dev.dv_xname));
+			    device_xname(&sc->sc_dev)));
 			DGE_EVCNT_INCR(&sc->sc_ev_txdw);
 		}
 		if (icr & ICR_TXQE)
@@ -1528,7 +1527,7 @@ dge_intr(void *arg)
 		}
 
 		if (icr & ICR_RXO) {
-			printf("%s: Receive overrun\n", sc->sc_dev.dv_xname);
+			printf("%s: Receive overrun\n", device_xname(&sc->sc_dev));
 			wantinit = 1;
 		}
 	}
@@ -1568,7 +1567,7 @@ dge_txintr(struct dge_softc *sc)
 		txs = &sc->sc_txsoft[i];
 
 		DPRINTF(DGE_DEBUG_TX,
-		    ("%s: TX: checking job %d\n", sc->sc_dev.dv_xname, i));
+		    ("%s: TX: checking job %d\n", device_xname(&sc->sc_dev), i));
 
 		DGE_CDTXSYNC(sc, txs->txs_firstdesc, txs->txs_dmamap->dm_nsegs,
 		    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
@@ -1583,7 +1582,7 @@ dge_txintr(struct dge_softc *sc)
 
 		DPRINTF(DGE_DEBUG_TX,
 		    ("%s: TX: job %d done: descs %d..%d\n",
-		    sc->sc_dev.dv_xname, i, txs->txs_firstdesc,
+		    device_xname(&sc->sc_dev), i, txs->txs_firstdesc,
 		    txs->txs_lastdesc));
 
 		ifp->if_opackets++;
@@ -1598,7 +1597,7 @@ dge_txintr(struct dge_softc *sc)
 	/* Update the dirty transmit buffer pointer. */
 	sc->sc_txsdirty = i;
 	DPRINTF(DGE_DEBUG_TX,
-	    ("%s: TX: txsdirty -> %d\n", sc->sc_dev.dv_xname, i));
+	    ("%s: TX: txsdirty -> %d\n", device_xname(&sc->sc_dev), i));
 
 	/*
 	 * If there are no more pending transmissions, cancel the watchdog
@@ -1627,7 +1626,7 @@ dge_rxintr(struct dge_softc *sc)
 
 		DPRINTF(DGE_DEBUG_RX,
 		    ("%s: RX: checking descriptor %d\n",
-		    sc->sc_dev.dv_xname, i));
+		    device_xname(&sc->sc_dev), i));
 
 		DGE_CDRXSYNC(sc, i, BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
 
@@ -1646,13 +1645,13 @@ dge_rxintr(struct dge_softc *sc)
 		if (__predict_false(sc->sc_rxdiscard)) {
 			DPRINTF(DGE_DEBUG_RX,
 			    ("%s: RX: discarding contents of descriptor %d\n",
-			    sc->sc_dev.dv_xname, i));
+			    device_xname(&sc->sc_dev), i));
 			DGE_INIT_RXDESC(sc, i);
 			if (status & RDESC_STS_EOP) {
 				/* Reset our state. */
 				DPRINTF(DGE_DEBUG_RX,
 				    ("%s: RX: resetting rxdiscard -> 0\n",
-				    sc->sc_dev.dv_xname));
+				    device_xname(&sc->sc_dev)));
 				sc->sc_rxdiscard = 0;
 			}
 			continue;
@@ -1682,7 +1681,7 @@ dge_rxintr(struct dge_softc *sc)
 			DGE_RXCHAIN_RESET(sc);
 			DPRINTF(DGE_DEBUG_RX,
 			    ("%s: RX: Rx buffer allocation failed, "
-			    "dropping packet%s\n", sc->sc_dev.dv_xname,
+			    "dropping packet%s\n", device_xname(&sc->sc_dev),
 			    sc->sc_rxdiscard ? " (discard)" : ""));
 			continue;
 		}
@@ -1694,7 +1693,7 @@ dge_rxintr(struct dge_softc *sc)
 
 		DPRINTF(DGE_DEBUG_RX,
 		    ("%s: RX: buffer at %p len %d\n",
-		    sc->sc_dev.dv_xname, m->m_data, len));
+		    device_xname(&sc->sc_dev), m->m_data, len));
 
 		/*
 		 * If this is not the end of the packet, keep
@@ -1704,7 +1703,7 @@ dge_rxintr(struct dge_softc *sc)
 			sc->sc_rxlen += len;
 			DPRINTF(DGE_DEBUG_RX,
 			    ("%s: RX: not yet EOP, rxlen -> %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_rxlen));
+			    device_xname(&sc->sc_dev), sc->sc_rxlen));
 			continue;
 		}
 
@@ -1719,7 +1718,7 @@ dge_rxintr(struct dge_softc *sc)
 
 		DPRINTF(DGE_DEBUG_RX,
 		    ("%s: RX: have entire packet, len -> %d\n",
-		    sc->sc_dev.dv_xname, len));
+		    device_xname(&sc->sc_dev), len));
 
 		/*
 		 * If an error occurred, update stats and drop the packet.
@@ -1729,13 +1728,13 @@ dge_rxintr(struct dge_softc *sc)
 			ifp->if_ierrors++;
 			if (errors & RDESC_ERR_SE)
 				printf("%s: symbol error\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(&sc->sc_dev));
 			else if (errors & RDESC_ERR_P)
 				printf("%s: parity error\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(&sc->sc_dev));
 			else if (errors & RDESC_ERR_CE)
 				printf("%s: CRC error\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(&sc->sc_dev));
 			m_freem(m);
 			continue;
 		}
@@ -1769,11 +1768,8 @@ dge_rxintr(struct dge_softc *sc)
 
 		ifp->if_ipackets++;
 
-#if NBPFILTER > 0
 		/* Pass this up to any BPF listeners. */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
@@ -1783,7 +1779,7 @@ dge_rxintr(struct dge_softc *sc)
 	sc->sc_rxptr = i;
 
 	DPRINTF(DGE_DEBUG_RX,
-	    ("%s: RX: rxptr -> %d\n", sc->sc_dev.dv_xname, i));
+	    ("%s: RX: rxptr -> %d\n", device_xname(&sc->sc_dev), i));
 }
 
 /*
@@ -1800,15 +1796,15 @@ dge_linkintr(struct dge_softc *sc, uint32_t icr)
 		status = CSR_READ(sc, DGE_STATUS);
 		if (status & STATUS_LINKUP) {
 			DPRINTF(DGE_DEBUG_LINK, ("%s: LINK: LSC -> up\n",
-			    sc->sc_dev.dv_xname));
+			    device_xname(&sc->sc_dev)));
 		} else {
 			DPRINTF(DGE_DEBUG_LINK, ("%s: LINK: LSC -> down\n",
-			    sc->sc_dev.dv_xname));
+			    device_xname(&sc->sc_dev)));
 		}
 	} else if (icr & ICR_RXSEQ) {
 		DPRINTF(DGE_DEBUG_LINK,
 		    ("%s: LINK: Receive sequence error\n",
-		    sc->sc_dev.dv_xname));
+		    device_xname(&sc->sc_dev)));
 	}
 	/* XXX - fix errata */
 }
@@ -1838,7 +1834,7 @@ dge_reset(struct dge_softc *sc)
 
 	if (CSR_READ(sc, DGE_CTRL0) & CTRL0_RST)
 		printf("%s: WARNING: reset failed to complete\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(&sc->sc_dev));
         /*
          * Reset the EEPROM logic.
          * This will cause the chip to reread its default values,
@@ -1939,7 +1935,7 @@ dge_init(struct ifnet *ifp)
 			if ((error = dge_add_rxbuf(sc, i)) != 0) {
 				printf("%s: unable to allocate or map rx "
 				    "buffer %d, error = %d\n",
-				    sc->sc_dev.dv_xname, i, error);
+				    device_xname(&sc->sc_dev), i, error);
 				/*
 				 * XXX Should attempt to run with fewer receive
 				 * XXX buffers instead of just failing.
@@ -2035,7 +2031,7 @@ dge_init(struct ifnet *ifp)
 
  out:
 	if (error)
-		printf("%s: interface not running\n", sc->sc_dev.dv_xname);
+		printf("%s: interface not running\n", device_xname(&sc->sc_dev));
 	return (error);
 }
 
@@ -2086,12 +2082,12 @@ dge_stop(struct ifnet *ifp, int disable)
 		}
 	}
 
-	if (disable)
-		dge_rxdrain(sc);
-
 	/* Mark the interface as down and cancel the watchdog timer. */
 	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 	ifp->if_timer = 0;
+
+	if (disable)
+		dge_rxdrain(sc);
 }
 
 /*
@@ -2145,7 +2141,7 @@ dge_add_rxbuf(struct dge_softc *sc, int idx)
 #endif
 	if (error) {
 		printf("%s: unable to load rx DMA map %d, error = %d\n",
-		    sc->sc_dev.dv_xname, idx, error);
+		    device_xname(&sc->sc_dev), idx, error);
 		panic("dge_add_rxbuf");	/* XXX XXX XXX */
 	}
 	bus_dmamap_sync(sc->sc_dmat, rxs->rxs_dmamap, 0,
@@ -2394,20 +2390,20 @@ phwait(struct dge_softc *sc, int p, int r, int d, int type)
 
 
 static void
-dge_xgmii_writereg(struct device *self, int phy, int reg, int val)
+dge_xgmii_writereg(device_t self, int phy, int reg, int val)
 {
-	struct dge_softc *sc = (void *) self;
+	struct dge_softc *sc = device_private(self);
 	int mdic;
 
 	CSR_WRITE(sc, DGE_MDIRW, val);
 	if (((mdic = phwait(sc, phy, reg, 1, MDIO_ADDR)) & MDIO_CMD)) {
 		printf("%s: address cycle timeout; phy %d reg %d\n",
-		    sc->sc_dev.dv_xname, phy, reg);
+		    device_xname(&sc->sc_dev), phy, reg);
 		return;
 	}
 	if (((mdic = phwait(sc, phy, reg, 1, MDIO_WRITE)) & MDIO_CMD)) {
 		printf("%s: read cycle timeout; phy %d reg %d\n",
-		    sc->sc_dev.dv_xname, phy, reg);
+		    device_xname(&sc->sc_dev), phy, reg);
 		return;
 	}
 }

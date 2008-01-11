@@ -1,4 +1,4 @@
-#	$NetBSD: sys.mk,v 1.93 2008/01/09 11:26:15 simonb Exp $
+#	$NetBSD: sys.mk,v 1.106 2011/05/20 14:27:48 joerg Exp $
 #	@(#)sys.mk	8.2 (Berkeley) 3/21/94
 
 unix?=		We run NetBSD.
@@ -13,10 +13,11 @@ RANLIB?=	ranlib
 
 AS?=		as
 AFLAGS?=
-COMPILE.s?=	${CC} ${AFLAGS} -c
-LINK.s?=	${CC} ${AFLAGS} ${LDFLAGS}
-COMPILE.S?=	${CC} ${AFLAGS} ${CPPFLAGS} -c -traditional-cpp
-LINK.S?=	${CC} ${AFLAGS} ${CPPFLAGS} ${LDFLAGS}
+COMPILE.s?=	${CC} ${AFLAGS} ${AFLAGS.${<:T}} -c
+LINK.s?=	${CC} ${AFLAGS} ${AFLAGS.${<:T}} ${LDFLAGS}
+_ASM_TRADITIONAL_CPP=	-x assembler-with-cpp
+COMPILE.S?=	${CC} ${AFLAGS} ${AFLAGS.${<:T}} ${CPPFLAGS} ${_ASM_TRADITIONAL_CPP} -c
+LINK.S?=	${CC} ${AFLAGS} ${AFLAGS.${<:T}} ${CPPFLAGS} ${LDFLAGS}
 
 CC?=		cc
 .if ${MACHINE_ARCH} == "alpha" || \
@@ -32,8 +33,14 @@ CC?=		cc
     ${MACHINE_ARCH} == "sparc" || \
     ${MACHINE_ARCH} == "sparc64"
 DBG?=	-O2
+.elif ${MACHINE_ARCH} == "sh3el" || ${MACHINE_ARCH} == "sh3eb"
+# -O2 is too -falign-* zealous for low-memory sh3 machines
+DBG?=	-Os -freorder-blocks
 .elif ${MACHINE_ARCH} == "vax"
 DBG?=	-O1 -fgcse -fstrength-reduce -fgcse-after-reload
+.elif ${MACHINE_ARCH} == "m68000"
+# see src/doc/HACKS for details
+DBG?=	-O1
 .else
 DBG?=	-O
 .endif
@@ -42,10 +49,32 @@ LDFLAGS?=
 COMPILE.c?=	${CC} ${CFLAGS} ${CPPFLAGS} -c
 LINK.c?=	${CC} ${CFLAGS} ${CPPFLAGS} ${LDFLAGS}
 
-CXX?=		c++
-CXXFLAGS?=	${CFLAGS:N-Wno-traditional:N-Wstrict-prototypes:N-Wmissing-prototypes:N-std=gnu99}
+# C Type Format data is required for DTrace
+# XXX TBD VERSION is not defined
+CTFFLAGS	?=	-L VERSION
+CTFMFLAGS	?=	-t -L VERSION
 
-COMPILE.cc?=	${CXX} ${CXXFLAGS} ${CPPFLAGS} -c
+.if defined(MKDTRACE) && ${MKDTRACE} != "no"
+CTFCONVERT	?=	${TOOL_CTFCONVERT}
+CTFMERGE	?=	${TOOL_CTFMERGE}
+.if defined(CFLAGS) && (${CFLAGS:M-g} != "")
+CTFFLAGS	+=	-g
+CTFMFLAGS	+=	-g
+.else
+CFLAGS		+=	-g
+.endif
+.endif
+
+CXX?=		c++
+CXXFLAGS?=	${CFLAGS:N-Wno-traditional:N-Wstrict-prototypes:N-Wmissing-prototypes:N-Wno-pointer-sign:N-ffreestanding:N-std=gnu99}
+
+__ALLSRC1=	${empty(DESTDIR):?${.ALLSRC}:${.ALLSRC:S|^${DESTDIR}|^destdir|}}
+__ALLSRC2=	${empty(MAKEOBJDIR):?${__ALLSRC1}:${__ALLSRC1:S|^${MAKEOBJDIR}|^obj|}}
+__ALLSRC3=	${empty(NETBSDSRCDIR):?${__ALLSRC2}:${__ALLSRC2:S|^${NETBSDSRCDIR}|^src|}}
+__BUILDSEED=	${BUILDSEED}/${__ALLSRC3:O}/${.TARGET}
+_CXXSEED?=	${BUILDSEED:D-frandom-seed=${__BUILDSEED:hash}}
+
+COMPILE.cc?=	${CXX} ${_CXXSEED} ${CXXFLAGS} ${CPPFLAGS} -c
 LINK.cc?=	${CXX} ${CXXFLAGS} ${CPPFLAGS} ${LDFLAGS}
 
 OBJC?=		${CC}
@@ -101,8 +130,14 @@ YACC.y?=	${YACC} ${YFLAGS}
 # C
 .c:
 	${LINK.c} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 .c.o:
 	${COMPILE.c} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 .c.a:
 	${COMPILE.c} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -134,8 +169,14 @@ YACC.y?=	${YACC} ${YFLAGS}
 
 .F:
 	${LINK.F} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 .F.o:
 	${COMPILE.F} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 .F.a:
 	${COMPILE.F} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -153,8 +194,14 @@ YACC.y?=	${YACC} ${YFLAGS}
 # Pascal
 .p:
 	${LINK.p} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 .p.o:
 	${COMPILE.p} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 .p.a:
 	${COMPILE.p} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -163,16 +210,28 @@ YACC.y?=	${YACC} ${YFLAGS}
 # Assembly
 .s:
 	${LINK.s} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 .s.o:
 	${COMPILE.s} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 .s.a:
 	${COMPILE.s} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
 	rm -f ${.PREFIX}.o
 .S:
 	${LINK.S} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 .S.o:
 	${COMPILE.S} ${.IMPSRC}
+.if defined(CTFCONVERT)
+	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
+.endif
 .S.a:
 	${COMPILE.S} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o

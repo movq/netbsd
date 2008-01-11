@@ -1,4 +1,4 @@
-/*	$NetBSD: wdcvar.h,v 1.88 2008/01/10 07:44:08 dyoung Exp $	*/
+/*	$NetBSD: wdcvar.h,v 1.91 2010/11/05 18:07:24 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *	notice, this list of conditions and the following disclaimer in the
  *	documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,9 +47,11 @@ struct wdc_regs {
 	/* Our registers */
 	bus_space_tag_t       cmd_iot;
 	bus_space_handle_t    cmd_baseioh;
+	bus_size_t            cmd_ios;
 	bus_space_handle_t    cmd_iohs[WDC_NREG+WDC_NSHADOWREG];
 	bus_space_tag_t       ctl_iot;
 	bus_space_handle_t    ctl_ioh;
+	bus_size_t            ctl_ios;
 
 	/* data32{iot,ioh} are only used for 32-bit data xfers */
 	bus_space_tag_t       data32iot;
@@ -148,7 +143,6 @@ int	wdcprobe(struct ata_channel *);
 void	wdcattach(struct ata_channel *);
 int	wdcdetach(device_t, int);
 void	wdc_childdetached(device_t, device_t);
-int	wdcactivate(device_t, enum devact);
 int	wdcintr(void *);
 
 void	wdc_sataprobe(struct ata_channel *);

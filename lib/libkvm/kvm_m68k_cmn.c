@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_m68k_cmn.c,v 1.12 2003/08/07 16:44:37 agc Exp $	*/
+/*	$NetBSD: kvm_m68k_cmn.c,v 1.16 2010/09/26 22:28:05 jym Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -74,7 +74,7 @@
 #if 0
 static char sccsid[] = "@(#)kvm_hp300.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: kvm_m68k_cmn.c,v 1.12 2003/08/07 16:44:37 agc Exp $");
+__RCSID("$NetBSD: kvm_m68k_cmn.c,v 1.16 2010/09/26 22:28:05 jym Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -100,10 +100,10 @@ __RCSID("$NetBSD: kvm_m68k_cmn.c,v 1.12 2003/08/07 16:44:37 agc Exp $");
 #include "kvm_private.h"
 #include "kvm_m68k.h"
 
-int   _kvm_cmn_initvtop __P((kvm_t *));
-void  _kvm_cmn_freevtop __P((kvm_t *));
-int	  _kvm_cmn_kvatop   __P((kvm_t *, u_long, u_long *));
-off_t _kvm_cmn_pa2off   __P((kvm_t *, u_long));
+int   _kvm_cmn_initvtop(kvm_t *);
+void  _kvm_cmn_freevtop(kvm_t *);
+int   _kvm_cmn_kvatop(kvm_t *, vaddr_t, paddr_t *);
+off_t _kvm_cmn_pa2off(kvm_t *, paddr_t);
 
 struct kvm_ops _kvm_ops_cmn = {
 	_kvm_cmn_initvtop,
@@ -111,38 +111,30 @@ struct kvm_ops _kvm_ops_cmn = {
 	_kvm_cmn_kvatop,
 	_kvm_cmn_pa2off };
 
-static int vatop_030 __P((kvm_t *, u_int32_t, u_long, u_long *));
-static int vatop_040 __P((kvm_t *, u_int32_t, u_long, u_long *));
+static int vatop_030(kvm_t *, uint32_t, vaddr_t, paddr_t *);
+static int vatop_040(kvm_t *, uint32_t, vaddr_t, paddr_t *);
 
 #define	_kvm_btop(v, a)	(((unsigned)(a)) >> (v)->pgshift)
 
-#define KREAD(kd, addr, p)\
-	(kvm_read(kd, addr, (char *)(p), sizeof(*(p))) != sizeof(*(p)))
-
 void
-_kvm_cmn_freevtop(kd)
-	kvm_t *kd;
+_kvm_cmn_freevtop(kvm_t *kd)
 {
 	/* No private state information to keep. */
 }
 
 int
-_kvm_cmn_initvtop(kd)
-	kvm_t *kd;
+_kvm_cmn_initvtop(kvm_t *kd)
 {
 	/* No private state information to keep. */
 	return (0);
 }
 
 int
-_kvm_cmn_kvatop(kd, va, pa)
-	kvm_t *kd;
-	u_long va;
-	u_long *pa;
+_kvm_cmn_kvatop(kvm_t *kd, vaddr_t va, paddr_t *pa)
 {
 	cpu_kcore_hdr_t *h = kd->cpu_data;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
-	int (*vtopf) __P((kvm_t *, u_int32_t, u_long, u_long *));
+	int (*vtopf)(kvm_t *, uint32_t, vaddr_t, paddr_t *);
 
 	if (ISALIVE(kd)) {
 		_kvm_err(kd, 0, "vatop called in live kernel!");
@@ -165,9 +157,7 @@ _kvm_cmn_kvatop(kd, va, pa)
  * Translate a physical address to a file-offset in the crash dump.
  */
 off_t
-_kvm_cmn_pa2off(kd, pa)
-	kvm_t	*kd;
-	u_long	pa;
+_kvm_cmn_pa2off(kvm_t *kd, u_long pa)
 {
 	cpu_kcore_hdr_t *h = kd->cpu_data;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
@@ -193,17 +183,13 @@ _kvm_cmn_pa2off(kd, pa)
  */
 
 static int
-vatop_030(kd, stpa, va, pa)
-	kvm_t *kd;
-	u_int32_t stpa;
-	u_long va;
-	u_long *pa;
+vatop_030(kvm_t *kd, uint32_t stpa, vaddr_t va, paddr_t *pa)
 {
 	cpu_kcore_hdr_t *h = kd->cpu_data;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
 	struct vmstate *vm = kd->vmst;
-	u_long addr;
-	u_int32_t ste, pte;
+	paddr_t addr;
+	uint32_t ste, pte;
 	u_int p, offset;
 
 	offset = va & vm->pgofset;
@@ -226,7 +212,7 @@ vatop_030(kd, stpa, va, pa)
 	 * Fortunately it is 1-to-1 mapped so we don't have to.
 	 */
 	if (stpa == m->sysseg_pa) {
-		if (pread(kd->pmfd, &ste, sizeof(ste),
+		if (_kvm_pread(kd, kd->pmfd, &ste, sizeof(ste),
 		    _kvm_cmn_pa2off(kd, addr)) != sizeof(ste))
 			goto invalid;
 	} else if (KREAD(kd, addr, &ste))
@@ -241,8 +227,8 @@ vatop_030(kd, stpa, va, pa)
 	/*
 	 * Address from STE is a physical address so don't use kvm_read.
 	 */
-	if (pread(kd->pmfd, &pte, sizeof(pte), _kvm_cmn_pa2off(kd, addr)) !=
-	    sizeof(pte))
+	if (_kvm_pread(kd, kd->pmfd, &pte, sizeof(pte),
+	    _kvm_cmn_pa2off(kd, addr)) != sizeof(pte))
 		goto invalid;
 	addr = pte & m->pg_frame;
 	if ((pte & m->pg_v) == 0) {
@@ -258,18 +244,14 @@ invalid:
 }
 
 static int
-vatop_040(kd, stpa, va, pa)
-	kvm_t *kd;
-	u_int32_t stpa;
-	u_long va;
-	u_long *pa;
+vatop_040(kvm_t *kd, uint32_t stpa, vaddr_t va, paddr_t *pa)
 {
 	cpu_kcore_hdr_t *h = kd->cpu_data;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
 	struct vmstate *vm = kd->vmst;
-	u_long addr;
-	u_int32_t stpa2;
-	u_int32_t ste, pte;
+	paddr_t addr;
+	uint32_t stpa2;
+	uint32_t ste, pte;
 	u_int offset;
 
 	offset = va & vm->pgofset;
@@ -292,7 +274,7 @@ vatop_040(kd, stpa, va, pa)
 	 * Fortunately it is 1-to-1 mapped so we don't have to.
 	 */
 	if (stpa == m->sysseg_pa) {
-		if (pread(kd->pmfd, &ste, sizeof(ste),
+		if (_kvm_pread(kd, kd->pmfd, &ste, sizeof(ste),
 		    _kvm_cmn_pa2off(kd, addr)) != sizeof(ste))
 			goto invalid;
 	} else if (KREAD(kd, addr, &ste))
@@ -310,8 +292,8 @@ vatop_040(kd, stpa, va, pa)
 	 * Address from level 1 STE is a physical address,
 	 * so don't use kvm_read.
 	 */
-	if (pread(kd->pmfd, &ste, sizeof(ste), _kvm_cmn_pa2off(kd, addr)) !=
-	    sizeof(ste))
+	if (_kvm_pread(kd, kd->pmfd, &ste, sizeof(ste),
+	    _kvm_cmn_pa2off(kd, addr)) != sizeof(ste))
 		goto invalid;
 	if ((ste & m->sg_v) == 0) {
 		_kvm_err(kd, 0, "invalid level 2 descriptor (%x)",
@@ -325,8 +307,8 @@ vatop_040(kd, stpa, va, pa)
 	/*
 	 * Address from STE is a physical address so don't use kvm_read.
 	 */
-	if (pread(kd->pmfd, &pte, sizeof(pte), _kvm_cmn_pa2off(kd, addr)) !=
-	    sizeof(pte))
+	if (_kvm_pread(kd, kd->pmfd, &pte, sizeof(pte),
+	    _kvm_cmn_pa2off(kd, addr)) != sizeof(pte))
 		goto invalid;
 	addr = pte & m->pg_frame;
 	if ((pte & m->pg_v) == 0) {

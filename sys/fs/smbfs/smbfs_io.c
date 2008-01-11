@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_io.c,v 1.29 2008/01/02 11:48:44 ad Exp $	*/
+/*	$NetBSD: smbfs_io.c,v 1.34 2010/04/23 15:38:47 pooka Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_io.c,v 1.29 2008/01/02 11:48:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_io.c,v 1.34 2010/04/23 15:38:47 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -244,9 +244,8 @@ smbfs_writevnode(struct vnode *vp, struct uio *uiop,
 {
 	struct smbmount *smp = VTOSMBFS(vp);
 	struct smbnode *np = VTOSMB(vp);
-	struct smb_cred scred;
 	struct lwp *l = curlwp;
-	struct proc *p = l->l_proc;
+	struct smb_cred scred;
 	int error = 0;
 	int extended = 0;
 	size_t resid = uiop->uio_resid;
@@ -254,7 +253,7 @@ smbfs_writevnode(struct vnode *vp, struct uio *uiop,
 	/* vn types other than VREG unsupported */
 	KASSERT(vp->v_type == VREG);
 
-	SMBVDEBUG("ofs=%lld,resid=%d\n",
+	SMBVDEBUG("ofs=%lld,resid=%zu\n",
 		(long long int) uiop->uio_offset,
 		uiop->uio_resid);
 	if (uiop->uio_offset < 0)
@@ -270,6 +269,8 @@ smbfs_writevnode(struct vnode *vp, struct uio *uiop,
 		}
 		if (ioflag & IO_APPEND) {
 #if notyet
+			struct proc *p = curproc;
+
 			/*
 			 * File size can be changed by another client
 			 */
@@ -277,21 +278,23 @@ smbfs_writevnode(struct vnode *vp, struct uio *uiop,
 			error = VOP_GETATTR(vp, &vattr, cred, td);
 			if (error)
 				return (error);
+			if (np->n_size + uiop->uio_resid >
+			    p->p_rlimit[RLIMIT_FSIZE].rlim_cur) {
+				mutex_enter(proc_lock);
+				psignal(p, SIGXFSZ);
+				mutex_exit(proc_lock);
+				return EFBIG;
+			}
 #endif
 			uiop->uio_offset = np->n_size;
 		}
 	}
 	if (uiop->uio_resid == 0)
 		return 0;
-	if (p && uiop->uio_offset + uiop->uio_resid > p->p_rlimit[RLIMIT_FSIZE].rlim_cur) {
-		mutex_enter(&proclist_mutex);
-		psignal(p, SIGXFSZ);
-		mutex_exit(&proclist_mutex);
-		return EFBIG;
-	}
 	smb_makescred(&scred, l, cred);
 	error = smb_write(smp->sm_share, np->n_fid, uiop, &scred);
-	SMBVDEBUG("after: ofs=%lld,resid=%d,err=%d\n",(long long int)uiop->uio_offset, uiop->uio_resid, error);
+	SMBVDEBUG("after: ofs=%lld,resid=%zu,err=%d\n",
+	    (long long int)uiop->uio_offset, uiop->uio_resid, error);
 	if (!error) {
 		if (uiop->uio_offset > np->n_size) {
 			np->n_size = uiop->uio_offset;
@@ -339,7 +342,7 @@ smbfs_doio(struct buf *bp, kauth_cred_t cr, struct lwp *l)
 			int left = uiop->uio_resid;
 			int nread = bp->b_bcount - left;
 			if (left > 0)
-			    bzero((char *)bp->b_data + nread, left);
+			    memset((char *)bp->b_data + nread, 0, left);
 		}
 		break;
 	    default:
@@ -407,12 +410,7 @@ smbfs_doio(struct buf *bp, kauth_cred_t cr, struct lwp *l)
  * doing the flush, just wait for completion.
  */
 int
-smbfs_vinvalbuf(vp, flags, cred, l, intrflg)
-	struct vnode *vp;
-	int flags;
-	kauth_cred_t cred;
-	struct lwp *l;
-	int intrflg;
+smbfs_vinvalbuf(struct vnode *vp, int flags, kauth_cred_t cred, struct lwp *l, int intrflg)
 {
 	struct smbnode *np = VTOSMB(vp);
 	int error = 0, slpflag;

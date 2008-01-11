@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.15 2007/05/28 12:06:42 tls Exp $	
+#	$NetBSD: Makefile,v 1.18 2011/05/10 01:52:49 christos Exp $	
 
 USE_FORT?= yes	# network client
 
-PROG=	traceroute
+RUMPPRG=traceroute
 MAN=	traceroute.8 
 
 CPPFLAGS+=-DHAVE_MALLOC_H=1 -DHAVE_SYS_SELECT_H=1 -DHAVE_SYS_SOCKIO_H=1
@@ -18,6 +18,10 @@ BINMODE=4555
 
 SRCS=	traceroute.c ifaddrlist.c 
 SRCS+= version.c as.c
+
+.PATH: ${.CURDIR}/../../lib/libc/net
+RUMPSRCS= getifaddrs.c
+CPPFLAGS+= -DRUMP_ACTION
 
 AWKS=	median.awk mean.awk 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.22 2007/01/20 21:16:23 ad Exp $	*/
+/*	$NetBSD: init.c,v 1.24 2009/10/02 18:17:16 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: init.c,v 1.22 2007/01/20 21:16:23 ad Exp $");
+__RCSID("$NetBSD: init.c,v 1.24 2009/10/02 18:17:16 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -394,7 +394,7 @@ testinit(void)
 		switch (istk->i_type->t_tspec) {
 		case ARRAY:
 			/* too many array initializers */
-			error(173);
+			error(173, istk->i_type->t_dim);
 			break;
 		case STRUCT:
 		case UNION:
@@ -587,7 +587,7 @@ mkinit(tnode_t *tn)
 		if (conaddr(tn, &sym, &offs) == -1) {
 			if (sc == AUTO || sc == REG) {
 				/* non-constant initializer */
-				(void)gnuism(177);
+				(void)c99ism(177);
 			} else {
 				/* non-constant initializer */
 				error(177);

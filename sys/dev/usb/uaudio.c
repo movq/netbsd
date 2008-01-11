@@ -1,4 +1,4 @@
-/*	$NetBSD: uaudio.c,v 1.110 2007/03/13 13:51:54 drochner Exp $	*/
+/*	$NetBSD: uaudio.c,v 1.120 2010/12/28 20:11:18 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.110 2007/03/13 13:51:54 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.120 2010/12/28 20:11:18 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,13 +45,14 @@ __KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.110 2007/03/13 13:51:54 drochner Exp $"
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
-#include <sys/tty.h>
 #include <sys/file.h>
 #include <sys/reboot.h>		/* for bootverbose */
 #include <sys/select.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
 #include <sys/poll.h>
+#include <sys/module.h>
+#include <sys/bus.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -68,16 +62,19 @@ __KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.110 2007/03/13 13:51:54 drochner Exp $"
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
+#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdi_util.h>
 #include <dev/usb/usb_quirks.h>
+
+#include <dev/usb/usbdevs.h>
 
 #include <dev/usb/uaudioreg.h>
 
 /* #define UAUDIO_DEBUG */
 /* #define UAUDIO_MULTIPLE_ENDPOINTS */
 #ifdef UAUDIO_DEBUG
-#define DPRINTF(x)	do { if (uaudiodebug) logprintf x; } while (0)
-#define DPRINTFN(n,x)	do { if (uaudiodebug>(n)) logprintf x; } while (0)
+#define DPRINTF(x)	do { if (uaudiodebug) printf x; } while (0)
+#define DPRINTFN(n,x)	do { if (uaudiodebug>(n)) printf x; } while (0)
 int	uaudiodebug = 0;
 #else
 #define DPRINTF(x)
@@ -159,7 +156,7 @@ struct chan {
 };
 
 struct uaudio_softc {
-	USBBASEDEVICE	sc_dev;		/* base device */
+	device_t	sc_dev;		/* base device */
 	usbd_device_handle sc_udev;	/* USB device */
 	int		sc_ac_iface;	/* Audio Control interface */
 	usbd_interface_handle	sc_ac_ifaceh;
@@ -180,12 +177,13 @@ struct uaudio_softc {
 	int		sc_mode;	/* play/record capability */
 	struct mixerctl *sc_ctls;	/* mixer controls */
 	int		sc_nctls;	/* # of mixer controls */
-	device_ptr_t	sc_audiodev;
+	device_t	sc_audiodev;
 	struct audio_format *sc_formats;
 	int		sc_nformats;
 	struct audio_encoding_set *sc_encodings;
 	u_int		sc_channel_config;
 	char		sc_dying;
+	struct audio_device sc_adev;
 };
 
 struct terminal_list {
@@ -356,17 +354,22 @@ Static const struct audio_hw_if uaudio_hw_if = {
 	NULL,
 };
 
-Static struct audio_device uaudio_device = {
-	"USB audio",
-	"",
-	"uaudio"
-};
+int uaudio_match(device_t, cfdata_t, void *);
+void uaudio_attach(device_t, device_t, void *);
+int uaudio_detach(device_t, int);
+void uaudio_childdet(device_t, device_t);
+int uaudio_activate(device_t, enum devact);
 
-USB_DECLARE_DRIVER(uaudio);
+extern struct cfdriver uaudio_cd;
 
-USB_MATCH(uaudio)
+CFATTACH_DECL2_NEW(uaudio, sizeof(struct uaudio_softc),
+    uaudio_match, uaudio_attach, uaudio_detach, uaudio_activate, NULL,
+    uaudio_childdet);
+
+int 
+uaudio_match(device_t parent, cfdata_t match, void *aux)
 {
-	USB_IFMATCH_START(uaudio, uaa);
+	struct usbif_attach_arg *uaa = aux;
 
 	/* Trigger on the control interface. */
 	if (uaa->class != UICLASS_AUDIO ||
@@ -377,33 +380,44 @@ USB_MATCH(uaudio)
 	return UMATCH_IFACECLASS_IFACESUBCLASS;
 }
 
-USB_ATTACH(uaudio)
+void 
+uaudio_attach(device_t parent, device_t self, void *aux)
 {
-	USB_IFATTACH_START(uaudio, sc, uaa);
+	struct uaudio_softc *sc = device_private(self);
+	struct usbif_attach_arg *uaa = aux;
 	usb_interface_descriptor_t *id;
 	usb_config_descriptor_t *cdesc;
 	char *devinfop;
 	usbd_status err;
 	int i, j, found;
 
-	devinfop = usbd_devinfo_alloc(uaa->device, 0);
-	printf(": %s\n", devinfop);
-	usbd_devinfo_free(devinfop);
-
+	sc->sc_dev = self;
 	sc->sc_udev = uaa->device;
+
+	strlcpy(sc->sc_adev.name, "USB audio", sizeof(sc->sc_adev.name));
+	strlcpy(sc->sc_adev.version, "", sizeof(sc->sc_adev.version));
+	snprintf(sc->sc_adev.config, sizeof(sc->sc_adev.config), "usb:%08x",
+	    sc->sc_udev->cookie.cookie);
+
+	aprint_naive("\n");
+	aprint_normal("\n");
+
+	devinfop = usbd_devinfo_alloc(uaa->device, 0);
+	aprint_normal_dev(self, "%s\n", devinfop);
+	usbd_devinfo_free(devinfop);
 
 	cdesc = usbd_get_config_descriptor(sc->sc_udev);
 	if (cdesc == NULL) {
-		printf("%s: failed to get configuration descriptor\n",
-		       USBDEVNAME(sc->sc_dev));
-		USB_ATTACH_ERROR_RETURN;
+		aprint_error_dev(self,
+		    "failed to get configuration descriptor\n");
+		return;
 	}
 
 	err = uaudio_identify(sc, cdesc);
 	if (err) {
-		printf("%s: audio descriptors make no sense, error=%d\n",
-		       USBDEVNAME(sc->sc_dev), err);
-		USB_ATTACH_ERROR_RETURN;
+		aprint_error_dev(self,
+		    "audio descriptors make no sense, error=%d\n", err);
+		return;
 	}
 
 	sc->sc_ac_ifaceh = uaa->iface;
@@ -428,13 +442,13 @@ USB_ATTACH(uaudio)
 
 	for (j = 0; j < sc->sc_nalts; j++) {
 		if (sc->sc_alts[j].ifaceh == NULL) {
-			printf("%s: alt %d missing AS interface(s)\n",
-			    USBDEVNAME(sc->sc_dev), j);
-			USB_ATTACH_ERROR_RETURN;
+			aprint_error_dev(self,
+			    "alt %d missing AS interface(s)\n", j);
+			return;
 		}
 	}
 
-	printf("%s: audio rev %d.%02x\n", USBDEVNAME(sc->sc_dev),
+	aprint_normal_dev(self, "audio rev %d.%02x\n",
 	       sc->sc_audio_rev >> 8, sc->sc_audio_rev & 0xff);
 
 	sc->sc_playchan.sc = sc->sc_recchan.sc = sc;
@@ -447,50 +461,51 @@ USB_ATTACH(uaudio)
 #ifndef UAUDIO_DEBUG
 	if (bootverbose)
 #endif
-		printf("%s: %d mixer controls\n", USBDEVNAME(sc->sc_dev),
+		aprint_normal_dev(self, "%d mixer controls\n",
 		    sc->sc_nctls);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   USBDEV(sc->sc_dev));
+			   sc->sc_dev);
 
 	DPRINTF(("uaudio_attach: doing audio_attach_mi\n"));
 #if defined(__OpenBSD__)
 	audio_attach_mi(&uaudio_hw_if, sc, &sc->sc_dev);
 #else
-	sc->sc_audiodev = audio_attach_mi(&uaudio_hw_if, sc, &sc->sc_dev);
+	sc->sc_audiodev = audio_attach_mi(&uaudio_hw_if, sc, sc->sc_dev);
 #endif
 
-	USB_ATTACH_SUCCESS_RETURN;
+	return;
 }
 
 int
-uaudio_activate(device_ptr_t self, enum devact act)
+uaudio_activate(device_t self, enum devact act)
 {
-	struct uaudio_softc *sc;
-	int rv;
+	struct uaudio_softc *sc = device_private(self);
 
-	sc = (struct uaudio_softc *)self;
-	rv = 0;
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return EOPNOTSUPP;
-
 	case DVACT_DEACTIVATE:
-		if (sc->sc_audiodev != NULL)
-			rv = config_deactivate(sc->sc_audiodev);
 		sc->sc_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return rv;
+}
+
+void
+uaudio_childdet(device_t self, device_t child)
+{
+	struct uaudio_softc *sc = device_private(self);
+
+	KASSERT(sc->sc_audiodev == child);
+	sc->sc_audiodev = NULL;
 }
 
 int
-uaudio_detach(device_ptr_t self, int flags)
+uaudio_detach(device_t self, int flags)
 {
-	struct uaudio_softc *sc;
+	struct uaudio_softc *sc = device_private(self);
 	int rv;
 
-	sc = (struct uaudio_softc *)self;
 	rv = 0;
 	/* Wait for outstanding requests to complete. */
 	usbd_delay_ms(sc->sc_udev, UAUDIO_NCHANBUFS * UAUDIO_NFRAMES);
@@ -499,7 +514,7 @@ uaudio_detach(device_ptr_t self, int flags)
 		rv = config_detach(sc->sc_audiodev, flags);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-			   USBDEV(sc->sc_dev));
+			   sc->sc_dev);
 
 	if (sc->sc_formats != NULL)
 		free(sc->sc_formats, M_USBDEV);
@@ -556,7 +571,7 @@ uaudio_mixer_add_ctl(struct uaudio_softc *sc, struct mixerctl *mc)
 	len = sizeof(*mc) * (sc->sc_nctls + 1);
 	nmc = malloc(len, M_USBDEV, M_NOWAIT);
 	if (nmc == NULL) {
-		printf("uaudio_mixer_add_ctl: no memory\n");
+		aprint_error("uaudio_mixer_add_ctl: no memory\n");
 		return;
 	}
 	/* Copy old data, if there was any */
@@ -631,17 +646,17 @@ uaudio_dump_cluster(const struct usb_audio_cluster *cl)
 	int cc, i, first;
 
 	cc = UGETW(cl->wChannelConfig);
-	logprintf("cluster: bNrChannels=%u wChannelConfig=0x%.4x",
+	printf("cluster: bNrChannels=%u wChannelConfig=0x%.4x",
 		  cl->bNrChannels, cc);
 	first = TRUE;
 	for (i = 0; cc != 0; i++) {
 		if (cc & 1) {
-			logprintf("%c%s", first ? '<' : ',', channel_names[i]);
+			printf("%c%s", first ? '<' : ',', channel_names[i]);
 			first = FALSE;
 		}
 		cc = cc >> 1;
 	}
-	logprintf("> iChannelNames=%u", cl->iChannelNames);
+	printf("> iChannelNames=%u", cl->iChannelNames);
 }
 #endif
 
@@ -689,7 +704,7 @@ uaudio_get_cluster(int id, const struct io_terminal *iot)
 		}
 	}
  bad:
-	printf("uaudio_get_cluster: bad data\n");
+	aprint_error("uaudio_get_cluster: bad data\n");
 	memset(&r, 0, sizeof r);
 	return r;
 
@@ -1246,8 +1261,9 @@ uaudio_add_processing(struct uaudio_softc *sc, const struct io_terminal *iot, in
 	case DYN_RANGE_COMP_PROCESS:
 	default:
 #ifdef UAUDIO_DEBUG
-		printf("uaudio_add_processing: unit %d, type=%d not impl.\n",
-		       d->bUnitId, ptype);
+		aprint_debug(
+		    "uaudio_add_processing: unit %d, type=%d not impl.\n",
+		    d->bUnitId, ptype);
 #endif
 		break;
 	}
@@ -1298,7 +1314,7 @@ uaudio_merge_terminal_list(const struct io_terminal *iot)
 	}
 	tml = malloc(TERMINAL_LIST_SIZE(len), M_TEMP, M_NOWAIT);
 	if (tml == NULL) {
-		printf("uaudio_merge_terminal_list: no memory\n");
+		aprint_error("uaudio_merge_terminal_list: no memory\n");
 		return NULL;
 	}
 	tml->size = 0;
@@ -1333,7 +1349,7 @@ uaudio_io_terminaltype(int outtype, struct io_terminal *iot, int id)
 		tml = malloc(TERMINAL_LIST_SIZE(it->output->size + 1),
 			     M_TEMP, M_NOWAIT);
 		if (tml == NULL) {
-			printf("uaudio_io_terminaltype: no memory\n");
+			aprint_error("uaudio_io_terminaltype: no memory\n");
 			return uaudio_merge_terminal_list(it);
 		}
 		memcpy(tml, it->output, TERMINAL_LIST_SIZE(it->output->size));
@@ -1354,7 +1370,7 @@ uaudio_io_terminaltype(int outtype, struct io_terminal *iot, int id)
 		it->inputs = NULL;
 		it->output = malloc(TERMINAL_LIST_SIZE(1), M_TEMP, M_NOWAIT);
 		if (it->output == NULL) {
-			printf("uaudio_io_terminaltype: no memory\n");
+			aprint_error("uaudio_io_terminaltype: no memory\n");
 			return NULL;
 		}
 		it->output->terminals[0] = outtype;
@@ -1366,12 +1382,12 @@ uaudio_io_terminaltype(int outtype, struct io_terminal *iot, int id)
 	case UDESCSUB_AC_INPUT:
 		it->inputs = malloc(sizeof(struct terminal_list *), M_TEMP, M_NOWAIT);
 		if (it->inputs == NULL) {
-			printf("uaudio_io_terminaltype: no memory\n");
+			aprint_error("uaudio_io_terminaltype: no memory\n");
 			return NULL;
 		}
 		tml = malloc(TERMINAL_LIST_SIZE(1), M_TEMP, M_NOWAIT);
 		if (tml == NULL) {
-			printf("uaudio_io_terminaltype: no memory\n");
+			aprint_error("uaudio_io_terminaltype: no memory\n");
 			free(it->inputs, M_TEMP);
 			it->inputs = NULL;
 			return NULL;
@@ -1385,7 +1401,7 @@ uaudio_io_terminaltype(int outtype, struct io_terminal *iot, int id)
 		src_id = it->d.fu->bSourceId;
 		it->inputs = malloc(sizeof(struct terminal_list *), M_TEMP, M_NOWAIT);
 		if (it->inputs == NULL) {
-			printf("uaudio_io_terminaltype: no memory\n");
+			aprint_error("uaudio_io_terminaltype: no memory\n");
 			return uaudio_io_terminaltype(outtype, iot, src_id);
 		}
 		it->inputs[0] = uaudio_io_terminaltype(outtype, iot, src_id);
@@ -1394,7 +1410,7 @@ uaudio_io_terminaltype(int outtype, struct io_terminal *iot, int id)
 	case UDESCSUB_AC_OUTPUT:
 		it->inputs = malloc(sizeof(struct terminal_list *), M_TEMP, M_NOWAIT);
 		if (it->inputs == NULL) {
-			printf("uaudio_io_terminaltype: no memory\n");
+			aprint_error("uaudio_io_terminaltype: no memory\n");
 			return NULL;
 		}
 		src_id = it->d.ot->bSourceId;
@@ -1407,7 +1423,7 @@ uaudio_io_terminaltype(int outtype, struct io_terminal *iot, int id)
 		it->inputs = malloc(sizeof(struct terminal_list *)
 				    * it->d.mu->bNrInPins, M_TEMP, M_NOWAIT);
 		if (it->inputs == NULL) {
-			printf("uaudio_io_terminaltype: no memory\n");
+			aprint_error("uaudio_io_terminaltype: no memory\n");
 			return NULL;
 		}
 		for (i = 0; i < it->d.mu->bNrInPins; i++) {
@@ -1422,7 +1438,7 @@ uaudio_io_terminaltype(int outtype, struct io_terminal *iot, int id)
 		it->inputs = malloc(sizeof(struct terminal_list *)
 				    * it->d.su->bNrInPins, M_TEMP, M_NOWAIT);
 		if (it->inputs == NULL) {
-			printf("uaudio_io_terminaltype: no memory\n");
+			aprint_error("uaudio_io_terminaltype: no memory\n");
 			return NULL;
 		}
 		for (i = 0; i < it->d.su->bNrInPins; i++) {
@@ -1437,7 +1453,7 @@ uaudio_io_terminaltype(int outtype, struct io_terminal *iot, int id)
 		it->inputs = malloc(sizeof(struct terminal_list *)
 				    * it->d.pu->bNrInPins, M_TEMP, M_NOWAIT);
 		if (it->inputs == NULL) {
-			printf("uaudio_io_terminaltype: no memory\n");
+			aprint_error("uaudio_io_terminaltype: no memory\n");
 			return NULL;
 		}
 		for (i = 0; i < it->d.pu->bNrInPins; i++) {
@@ -1452,7 +1468,7 @@ uaudio_io_terminaltype(int outtype, struct io_terminal *iot, int id)
 		it->inputs = malloc(sizeof(struct terminal_list *)
 				    * it->d.eu->bNrInPins, M_TEMP, M_NOWAIT);
 		if (it->inputs == NULL) {
-			printf("uaudio_io_terminaltype: no memory\n");
+			aprint_error("uaudio_io_terminaltype: no memory\n");
 			return NULL;
 		}
 		for (i = 0; i < it->d.eu->bNrInPins; i++) {
@@ -1488,7 +1504,7 @@ uaudio_add_alt(struct uaudio_softc *sc, const struct as_info *ai)
 	len = sizeof(*ai) * (sc->sc_nalts + 1);
 	nai = malloc(len, M_USBDEV, M_NOWAIT);
 	if (nai == NULL) {
-		printf("uaudio_add_alt: no memory\n");
+		aprint_error("uaudio_add_alt: no memory\n");
 		return;
 	}
 	/* Copy old data, if there was any */
@@ -1536,8 +1552,8 @@ uaudio_process_as(struct uaudio_softc *sc, const char *tbuf, int *offsp,
 		return USBD_INVAL;
 
 	if (asf1d->bFormatType != FORMAT_TYPE_I) {
-		printf("%s: ignored setting with type %d format\n",
-		       USBDEVNAME(sc->sc_dev), UGETW(asid->wFormatTag));
+		aprint_error_dev(sc->sc_dev,
+		    "ignored setting with type %d format\n", UGETW(asid->wFormatTag));
 		return USBD_NORMAL_COMPLETION;
 	}
 
@@ -1567,16 +1583,16 @@ uaudio_process_as(struct uaudio_softc *sc, const char *tbuf, int *offsp,
 	if (dir == UE_DIR_IN && type == UE_ISO_ADAPT) {
 		sync = TRUE;
 #ifndef UAUDIO_MULTIPLE_ENDPOINTS
-		printf("%s: ignored input endpoint of type adaptive\n",
-		       USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev,
+		    "ignored input endpoint of type adaptive\n");
 		return USBD_NORMAL_COMPLETION;
 #endif
 	}
 	if (dir != UE_DIR_IN && type == UE_ISO_ASYNC) {
 		sync = TRUE;
 #ifndef UAUDIO_MULTIPLE_ENDPOINTS
-		printf("%s: ignored output endpoint of type async\n",
-		       USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev,
+		    "ignored output endpoint of type async\n");
 		return USBD_NORMAL_COMPLETION;
 #endif
 	}
@@ -1592,14 +1608,14 @@ uaudio_process_as(struct uaudio_softc *sc, const char *tbuf, int *offsp,
 
 #ifdef UAUDIO_MULTIPLE_ENDPOINTS
 	if (sync && id->bNumEndpoints <= 1) {
-		printf("%s: a sync-pipe endpoint but no other endpoint\n",
-		       USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev,
+		    "a sync-pipe endpoint but no other endpoint\n");
 		return USBD_INVAL;
 	}
 #endif
 	if (!sync && id->bNumEndpoints > 1) {
-		printf("%s: non sync-pipe endpoint but multiple endpoints\n",
-		       USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev,
+		    "non sync-pipe endpoint but multiple endpoints\n");
 		return USBD_INVAL;
 	}
 	epdesc1 = NULL;
@@ -1619,21 +1635,22 @@ uaudio_process_as(struct uaudio_softc *sc, const char *tbuf, int *offsp,
 		if (offs > size)
 			return USBD_INVAL;
 		if (epdesc1->bSynchAddress != 0) {
-			printf("%s: invalid endpoint: bSynchAddress=0\n",
-			       USBDEVNAME(sc->sc_dev));
+			aprint_error_dev(sc->sc_dev,
+			    "invalid endpoint: bSynchAddress=0\n");
 			return USBD_INVAL;
 		}
 		if (UE_GET_XFERTYPE(epdesc1->bmAttributes) != UE_ISOCHRONOUS) {
-			printf("%s: invalid endpoint: bmAttributes=0x%x\n",
-			       USBDEVNAME(sc->sc_dev), epdesc1->bmAttributes);
+			aprint_error_dev(sc->sc_dev,
+			    "invalid endpoint: bmAttributes=0x%x\n",
+			     epdesc1->bmAttributes);
 			return USBD_INVAL;
 		}
 		if (epdesc1->bEndpointAddress != ed->bSynchAddress) {
-			printf("%s: invalid endpoint addresses: "
-			       "ep[0]->bSynchAddress=0x%x "
-			       "ep[1]->bEndpointAddress=0x%x\n",
-			       USBDEVNAME(sc->sc_dev), ed->bSynchAddress,
-			       epdesc1->bEndpointAddress);
+			aprint_error_dev(sc->sc_dev,
+			    "invalid endpoint addresses: "
+			    "ep[0]->bSynchAddress=0x%x "
+			    "ep[1]->bEndpointAddress=0x%x\n",
+			    ed->bSynchAddress, epdesc1->bEndpointAddress);
 			return USBD_INVAL;
 		}
 		/* UE_GET_ADDR(epdesc1->bEndpointAddress), and epdesc1->bRefresh */
@@ -1643,8 +1660,8 @@ uaudio_process_as(struct uaudio_softc *sc, const char *tbuf, int *offsp,
 	chan = asf1d->bNrChannels;
 	prec = asf1d->bBitResolution;
 	if (prec != 8 && prec != 16 && prec != 24) {
-		printf("%s: ignored setting with precision %d\n",
-		       USBDEVNAME(sc->sc_dev), prec);
+		aprint_error_dev(sc->sc_dev,
+		    "ignored setting with precision %d\n", prec);
 		return USBD_NORMAL_COMPLETION;
 	}
 	switch (format) {
@@ -1676,22 +1693,23 @@ uaudio_process_as(struct uaudio_softc *sc, const char *tbuf, int *offsp,
 		break;
 	case UA_FMT_IEEE_FLOAT:
 	default:
-		printf("%s: ignored setting with format %d\n",
-		       USBDEVNAME(sc->sc_dev), format);
+		aprint_error_dev(sc->sc_dev,
+		    "ignored setting with format %d\n", format);
 		return USBD_NORMAL_COMPLETION;
 	}
 #ifdef UAUDIO_DEBUG
-	printf("%s: %s: %dch, %d/%dbit, %s,", USBDEVNAME(sc->sc_dev),
+	aprint_debug_dev(sc->sc_dev, "%s: %dch, %d/%dbit, %s,",
 	       dir == UE_DIR_IN ? "recording" : "playback",
 	       chan, prec, asf1d->bSubFrameSize * 8, format_str);
 	if (asf1d->bSamFreqType == UA_SAMP_CONTNUOUS) {
-		printf(" %d-%dHz\n", UA_SAMP_LO(asf1d), UA_SAMP_HI(asf1d));
+		aprint_debug(" %d-%dHz\n", UA_SAMP_LO(asf1d),
+		    UA_SAMP_HI(asf1d));
 	} else {
 		int r;
-		printf(" %d", UA_GETSAMP(asf1d, 0));
+		aprint_debug(" %d", UA_GETSAMP(asf1d, 0));
 		for (r = 1; r < asf1d->bSamFreqType; r++)
-			printf(",%d", UA_GETSAMP(asf1d, r));
-		printf("Hz\n");
+			aprint_debug(",%d", UA_GETSAMP(asf1d, r));
+		aprint_debug("Hz\n");
 	}
 #endif
 	ai.alt = id->bAlternateSetting;
@@ -1754,9 +1772,9 @@ uaudio_identify_as(struct uaudio_softc *sc,
 			uaudio_process_as(sc, tbuf, &offs, size, id);
 			break;
 		default:
-			printf("%s: ignored audio interface with %d "
-			       "endpoints\n",
-			       USBDEVNAME(sc->sc_dev), id->bNumEndpoints);
+			aprint_error_dev(sc->sc_dev,
+			    "ignored audio interface with %d endpoints\n",
+			     id->bNumEndpoints);
 			break;
 		}
 		id = uaudio_find_iface(tbuf, size, &offs,UISUBCLASS_AUDIOSTREAM);
@@ -1768,8 +1786,7 @@ uaudio_identify_as(struct uaudio_softc *sc,
 	DPRINTF(("uaudio_identify_as: %d alts available\n", sc->sc_nalts));
 
 	if (sc->sc_mode == 0) {
-		printf("%s: no usable endpoint found\n",
-		       USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev, "no usable endpoint found\n");
 		return USBD_INVAL;
 	}
 
@@ -1799,7 +1816,7 @@ uaudio_identify_as(struct uaudio_softc *sc,
 		} else {
 			for (j = 0; j  < t1desc->bSamFreqType; j++) {
 				if (j >= AUFMT_MAX_FREQUENCIES) {
-					printf("%s: please increase "
+					aprint_error("%s: please increase "
 					       "AUFMT_MAX_FREQUENCIES to %d\n",
 					       __func__, t1desc->bSamFreqType);
 					break;
@@ -1830,7 +1847,7 @@ uaudio_identify_ac(struct uaudio_softc *sc, const usb_config_descriptor_t *cdesc
 	const struct usb_audio_output_terminal *pot;
 	struct terminal_list *tml;
 	const char *tbuf, *ibuf, *ibufend;
-	int size, offs, aclen, ndps, i, j;
+	int size, offs, ndps, i, j;
 
 	size = UGETW(cdesc->wTotalLength);
 	tbuf = (const char *)cdesc;
@@ -1847,12 +1864,10 @@ uaudio_identify_ac(struct uaudio_softc *sc, const usb_config_descriptor_t *cdesc
 
 	/* A class-specific AC interface header should follow. */
 	ibuf = tbuf + offs;
+	ibufend = tbuf + size;
 	acdp = (const struct usb_audio_control_descriptor *)ibuf;
 	if (acdp->bDescriptorType != UDESC_CS_INTERFACE ||
 	    acdp->bDescriptorSubtype != UDESCSUB_AC_HEADER)
-		return USBD_INVAL;
-	aclen = UGETW(acdp->wTotalLength);
-	if (offs + aclen > size)
 		return USBD_INVAL;
 
 	if (!(usbd_get_quirks(sc->sc_udev)->uq_flags & UQ_BAD_ADC) &&
@@ -1860,18 +1875,17 @@ uaudio_identify_ac(struct uaudio_softc *sc, const usb_config_descriptor_t *cdesc
 		return USBD_INVAL;
 
 	sc->sc_audio_rev = UGETW(acdp->bcdADC);
-	DPRINTFN(2,("uaudio_identify_ac: found AC header, vers=%03x, len=%d\n",
-		 sc->sc_audio_rev, aclen));
+	DPRINTFN(2,("uaudio_identify_ac: found AC header, vers=%03x\n",
+		 sc->sc_audio_rev));
 
 	sc->sc_nullalt = -1;
 
 	/* Scan through all the AC specific descriptors */
-	ibufend = ibuf + aclen;
 	dp = (const uaudio_cs_descriptor_t *)ibuf;
 	ndps = 0;
 	iot = malloc(sizeof(struct io_terminal) * 256, M_TEMP, M_NOWAIT | M_ZERO);
 	if (iot == NULL) {
-		printf("%s: no memory\n", __func__);
+		aprint_error("%s: no memory\n", __func__);
 		return USBD_NOMEM;
 	}
 	for (;;) {
@@ -1883,11 +1897,8 @@ uaudio_identify_ac(struct uaudio_softc *sc, const usb_config_descriptor_t *cdesc
 			free(iot, M_TEMP);
 			return USBD_INVAL;
 		}
-		if (dp->bDescriptorType != UDESC_CS_INTERFACE) {
-			printf("uaudio_identify_ac: skip desc type=0x%02x\n",
-			       dp->bDescriptorType);
-			continue;
-		}
+		if (dp->bDescriptorType != UDESC_CS_INTERFACE)
+			break;
 		i = ((const struct usb_audio_input_terminal *)dp)->bTerminalId;
 		iot[i].d.desc = dp;
 		if (i > ndps)
@@ -1914,79 +1925,79 @@ uaudio_identify_ac(struct uaudio_softc *sc, const usb_config_descriptor_t *cdesc
 
 		if (iot[i].d.desc == NULL)
 			continue;
-		logprintf("id %d:\t", i);
+		printf("id %d:\t", i);
 		switch (iot[i].d.desc->bDescriptorSubtype) {
 		case UDESCSUB_AC_INPUT:
-			logprintf("AC_INPUT type=%s\n", uaudio_get_terminal_name
+			printf("AC_INPUT type=%s\n", uaudio_get_terminal_name
 				  (UGETW(iot[i].d.it->wTerminalType)));
-			logprintf("\t");
+			printf("\t");
 			cluster = uaudio_get_cluster(i, iot);
 			uaudio_dump_cluster(&cluster);
-			logprintf("\n");
+			printf("\n");
 			break;
 		case UDESCSUB_AC_OUTPUT:
-			logprintf("AC_OUTPUT type=%s ", uaudio_get_terminal_name
+			printf("AC_OUTPUT type=%s ", uaudio_get_terminal_name
 				  (UGETW(iot[i].d.ot->wTerminalType)));
-			logprintf("src=%d\n", iot[i].d.ot->bSourceId);
+			printf("src=%d\n", iot[i].d.ot->bSourceId);
 			break;
 		case UDESCSUB_AC_MIXER:
-			logprintf("AC_MIXER src=");
+			printf("AC_MIXER src=");
 			for (j = 0; j < iot[i].d.mu->bNrInPins; j++)
-				logprintf("%d ", iot[i].d.mu->baSourceId[j]);
-			logprintf("\n\t");
+				printf("%d ", iot[i].d.mu->baSourceId[j]);
+			printf("\n\t");
 			cluster = uaudio_get_cluster(i, iot);
 			uaudio_dump_cluster(&cluster);
-			logprintf("\n");
+			printf("\n");
 			break;
 		case UDESCSUB_AC_SELECTOR:
-			logprintf("AC_SELECTOR src=");
+			printf("AC_SELECTOR src=");
 			for (j = 0; j < iot[i].d.su->bNrInPins; j++)
-				logprintf("%d ", iot[i].d.su->baSourceId[j]);
-			logprintf("\n");
+				printf("%d ", iot[i].d.su->baSourceId[j]);
+			printf("\n");
 			break;
 		case UDESCSUB_AC_FEATURE:
-			logprintf("AC_FEATURE src=%d\n", iot[i].d.fu->bSourceId);
+			printf("AC_FEATURE src=%d\n", iot[i].d.fu->bSourceId);
 			break;
 		case UDESCSUB_AC_PROCESSING:
-			logprintf("AC_PROCESSING src=");
+			printf("AC_PROCESSING src=");
 			for (j = 0; j < iot[i].d.pu->bNrInPins; j++)
-				logprintf("%d ", iot[i].d.pu->baSourceId[j]);
-			logprintf("\n\t");
+				printf("%d ", iot[i].d.pu->baSourceId[j]);
+			printf("\n\t");
 			cluster = uaudio_get_cluster(i, iot);
 			uaudio_dump_cluster(&cluster);
-			logprintf("\n");
+			printf("\n");
 			break;
 		case UDESCSUB_AC_EXTENSION:
-			logprintf("AC_EXTENSION src=");
+			printf("AC_EXTENSION src=");
 			for (j = 0; j < iot[i].d.eu->bNrInPins; j++)
-				logprintf("%d ", iot[i].d.eu->baSourceId[j]);
-			logprintf("\n\t");
+				printf("%d ", iot[i].d.eu->baSourceId[j]);
+			printf("\n\t");
 			cluster = uaudio_get_cluster(i, iot);
 			uaudio_dump_cluster(&cluster);
-			logprintf("\n");
+			printf("\n");
 			break;
 		default:
-			logprintf("unknown audio control (subtype=%d)\n",
+			printf("unknown audio control (subtype=%d)\n",
 				  iot[i].d.desc->bDescriptorSubtype);
 		}
 		for (j = 0; j < iot[i].inputs_size; j++) {
 			int k;
-			logprintf("\tinput%d: ", j);
+			printf("\tinput%d: ", j);
 			tml = iot[i].inputs[j];
 			if (tml == NULL) {
-				logprintf("NULL\n");
+				printf("NULL\n");
 				continue;
 			}
 			for (k = 0; k < tml->size; k++)
-				logprintf("%s ", uaudio_get_terminal_name
+				printf("%s ", uaudio_get_terminal_name
 					  (tml->terminals[k]));
-			logprintf("\n");
+			printf("\n");
 		}
-		logprintf("\toutput: ");
+		printf("\toutput: ");
 		tml = iot[i].output;
 		for (j = 0; j < tml->size; j++)
-			logprintf("%s ", uaudio_get_terminal_name(tml->terminals[j]));
-		logprintf("\n");
+			printf("%s ", uaudio_get_terminal_name(tml->terminals[j]));
+		printf("\n");
 	}
 #endif
 
@@ -1998,7 +2009,7 @@ uaudio_identify_ac(struct uaudio_softc *sc, const usb_config_descriptor_t *cdesc
 			 i, dp->bDescriptorSubtype));
 		switch (dp->bDescriptorSubtype) {
 		case UDESCSUB_AC_HEADER:
-			printf("uaudio_identify_ac: unexpected AC header\n");
+			aprint_error("uaudio_identify_ac: unexpected AC header\n");
 			break;
 		case UDESCSUB_AC_INPUT:
 			uaudio_add_input(sc, iot, i);
@@ -2022,8 +2033,9 @@ uaudio_identify_ac(struct uaudio_softc *sc, const usb_config_descriptor_t *cdesc
 			uaudio_add_extension(sc, iot, i);
 			break;
 		default:
-			printf("uaudio_identify_ac: bad AC desc subtype=0x%02x\n",
-			       dp->bDescriptorSubtype);
+			aprint_error(
+			    "uaudio_identify_ac: bad AC desc subtype=0x%02x\n",
+			    dp->bDescriptorSubtype);
 			break;
 		}
 	}
@@ -2211,7 +2223,7 @@ uaudio_getdev(void *addr, struct audio_device *retp)
 	if (sc->sc_dying)
 		return EIO;
 
-	*retp = uaudio_device;
+	*retp = sc->sc_adev;
 	return 0;
 }
 
@@ -2255,7 +2267,7 @@ uaudio_round_blocksize(void *addr, int blk,
 
 #ifdef DIAGNOSTIC
 	if (blk <= 0) {
-		printf("uaudio_round_blocksize: blk=%d\n", blk);
+		aprint_debug("uaudio_round_blocksize: blk=%d\n", blk);
 		blk = 512;
 	}
 #endif
@@ -2606,11 +2618,10 @@ uaudio_chan_open(struct uaudio_softc *sc, struct chan *ch)
 		return err;
 
 	/*
-	 * If just one sampling rate is supported,
-	 * no need to call uaudio_set_speed().
 	 * Roland SD-90 freezes by a SAMPLING_FREQ_CONTROL request.
 	 */
-	if (as->asf1desc->bSamFreqType != 1) {
+	if ((UGETW(sc->sc_udev->ddesc.idVendor) != USB_VENDOR_ROLAND) &&
+	    (UGETW(sc->sc_udev->ddesc.idProduct) != USB_PRODUCT_ROLAND_SD90)) {
 		err = uaudio_set_speed(sc, endpt, ch->sample_rate);
 		if (err) {
 			DPRINTF(("uaudio_chan_open: set_speed failed err=%s\n",
@@ -2781,7 +2792,7 @@ uaudio_chan_pintr(usbd_xfer_handle xfer, usbd_private_handle priv,
 		    count, ch->transferred));
 #ifdef DIAGNOSTIC
 	if (count != cb->size) {
-		printf("uaudio_chan_pintr: count(%d) != size(%d)\n",
+		aprint_error("uaudio_chan_pintr: count(%d) != size(%d)\n",
 		       count, cb->size);
 	}
 #endif
@@ -2869,7 +2880,7 @@ uaudio_chan_rintr(usbd_xfer_handle xfer, usbd_private_handle priv,
 	/* count < cb->size is normal for asynchronous source */
 #ifdef DIAGNOSTIC
 	if (count > cb->size) {
-		printf("uaudio_chan_rintr: count(%d) > size(%d)\n",
+		aprint_error("uaudio_chan_rintr: count(%d) > size(%d)\n",
 		       count, cb->size);
 	}
 #endif
@@ -3048,3 +3059,75 @@ uaudio_set_speed(struct uaudio_softc *sc, int endpt, u_int speed)
 
 	return usbd_do_request(sc->sc_udev, &req, data);
 }
+
+#ifdef _MODULE
+
+MODULE(MODULE_CLASS_DRIVER, uaudio, NULL);
+
+static const struct cfiattrdata audiobuscf_iattrdata = {
+	"audiobus", 0, { { NULL, NULL, 0 }, }
+};
+static const struct cfiattrdata * const uaudio_attrs[] = {
+	&audiobuscf_iattrdata, NULL
+};
+CFDRIVER_DECL(uaudio, DV_DULL, uaudio_attrs);
+extern struct cfattach uaudio_ca;
+static int uaudioloc[6/*USBIFIFCF_NLOCS*/] = {
+	-1/*USBIFIFCF_PORT_DEFAULT*/,
+	-1/*USBIFIFCF_CONFIGURATION_DEFAULT*/,
+	-1/*USBIFIFCF_INTERFACE_DEFAULT*/,
+	-1/*USBIFIFCF_VENDOR_DEFAULT*/,
+	-1/*USBIFIFCF_PRODUCT_DEFAULT*/,
+	-1/*USBIFIFCF_RELEASE_DEFAULT*/};
+static struct cfparent uhubparent = {
+	"usbifif", NULL, DVUNIT_ANY
+};
+static struct cfdata uaudio_cfdata[] = {
+	{
+		.cf_name = "uaudio",
+		.cf_atname = "uaudio",
+		.cf_unit = 0,
+		.cf_fstate = FSTATE_STAR,
+		.cf_loc = uaudioloc,
+		.cf_flags = 0,
+		.cf_pspec = &uhubparent,
+	},
+	{ NULL }
+};
+
+static int
+uaudio_modcmd(modcmd_t cmd, void *arg)
+{
+	int err;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		err = config_cfdriver_attach(&uaudio_cd);
+		if (err) {
+			return err;
+		}
+		err = config_cfattach_attach("uaudio", &uaudio_ca);
+		if (err) {
+			config_cfdriver_detach(&uaudio_cd);
+			return err;
+		}
+		err = config_cfdata_attach(uaudio_cfdata, 1);
+		if (err) {
+			config_cfattach_detach("uaudio", &uaudio_ca);
+			config_cfdriver_detach(&uaudio_cd);
+			return err;
+		}
+		return 0;
+	case MODULE_CMD_FINI:
+		err = config_cfdata_detach(uaudio_cfdata);
+		if (err)
+			return err;
+		config_cfattach_detach("uaudio", &uaudio_ca);
+		config_cfdriver_detach(&uaudio_cd);
+		return 0;
+	default:
+		return ENOTTY;
+	}
+}
+
+#endif

@@ -1,4 +1,33 @@
-/*	$NetBSD: vector.S,v 1.19 2008/01/01 19:49:06 yamt Exp $	*/
+/*	$NetBSD: vector.S,v 1.37 2011/03/18 15:18:16 joerg Exp $	*/
+
+/*-
+ * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Charles M. Hannum and by Andrew Doran.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -35,45 +64,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*-
- * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
- * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Charles M. Hannum and by Andrew Doran.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
 #include <machine/asm.h>
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
+#include "opt_xen.h"
+#include "opt_dtrace.h"
 
 #define ALIGN_TEXT	.align 16,0x90
 
@@ -105,6 +101,7 @@
 /*****************************************************************************/
 
 #ifndef	XEN
+#define PRE_TRAP
 #define	TRAP(a)		pushq $(a) ; jmp _C_LABEL(alltraps)
 #define	ZTRAP(a)	pushq $0 ; TRAP(a)
 #else
@@ -116,6 +113,21 @@
 
 #define	BPTTRAP(a)	ZTRAP(a)
 
+#ifdef KDTRACE_HOOKS
+	.bss
+	.globl	dtrace_invop_jump_addr
+	.align	8
+	.type	dtrace_invop_jump_addr, @object
+	.size	dtrace_invop_jump_addr, 8
+dtrace_invop_jump_addr:
+	.zero	8
+	.globl	dtrace_invop_calltrap_addr
+	.align	8
+	.type	dtrace_invop_calltrap_addr, @object
+	.size	dtrace_invop_calltrap_addr, 8
+dtrace_invop_calltrap_addr:
+	.zero	8
+#endif
 	.text
 
 IDTVEC(trap00)
@@ -140,15 +152,15 @@ IDTVEC(trap02)
 	movw	%es,TF_ES(%rsp)
 	movw	%ds,TF_DS(%rsp)
 	movq	%rsp,%rdi
+	incq	CPUVAR(NTRAP)
 	call	_C_LABEL(trap)
-	swapgs
-	movw	TF_GS(%rsp),%gs
-	movw	TF_FS(%rsp),%fs
 	movw	TF_ES(%rsp),%es
 	movw	TF_DS(%rsp),%ds
+	swapgs
 	jmp	2f
 1:
 	movq	%rsp,%rdi
+	incq	CPUVAR(NTRAP)
 	call	_C_LABEL(trap)
 2:
 	INTR_RESTORE_GPRS
@@ -164,13 +176,16 @@ IDTVEC(trap05)
 IDTVEC(trap06)
 	ZTRAP(T_PRIVINFLT)
 IDTVEC(trap07)
+	PRE_TRAP;
 	pushq	$0			# dummy error code
-	pushq	$T_DNA
+	pushq	$T_ASTFLT
 	INTRENTRY
-  	STI(si)
+#ifdef DIAGNOSTIC
+	movl	CPUVAR(ILEVEL),%ebx
+#endif /* DIAGNOSTIC */
 	movq	CPUVAR(SELF),%rdi
 	call	_C_LABEL(fpudna)
-	INTRFASTEXIT
+	jmp	.Lalltraps_checkusr
 IDTVEC(trap08)
 	TRAP(T_DOUBLEFLT)
 IDTVEC(trap09)
@@ -187,15 +202,40 @@ IDTVEC(trap0e)
 	TRAP(T_PAGEFLT)
 IDTVEC(intrspurious)
 IDTVEC(trap0f)
-	iretq
+	PRE_TRAP;
+	pushq	$0			# dummy error code
+	pushq	$T_ASTFLT
+	INTRENTRY
+#ifdef DIAGNOSTIC
+	movl	CPUVAR(ILEVEL),%ebx
+#endif /* DIAGNOSTIC */
+	jmp	.Lalltraps_checkusr
 IDTVEC(trap10)
-	ZTRAP(T_ARITHTRAP)
+	PRE_TRAP;
+	pushq	$0			# dummy error code
+	pushq	$T_ARITHTRAP
+.Ldo_fputrap:
+	INTRENTRY
+#ifdef DIAGNOSTIC
+	movl	CPUVAR(ILEVEL),%ebx
+#endif /* DIAGNOSTIC */
+	testb	$SEL_RPL,TF_CS(%rsp)
+	jz	1f
+	movq	%rsp,%rdi
+	call	_C_LABEL(fputrap)
+	jmp	.Lalltraps_checkusr
+1:
+  	STI(si)
+	jmp	calltrap
 IDTVEC(trap11)
 	ZTRAP(T_ALIGNFLT)
 IDTVEC(trap12)
 	ZTRAP(T_MCA)
 IDTVEC(trap13)
-	ZTRAP(T_XMM)
+	PRE_TRAP;
+	pushq	$0			# dummy error code
+	pushq	$T_XMM
+	jmp	.Ldo_fputrap
 IDTVEC(trap14)
 IDTVEC(trap15)
 IDTVEC(trap16)
@@ -257,15 +297,40 @@ NENTRY(resume_pop_es)
 NENTRY(alltraps)
 	INTRENTRY
   	STI(si)
+#ifdef KDTRACE_HOOKS
+	/*
+	 * DTrace Function Boundary Trace (fbt) probes are triggered
+	 * by int3 (0xcc) which causes the #BP (T_BPTFLT) breakpoint
+	 * interrupt. For all other trap types, just handle them in
+	 * the usual way.
+	 */
+	cmpl    $T_BPTFLT,TF_TRAPNO(%rsp)
+	jne     calltrap
+
+	/* Check if there is no DTrace hook registered. */
+	cmpq	$0,dtrace_invop_jump_addr
+	je	calltrap
+
+	/*
+	 * Set our jump address for the jump back in the event that
+	 * the exception wasn't caused by DTrace at all.
+	 */
+	movq	$calltrap, dtrace_invop_calltrap_addr(%rip)
+
+	/* Jump to the code hooked in by DTrace. */
+	movq	dtrace_invop_jump_addr, %rax
+	jmpq	*dtrace_invop_jump_addr
+#endif
 calltrap:
 #ifdef DIAGNOSTIC
 	movl	CPUVAR(ILEVEL),%ebx
 #endif /* DIAGNOSTIC */
 	movq	%rsp,%rdi
+	incq	CPUVAR(NTRAP)
 	call	_C_LABEL(trap)
+.Lalltraps_checkusr:
 	testb	$SEL_RPL,TF_CS(%rsp)
-	jnz	.Lalltraps_checkast
-	jmp	6f
+	jz	6f
 .Lalltraps_checkast:
 	movq	CPUVAR(CURLWP),%r14
 	/* Check for ASTs on exit to user mode. */
@@ -276,6 +341,7 @@ calltrap:
   	STI(si)
 	movl	$T_ASTFLT,TF_TRAPNO(%rsp)
 	movq	%rsp,%rdi
+	incq	CPUVAR(NTRAP)
 	call	_C_LABEL(trap)
 	jmp	.Lalltraps_checkast	/* re-check ASTs */
 3:	CHECK_DEFERRED_SWITCH
@@ -324,13 +390,11 @@ calltrap:
  *
  */
 
-#define MY_COUNT _C_LABEL(uvmexp)
-
 /* XXX See comment in locore.s */
 #ifdef __ELF__
-#define	XINTR(name,num)		Xintr_/**/name/**/num
+#define	XINTR(name,num)		Xintr_ ## name ## num
 #else
-#define	XINTR(name,num)		_Xintr_/**/name/**/num
+#define	XINTR(name,num)		_Xintr_ ## name ## num
 #endif
 
 #if NLAPIC > 0
@@ -359,7 +423,6 @@ IDTVEC(resume_lapic_ipi)
 	jmp	_C_LABEL(Xdoreti)
 2:
 	orl	$(1 << LIR_IPI),CPUVAR(IPENDING)
-	sti
 	INTRFASTEXIT
 
 #if defined(DDB)
@@ -408,7 +471,6 @@ IDTVEC(resume_lapic_ltimer)
 	jmp	_C_LABEL(Xdoreti)
 2:
 	orl	$(1 << LIR_TIMER),CPUVAR(IPENDING)
-	sti
 	INTRFASTEXIT
 #endif /* NLAPIC > 0 */
 
@@ -427,8 +489,12 @@ IDTVEC(intr_lapic_tlb_mcast)
 0:
 	pushq	%rax
 	pushq	%rbx
-	pushq	%rcx
+	pushq	%rdi
+	pushq	%rsi
 	pushq	%rdx
+	pushq	%rcx
+	pushq	%r8
+	pushq	%r9
 	incq	CPUVAR(TLB_EVCNT)+EV_COUNT
 	/* Find out what needs to be invalidated and unlock the mailbox. */
 	movq	CPUVAR(PMAP_CPU),%rcx
@@ -464,8 +530,12 @@ IDTVEC(intr_lapic_tlb_mcast)
 	movl	$TLBSTATE_STALE, CPUVAR(TLBSTATE)
 3:
 	/* Restore state and return. */
-	popq	%rdx
+	popq	%r9
+	popq	%r8
 	popq	%rcx
+	popq	%rdx
+	popq	%rsi
+	popq	%rdi
 	popq	%rbx
 	popq	%rax
 	testq	$SEL_UPL, 8(%rsp)
@@ -474,26 +544,42 @@ IDTVEC(intr_lapic_tlb_mcast)
 4:
 	iretq
 5:
-	/* Invalidate all user pages. */
+	/*
+	 * Get the emap generation number.  Invalidate user TLB entries.
+	 * Perform emap update, pass the generation number.  Note that
+	 * caller-save registers might be modified (all saved in the
+	 * beginning).  Only %rbx value is used by 2b context.
+	 */
+	callq	_C_LABEL(uvm_emap_gen_return)
+	movq	%rax, %rdi
 	movq	%cr3, %rax
 	movq	%rax, %cr3
+	callq	_C_LABEL(uvm_emap_update)
 	jmp	2b
 
 /*
  * Broadcast TLB shootdown handler for kernel_pmap.
  */
 IDTVEC(intr_lapic_tlb_bcast)
+	testq	$SEL_UPL,8(%rsp)
+	jz	0f
+	swapgs
+0:
 	/* Save state. */
 	pushq	%rax
-	pushq	%rbx
+	pushq	%rdi
+	pushq	%rsi
 	pushq	%rdx
+	pushq	%rcx
+	pushq	%r8
+	pushq	%r9
 	/* Find out what needs to be invalidated. */
 	movq	_C_LABEL(pmap_mbox)+MB_ADDR1, %rax
 	movq	_C_LABEL(pmap_mbox)+MB_ADDR2, %rdx
-	movq	_C_LABEL(pmap_mbox)+MB_GLOBAL, %rbx
+	movq	_C_LABEL(pmap_mbox)+MB_GLOBAL, %rdi
 	movl	$0, _C_LABEL(local_apic)+LAPIC_EOI
 	cmpq	$-1, %rax
-	je,pn	3f
+	je	3f
 1:
 	/* Invalidate a single page or a range of pages. */
 	invlpg	(%rax)
@@ -504,27 +590,48 @@ IDTVEC(intr_lapic_tlb_bcast)
 	/* Notify waiter of completion, restore state & return */
 	lock
 	incq	_C_LABEL(pmap_mbox)+MB_TAIL
+	popq	%r9
+	popq	%r8
+	popq	%rcx
 	popq	%rdx
-	popq	%rbx
+	popq	%rsi
+	popq	%rdi
 	popq	%rax
+	testq	$SEL_UPL, 8(%rsp)
+	jz	5f
+	swapgs
+5:
 	iretq
 3:
-	testq	%rbx, %rbx
+	testq	%rdi, %rdi
 	jz	4f
 	/*
-	 * If we have been asked to invalidate the entire TLB
-	 * we arrive here.
+	 * If we have been asked to invalidate the entire TLB we arrive here.
+	 * Get the emap generation before flush, and use it after for update.
+	 * Note that caller-save registers might be modified, though no
+	 * registers need to be preserved for 2b context.
 	 */
+	callq	_C_LABEL(uvm_emap_gen_return)
+	movq	%rax, %rdi
 	movq	%cr4, %rax
 	movq	%rax, %rdx
 	andq	$~CR4_PGE, %rdx
 	movq	%rdx, %cr4
 	movq	%rax, %cr4
+	callq	_C_LABEL(uvm_emap_update)
 	jmp	2b
 4:
-	/* Invalidate user TLB entries. */
+	/*
+	 * Get the emap generation number.  Invalidate user TLB entries.
+	 * Perform emap update, pass the generation number.  Note that
+	 * caller-save registers might be modified, though no registers
+	 * need to be preserved for 2b context.
+	 */
+	callq	_C_LABEL(uvm_emap_gen_return)
+	movq	%rax, %rdi
 	movq	%cr3, %rax
 	movq	%rax, %cr3
+	callq	_C_LABEL(uvm_emap_update)
 	jmp	2b
 
 #endif /* !XEN */
@@ -539,18 +646,18 @@ IDTVEC(intr_lapic_tlb_bcast)
  */
 
 #define	INTRSTUB(name, num, early_ack, late_ack, mask, unmask, level_mask) \
-IDTVEC(recurse_/**/name/**/num)						;\
+IDTVEC(recurse_ ## name ## num)						;\
 	INTR_RECURSE_HWFRAME						;\
 	subq	$8,%rsp							;\
 	pushq	$T_ASTFLT		/* trap # for doing ASTs */	;\
 	INTRENTRY							;\
-IDTVEC(resume_/**/name/**/num)						\
+IDTVEC(resume_ ## name ## num)						\
 	movq	$IREENT_MAGIC,TF_ERR(%rsp)				;\
 	movl	%ebx,%r13d						;\
 	movq	CPUVAR(ISOURCES) + (num) * 8, %r14			;\
 	movl	IS_MAXLEVEL(%r14),%ebx					;\
 	jmp	1f							;\
-IDTVEC(intr_/**/name/**/num)						;\
+IDTVEC(intr_ ## name ## num)						;\
 	pushq	$0			/* dummy error code */		;\
 	pushq	$T_ASTFLT		/* trap # for doing ASTs */	;\
 	INTRENTRY							;\
@@ -563,7 +670,7 @@ IDTVEC(intr_/**/name/**/num)						;\
 	movl	CPUVAR(ILEVEL),%r13d					;\
 	cmpl	%ebx,%r13d						;\
 	jae	10f			/* currently masked; hold it */	;\
-	incl	MY_COUNT+V_INTR		/* statistical info */		;\
+	incq	CPUVAR(NINTR)		/* statistical info */		;\
 	incq	IS_EVCNT(%r14)						;\
 1:									\
 	pushq	%r13							;\
@@ -600,12 +707,10 @@ IDTVEC(intr_/**/name/**/num)						;\
 	orl     $(1 << num),CPUVAR(IPENDING)				;\
 	level_mask(num)							;\
 	late_ack(num)							;\
-	sti								;\
 	INTRFASTEXIT							;\
 9:									\
 	unmask(num)							;\
 	late_ack(num)							;\
-	sti								;\
 	INTRFASTEXIT
 
 #define ICUADDR IO_ICU1
@@ -890,12 +995,12 @@ _C_LABEL(ioapic_level_stubs):
 #else	/* !XEN */
 /* Resume/recurse procedures for spl() */
 #define	XENINTRSTUB(name, num, early_ack, late_ack, mask, unmask, level_mask) \
-IDTVEC(recurse_/**/name/**/num)						;\
+IDTVEC(recurse_ ## name ## num)						;\
   	INTR_RECURSE_HWFRAME						;\
   	subq	$8,%rsp							;\
   	pushq	$T_ASTFLT		/* trap # for doing ASTs */	;\
   	INTRENTRY							;\
-IDTVEC(resume_/**/name/**/num)						\
+IDTVEC(resume_ ## name ## num)						\
   	movq	$IREENT_MAGIC,TF_ERR(%rsp)				;\
   	movl	%ebx,%r13d						;\
   	movq	CPUVAR(ISOURCES) + (num) * 8, %r14			;\
@@ -916,7 +1021,7 @@ IDTVEC(resume_/**/name/**/num)						\
   	CLI(si)								;\
   	unmask(num)			/* unmask it in hardware */	;\
   	late_ack(num)							;\
-  	CLI(si)								;\
+  	STI(si)								;\
   	jmp	_C_LABEL(Xdoreti)	/* lower spl and do ASTs */	;\
   
 # The unmask func for Xen events
@@ -1007,8 +1112,7 @@ NENTRY(hypervisor_callback)
 	subq	$8, %rdi; /* don't forget if_ppl */
 	call	do_hypervisor_callback
 	testb   $SEL_RPL,TF_CS(%rsp)
-	jz	1f
-	jmp doreti_checkast
+	jnz	doreti_checkast
 1:
 	INTRFASTEXIT
 

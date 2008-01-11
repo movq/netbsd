@@ -1,4 +1,4 @@
-/*	$NetBSD: if_eon.c,v 1.64 2008/01/10 08:04:44 dyoung Exp $	*/
+/*	$NetBSD: if_eon.c,v 1.70 2011/03/09 22:04:52 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -67,7 +67,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.64 2008/01/10 08:04:44 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_eon.c,v 1.70 2011/03/09 22:04:52 dyoung Exp $");
 
 #include "opt_eon.h"
 
@@ -149,12 +149,12 @@ eonattach(void)
 	ifp->if_ioctl = eonioctl;
 	ifp->if_output = eonoutput;
 	ifp->if_type = IFT_EON;
-	ifp->if_addrlen = 5;
+	ifp->if_addrlen = 0;
 	ifp->if_hdrlen = EONIPLEN;
 	ifp->if_flags = IFF_BROADCAST;
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
-	eonioctl(ifp, SIOCSIFADDR, ifp->if_dl);
+	eonioctl(ifp, SIOCINITIFADDR, ifp->if_dl);
 	eon_llinfo.el_qhdr.link =
 		eon_llinfo.el_qhdr.rlink = &(eon_llinfo.el_qhdr);
 
@@ -190,15 +190,13 @@ eonioctl(struct ifnet *ifp, u_long cmd, void *data)
 #endif
 
 	switch (cmd) {
-	case SIOCSIFADDR:
-		if (ifa == NULL)
-			break;
+	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP;
 		if (ifa->ifa_addr->sa_family != AF_LINK)
 			ifa->ifa_rtrequest = eonrtrequest;
 		break;
 	default:
-		error = EINVAL;
+		error = ifioctl_common(ifp, cmd, data);
 		break;
 	}
 	splx(s);
@@ -251,7 +249,7 @@ eoniphdr(struct eon_iphdr *hdr, const void *loc, struct route *ro, int class)
  * RETURNS:			nothing
  */
 void
-eonrtrequest(int cmd, struct rtentry *rt, struct rt_addrinfo *info)
+eonrtrequest(int cmd, struct rtentry *rt, const struct rt_addrinfo *info)
 {
 	struct rtentry *nrt;
 	unsigned long   zerodst = 0;
@@ -302,7 +300,7 @@ eonrtrequest(int cmd, struct rtentry *rt, struct rt_addrinfo *info)
 	}
 	el->el_flags |= RTF_UP;
 	eoniphdr(&el->el_ei, ipaddrloc, &el->el_iproute, EON_NORMAL_ADDR);
-	if ((nrt = rtcache_getrt(&el->el_iproute)) != NULL)
+	if ((nrt = rtcache_validate(&el->el_iproute)) != NULL)
 		rt->rt_rmx.rmx_mtu = nrt->rt_rmx.rmx_mtu - sizeof(el->el_ei);
 }
 
@@ -368,7 +366,7 @@ einval:
 		goto flush;
 	}
 	if ((el->el_flags & RTF_UP) == 0) {
-		eonrtrequest(RTM_CHANGE, rt, (struct rt_addrinfo *) 0);
+		eonrtrequest(RTM_CHANGE, rt, NULL);
 		if ((el->el_flags & RTF_UP) == 0) {
 			error = EHOSTUNREACH;
 			goto flush;

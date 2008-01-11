@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64570.c,v 1.38 2007/10/19 11:59:52 ad Exp $	*/
+/*	$NetBSD: hd64570.c,v 1.43 2010/04/05 07:19:34 joerg Exp $	*/
 
 /*
  * Copyright (c) 1999 Christian E. Hopps
@@ -65,9 +65,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.38 2007/10/19 11:59:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.43 2010/04/05 07:19:34 joerg Exp $");
 
-#include "bpfilter.h"
 #include "opt_inet.h"
 #include "opt_iso.h"
 
@@ -99,9 +98,7 @@ __KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.38 2007/10/19 11:59:52 ad Exp $");
 #include <netiso/iso_var.h>
 #endif
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/cpu.h>
 #include <sys/bus.h>
@@ -462,16 +459,13 @@ sca_port_attach(struct sca_softc *sc, u_int port)
 	IFQ_SET_READY(&ifp->if_snd);
 	if_attach(ifp);
 	if_alloc_sadl(ifp);
-
-#if NBPFILTER > 0
-	bpfattach(ifp, DLT_HDLC, HDLC_HDRLEN);
-#endif
+	bpf_attach(ifp, DLT_HDLC, HDLC_HDRLEN);
 
 	if (sc->sc_parent == NULL)
 		printf("%s: port %d\n", ifp->if_xname, port);
 	else
 		printf("%s at %s port %d\n",
-		       ifp->if_xname, sc->sc_parent->dv_xname, port);
+		       ifp->if_xname, device_xname(sc->sc_parent), port);
 
 	/*
 	 * reset the last seen times on the cisco keepalive protocol
@@ -926,10 +920,7 @@ sca_output(
 }
 
 static int
-sca_ioctl(ifp, cmd, addr)
-     struct ifnet *ifp;
-     u_long cmd;
-     void *addr;
+sca_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ifreq *ifr;
 	struct ifaddr *ifa;
@@ -938,12 +929,12 @@ sca_ioctl(ifp, cmd, addr)
 
 	s = splnet();
 
-	ifr = (struct ifreq *)addr;
-	ifa = (struct ifaddr *)addr;
+	ifr = (struct ifreq *)data;
+	ifa = (struct ifaddr *)data;
 	error = 0;
 
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		switch(ifa->ifa_addr->sa_family) {
 #ifdef INET
 		case AF_INET:
@@ -997,6 +988,8 @@ sca_ioctl(ifp, cmd, addr)
 		break;
 
 	case SIOCSIFFLAGS:
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
 		if (ifr->ifr_flags & IFF_UP) {
 			ifp->if_flags |= IFF_UP;
 			sca_port_up(ifp->if_softc);
@@ -1008,7 +1001,7 @@ sca_ioctl(ifp, cmd, addr)
 		break;
 
 	default:
-		error = EINVAL;
+		error = ifioctl_common(ifp, cmd, data);
 	}
 
 	splx(s);
@@ -1021,8 +1014,7 @@ sca_ioctl(ifp, cmd, addr)
  * MUST BE CALLED AT splnet()
  */
 static void
-sca_start(ifp)
-	struct ifnet *ifp;
+sca_start(struct ifnet *ifp)
 {
 	sca_port_t *scp = ifp->if_softc;
 	struct sca_softc *sc = scp->sca;
@@ -1143,13 +1135,10 @@ X
 
 	ifp->if_opackets++;
 
-#if NBPFILTER > 0
 	/*
 	 * Pass packet to bpf if there is a listener.
 	 */
-	if (ifp->if_bpf)
-		bpf_mtap(ifp->if_bpf, mb_head);
-#endif
+	bpf_mtap(ifp, mb_head);
 
 	m_freem(mb_head);
 
@@ -1605,10 +1594,7 @@ sca_frame_process(sca_port_t *scp)
 		return;
 	}
 
-#if NBPFILTER > 0
-	if (scp->sp_if.if_bpf)
-		bpf_mtap(scp->sp_if.if_bpf, m);
-#endif
+	bpf_mtap(&scp->sp_if, m);
 
 	scp->sp_if.if_ipackets++;
 
@@ -2127,7 +2113,7 @@ sca_print_clock_info(struct sca_softc *sc)
 	u_int32_t mhz, div;
 	int i;
 
-	printf("%s: base clock %d Hz\n", sc->sc_parent->dv_xname,
+	printf("%s: base clock %d Hz\n", device_xname(sc->sc_parent),
 	    sc->sc_baseclock);
 
 	/* print the information about the port clock selection */

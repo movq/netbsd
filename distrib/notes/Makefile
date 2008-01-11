@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.39 2008/01/09 11:25:58 simonb Exp $
+#	$NetBSD: Makefile,v 1.42 2011/01/26 01:18:44 pooka Exp $
 #
 
 .include <bsd.own.mk>
@@ -15,9 +15,11 @@ SUBDIR+= acorn32
 SUBDIR+= alpha
 SUBDIR+= amd64
 SUBDIR+= amiga
-# SUBDIR+= arc		# not complete
+SUBDIR+= arc
 SUBDIR+= atari
+SUBDIR+= bebox
 SUBDIR+= cats
+SUBDIR+= emips
 SUBDIR+= evbarm
 SUBDIR+= evbppc
 SUBDIR+= hp300

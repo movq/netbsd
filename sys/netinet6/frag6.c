@@ -1,4 +1,4 @@
-/*	$NetBSD: frag6.c,v 1.40 2007/12/20 19:53:33 dyoung Exp $	*/
+/*	$NetBSD: frag6.c,v 1.49 2011/05/03 17:44:30 dyoung Exp $	*/
 /*	$KAME: frag6.c,v 1.40 2002/05/27 21:40:31 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: frag6.c,v 1.40 2007/12/20 19:53:33 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: frag6.c,v 1.49 2011/05/03 17:44:30 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,6 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: frag6.c,v 1.40 2007/12/20 19:53:33 dyoung Exp $");
 #include <sys/domain.h>
 #include <sys/protosw.h>
 #include <sys/socket.h>
+#include <sys/socketvar.h>
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
@@ -52,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: frag6.c,v 1.40 2007/12/20 19:53:33 dyoung Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
+#include <netinet6/ip6_private.h>
 #include <netinet/icmp6.h>
 
 #include <net/net_osdep.h>
@@ -63,6 +65,8 @@ static void frag6_remque(struct ip6q *);
 static void frag6_freef(struct ip6q *);
 
 static int ip6q_locked;
+static int frag6_drainwanted;
+
 u_int frag6_nfragpackets;
 u_int frag6_nfrags;
 struct	ip6q ip6q;	/* ip6 reassemble queue */
@@ -71,7 +75,7 @@ static inline int ip6q_lock_try(void);
 static inline void ip6q_unlock(void);
 
 static inline int
-ip6q_lock_try()
+ip6q_lock_try(void)
 {
 	int s;
 
@@ -90,7 +94,7 @@ ip6q_lock_try()
 }
 
 static inline void
-ip6q_unlock()
+ip6q_unlock(void)
 {
 	int s;
 
@@ -129,7 +133,7 @@ do {									\
  * Initialise reassembly queue and fragment identifier.
  */
 void
-frag6_init()
+frag6_init(void)
 {
 
 	ip6q.ip6q_next = ip6q.ip6q_prev = &ip6q;
@@ -194,8 +198,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 	dstifp = NULL;
 	/* find the destination interface of the packet. */
 	sockaddr_in6_init(&u.dst6, &ip6->ip6_dst, 0, 0, 0);
-	rtcache_lookup(&ro, &u.dst);
-	if ((rt = rtcache_getrt(&ro)) != NULL && rt->rt_ifa != NULL)
+	if ((rt = rtcache_lookup(&ro, &u.dst)) != NULL && rt->rt_ifa != NULL)
 		dstifp = ((struct in6_ifaddr *)rt->rt_ifa)->ia_ifp;
 
 	/* jumbo payload can't contain a fragment header */
@@ -219,7 +222,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 		return IPPROTO_DONE;
 	}
 
-	ip6stat.ip6s_fragments++;
+	IP6_STATINC(IP6_STAT_FRAGMENTS);
 	in6_ifstat_inc(dstifp, ifs6_reass_reqd);
 
 	/* offset now points to data portion */
@@ -265,7 +268,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 		    M_DONTWAIT);
 		if (q6 == NULL)
 			goto dropfrag;
-		bzero(q6, sizeof(*q6));
+		memset(q6, 0, sizeof(*q6));
 
 		frag6_insque(q6, &ip6q);
 
@@ -358,7 +361,7 @@ frag6_input(struct mbuf **mp, int *offp, int proto)
 	    M_DONTWAIT);
 	if (ip6af == NULL)
 		goto dropfrag;
-	bzero(ip6af, sizeof(*ip6af));
+	memset(ip6af, 0, sizeof(*ip6af));
 	ip6af->ip6af_head = ip6->ip6_flow;
 	ip6af->ip6af_len = ip6->ip6_plen;
 	ip6af->ip6af_nxt = ip6->ip6_nxt;
@@ -516,7 +519,7 @@ insert:
 	/*
 	 * Delete frag6 header with as a few cost as possible.
 	 */
-	if (offset < m->m_len) {
+	if (m->m_len >= offset + sizeof(struct ip6_frag)) {
 		memmove((char *)ip6 + sizeof(struct ip6_frag), ip6, offset);
 		m->m_data += sizeof(struct ip6_frag);
 		m->m_len -= sizeof(struct ip6_frag);
@@ -553,7 +556,7 @@ insert:
 		m->m_pkthdr.len = plen;
 	}
 
-	ip6stat.ip6s_reassembled++;
+	IP6_STATINC(IP6_STAT_REASSEMBLED);
 	in6_ifstat_inc(dstifp, ifs6_reass_ok);
 
 	/*
@@ -568,7 +571,7 @@ insert:
 
  dropfrag:
 	in6_ifstat_inc(dstifp, ifs6_reass_fail);
-	ip6stat.ip6s_fragdropped++;
+	IP6_STATINC(IP6_STAT_FRAGDROPPED);
 	m_freem(m);
 	IP6Q_UNLOCK();
 	return IPPROTO_DONE;
@@ -669,16 +672,27 @@ frag6_remque(struct ip6q *p6)
 	p6->ip6q_next->ip6q_prev = p6->ip6q_prev;
 }
 
+void
+frag6_fasttimo(void)
+{
+	if (frag6_drainwanted) {
+		frag6_drain();
+		frag6_drainwanted = 0;
+	}
+}
+
 /*
  * IPv6 reassembling timer processing;
  * if a timer expires on a reassembly
  * queue, discard it.
  */
 void
-frag6_slowtimo()
+frag6_slowtimo(void)
 {
 	struct ip6q *q6;
-	int s = splsoftnet();
+
+	mutex_enter(softnet_lock);
+	KERNEL_LOCK(1, NULL);
 
 	IP6Q_LOCK();
 	q6 = ip6q.ip6q_next;
@@ -687,7 +701,7 @@ frag6_slowtimo()
 			--q6->ip6q_ttl;
 			q6 = q6->ip6q_next;
 			if (q6->ip6q_prev->ip6q_ttl == 0) {
-				ip6stat.ip6s_fragtimeout++;
+				IP6_STATINC(IP6_STAT_FRAGTIMEOUT);
 				/* XXX in6_ifstat_inc(ifp, ifs6_reass_fail) */
 				frag6_freef(q6->ip6q_prev);
 			}
@@ -699,7 +713,7 @@ frag6_slowtimo()
 	 */
 	while (frag6_nfragpackets > (u_int)ip6_maxfragpackets &&
 	    ip6q.ip6q_prev) {
-		ip6stat.ip6s_fragoverflow++;
+		IP6_STATINC(IP6_STAT_FRAGOVERFLOW);
 		/* XXX in6_ifstat_inc(ifp, ifs6_reass_fail) */
 		frag6_freef(ip6q.ip6q_prev);
 	}
@@ -715,22 +729,31 @@ frag6_slowtimo()
 	rtcache_free(&ipsrcchk_rt);
 #endif
 
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
+}
+
+void
+frag6_drainstub(void)
+{
+	frag6_drainwanted = 1;
 }
 
 /*
  * Drain off all datagram fragments.
  */
 void
-frag6_drain()
+frag6_drain(void)
 {
 
-	if (ip6q_lock_try() == 0)
-		return;
-	while (ip6q.ip6q_next != &ip6q) {
-		ip6stat.ip6s_fragdropped++;
-		/* XXX in6_ifstat_inc(ifp, ifs6_reass_fail) */
-		frag6_freef(ip6q.ip6q_next);
+	KERNEL_LOCK(1, NULL);
+	if (ip6q_lock_try() != 0) {
+		while (ip6q.ip6q_next != &ip6q) {
+			IP6_STATINC(IP6_STAT_FRAGDROPPED);
+			/* XXX in6_ifstat_inc(ifp, ifs6_reass_fail) */
+			frag6_freef(ip6q.ip6q_next);
+		}
+		IP6Q_UNLOCK();
 	}
-	IP6Q_UNLOCK();
+	KERNEL_UNLOCK_ONE(NULL);
 }

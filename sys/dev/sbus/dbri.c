@@ -1,14 +1,14 @@
-/*	$NetBSD: dbri.c,v 1.17 2007/12/03 15:34:33 ad Exp $	*/
+/*	$NetBSD: dbri.c,v 1.33 2011/03/09 05:40:11 macallan Exp $	*/
 
 /*
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)
  * Copyright (c) 1998, 1999 Brent Baccala (baccala@freesoft.org)
  * Copyright (c) 2001, 2002 Jared D. McNeill <jmcneill@netbsd.org>
- * Copyright (c) 2005, 2007 Michael Lorenz <macallan@netbsd.org>
+ * Copyright (c) 2005 Michael Lorenz <macallan@netbsd.org>
  * All rights reserved.
  *
- * This driver is losely based on a Linux driver written by Rudolf Koenig and
- * Brent Baccala who kindly gave their permission to use their code in a
+ * This driver is losely based on a Linux driver written by Rudolf Koenig and 
+ * Brent Baccala who kindly gave their permission to use their code in a 
  * BSD-licensed driver.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -19,30 +19,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Rudolf Koenig, Brent
- *      Baccala, Jared D. McNeill.
- * 4. Neither the name of the author nor the names of any contributors may
- *    be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dbri.c,v 1.17 2007/12/03 15:34:33 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dbri.c,v 1.33 2011/03/09 05:40:11 macallan Exp $");
 
 #include "audio.h"
 #if NAUDIO > 0
@@ -101,10 +93,10 @@ enum io {
  */
 
 /* softc stuff */
-static void	dbri_attach_sbus(struct device *, struct device *, void *);
-static int	dbri_match_sbus(struct device *, struct cfdata *, void *);
+static void	dbri_attach_sbus(device_t, device_t, void *);
+static int	dbri_match_sbus(device_t, cfdata_t, void *);
 
-static void	dbri_config_interrupts(struct device *);
+static int	dbri_config_interrupts(device_t);
 
 /* interrupt handler */
 static int	dbri_intr(void *);
@@ -113,8 +105,8 @@ static void	dbri_softint(void *);
 /* supporting subroutines */
 static int	dbri_init(struct dbri_softc *);
 static int	dbri_reset(struct dbri_softc *);
-static volatile u_int32_t *dbri_command_lock(struct dbri_softc *);
-static void	dbri_command_send(struct dbri_softc *, volatile u_int32_t *);
+static volatile uint32_t *dbri_command_lock(struct dbri_softc *);
+static void	dbri_command_send(struct dbri_softc *, volatile uint32_t *);
 static void	dbri_process_interrupt_buffer(struct dbri_softc *);
 static void	dbri_process_interrupt(struct dbri_softc *, int32_t);
 
@@ -133,8 +125,8 @@ static void	chi_reset(struct dbri_softc *, enum ms, int);
 static void	pipe_setup(struct dbri_softc *, int, int);
 static void	pipe_reset(struct dbri_softc *, int);
 static void	pipe_receive_fixed(struct dbri_softc *, int,
-    volatile u_int32_t *);
-static void	pipe_transmit_fixed(struct dbri_softc *, int, u_int32_t);
+    volatile uint32_t *);
+static void	pipe_transmit_fixed(struct dbri_softc *, int, uint32_t);
 
 static void	pipe_ts_link(struct dbri_softc *, int, enum io, int, int, int);
 static int	pipe_active(struct dbri_softc *, int);
@@ -170,10 +162,11 @@ static void	dbri_free(void *, void *, struct malloc_type *);
 static paddr_t	dbri_mappage(void *, void *, off_t, int);
 static void	dbri_set_power(struct dbri_softc *, int);
 static void	dbri_bring_up(struct dbri_softc *);
-static void	dbri_powerhook(int, void *);
+static bool	dbri_suspend(device_t, const pmf_qual_t *);
+static bool	dbri_resume(device_t, const pmf_qual_t *);
 
 /* stupid support routines */
-static u_int32_t	reverse_bytes(u_int32_t, int);
+static uint32_t	reverse_bytes(uint32_t, int);
 
 struct audio_device dbri_device = {
 	"CS4215",
@@ -210,7 +203,7 @@ struct audio_hw_if dbri_hw_if = {
 	dbri_trigger_input
 };
 
-CFATTACH_DECL(dbri, sizeof(struct dbri_softc),
+CFATTACH_DECL_NEW(dbri, sizeof(struct dbri_softc),
     dbri_match_sbus, dbri_attach_sbus, NULL, NULL);
 
 #define DBRI_NFORMATS		4
@@ -257,7 +250,7 @@ enum {
  * Autoconfig routines
  */
 static int
-dbri_match_sbus(struct device *parent, struct cfdata *match, void *aux)
+dbri_match_sbus(device_t parent, cfdata_t match, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 	char *ver;
@@ -276,15 +269,16 @@ dbri_match_sbus(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-dbri_attach_sbus(struct device *parent, struct device *self, void *aux)
+dbri_attach_sbus(device_t parent, device_t self, void *aux)
 {
-	struct dbri_softc *sc = (struct dbri_softc *)self;
+	struct dbri_softc *sc = device_private(self);
 	struct sbus_attach_args *sa = aux;
 	bus_space_handle_t ioh;
 	bus_size_t size;
 	int error, rseg, pwr, i;
 	char *ver = &sa->sa_name[9];
 
+	sc->sc_dev = self;
 	sc->sc_iot = sa->sa_bustag;
 	sc->sc_dmat = sa->sa_dmatag;
 	sc->sc_powerstate = 1;
@@ -301,7 +295,10 @@ dbri_attach_sbus(struct device *parent, struct device *self, void *aux)
 		sc->sc_have_powerctl = 1;
 		sc->sc_powerstate = 0;
 		dbri_set_power(sc, 1);
-		powerhook_establish(self->dv_xname, dbri_powerhook, sc);
+		if (!pmf_device_register(self, dbri_suspend, dbri_resume)) {
+			aprint_error_dev(self,
+			    "cannot set power mgmt handler\n");
+		}
 	} else {
 		/* we can't control power so we're always up */
 		sc->sc_have_powerctl = 0;
@@ -320,7 +317,7 @@ dbri_attach_sbus(struct device *parent, struct device *self, void *aux)
 				 sa->sa_offset, sa->sa_size,
 				 BUS_SPACE_MAP_LINEAR, /*0,*/ &ioh) != 0) {
 			aprint_error("%s @ sbus: cannot map registers\n",
-				self->dv_xname);
+				device_xname(self));
 			return;
 		}
 	}
@@ -332,7 +329,7 @@ dbri_attach_sbus(struct device *parent, struct device *self, void *aux)
 	/* get a DMA handle */
 	if ((error = bus_dmamap_create(sc->sc_dmat, size, 1, size, 0,
 				       BUS_DMA_NOWAIT, &sc->sc_dmamap)) != 0) {
-		aprint_error("%s: DMA map create error %d\n", self->dv_xname, 
+		aprint_error_dev(self, "DMA map create error %d\n",
 		    error);
 		return;
 	}
@@ -340,8 +337,8 @@ dbri_attach_sbus(struct device *parent, struct device *self, void *aux)
 	/* allocate DMA buffer */
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, size, 0, 0, &sc->sc_dmaseg,
 				      1, &rseg, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error("%s: DMA buffer alloc error %d\n",
-		    self->dv_xname, error);
+		aprint_error_dev(self, "DMA buffer alloc error %d\n",
+		    error);
 		return;
 	}
 
@@ -349,8 +346,8 @@ dbri_attach_sbus(struct device *parent, struct device *self, void *aux)
 	if ((error = bus_dmamem_map(sc->sc_dmat, &sc->sc_dmaseg, rseg, size,
 				    &sc->sc_membase,
 				    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		aprint_error("%s: DMA buffer map error %d\n",
-		    self->dv_xname, error);
+		aprint_error_dev(self, "DMA buffer map error %d\n",
+		    error);
 		return;
 	}
 
@@ -358,8 +355,8 @@ dbri_attach_sbus(struct device *parent, struct device *self, void *aux)
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_dmamap,
 				     sc->sc_membase, size, NULL,
 				     BUS_DMA_NOWAIT)) != 0) {
-		aprint_error("%s: DMA buffer map load error %d\n",
-		    self->dv_xname, error);
+		aprint_error_dev(self, "DMA buffer map load error %d\n",
+		    error);
 		bus_dmamem_unmap(sc->sc_dmat, sc->sc_membase, size);
 		bus_dmamem_free(sc->sc_dmat, &sc->sc_dmaseg, rseg);
 		return;
@@ -373,8 +370,6 @@ dbri_attach_sbus(struct device *parent, struct device *self, void *aux)
 	sc->sc_dmabase = sc->sc_dmamap->dm_segs[0].ds_addr;
 	sc->sc_bufsiz = size;
 
-	sbus_establish(&sc->sc_sd, &sc->sc_dev);
-
 	bus_intr_establish(sa->sa_bustag, sa->sa_pri, IPL_SCHED, dbri_intr,
 	    sc);
 
@@ -383,8 +378,8 @@ dbri_attach_sbus(struct device *parent, struct device *self, void *aux)
 	sc->sc_refcount = 0;
 	sc->sc_playing = 0;
 	sc->sc_recording = 0;
-	sc->sc_pmgrstate = PWR_RESUME;
-	config_interrupts(self, &dbri_config_interrupts);
+	sc->sc_init_done = 0;
+	config_finalize_register(self, &dbri_config_interrupts);
 
 	return;
 }
@@ -403,14 +398,15 @@ dbri_set_power(struct dbri_softc *sc, int state)
 		return;
 
 	if (state) {
-		DPRINTF("%s: waiting to power up... ", sc->sc_dev.dv_xname);
+		DPRINTF("%s: waiting to power up... ", 
+		    device_xname(sc->sc_dev));
 		s = splhigh();
 		*AUXIO4M_REG |= (AUXIO4M_MMX);
 		splx(s);
 		delay(10000);
 		DPRINTF("done (%02x)\n", *AUXIO4M_REG);
 	} else {
-		DPRINTF("%s: powering down\n", sc->sc_dev.dv_xname);
+		DPRINTF("%s: powering down\n", device_xname(sc->sc_dev));
 		s = splhigh();
 		*AUXIO4M_REG &= ~AUXIO4M_MMX;
 		splx(s);
@@ -446,20 +442,29 @@ dbri_bring_up(struct dbri_softc *sc)
 	mmcodec_setgain(sc, 0);
 }
 
-static void
-dbri_config_interrupts(struct device *dev)
+static int
+dbri_config_interrupts(device_t dev)
 {
-	struct dbri_softc *sc = (struct dbri_softc *)dev;
+	struct dbri_softc *sc = device_private(dev);
+
+	if (sc->sc_init_done != 0)
+		return 0;
+
+	sc->sc_init_done = 1;
 
 	dbri_init(sc);
-	mmcodec_init(sc);
-	
+	if (mmcodec_init(sc) == -1) {
+		printf("%s: no codec detected, aborting\n",
+		    device_xname(dev));
+		return 0;
+	}
+
 	/* Attach ourselves to the high level audio interface */
-	audio_attach_mi(&dbri_hw_if, sc, &sc->sc_dev);
+	audio_attach_mi(&dbri_hw_if, sc, sc->sc_dev);
 
 	/* power down until open() */
 	dbri_set_power(sc, 0);
-	return;
+	return 0;
 }
 
 static int
@@ -473,20 +478,19 @@ dbri_intr(void *hdl)
 	/* clear interrupt */
 	x = bus_space_read_4(iot, ioh, DBRI_REG1);
 	if (x & (DBRI_MRR | DBRI_MLE | DBRI_LBG | DBRI_MBE)) {
-		u_int32_t tmp;
+		uint32_t tmp;
 
 		if (x & DBRI_MRR)
-			aprint_debug("%s: multiple ack error on sbus\n",
-			    sc->sc_dev.dv_xname);
+			aprint_debug_dev(sc->sc_dev,
+			     "multiple ack error on sbus\n");
 		if (x & DBRI_MLE)
-			aprint_debug("%s: multiple late error on sbus\n",
-			    sc->sc_dev.dv_xname);
+			aprint_debug_dev(sc->sc_dev,
+			    "multiple late error on sbus\n");
 		if (x & DBRI_LBG)
-			aprint_debug("%s: lost bus grant on sbus\n",
-			    sc->sc_dev.dv_xname);
+			aprint_debug_dev(sc->sc_dev,
+			    "lost bus grant on sbus\n");
 		if (x & DBRI_MBE)
-			aprint_debug("%s: burst error on sbus\n",
-			    sc->sc_dev.dv_xname);
+			aprint_debug_dev(sc->sc_dev, "burst error on sbus\n");
 
 		/*
 		 * Some of these errors disable the chip's circuitry.
@@ -522,8 +526,8 @@ dbri_init(struct dbri_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	u_int32_t reg;
-	volatile u_int32_t *cmd;
+	uint32_t reg;
+	volatile uint32_t *cmd;
 	bus_addr_t dmaaddr;
 	int n;
 
@@ -532,7 +536,7 @@ dbri_init(struct dbri_softc *sc)
 	cmd = dbri_command_lock(sc);
 
 	/* XXX: Initialize interrupt ring buffer */
-	sc->sc_dma->intr[0] = (u_int32_t)sc->sc_dmabase + dbri_dma_off(intr, 0);
+	sc->sc_dma->intr[0] = (uint32_t)sc->sc_dmabase + dbri_dma_off(intr, 0);
 	sc->sc_irqp = 1;
 
 	/* Initialize pipes */
@@ -552,7 +556,7 @@ dbri_init(struct dbri_softc *sc)
 	bus_space_write_4(iot, ioh, DBRI_REG0, reg);
 
 	/* setup interrupt queue */
-	dmaaddr = (u_int32_t)sc->sc_dmabase + dbri_dma_off(intr, 0);
+	dmaaddr = (uint32_t)sc->sc_dmabase + dbri_dma_off(intr, 0);
 	*(cmd++) = DBRI_CMD(DBRI_COMMAND_IIQ, 0, 0);
 	*(cmd++) = dmaaddr;
 
@@ -574,18 +578,17 @@ dbri_reset(struct dbri_softc *sc)
 		bail++;
 		delay(10);
 	}
-	if (bail == 100000) aprint_error("%s: reset timed out\n",
-	    sc->sc_dev.dv_xname);
+	if (bail == 100000)
+		aprint_error_dev(sc->sc_dev, "reset timed out\n");
 	return (0);
 }
 
-static volatile u_int32_t *
+static volatile uint32_t *
 dbri_command_lock(struct dbri_softc *sc)
 {
 
 	if (sc->sc_locked)
-		aprint_debug("%s: command buffer locked\n", 
-		    sc->sc_dev.dv_xname);
+		aprint_debug_dev(sc->sc_dev, "command buffer locked\n");
 
 	sc->sc_locked++;
 
@@ -593,7 +596,7 @@ dbri_command_lock(struct dbri_softc *sc)
 }
 
 static void
-dbri_command_send(struct dbri_softc *sc, volatile u_int32_t *cmd)
+dbri_command_send(struct dbri_softc *sc, volatile uint32_t *cmd)
 {
 	bus_space_handle_t ioh = sc->sc_ioh;
 	bus_space_tag_t iot = sc->sc_iot;
@@ -605,11 +608,10 @@ dbri_command_send(struct dbri_softc *sc, volatile u_int32_t *cmd)
 	sc->sc_locked--;
 
 	if (sc->sc_locked != 0) {
-		aprint_error("%s: command buffer improperly locked\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "command buffer improperly locked\n");
 	} else if ((cmd - &sc->sc_dma->command[0]) >= DBRI_NUM_COMMANDS - 1) {
-		aprint_error("%s: command buffer overflow\n", 
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "command buffer overflow\n");
 	} else {
 		*(cmd++) = DBRI_CMD(DBRI_COMMAND_PAUSE, 0, 0);
 		*(cmd++) = DBRI_CMD(DBRI_COMMAND_WAIT, 1, 0);
@@ -624,19 +626,17 @@ dbri_command_send(struct dbri_softc *sc, volatile u_int32_t *cmd)
 		}
 
 		if (maxloops == 0) {
-			aprint_error(
-			    "%s: chip never completed command buffer\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev, 
+			    "chip never completed command buffer\n");
 		} else {
 
 			DPRINTF("%s: command completed\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 
 			while ((--maxloops) > 0 && (!sc->sc_waitseen))
 				dbri_process_interrupt_buffer(sc);
 			if (maxloops == 0) {
-				aprint_error("%s: chip never acked WAIT\n",
-				    sc->sc_dev.dv_xname);
+				aprint_error_dev(sc->sc_dev, "chip never acked WAIT\n");
 			}
 		}
 	}
@@ -706,7 +706,7 @@ dbri_process_interrupt(struct dbri_softc *sc, int32_t i)
 		if (sc->sc_pipe[channel].prec)
 			*(sc->sc_pipe[channel].prec) = val;
 #ifndef DBRI_SPIN
-		DPRINTF("%s: wakeup %p\n", sc->sc_dev.dv_xname, sc);
+		DPRINTF("%s: wakeup %p\n", device_xname(sc->sc_dev), sc);
 		wakeup(sc);
 #endif
 		break;
@@ -727,10 +727,10 @@ dbri_process_interrupt(struct dbri_softc *sc, int32_t i)
 	}
 	case DBRI_INTR_UNDR:
 	{
-		volatile u_int32_t *cmd;
+		volatile uint32_t *cmd;
 		int td = sc->sc_pipe[channel].desc;
 
-		DPRINTF("%s: DBRI_INTR_UNDR\n", sc->sc_dev.dv_xname);
+		DPRINTF("%s: DBRI_INTR_UNDR\n", device_xname(sc->sc_dev));
 
 		sc->sc_dma->xmit[td].status = 0;
 
@@ -749,8 +749,8 @@ dbri_process_interrupt(struct dbri_softc *sc, int32_t i)
 		break;
 	default:
 
-		aprint_error("%s: unknown interrupt code %d\n",
-		    sc->sc_dev.dv_xname, code);
+		aprint_error_dev(sc->sc_dev, "unknown interrupt code %d\n",
+		    code);
 		break;
 	}
 
@@ -766,34 +766,31 @@ mmcodec_init(struct dbri_softc *sc)
 {
 	bus_space_handle_t ioh = sc->sc_ioh;
 	bus_space_tag_t iot = sc->sc_iot;
-	u_int32_t reg2;
+	uint32_t reg2;
 	int bail;
 
 	reg2 = bus_space_read_4(iot, ioh, DBRI_REG2);
 	DPRINTF("mmcodec_init: PIO reads %x\n", reg2);
 
 	if (reg2 & DBRI_PIO2) {
-		aprint_normal("%s: onboard CS4215 detected\n",
-		    sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, " onboard CS4215 detected\n");
 		sc->sc_mm.onboard = 1;
 	}
 
 	if (reg2 & DBRI_PIO0) {
-		aprint_normal("%s: speakerbox detected\n",
-		    sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "speakerbox detected\n");
 		bus_space_write_4(iot, ioh, DBRI_REG2, DBRI_PIO2_ENABLE);
 		sc->sc_mm.onboard = 0;
 	}
 
 	if ((reg2 & DBRI_PIO2) && (reg2 & DBRI_PIO0)) {
-		aprint_normal("%s: using speakerbox\n",
-		    sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "using speakerbox\n");
 		bus_space_write_4(iot, ioh, DBRI_REG2, DBRI_PIO2_ENABLE);
 		sc->sc_mm.onboard = 0;
 	}
 
 	if (!(reg2 & (DBRI_PIO0|DBRI_PIO2))) {
-		aprint_normal("%s: no mmcodec found\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "no mmcodec found\n");
 		return -1;
 	}
 
@@ -815,14 +812,14 @@ mmcodec_init(struct dbri_softc *sc)
 		bail++;
 		if (bail > 100) {
 			DPRINTF("%s: cs4215 probe failed at offset %d\n",
-		    	    sc->sc_dev.dv_xname, sc->sc_mm.offset);
+		    	    device_xname(sc->sc_dev), sc->sc_mm.offset);
 			return (-1);
 		}
 		delay(10000);
 	}
 
-	aprint_normal("%s: cs4215 rev %c found at offset %d\n",
-	    sc->sc_dev.dv_xname, 0x43 + (sc->sc_version & 0xf), sc->sc_mm.offset);
+	aprint_normal_dev(sc->sc_dev, "cs4215 rev %c found at offset %d\n",
+	    0x43 + (sc->sc_version & 0xf), sc->sc_mm.offset);
 
 	/* set some sane defaults for mmcodec_init_data */
 	sc->sc_params.channels = 2;
@@ -838,7 +835,7 @@ mmcodec_init_data(struct dbri_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	u_int32_t tmp;
+	uint32_t tmp;
 	int data_width;
 
 	tmp = bus_space_read_4(iot, ioh, DBRI_REG0);
@@ -971,8 +968,8 @@ mmcodec_setcontrol(struct dbri_softc *sc)
 {
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
-	u_int32_t val;
-	u_int32_t tmp;
+	uint32_t val;
+	uint32_t tmp;
 	int bail = 0;
 #if DBRI_SPIN
 	int i;
@@ -1032,19 +1029,19 @@ mmcodec_setcontrol(struct dbri_softc *sc)
 
 	if (i == 0) {
 		DPRINTF("%s: cs4215 didn't respond to CLB (0x%02x)\n",
-		    sc->sc_dev.dv_xname, sc->sc_mm.status);
+		    device_xname(sc->sc_dev), sc->sc_mm.status);
 		return (-1);
 	}
 #else
 	while (((sc->sc_mm.status & 0xe4) != 0x20) && (bail < 10)) {
-		DPRINTF("%s: tsleep %p\n", sc->sc_dev.dv_xname, sc);
+		DPRINTF("%s: tsleep %p\n", device_xname(sc->sc_dev), sc);
 		tsleep(sc, PCATCH | PZERO, "dbrifxdt", hz);
 		bail++;
 	}
 #endif
 	if (bail >= 10) {
 		DPRINTF("%s: switching to control mode timed out (%x %x)\n",
-		    sc->sc_dev.dv_xname, sc->sc_mm.status,
+		    device_xname(sc->sc_dev), sc->sc_mm.status,
 		    bus_space_read_4(iot, ioh, DBRI_REG2));
 		return -1;
 	}
@@ -1071,7 +1068,7 @@ mmcodec_setcontrol(struct dbri_softc *sc)
 static void
 chi_reset(struct dbri_softc *sc, enum ms ms, int bpf)
 {
-	volatile u_int32_t *cmd;
+	volatile uint32_t *cmd;
 	int val;
 	int clockrate, divisor;
 
@@ -1102,15 +1099,14 @@ chi_reset(struct dbri_softc *sc, enum ms ms, int bpf)
 		divisor = 12288 / clockrate;
 
 		if (divisor > 255 || divisor * clockrate != 12288)
-			aprint_error("%s: illegal bits-per-frame %d\n",
-			    sc->sc_dev.dv_xname, bpf);
+			aprint_error_dev(sc->sc_dev,
+			    "illegal bits-per-frame %d\n", bpf);
 
 		*(cmd++) = DBRI_CMD(DBRI_COMMAND_CHI, 0,
 		    DBRI_CHI_CHICM(divisor) | DBRI_CHI_FD | DBRI_CHI_BPF(bpf));
 		break;
 	default:
-		aprint_error("%s: unknown value for ms!\n", 
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "unknown value for ms!\n");
 		break;
 	}
 
@@ -1134,13 +1130,13 @@ pipe_setup(struct dbri_softc *sc, int pipe, int sdp)
 {
 	DPRINTF("pipe setup: %d\n", pipe);
 	if (pipe < 0 || pipe >= DBRI_PIPE_MAX) {
-		aprint_error("%s: illegal pipe number %d\n", 
-		    sc->sc_dev.dv_xname, pipe);
+		aprint_error_dev(sc->sc_dev, "illegal pipe number %d\n", 
+		    pipe);
 		return;
 	}
 
 	if ((sdp & 0xf800) != sdp)
-		aprint_error("%s: strange SDP value %d\n", sc->sc_dev.dv_xname, 
+		aprint_error_dev(sc->sc_dev, "strange SDP value %d\n",
 		    sdp);
 
 	if (DBRI_SDP_MODE(sdp) == DBRI_SDP_FIXED &&
@@ -1163,18 +1159,18 @@ pipe_reset(struct dbri_softc *sc, int pipe)
 	struct dbri_desc *dd;
 	int sdp;
 	int desc;
-	volatile u_int32_t *cmd;
+	volatile uint32_t *cmd;
 
 	if (pipe < 0 || pipe >= DBRI_PIPE_MAX) {
-		aprint_error("%s: illegal pipe number %d\n", 
-		    sc->sc_dev.dv_xname, pipe);
+		aprint_error_dev(sc->sc_dev, "illegal pipe number %d\n", 
+		    pipe);
 		return;
 	}
 
 	sdp = sc->sc_pipe[pipe].sdp;
 	if (sdp == 0) {
-		aprint_error("%s: can not reset uninitialized pipe %d\n",
-		    sc->sc_dev.dv_xname, pipe);
+		aprint_error_dev(sc->sc_dev, "can not reset uninitialized pipe %d\n",
+		    pipe);
 		return;
 	}
 
@@ -1201,24 +1197,24 @@ pipe_reset(struct dbri_softc *sc, int pipe)
 }
 
 static void
-pipe_receive_fixed(struct dbri_softc *sc, int pipe, volatile u_int32_t *prec)
+pipe_receive_fixed(struct dbri_softc *sc, int pipe, volatile uint32_t *prec)
 {
 
 	if (pipe < DBRI_PIPE_MAX / 2 || pipe >= DBRI_PIPE_MAX) {
-		aprint_error("%s: illegal pipe number %d\n",
-		    sc->sc_dev.dv_xname, pipe);
+		aprint_error_dev(sc->sc_dev, "illegal pipe number %d\n",
+		    pipe);
 		return;
 	}
 
 	if (DBRI_SDP_MODE(sc->sc_pipe[pipe].sdp) != DBRI_SDP_FIXED) {
-		aprint_error("%s: non-fixed pipe %d\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "non-fixed pipe %d\n",
 		    pipe);
 		return;
 	}
 
 	if (sc->sc_pipe[pipe].sdp & DBRI_SDP_TO_SER) {
-		aprint_error("%s: can not receive on transmit pipe %d\b",
-		    sc->sc_dev.dv_xname, pipe);
+		aprint_error_dev(sc->sc_dev, "can not receive on transmit pipe %d\b",
+		    pipe);
 		return;
 	}
 
@@ -1228,31 +1224,31 @@ pipe_receive_fixed(struct dbri_softc *sc, int pipe, volatile u_int32_t *prec)
 }
 
 static void
-pipe_transmit_fixed(struct dbri_softc *sc, int pipe, u_int32_t data)
+pipe_transmit_fixed(struct dbri_softc *sc, int pipe, uint32_t data)
 {
-	volatile u_int32_t *cmd;
+	volatile uint32_t *cmd;
 
 	if (pipe < DBRI_PIPE_MAX / 2 || pipe >= DBRI_PIPE_MAX) {
-		aprint_error("%s: illegal pipe number %d\n",
-		    sc->sc_dev.dv_xname, pipe);
+		aprint_error_dev(sc->sc_dev, "illegal pipe number %d\n",
+		    pipe);
 		return;
 	}
 
 	if (DBRI_SDP_MODE(sc->sc_pipe[pipe].sdp) == 0) {
-		aprint_error("%s: uninitialized pipe %d\n",
-		    sc->sc_dev.dv_xname, pipe);
+		aprint_error_dev(sc->sc_dev, "uninitialized pipe %d\n",
+		    pipe);
 		return;
 	}
 
 	if (DBRI_SDP_MODE(sc->sc_pipe[pipe].sdp) != DBRI_SDP_FIXED) {
-		aprint_error("%s: non-fixed pipe %d\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "non-fixed pipe %d\n",
 		    pipe);
 		return;
 	}
 
 	if (!(sc->sc_pipe[pipe].sdp & DBRI_SDP_TO_SER)) {
-		aprint_error("%s: called on receive pipe %d\n",
-		    sc->sc_dev.dv_xname, pipe);
+		aprint_error_dev(sc->sc_dev, "called on receive pipe %d\n",
+		    pipe);
 		return;
 	}
 
@@ -1272,7 +1268,7 @@ static void
 setup_ring_xmit(struct dbri_softc *sc, int pipe, int which, int num, int blksz,
 		void (*callback)(void *), void *callback_args)
 {
-	volatile u_int32_t *cmd;
+	volatile uint32_t *cmd;
 	int x, i;
 	int td;
 	int td_first, td_last;
@@ -1293,8 +1289,8 @@ setup_ring_xmit(struct dbri_softc *sc, int pipe, int which, int num, int blksz,
 	td_first = td_last = -1;
 
 	if (sc->sc_pipe[pipe].sdp == 0) {
-		aprint_error("%s: uninitialized pipe %d\n",
-		    sc->sc_dev.dv_xname, pipe);
+		aprint_error_dev(sc->sc_dev, "uninitialized pipe %d\n",
+		    pipe);
 		return;
 	}
 
@@ -1368,7 +1364,7 @@ static void
 setup_ring_recv(struct dbri_softc *sc, int pipe, int which, int num, int blksz,
 		void (*callback)(void *), void *callback_args)
 {
-	volatile u_int32_t *cmd;
+	volatile uint32_t *cmd;
 	int x, i;
 	int td_first, td_last;
 	bus_addr_t dmabuf, dmabase;
@@ -1386,8 +1382,8 @@ setup_ring_recv(struct dbri_softc *sc, int pipe, int which, int num, int blksz,
 	td_first = td_last = -1;
 
 	if (sc->sc_pipe[pipe].sdp == 0) {
-		aprint_error("%s: uninitialized pipe %d\n",
-		    sc->sc_dev.dv_xname, pipe);
+		aprint_error_dev(sc->sc_dev, "uninitialized pipe %d\n",
+		    pipe);
 		return;
 	}
 
@@ -1459,21 +1455,21 @@ static void
 pipe_ts_link(struct dbri_softc *sc, int pipe, enum io dir, int basepipe,
 		int len, int cycle)
 {
-	volatile u_int32_t *cmd;
+	volatile uint32_t *cmd;
 	int prevpipe, nextpipe;
 	int val;
 
 	DPRINTF("%s: %d\n", __func__, pipe);
 	if (pipe < 0 || pipe >= DBRI_PIPE_MAX ||
 	    basepipe < 0 || basepipe >= DBRI_PIPE_MAX) {
-		aprint_error("%s: illegal pipe numbers (%d, %d)\n",
-		    sc->sc_dev.dv_xname, pipe, basepipe);
+		aprint_error_dev(sc->sc_dev, "illegal pipe numbers (%d, %d)\n",
+		    pipe, basepipe);
 		return;
 	}
 
 	if (sc->sc_pipe[pipe].sdp == 0 || sc->sc_pipe[basepipe].sdp == 0) {
-		aprint_error("%s: uninitialized pipe (%d, %d)\n",
-		    sc->sc_dev.dv_xname, pipe, basepipe);
+		aprint_error_dev(sc->sc_dev, "uninitialized pipe (%d, %d)\n",
+		    pipe, basepipe);
 		return;
 	}
 
@@ -1535,7 +1531,7 @@ pipe_ts_link(struct dbri_softc *sc, int pipe, enum io dir, int basepipe,
 		break;
 	default:
 		DPRINTF("%s: should not have happened!\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		break;
 	}
 
@@ -1733,8 +1729,12 @@ dbri_round_blocksize(void *hdl, int bs, int mode,
 			const audio_params_t *param)
 {
 
-	/* DBRI DMA segment size, rounded down to 32bit alignment */
-	return 0x1ffc;
+	/*
+	 * DBRI DMA segment size can be up to 0x1fff, sixes that are not powers
+	 * of two seem to confuse the upper audio layer so we're going with
+	 * 0x1000 here
+	 */
+	return 0x1000;
 }
 
 static int
@@ -1878,6 +1878,7 @@ dbri_query_devinfo(void *hdl, mixer_devinfo_t *di)
 		strcpy(di->label.name, AudioNmaster);
 		di->type = AUDIO_MIXER_VALUE;
 		di->un.v.num_channels = 2;
+		di->un.v.delta = 16;
 		strcpy(di->un.v.units.name, AudioNvolume);
 		return (0);
 	case DBRI_INPUT_GAIN:	/* input gain */
@@ -1949,7 +1950,7 @@ static size_t
 dbri_round_buffersize(void *hdl, int dir, size_t bufsize)
 {
 #ifdef DBRI_BIG_BUFFER
-	return 16*0x1ffc;	/* use ~128KB buffer */
+	return 0x20000;	/* use 128KB buffer */
 #else
 	return bufsize;
 #endif
@@ -2049,8 +2050,8 @@ dbri_trigger_input(void *hdl, void *start, void *end, int blksize,
 }
 
 
-static u_int32_t
-reverse_bytes(u_int32_t b, int len)
+static uint32_t
+reverse_bytes(uint32_t b, int len)
 {
 	switch (len) {
 	case 32:
@@ -2117,13 +2118,25 @@ dbri_malloc(void *v, int dir, size_t s, struct malloc_type *mt, int flags)
 static void
 dbri_free(void *v, void *p, struct malloc_type *mt)
 {
-	free(p, mt);
+	struct dbri_softc *sc = v;
+	struct dbri_desc *dd;
+	int i;
+
+	for (i = 0; i < sc->sc_desc_used; i++) {
+		dd = &sc->sc_desc[i];
+		if (dd->buf == p)
+			break;
+	}
+	if (i >= sc->sc_desc_used)
+		return;
+	bus_dmamap_unload(sc->sc_dmat, dd->dmamap);
+	bus_dmamap_destroy(sc->sc_dmat, dd->dmamap);
 }
 
 static paddr_t
 dbri_mappage(void *v, void *mem, off_t off, int prot)
 {
-	struct dbri_softc *sc = v;;
+	struct dbri_softc *sc = v;
 	int current;
 
 	if (off < 0)
@@ -2174,45 +2187,40 @@ dbri_close(void *cookie)
 	sc->sc_recording = 0;
 }
 
-static void
-dbri_powerhook(int why, void *cookie)
+static bool
+dbri_suspend(device_t self, const pmf_qual_t *qual)
 {
-	struct dbri_softc *sc = cookie;
+	struct dbri_softc *sc = device_private(self);
 
-	if (why == sc->sc_pmgrstate)
-		return;
+	dbri_set_power(sc, 0);
+	return true;
+}
 
-	switch(why)
-	{
-		case PWR_SUSPEND:
-			dbri_set_power(sc, 0);
-			break;
-		case PWR_RESUME:
-			if (sc->sc_powerstate != 0)
-				break;
-			aprint_verbose("resume: %d\n", sc->sc_refcount);
-			sc->sc_pmgrstate = PWR_RESUME;
-			if (sc->sc_playing) {
-				volatile u_int32_t *cmd;
-				int s;
+static bool
+dbri_resume(device_t self, const pmf_qual_t *qual)
+{
+	struct dbri_softc *sc = device_private(self);
 
-				dbri_bring_up(sc);
-				s = splsched();
-				cmd = dbri_command_lock(sc);
-				*(cmd++) = DBRI_CMD(DBRI_COMMAND_SDP,
-				    0, sc->sc_pipe[4].sdp |
-				    DBRI_SDP_VALID_POINTER |
-				    DBRI_SDP_EVERY | DBRI_SDP_CLEAR);
-				*(cmd++) = sc->sc_dmabase +
-				    dbri_dma_off(xmit, 0);
-				dbri_command_send(sc, cmd);
-				splx(s);
-			}
-			break;
-		default:
-			return;
+	if (sc->sc_powerstate != 0)
+		return true;
+	aprint_verbose("resume: %d\n", sc->sc_refcount);
+	if (sc->sc_playing) {
+		volatile uint32_t *cmd;
+		int s;
+
+		dbri_bring_up(sc);
+		s = splsched();
+		cmd = dbri_command_lock(sc);
+		*(cmd++) = DBRI_CMD(DBRI_COMMAND_SDP,
+		    0, sc->sc_pipe[4].sdp |
+		    DBRI_SDP_VALID_POINTER |
+		    DBRI_SDP_EVERY | DBRI_SDP_CLEAR);
+		*(cmd++) = sc->sc_dmabase +
+		    dbri_dma_off(xmit, 0);
+		dbri_command_send(sc, cmd);
+		splx(s);
 	}
-	sc->sc_pmgrstate = why;
+	return true;
 }
 
 #endif /* NAUDIO > 0 */

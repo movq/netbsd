@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.21 2007/10/05 15:27:46 sjg Exp $
+# $NetBSD: Makefile,v 1.32 2011/04/07 01:40:02 joerg Exp $
 #
 # Unit tests for make(1)
 # The main targets are:
@@ -21,9 +21,14 @@ UNIT_TESTS:= ${.PARSEDIR}
 SUBFILES= \
 	comment \
 	cond1 \
+	error \
 	export \
 	export-all \
+	doterror \
 	dotwait \
+	forsubst \
+	hash \
+	misc \
 	moderrs \
 	modmatch \
 	modmisc \
@@ -31,23 +36,35 @@ SUBFILES= \
 	modts \
 	modword \
 	posix \
+	qequals \
+	sysv \
 	ternary \
+	unexport \
+	unexport-env \
 	varcmd
 
 all: ${SUBFILES}
+
+flags.doterror=
 
 # the tests are actually done with sub-makes.
 .PHONY: ${SUBFILES}
 .PRECIOUS: ${SUBFILES}
 ${SUBFILES}:
-	-@${.MAKE} -k -f ${UNIT_TESTS}/$@
+	-@${.MAKE} ${flags.$@:U-k} -f ${UNIT_TESTS}/$@
 
 clean:
 	rm -f *.out *.fail *.core
 
-.include <bsd.obj.mk>
+.-include <bsd.obj.mk>
 
 TEST_MAKE?= ${.MAKE}
+TOOL_SED?= sed
+
+# ensure consistent results from sort(1)
+LC_ALL= C
+LANG= C
+.export LANG LC_ALL
 
 # The driver.
 # We always pretend .MAKE was called 'make' 
@@ -57,7 +74,7 @@ TEST_MAKE?= ${.MAKE}
 test:
 	@echo "${TEST_MAKE} -f ${MAKEFILE} > ${.TARGET}.out 2>&1"
 	@cd ${.OBJDIR} && ${TEST_MAKE} -f ${MAKEFILE} 2>&1 | \
-	sed -e 's,^${TEST_MAKE:T:C/\./\\\./g}:,make:,' \
+	${TOOL_SED} -e 's,^${TEST_MAKE:T:C/\./\\\./g}:,make:,' \
 	-e '/stopped/s, /.*, unit-tests,' \
 	-e 's,${.CURDIR:C/\./\\\./g}/,,g' \
 	-e 's,${UNIT_TESTS:C/\./\\\./g}/,,g' > ${.TARGET}.out || { \

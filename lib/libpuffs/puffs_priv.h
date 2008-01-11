@@ -1,7 +1,7 @@
-/*	$NetBSD: puffs_priv.h,v 1.37 2007/12/25 20:38:01 pooka Exp $	*/
+/*	$NetBSD: puffs_priv.h,v 1.43 2010/12/06 14:50:34 pooka Exp $	*/
 
 /*
- * Copyright (c) 2006 Antti Kantee.  All Rights Reserved.
+ * Copyright (c) 2006, 2007, 2008 Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,19 +31,13 @@
 #include <sys/types.h>
 #include <fs/puffs/puffs_msgif.h>
 
+#include <pthread.h>
 #include <puffs.h>
 #include <ucontext.h>
-
-#ifdef PUFFS_WITH_THREADS
-#include <pthread.h>
 
 extern pthread_mutex_t pu_lock;
 #define PU_LOCK() pthread_mutex_lock(&pu_lock)
 #define PU_UNLOCK() pthread_mutex_unlock(&pu_lock)
-#else
-#define PU_LOCK()
-#define PU_UNLOCK()
-#endif
 
 #define PU_CMAP(pu, c) (pu->pu_cmap ? pu->pu_cmap(pu,c) : (struct puffs_node*)c)
 
@@ -91,10 +85,6 @@ struct puffs_fctrl_io {
         || (fio->stat & FIO_ENABLE_W) == 0))	\
 	&& (fio->wwait == 0)))
 
-struct puffs_executor {
-	struct puffs_framebuf		*pex_pufbuf;
-	TAILQ_ENTRY(puffs_executor)	pex_entries;
-};
 
 /*
  * usermount: describes one file system instance
@@ -108,23 +98,32 @@ struct puffs_usermount {
 	uint32_t		pu_flags;
 	int			pu_cc_stackshift;
 
+	ucontext_t		pu_mainctx;
+#define PUFFS_CCMAXSTORE 32
+	int			pu_cc_nstored;
+
 	int			pu_kq;
 	int			pu_state;
-#define PU_STATEMASK	0xff
-#define PU_INLOOP	0x100
-#define PU_ASYNCFD	0x200
-#define PU_HASKQ	0x400
-#define PU_PUFFSDAEMON	0x800
+#define PU_STATEMASK	0x00ff
+#define PU_INLOOP	0x0100
+#define PU_ASYNCFD	0x0200
+#define PU_HASKQ	0x0400
+#define PU_PUFFSDAEMON	0x0800
+#define PU_MAINRESTORE	0x1000
+#define PU_DONEXIT	0x2000
 #define PU_SETSTATE(pu, s) (pu->pu_state = (s) | (pu->pu_state & ~PU_STATEMASK))
+#define PU_SETSFLAG(pu, s) (pu->pu_state |= (s))
+#define PU_CLRSFLAG(pu, s) \
+    (pu->pu_state = ((pu->pu_state &= ~(s)) | (pu->pu_state & PU_STATEMASK)))
 	int			pu_dpipe[2];
 
 	struct puffs_node	*pu_pn_root;
 
 	LIST_HEAD(, puffs_node)	pu_pnodelst;
-	LIST_HEAD(, puffs_cc)	pu_ccnukelst;
-	TAILQ_HEAD(, puffs_cc)	pu_sched;
 
-	TAILQ_HEAD(, puffs_executor) pu_exq;
+	LIST_HEAD(, puffs_cc)	pu_ccmagazin;
+	TAILQ_HEAD(, puffs_cc)	pu_lazyctx;
+	TAILQ_HEAD(, puffs_cc)	pu_sched;
 
 	pu_cmap_fn		pu_cmap;
 
@@ -145,7 +144,7 @@ struct puffs_usermount {
 	LIST_HEAD(, puffs_fctrl_io) pu_ios;
 	LIST_HEAD(, puffs_fctrl_io) pu_ios_rmlist;
 	struct kevent		*pu_evs;
-	size_t			pu_nfds;
+	size_t			pu_nevs;
 
 	puffs_ml_loop_fn	pu_ml_lfn;
 	struct timespec		pu_ml_timeout;
@@ -159,37 +158,41 @@ struct puffs_usermount {
 
 /* call context */
 
+struct puffs_cc;
+typedef void (*puffs_ccfunc)(struct puffs_cc *);
+
 struct puffs_cc {
 	struct puffs_usermount	*pcc_pu;
 	struct puffs_framebuf	*pcc_pb;
 
-	ucontext_t		pcc_uc;		/* "continue" 		*/
-	ucontext_t		pcc_uc_ret;	/* "yield" 		*/
-	void			*pcc_stack;
+	/* real cc */
+	union {
+		struct {
+			ucontext_t	uc;		/* "continue"	*/
+			ucontext_t	uc_ret;		/* "yield" 	*/
+		} real;
+		struct {
+			puffs_ccfunc	func;
+			void		*farg;
+		} fake;
+	} pcc_u;
 
 	pid_t			pcc_pid;
 	lwpid_t			pcc_lid;
 
 	int			pcc_flags;
 
-	TAILQ_ENTRY(puffs_cc)	entries;
-	LIST_ENTRY(puffs_cc)	nlst_entries;
+	TAILQ_ENTRY(puffs_cc)	pcc_schedent;
+	LIST_ENTRY(puffs_cc)	pcc_rope;
 };
-#define PCC_FAKECC	0x01
-#define PCC_REALCC	0x02
-#define PCC_DONE	0x04
-#define PCC_BORROWED	0x08
-#define PCC_HASCALLER	0x10
-#define PCC_THREADED	0x20
-
-#define pcc_callstat(a)	   (a->pcc_flags & PCC_CALL_MASK)
-#define pcc_callset(a, b)  (a->pcc_flags = (a->pcc_flags & ~PCC_CALL_MASK) | b)
-
-#define pcc_init_unreal(ap, type) 					\
-do {									\
-	memset(ap, 0, sizeof(*ap));					\
-	(ap)->pcc_flags = type;						\
-} while (/*CONSTCOND*/0)
+#define pcc_uc		pcc_u.real.uc
+#define pcc_uc_ret 	pcc_u.real.uc_ret
+#define pcc_func	pcc_u.fake.func
+#define pcc_farg	pcc_u.fake.farg
+#define PCC_DONE	0x01
+#define PCC_BORROWED	0x02
+#define PCC_HASCALLER	0x04
+#define PCC_MLCONT	0x08
 
 struct puffs_newinfo {
 	void		**pni_cookie;
@@ -210,38 +213,43 @@ struct puffs_newinfo {
 
 __BEGIN_DECLS
 
-void	puffs_calldispatcher(struct puffs_cc *);
-
-void	puffs_framev_input(struct puffs_usermount *, struct puffs_framectrl *,
+void	puffs__framev_input(struct puffs_usermount *, struct puffs_framectrl *,
 			   struct puffs_fctrl_io *);
-int	puffs_framev_output(struct puffs_usermount *, struct puffs_framectrl*,
+int	puffs__framev_output(struct puffs_usermount *, struct puffs_framectrl*,
 			    struct puffs_fctrl_io *);
-void	puffs_framev_exit(struct puffs_usermount *);
-void	puffs_framev_readclose(struct puffs_usermount *,
+void	puffs__framev_exit(struct puffs_usermount *);
+void	puffs__framev_readclose(struct puffs_usermount *,
 			       struct puffs_fctrl_io *, int);
-void	puffs_framev_writeclose(struct puffs_usermount *,
+void	puffs__framev_writeclose(struct puffs_usermount *,
 				struct puffs_fctrl_io *, int);
-void	puffs_framev_notify(struct puffs_fctrl_io *, int);
+void	puffs__framev_notify(struct puffs_fctrl_io *, int);
 void	*puffs__framebuf_getdataptr(struct puffs_framebuf *);
 int	puffs__framev_addfd_ctrl(struct puffs_usermount *, int, int,
 				 struct puffs_framectrl *);
 void	puffs__framebuf_moveinfo(struct puffs_framebuf *,
 				 struct puffs_framebuf *);
 
-int	puffs_cc_create(struct puffs_usermount *, struct puffs_framebuf *,
-			int, struct puffs_cc **);
-void	puffs_cc_destroy(struct puffs_cc *);
-void	puffs_cc_setcaller(struct puffs_cc *, pid_t, lwpid_t);
-void	puffs_goto(struct puffs_cc *);
+void	puffs__theloop(struct puffs_cc *);
+void	puffs__ml_dispatch(struct puffs_usermount *, struct puffs_framebuf *);
 
-int	puffs_fsframe_read(struct puffs_usermount *, struct puffs_framebuf *,
-			   int, int *);
-int	puffs_fsframe_write(struct puffs_usermount *, struct puffs_framebuf *,
-			   int, int *);
-int	puffs_fsframe_cmp(struct puffs_usermount *, struct puffs_framebuf *,
-			  struct puffs_framebuf *, int *);
-void	puffs_fsframe_gotframe(struct puffs_usermount *,
-			       struct puffs_framebuf *);
+int	puffs__cc_create(struct puffs_usermount *, puffs_ccfunc,
+			 struct puffs_cc **);
+void	puffs__cc_cont(struct puffs_cc *);
+void	puffs__cc_destroy(struct puffs_cc *, int);
+void	puffs__cc_setcaller(struct puffs_cc *, pid_t, lwpid_t);
+void	puffs__goto(struct puffs_cc *);
+int	puffs__cc_savemain(struct puffs_usermount *);
+int	puffs__cc_restoremain(struct puffs_usermount *);
+void	puffs__cc_exit(struct puffs_usermount *);
+
+int	puffs__fsframe_read(struct puffs_usermount *, struct puffs_framebuf *,
+			    int, int *);
+int	puffs__fsframe_write(struct puffs_usermount *, struct puffs_framebuf *,
+			    int, int *);
+int	puffs__fsframe_cmp(struct puffs_usermount *, struct puffs_framebuf *,
+			   struct puffs_framebuf *, int *);
+void	puffs__fsframe_gotframe(struct puffs_usermount *,
+			        struct puffs_framebuf *);
 
 uint64_t	puffs__nextreq(struct puffs_usermount *pu);
 

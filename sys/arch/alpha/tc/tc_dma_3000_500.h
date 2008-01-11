@@ -1,4 +1,4 @@
-/* $NetBSD: tc_dma_3000_500.h,v 1.2 1997/06/07 00:02:19 thorpej Exp $ */
+/* $NetBSD: tc_dma_3000_500.h,v 1.4 2009/03/14 14:45:54 dsl Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,18 +30,18 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-void	tc_dma_init_3000_500 __P((int));
-bus_dma_tag_t tc_dma_get_tag_3000_500 __P((int));
+void	tc_dma_init_3000_500(int);
+bus_dma_tag_t tc_dma_get_tag_3000_500(int);
 
-int	tc_bus_dmamap_create_sgmap __P((bus_dma_tag_t, bus_size_t, int,
-	    bus_size_t, bus_size_t, int, bus_dmamap_t *));
-void	tc_bus_dmamap_destroy_sgmap __P((bus_dma_tag_t, bus_dmamap_t));
-int	tc_bus_dmamap_load_sgmap __P((bus_dma_tag_t, bus_dmamap_t, void *,
-	    bus_size_t, struct proc *, int));
-int	tc_bus_dmamap_load_mbuf_sgmap __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct mbuf *, int));
-int	tc_bus_dmamap_load_uio_sgmap __P((bus_dma_tag_t, bus_dmamap_t,
-	    struct uio *, int));
-int	tc_bus_dmamap_load_raw_sgmap __P((bus_dma_tag_t, bus_dmamap_t,
-	    bus_dma_segment_t *, int, bus_size_t, int));
-void	tc_bus_dmamap_unload_sgmap __P((bus_dma_tag_t, bus_dmamap_t));
+int	tc_bus_dmamap_create_sgmap(bus_dma_tag_t, bus_size_t, int,
+	    bus_size_t, bus_size_t, int, bus_dmamap_t *);
+void	tc_bus_dmamap_destroy_sgmap(bus_dma_tag_t, bus_dmamap_t);
+int	tc_bus_dmamap_load_sgmap(bus_dma_tag_t, bus_dmamap_t, void *,
+	    bus_size_t, struct proc *, int);
+int	tc_bus_dmamap_load_mbuf_sgmap(bus_dma_tag_t, bus_dmamap_t,
+	    struct mbuf *, int);
+int	tc_bus_dmamap_load_uio_sgmap(bus_dma_tag_t, bus_dmamap_t,
+	    struct uio *, int);
+int	tc_bus_dmamap_load_raw_sgmap(bus_dma_tag_t, bus_dmamap_t,
+	    bus_dma_segment_t *, int, bus_size_t, int);
+void	tc_bus_dmamap_unload_sgmap(bus_dma_tag_t, bus_dmamap_t);

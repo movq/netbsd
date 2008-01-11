@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.18 2008/01/09 19:39:07 garbled Exp $	*/
+/*	$NetBSD: boot.c,v 1.23 2011/01/22 19:19:21 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -107,7 +100,15 @@ char bootfile[128];
 int boothowto;
 int debug;
 
-static char *kernels[] = { "/netbsd.ofppc", "/netbsd", "/netbsd.gz", NULL };
+#ifdef OFWDUMP
+void dump_ofwtree(int);
+#endif
+
+static char *kernels[] = { "/netbsd.ofppc", "/netbsd",
+			   "/netbsd.gz", "onetbsd", NULL };
+static char *kernels64[] = { "/netbsd.ofppc64", "/netbsd64", "/netbsd64.gz",
+			     "onetbsd64", "/netbsd.ofppc", "/netbsd",
+			     "/netbsd.gz", "onetbsd", NULL };
 
 static void
 prom2boot(char *dev)
@@ -154,7 +155,7 @@ parseargs(char *str, int *howtop)
 static void
 chain(boot_entry_t entry, char *args, void *ssym, void *esym)
 {
-	extern char end[], *cp;
+	extern char end[];
 	u_int l, magic = 0x19730224;
 
 	/*
@@ -187,9 +188,8 @@ _rtt(void)
 void
 main(void)
 {
-	extern char bootprog_name[], bootprog_rev[],
-		    bootprog_maker[], bootprog_date[];
-	int chosen, options;
+	extern char bootprog_name[], bootprog_rev[];
+	int chosen, cpu, cpunode, j, is64=0;
 	char bootline[512];		/* Should check size? */
 	char *cp;
 	u_long marks[MARK_MAX];
@@ -198,8 +198,11 @@ main(void)
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
 
+#ifdef OFWDUMP
+	chosen = OF_finddevice("/");
+	dump_ofwtree(chosen);
+#endif
 	/*
 	 * Get the boot arguments from Openfirmware
 	 */
@@ -208,6 +211,14 @@ main(void)
 	    OF_getprop(chosen, "bootargs", bootline, sizeof bootline) < 0) {
 		printf("Invalid Openfirmware environment\n");
 		OF_exit();
+	}
+
+	/* lets see if we can guess the 64bittedness */
+	if (OF_getprop(chosen, "cpu", &cpu, sizeof cpu) ==  sizeof(cpu)) {
+		cpunode = OF_instance_to_package(cpu);
+		if (OF_getprop(cpunode, "64-bit", &j, sizeof j) >= 0) {
+			is64 = 1;
+		}
 	}
 
 	prom2boot(bootdev);
@@ -227,13 +238,22 @@ main(void)
 			kernels[0] = bootline;
 			kernels[1] = NULL;
 		}
+		if (!bootline[0] && is64) {
+			for (i = 0; kernels64[i]; i++) {
+				DPRINTF("Trying %s\n", kernels64[i]);
 
-		for (i = 0; kernels[i]; i++) {
-			DPRINTF("Trying %s\n", kernels[i]);
+				marks[MARK_START] = 0;
+				if (loadfile(kernels64[i], marks, LOAD_KERNEL) >= 0)
+					goto loaded;
+			}
+		} else {
+			for (i = 0; kernels[i]; i++) {
+				DPRINTF("Trying %s\n", kernels[i]);
 
-			marks[MARK_START] = 0;
-			if (loadfile(kernels[i], marks, LOAD_KERNEL) >= 0)
-				goto loaded;
+				marks[MARK_START] = 0;
+				if (loadfile(kernels[i], marks, LOAD_KERNEL) >= 0)
+					goto loaded;
+			}
 		}
 
 		boothowto |= RB_ASKNAME;

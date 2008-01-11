@@ -1,4 +1,4 @@
-/* $NetBSD: pass6.c,v 1.20 2007/10/10 20:42:20 ad Exp $	 */
+/* $NetBSD: pass6.c,v 1.23 2010/02/16 23:20:30 mlelstv Exp $	 */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -93,7 +86,8 @@ rfw_update_single(struct uvnode *vp, daddr_t lbn, ufs_daddr_t ndaddr, int size)
 	struct inode *ip;
 	daddr_t daddr, ooff;
 	int num, error;
-	int i, bb, osize = 0, obb = 0;
+	int i, osize = 0;
+	int frags, ofrags = 0;
 	u_int32_t oldsn, sn;
 
 	ip = VTOI(vp);
@@ -106,34 +100,34 @@ rfw_update_single(struct uvnode *vp, daddr_t lbn, ufs_daddr_t ndaddr, int size)
 	if (daddr > 0)
 		daddr = dbtofsb(fs, daddr);
 
-	bb = fragstofsb(fs, numfrags(fs, size));
+	frags = numfrags(fs, size);
 	switch (num) {
 	case 0:
 		ooff = ip->i_ffs1_db[lbn];
 		if (ooff <= 0)
-			ip->i_ffs1_blocks += bb;
+			ip->i_ffs1_blocks += frags;
 		else {
 			/* possible fragment truncation or extension */
-			obb = btofsb(fs, ip->i_lfs_fragsize[lbn]);
-			ip->i_ffs1_blocks += (bb - obb);
+			ofrags = ip->i_lfs_fragsize[lbn];
+			ip->i_ffs1_blocks += (frags - ofrags);
 		}
 		ip->i_ffs1_db[lbn] = ndaddr;
 		break;
 	case 1:
 		ooff = ip->i_ffs1_ib[a[0].in_off];
 		if (ooff <= 0)
-			ip->i_ffs1_blocks += bb;
+			ip->i_ffs1_blocks += frags;
 		ip->i_ffs1_ib[a[0].in_off] = ndaddr;
 		break;
 	default:
 		ap = &a[num - 1];
-		if (bread(vp, ap->in_lbn, fs->lfs_bsize, NULL, &bp))
+		if (bread(vp, ap->in_lbn, fs->lfs_bsize, NULL, 0, &bp))
 			errx(1, "lfs_updatemeta: bread bno %" PRId64,
 			    ap->in_lbn);
 
 		ooff = ((ufs_daddr_t *) bp->b_data)[ap->in_off];
 		if (ooff <= 0)
-			ip->i_ffs1_blocks += bb;
+			ip->i_ffs1_blocks += frags;
 		((ufs_daddr_t *) bp->b_data)[ap->in_off] = ndaddr;
 		(void) VOP_BWRITE(bp);
 	}
@@ -195,7 +189,7 @@ rfw_update_single(struct uvnode *vp, daddr_t lbn, ufs_daddr_t ndaddr, int size)
 	if (daddr <= 0) {
 		fs->lfs_bfree -= btofsb(fs, size);
 	} else if (size != osize) {
-		fs->lfs_bfree -= (bb - obb);
+		fs->lfs_bfree -= (frags - ofrags);
 	}
 
 	/*
@@ -299,7 +293,7 @@ pass6check(struct inodesc * idesc)
 
 	/* Check that the blocks do not lie within clean segments. */
 	anyout = anynew = 0;
-	for (i = 0; i < fragstofsb(fs, idesc->id_numfrags); i++) {
+	for (i = 0; i < idesc->id_numfrags; i++) {
 		sn = dtosn(fs, idesc->id_blkno + i);
 		if (sn < 0 || sn >= fs->lfs_nseg ||
 		    (seg_table[sn].su_flags & SEGUSE_DIRTY) == 0) {
@@ -345,14 +339,14 @@ account_indir(struct uvnode *vp, struct ufs1_dinode *dp, daddr_t ilbn, daddr_t d
 		lbn = -ilbn;
 	else
 		lbn = ilbn + 1;
-	bread(fs->lfs_devvp, fsbtodb(fs, daddr), fs->lfs_bsize, NULL, &bp);
+	bread(fs->lfs_devvp, fsbtodb(fs, daddr), fs->lfs_bsize, NULL, 0, &bp);
 	buf = emalloc(fs->lfs_bsize);
 	memcpy(buf, bp->b_data, fs->lfs_bsize);
 	brelse(bp, 0);
 
 	obuf = emalloc(fs->lfs_bsize);
 	if (vp) {
-		bread(vp, ilbn, fs->lfs_bsize, NULL, &bp);
+		bread(vp, ilbn, fs->lfs_bsize, NULL, 0, &bp);
 		memcpy(obuf, bp->b_data, fs->lfs_bsize);
 		brelse(bp, 0);
 	} else
@@ -621,7 +615,7 @@ pass6(void)
 		}
 		
 		/* Read in summary block */
-		bread(devvp, fsbtodb(fs, daddr), fs->lfs_sumsize, NULL, &bp);
+		bread(devvp, fsbtodb(fs, daddr), fs->lfs_sumsize, NULL, 0, &bp);
 		sp = (SEGSUM *)bp->b_data;
 		if (debug)
 			pwarn("sum at 0x%x: ninos=%d nfinfo=%d\n",
@@ -661,7 +655,7 @@ pass6(void)
 			fs->lfs_bfree -= btofsb(fs, fs->lfs_ibsize);
 			sbdirty();
 			bread(devvp, fsbtodb(fs, ibdaddr), fs->lfs_ibsize,
-			      NOCRED, &ibp);
+			      NOCRED, 0, &ibp);
 			memcpy(ibbuf, ibp->b_data, fs->lfs_ibsize);
 			brelse(ibp, 0);
 
@@ -848,7 +842,7 @@ pass6(void)
 		}
 		
 		/* Read in summary block */
-		bread(devvp, fsbtodb(fs, daddr), fs->lfs_sumsize, NULL, &bp);
+		bread(devvp, fsbtodb(fs, daddr), fs->lfs_sumsize, NULL, 0, &bp);
 		sp = (SEGSUM *)bp->b_data;
 		bc = check_summary(fs, sp, daddr, debug, devvp, pass6harvest);
 		if (bc == 0) {

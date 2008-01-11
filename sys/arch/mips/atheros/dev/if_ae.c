@@ -1,4 +1,4 @@
-/* $Id: if_ae.c,v 1.9 2007/10/17 19:55:35 garbled Exp $ */
+/* $Id: if_ae.c,v 1.19 2010/04/05 07:19:31 joerg Exp $ */
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
  * Copyright (c) 2006 Garrett D'Amore.
@@ -55,13 +55,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -105,9 +98,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ae.c,v 1.9 2007/10/17 19:55:35 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ae.c,v 1.19 2010/04/05 07:19:31 joerg Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -129,9 +121,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ae.c,v 1.9 2007/10/17 19:55:35 garbled Exp $");
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <machine/bus.h>
 #include <machine/intr.h>
@@ -156,16 +146,14 @@ static const struct {
 	{ 0,			NULL },
 };
 
-static int 	ae_match(struct device *, struct cfdata *, void *);
-static void	ae_attach(struct device *, struct device *, void *);
-static int	ae_detach(struct device *, int);
-static int	ae_activate(struct device *, enum devact);
+static int 	ae_match(device_t, struct cfdata *, void *);
+static void	ae_attach(device_t, device_t, void *);
+static int	ae_detach(device_t, int);
+static int	ae_activate(device_t, enum devact);
 
+static int	ae_ifflags_cb(struct ethercom *);
 static void	ae_reset(struct ae_softc *);
 static void	ae_idle(struct ae_softc *, u_int32_t);
-
-static int	ae_mediachange(struct ifnet *);
-static void	ae_mediastatus(struct ifnet *, struct ifmediareq *);
 
 static void	ae_start(struct ifnet *);
 static void	ae_watchdog(struct ifnet *);
@@ -189,10 +177,10 @@ static void	ae_rxintr(struct ae_softc *);
 static void	ae_txintr(struct ae_softc *);
 
 static void	ae_mii_tick(void *);
-static void	ae_mii_statchg(struct device *);
+static void	ae_mii_statchg(device_t);
 
-static int	ae_mii_readreg(struct device *, int, int);
-static void	ae_mii_writereg(struct device *, int, int, int);
+static int	ae_mii_readreg(device_t, int, int);
+static void	ae_mii_writereg(device_t, int, int, int);
 
 #ifdef AE_DEBUG
 #define	DPRINTF(sc, x)	if ((sc)->sc_ethercom.ec_if.if_flags & IFF_DEBUG) \
@@ -214,7 +202,7 @@ CFATTACH_DECL(ae, sizeof(struct ae_softc),
  *	Check for a device match.
  */
 int
-ae_match(struct device *parent, struct cfdata *cf, void *aux)
+ae_match(device_t parent, struct cfdata *cf, void *aux)
 {
 	struct arbus_attach_args *aa = aux;
 
@@ -231,11 +219,11 @@ ae_match(struct device *parent, struct cfdata *cf, void *aux)
  *	Attach an ae interface to the system.
  */
 void
-ae_attach(struct device *parent, struct device *self, void *aux)
+ae_attach(device_t parent, device_t self, void *aux)
 {
 	const uint8_t *enaddr;
 	prop_data_t ea;
-	struct ae_softc *sc = (void *)self;
+	struct ae_softc *sc = device_private(self);
 	struct arbus_attach_args *aa = aux;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int i, error;
@@ -247,7 +235,7 @@ ae_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * Try to get MAC address.
 	 */
-	ea = prop_dictionary_get(device_properties(&sc->sc_dev), "mac-addr");
+	ea = prop_dictionary_get(device_properties(&sc->sc_dev), "mac-address");
 	if (ea == NULL) {
 		printf("%s: unable to get mac-addr property\n",
 		    sc->sc_dev.dv_xname);
@@ -362,8 +350,9 @@ ae_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_mii.mii_readreg = ae_mii_readreg;
 	sc->sc_mii.mii_writereg = ae_mii_writereg;
 	sc->sc_mii.mii_statchg = ae_mii_statchg;
-	ifmedia_init(&sc->sc_mii.mii_media, 0, ae_mediachange,
-	    ae_mediastatus);
+	sc->sc_ethercom.ec_mii = &sc->sc_mii;
+	ifmedia_init(&sc->sc_mii.mii_media, 0, ether_mediachange,
+	    ether_mediastatus);
 	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, 0);
 
@@ -396,6 +385,7 @@ ae_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	if_attach(ifp);
 	ether_ifattach(ifp, enaddr);
+	ether_set_ifflags_cb(&sc->sc_ethercom, ae_ifflags_cb);
 
 #if NRND > 0
 	rnd_attach_source(&sc->sc_rnd_source, sc->sc_dev.dv_xname,
@@ -457,25 +447,17 @@ ae_attach(struct device *parent, struct device *self, void *aux)
  *	Handle device activation/deactivation requests.
  */
 int
-ae_activate(struct device *self, enum devact act)
+ae_activate(device_t self, enum devact act)
 {
-	struct ae_softc *sc = (void *) self;
-	int s, error = 0;
+	struct ae_softc *sc = device_private(self);
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		error = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
-		mii_activate(&sc->sc_mii, act, MII_PHY_ANY, MII_OFFSET_ANY);
 		if_deactivate(&sc->sc_ethercom.ec_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-
-	return (error);
 }
 
 /*
@@ -484,9 +466,9 @@ ae_activate(struct device *self, enum devact act)
  *	Detach a device interface.
  */
 int
-ae_detach(struct device *self, int flags)
+ae_detach(device_t self, int flags)
 {
-	struct ae_softc *sc = (void *)self;
+	struct ae_softc *sc = device_private(self);
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct ae_rxsoft *rxs;
 	struct ae_txsoft *txs;
@@ -753,13 +735,10 @@ ae_start(struct ifnet *ifp)
 
 		last_txs = txs;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m0);
 	}
 
 	if (txs == NULL || sc->sc_txfree == 0) {
@@ -822,6 +801,24 @@ ae_watchdog(struct ifnet *ifp)
 	ae_start(ifp);
 }
 
+/* If the interface is up and running, only modify the receive
+ * filter when changing to/from promiscuous mode.  Otherwise return
+ * ENETRESET so that ether_ioctl will reset the chip.
+ */
+static int
+ae_ifflags_cb(struct ethercom *ec)
+{
+	struct ifnet *ifp = &ec->ec_if;
+	struct ae_softc *sc = ifp->if_softc;
+	int change = ifp->if_flags ^ sc->sc_if_flags;
+
+	if ((change & ~(IFF_CANTCHANGE|IFF_DEBUG)) != 0)
+		return ENETRESET;
+	else if ((change & IFF_PROMISC) != 0)
+		ae_filter_setup(sc);
+	return 0;
+}
+
 /*
  * ae_ioctl:		[ifnet interface function]
  *
@@ -831,46 +828,20 @@ static int
 ae_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ae_softc *sc = ifp->if_softc;
-	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error;
 
 	s = splnet();
 
-	switch (cmd) {
-	case SIOCSIFMEDIA:
-	case SIOCGIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, cmd);
-		break;
-	case SIOCSIFFLAGS:
-		/* If the interface is up and running, only modify the receive
-		 * filter when setting promiscuous or debug mode.  Otherwise
-		 * fall through to ether_ioctl, which will reset the chip.
-		 */
-#define RESETIGN (IFF_CANTCHANGE|IFF_DEBUG)
-		if (((ifp->if_flags & (IFF_UP|IFF_RUNNING))
-		    == (IFF_UP|IFF_RUNNING))
-		    && ((ifp->if_flags & (~RESETIGN))
-		    == (sc->sc_if_flags & (~RESETIGN)))) {
-			/* Set up the receive filter. */
+	error = ether_ioctl(ifp, cmd, data);
+	if (error == ENETRESET) {
+		if (ifp->if_flags & IFF_RUNNING) {
+			/*
+			 * Multicast list has changed.  Set the
+			 * hardware filter accordingly.
+			 */
 			ae_filter_setup(sc);
-			error = 0;
-			break;
-#undef RESETIGN
 		}
-		/* FALLTHROUGH */
-	default:
-		error = ether_ioctl(ifp, cmd, data);
-		if (error == ENETRESET) {
-			if (ifp->if_flags & IFF_RUNNING) {
-				/*
-				 * Multicast list has changed.  Set the
-				 * hardware filter accordingly.
-				 */
-				ae_filter_setup(sc);
-			}
-			error = 0;
-		}
-		break;
+		error = 0;
 	}
 
 	/* Try to get more packets going. */
@@ -1172,14 +1143,11 @@ ae_rxintr(struct ae_softc *sc)
 		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass this up to any BPF listeners, but only
 		 * pass it up the stack if its for us.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m);
-#endif /* NBPFILTER > 0 */
+		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
 		(*ifp->if_input)(ifp, m);
@@ -1465,7 +1433,8 @@ ae_init(struct ifnet *ifp)
 	/*
 	 * Set the current media.
 	 */
-	ae_mediachange(ifp);
+	if ((error = ether_mediachange(ifp)) != 0)
+		goto out;
 
 	/*
 	 * Start the mac.
@@ -1641,17 +1610,17 @@ ae_stop(struct ifnet *ifp, int disable)
 		SIMPLEQ_INSERT_TAIL(&sc->sc_txfreeq, txs, txs_q);
 	}
 
-	if (disable) {
-		ae_rxdrain(sc);
-		ae_disable(sc);
-	}
-
 	/*
 	 * Mark the interface down and cancel the watchdog timer.
 	 */
 	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 	sc->sc_if_flags = ifp->if_flags;
 	ifp->if_timer = 0;
+
+	if (disable) {
+		ae_rxdrain(sc);
+		ae_disable(sc);
+	}
 
 	/*
 	 * Reset the chip (needed on some flavors to actually disable it).
@@ -1848,48 +1817,6 @@ ae_idle(struct ae_softc *sc, u_int32_t bits)
 }
 
 /*****************************************************************************
- * Generic media support functions.
- *****************************************************************************/
-
-/*
- * ae_mediastatus:	[ifmedia interface function]
- *
- *	Query the current media.
- */
-void
-ae_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
-{
-	struct ae_softc *sc = ifp->if_softc;
-
-	if (AE_IS_ENABLED(sc) == 0) {
-		ifmr->ifm_active = IFM_ETHER | IFM_NONE;
-		ifmr->ifm_status = 0;
-		return;
-	}
-
-	mii_pollstat(&sc->sc_mii);
-	ifmr->ifm_status = sc->sc_mii.mii_media_status;
-	ifmr->ifm_active = sc->sc_mii.mii_media_active;
-}
-
-/*
- * ae_mediachange:	[ifmedia interface function]
- *
- *	Update the current media.
- */
-int
-ae_mediachange(struct ifnet *ifp)
-{
-	struct ae_softc *sc = ifp->if_softc;
-
-	if ((ifp->if_flags & IFF_UP) == 0)
-		return (0);
-
-	mii_mediachg(&sc->sc_mii);
-	return (0);
-}
-
-/*****************************************************************************
  * Support functions for MII-attached media.
  *****************************************************************************/
 
@@ -1920,9 +1847,9 @@ ae_mii_tick(void *arg)
  *	Callback from PHY when media changes.
  */
 static void
-ae_mii_statchg(struct device *self)
+ae_mii_statchg(device_t self)
 {
-	struct ae_softc *sc = (struct ae_softc *)self;
+	struct ae_softc *sc = device_private(self);
 	uint32_t	macctl, flowc;
 
 	//opmode = AE_READ(sc, CSR_OPMODE);
@@ -1956,9 +1883,9 @@ ae_mii_statchg(struct device *self)
  *	Read a PHY register.
  */
 static int
-ae_mii_readreg(struct device *self, int phy, int reg)
+ae_mii_readreg(device_t self, int phy, int reg)
 {
-	struct ae_softc	*sc = (struct ae_softc *)self;
+	struct ae_softc	*sc = device_private(self);
 	uint32_t	addr;
 	int		i;
 
@@ -1979,9 +1906,9 @@ ae_mii_readreg(struct device *self, int phy, int reg)
  *	Write a PHY register.
  */
 static void
-ae_mii_writereg(struct device *self, int phy, int reg, int val)
+ae_mii_writereg(device_t self, int phy, int reg, int val)
 {
-	struct ae_softc *sc = (struct ae_softc *)self;
+	struct ae_softc *sc = device_private(self);
 	uint32_t	addr;
 	int		i;
 

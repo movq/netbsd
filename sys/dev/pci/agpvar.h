@@ -1,4 +1,4 @@
-/*	$NetBSD: agpvar.h,v 1.15 2007/08/04 09:33:05 kiyohara Exp $	*/
+/*	$NetBSD: agpvar.h,v 1.18 2009/05/06 10:34:32 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -128,7 +128,7 @@ struct agp_methods {
  * All chipset drivers must have this at the start of their softc.
  */
 struct agp_softc {
-	struct device		as_dev;
+	device_t		as_dev;
 	bus_space_tag_t		as_apt;
 	int			as_capoff;
 	bus_addr_t		as_apaddr;
@@ -183,13 +183,13 @@ int agp_generic_unbind_memory(struct agp_softc *, struct agp_memory *);
 int agp_amd_match(const struct pci_attach_args *);
 int agp_amd64_match(const struct pci_attach_args *);
 
-int agp_ali_attach(struct device *, struct device *, void *);
-int agp_amd_attach(struct device *, struct device *, void *);
-int agp_i810_attach(struct device *, struct device *, void *);
-int agp_intel_attach(struct device *, struct device *, void *);
-int agp_via_attach(struct device *, struct device *, void *);
-int agp_sis_attach(struct device *, struct device *, void *);
-int agp_amd64_attach(struct device *, struct device *, void *);
+int agp_ali_attach(device_t, device_t, void *);
+int agp_amd_attach(device_t, device_t, void *);
+int agp_i810_attach(device_t, device_t, void *);
+int agp_intel_attach(device_t, device_t, void *);
+int agp_via_attach(device_t, device_t, void *);
+int agp_sis_attach(device_t, device_t, void *);
+int agp_amd64_attach(device_t, device_t, void *);
 
 int agp_alloc_dmamem(bus_dma_tag_t, size_t, int, bus_dmamap_t *, void **,
 		     bus_addr_t *, bus_dma_segment_t *, int, int *);
@@ -263,5 +263,11 @@ int agp_unbind_memory(void *, void *);
  * agp_alloc_memory().
  */
 void agp_memory_info(void *, void *, struct agp_memory_info *);
+
+/*
+ * XXX horrible hack to allow drm code to use our mapping
+ * of VGA chip registers
+ */
+int agp_i810_borrow(bus_addr_t, bus_space_handle_t *);
 
 #endif /* !_PCI_AGPPRIV_H_ */

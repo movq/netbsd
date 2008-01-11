@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.50 2007/12/04 15:12:07 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.69 2011/05/16 13:22:55 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -94,13 +94,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -136,11 +129,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -160,11 +149,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.50 2007/12/04 15:12:07 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.69 2011/05/16 13:22:55 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_fpu_emulate.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -182,8 +172,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.50 2007/12/04 15:12:07 tsutsui Exp $")
 #include <sys/ioctl.h>
 #include <sys/tty.h>
 #include <sys/mount.h>
-#include <sys/user.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/vnode.h>
@@ -205,6 +195,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.50 2007/12/04 15:12:07 tsutsui Exp $")
 #include <machine/idprom.h>
 #include <machine/kcore.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 #define _SUN68K_BUS_DMA_PRIVATE
@@ -240,8 +231,6 @@ extern u_int bufpages;
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-struct vm_map *exec_map = NULL;  
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	physmem;
@@ -304,12 +293,12 @@ cpu_startup(void)
 	msgbufaddr = (void *)((char *)v + MSGBUFOFF);
 	initmsgbuf(msgbufaddr, MSGBUFSIZE);
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	{
 		extern int nsym;
 		extern char *ssym, *esym;
 
-		ksyms_init(nsym, ssym, esym);
+		ksyms_addsyms_elf(nsym, ssym, esym);
 	}
 #endif /* DDB */
 
@@ -345,25 +334,12 @@ cpu_startup(void)
 
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				   VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -389,39 +365,6 @@ cpu_startup(void)
 	 * Set up CPU-specific registers, cache, etc.
 	 */
 	initcpu();
-}
-
-/*
- * Set registers on exec.
- */
-void 
-setregs(struct lwp *l, struct exec_package *pack, u_long stack)
-{
-	struct trapframe *tf = (struct trapframe *)l->l_md.md_regs;
-
-	tf->tf_sr = PSL_USERSET;
-	tf->tf_pc = pack->ep_entry & ~1;
-	tf->tf_regs[D0] = 0;
-	tf->tf_regs[D1] = 0;
-	tf->tf_regs[D2] = 0;
-	tf->tf_regs[D3] = 0;
-	tf->tf_regs[D4] = 0;
-	tf->tf_regs[D5] = 0;
-	tf->tf_regs[D6] = 0;
-	tf->tf_regs[D7] = 0;
-	tf->tf_regs[A0] = 0;
-	tf->tf_regs[A1] = 0;
-	tf->tf_regs[A2] = (int)l->l_proc->p_psstr;
-	tf->tf_regs[A3] = 0;
-	tf->tf_regs[A4] = 0;
-	tf->tf_regs[A5] = 0;
-	tf->tf_regs[A6] = 0;
-	tf->tf_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-
-	l->l_md.md_flags = 0;
 }
 
 /*
@@ -563,6 +506,8 @@ cpu_reboot(int howto, char *user_boot_string)
 	/* run any shutdown hooks */
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	if (howto & RB_HALT) {
 	haltsys:
 		printf("halted.\n");
@@ -699,8 +644,8 @@ dumpsys(void)
 	if (dumpsize == 0)
 		cpu_dumpconf();
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
-		    minor(dumpdev));
+		printf("\ndump to dev %u,%u not possible\n",
+		    major(dumpdev), minor(dumpdev));
 		return;
 	}
 	savectx(&dumppcb);
@@ -711,8 +656,8 @@ dumpsys(void)
 		return;
 	}
 
-	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
-	    minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n",
+	    major(dumpdev), minor(dumpdev), dumplo);
 
 	/*
 	 * Prepare the dump header, including MMU state.
@@ -772,7 +717,7 @@ dumpsys(void)
 		chunk = todo;
 	do {
 		if ((todo & 0xf) == 0)
-			printf("\r%4d", todo);
+			printf_nolog("\r%4d", todo);
 		vaddr = (char*)(paddr + KERNBASE);
 		error = (*dsw->d_dump)(dumpdev, blkno, vaddr, PAGE_SIZE);
 		if (error)
@@ -786,8 +731,8 @@ dumpsys(void)
 	vaddr = (char*)vmmap;	/* Borrow /dev/mem VA */
 	do {
 		if ((todo & 0xf) == 0)
-			printf("\r%4d", todo);
-		pmap_kenter_pa(vmmap, paddr | PMAP_NC, VM_PROT_READ);
+			printf_nolog("\r%4d", todo);
+		pmap_kenter_pa(vmmap, paddr | PMAP_NC, VM_PROT_READ, 0);
 		pmap_update(pmap_kernel());
 		error = (*dsw->d_dump)(dumpdev, blkno, vaddr, PAGE_SIZE);
 		pmap_kremove(vmmap, PAGE_SIZE);
@@ -918,7 +863,7 @@ _bus_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs,
 
 	/* Map physical pages into MMU */
 	mlist = segs[0]._ds_mlist;
-	for (m = TAILQ_FIRST(mlist); m != NULL; m = TAILQ_NEXT(m,pageq)) {
+	for (m = TAILQ_FIRST(mlist); m != NULL; m = TAILQ_NEXT(m,pageq.queue)) {
 		if (sgsize == 0)
 			panic("_bus_dmamap_load_raw: size botch");
 		pa = VM_PAGE_TO_PHYS(m);

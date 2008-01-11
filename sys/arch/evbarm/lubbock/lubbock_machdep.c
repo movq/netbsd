@@ -1,4 +1,4 @@
-/*	$NetBSD: lubbock_machdep.c,v 1.16 2007/10/17 19:54:13 garbled Exp $ */
+/*	$NetBSD: lubbock_machdep.c,v 1.26 2010/11/28 08:23:24 hannken Exp $ */
 
 /*
  * Copyright (c) 2002, 2003, 2005  Genetec Corporation.  All rights reserved.
@@ -112,15 +112,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lubbock_machdep.c,v 1.16 2007/10/17 19:54:13 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lubbock_machdep.c,v 1.26 2010/11/28 08:23:24 hannken Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_ipkdb.h"
 #include "opt_pmap_debug.h"
 #include "opt_md.h"
 #include "opt_com.h"
-#include "md.h"
 #include "lcd.h"
 
 #include <sys/param.h>
@@ -185,11 +183,7 @@ u_int cpu_reset_address = 0;
 /* Define various stack sizes in pages */
 #define IRQ_STACK_SIZE	1
 #define ABT_STACK_SIZE	1
-#ifdef IPKDB
-#define UND_STACK_SIZE	2
-#else
 #define UND_STACK_SIZE	1
-#endif
 
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
@@ -200,8 +194,6 @@ vm_offset_t physical_freestart;
 vm_offset_t physical_freeend;
 vm_offset_t physical_end;
 u_int free_pages;
-vm_offset_t pagetables_start;
-int physmem = 0;
 
 /*int debug_flags;*/
 #ifndef PMAP_STATIC_L1S
@@ -235,8 +227,6 @@ extern int pmap_debug_level;
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
-
-struct user *proc0paddr;
 
 /* Prototypes */
 
@@ -308,6 +298,7 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -338,6 +329,8 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -447,7 +440,6 @@ initarm(void *arg)
 	int loop;
 	int loop1;
 	u_int l1pagetable;
-	pv_addr_t kernel_l1pt;
 	paddr_t memstart;
 	psize_t memsize;
 	int led_data = 0;
@@ -523,7 +515,7 @@ initarm(void *arg)
 	 * RedBoot's first level page table is at 0xa0004000.  There
 	 * are also 2 second-level tables at 0xa0008000 and
 	 * 0xa0008400.  We will continue to use them until we switch to
-	 * our pagetable by setttb().
+	 * our pagetable by cpu_setttb().
 	 *
 	 */
 
@@ -879,7 +871,7 @@ initarm(void *arg)
 	LEDSTEP();
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 	LEDSTEP();
@@ -888,8 +880,7 @@ initarm(void *arg)
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");
@@ -939,8 +930,7 @@ initarm(void *arg)
 	/* Boot strap pmap telling it where the kernel page table is */
 	printf("pmap ");
 	LEDSTEP();
-	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 	LEDSTEP();
 
 #ifdef __HAVE_MEMORY_DISK__
@@ -957,13 +947,6 @@ initarm(void *arg)
 	}
 
 	LEDSTEP();
-
-#ifdef IPKDB
-	/* Initialise ipkdb */
-	ipkdb_init();
-	if (boothowto & RB_KDB)
-		ipkdb_connect(0);
-#endif
 
 #ifdef KGDB
 	if (boothowto & RB_KDB) {

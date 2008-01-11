@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_ifattach.c,v 1.79 2007/12/06 00:28:36 dyoung Exp $	*/
+/*	$NetBSD: in6_ifattach.c,v 1.85 2009/09/19 13:11:02 christos Exp $	*/
 /*	$KAME: in6_ifattach.c,v 1.124 2001/07/18 08:32:51 jinmei Exp $	*/
 
 /*
@@ -31,16 +31,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_ifattach.c,v 1.79 2007/12/06 00:28:36 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_ifattach.c,v 1.85 2009/09/19 13:11:02 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/kmem.h>
 #include <sys/malloc.h>
 #include <sys/socket.h>
 #include <sys/sockio.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/md5.h>
+#include <sys/socketvar.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -314,9 +316,9 @@ generate_tmp_ifid(u_int8_t *seed0, const u_int8_t *seed1, u_int8_t *ret)
 
 	return 0;
 }
+
 /*
  * Get interface identifier for the specified interface.
- * XXX assumes single sockaddr_dl (AF_LINK address) per an interfacea
  *
  * in6 - upper 64bits are preserved
  */
@@ -324,7 +326,7 @@ int
 in6_get_hw_ifid(struct ifnet *ifp, struct in6_addr *in6)
 {
 	struct ifaddr *ifa;
-	const struct sockaddr_dl *sdl;
+	const struct sockaddr_dl *sdl = NULL, *tsdl;
 	const char *addr;
 	size_t addrlen;
 	static u_int8_t allzero[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -334,18 +336,18 @@ in6_get_hw_ifid(struct ifnet *ifp, struct in6_addr *in6)
 	IFADDR_FOREACH(ifa, ifp) {
 		if (ifa->ifa_addr->sa_family != AF_LINK)
 			continue;
-		sdl = satocsdl(ifa->ifa_addr);
-		if (sdl == NULL)
+		tsdl = satocsdl(ifa->ifa_addr);
+		if (tsdl == NULL || tsdl->sdl_alen == 0)
 			continue;
-		if (sdl->sdl_alen == 0)
-			continue;
-
-		goto found;
+		if (sdl == NULL || ifa == ifp->if_dl || ifa == ifp->if_hwdl)
+			sdl = tsdl;
+		if (ifa == ifp->if_hwdl)
+			break;
 	}
 
-	return -1;
+	if (sdl == NULL)
+		return -1;
 
-found:
 	addr = CLLADDR(sdl);
 	addrlen = sdl->sdl_alen;
 
@@ -578,7 +580,7 @@ in6_ifattach_linklocal(struct ifnet *ifp, struct ifnet *altifp)
 	    IN6_IFAUPDATE_DADDELAY)) != 0) {
 		/*
 		 * XXX: When the interface does not support IPv6, this call
-		 * would fail in the SIOCSIFADDR ioctl.  I believe the
+		 * would fail in the SIOCINITIFADDR ioctl.  I believe the
 		 * notification is rather confusing in this case, so just
 		 * suppress it.  (jinmei@kame.net 20010130)
 		 */
@@ -961,7 +963,9 @@ in6_tmpaddrtimer(void *ignored_arg)
 	struct nd_ifinfo *ndi;
 	u_int8_t nullbuf[8];
 	struct ifnet *ifp;
-	int s = splsoftnet();
+
+	mutex_enter(softnet_lock);
+	KERNEL_LOCK(1, NULL);
 
 	callout_reset(&in6_tmpaddrtimer_ch,
 	    (ip6_temp_preferred_lifetime - ip6_desync_factor -
@@ -980,5 +984,6 @@ in6_tmpaddrtimer(void *ignored_arg)
 		}
 	}
 
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
 }

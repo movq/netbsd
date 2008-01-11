@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xe.c,v 1.17 2005/12/11 12:18:25 christos Exp $	*/
+/*	$NetBSD: if_xe.c,v 1.21 2010/04/24 19:58:13 dbj Exp $	*/
 /*
  * Copyright (c) 1998 Darrin B. Jewell
  * All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Darrin B. Jewell
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,10 +25,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xe.c,v 1.17 2005/12/11 12:18:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xe.c,v 1.21 2010/04/24 19:58:13 dbj Exp $");
 
 #include "opt_inet.h"
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -472,7 +466,7 @@ xe_dma_tx_mbuf(struct mb8795_softc *sc, struct mbuf *m)
 			u_char *p = buf;
 			for (m=xsc->sc_tx_mb_head; m; m = m->m_next) {
 				if (m->m_len == 0) continue;
-				bcopy(mtod(m, u_char *), p, m->m_len);
+				memcpy(p, mtod(m, u_char *), m->m_len);
 				p += m->m_len;
 			}
 			/* Fix runt packets */

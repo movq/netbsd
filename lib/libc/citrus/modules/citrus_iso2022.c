@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_iso2022.c,v 1.18 2007/11/21 14:19:32 tnozaki Exp $	*/
+/*	$NetBSD: citrus_iso2022.c,v 1.20 2010/12/07 22:01:45 joerg Exp $	*/
 
 /*-
  * Copyright (c)1999, 2002 Citrus Project,
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_iso2022.c,v 1.18 2007/11/21 14:19:32 tnozaki Exp $");
+__RCSID("$NetBSD: citrus_iso2022.c,v 1.20 2010/12/07 22:01:45 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -39,7 +39,6 @@ __RCSID("$NetBSD: citrus_iso2022.c,v 1.18 2007/11/21 14:19:32 tnozaki Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
-#include <locale.h>
 #include <wchar.h>
 #include <sys/types.h>
 #include <limits.h>
@@ -881,7 +880,7 @@ _citrus_ISO2022_mbrtowc_priv(_ISO2022EncodingInfo * __restrict ei,
 
 	/* buffer is not empty */
 	p = psenc->ch;
-	while (psenc->chlen < sizeof(psenc->ch) && n >= 0) {
+	while (psenc->chlen < sizeof(psenc->ch)) {
 		if (n > 0) {
 			psenc->ch[psenc->chlen++] = *s0++;
 			n--;

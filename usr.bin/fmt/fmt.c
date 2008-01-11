@@ -1,4 +1,4 @@
-/*	$NetBSD: fmt.c,v 1.28 2007/12/15 19:44:50 perry Exp $	*/
+/*	$NetBSD: fmt.c,v 1.31 2008/07/21 14:19:22 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)fmt.c	8.1 (Berkeley) 7/20/93";
 #endif
-__RCSID("$NetBSD: fmt.c,v 1.28 2007/12/15 19:44:50 perry Exp $");
+__RCSID("$NetBSD: fmt.c,v 1.31 2008/07/21 14:19:22 lukem Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -157,8 +157,8 @@ main(int argc, char **argv)
 		oflush();
 		return 0;
 	}
-	while (argc--) {
-		if ((fi = fopen(*argv++, "r")) == NULL) {
+	for (;argc; argc--, argv++) {
+		if ((fi = fopen(*argv, "r")) == NULL) {
 			warn("Cannot open `%s'", *argv);
 			errs++;
 			continue;
@@ -211,26 +211,43 @@ fmt(FILE *fi)
 	struct buffer lbuf, cbuf;
 	char *cp, *cp2;
 	int c, add_space;
-	size_t len, col;
+	size_t len, col, i;
 
 	if (center) {
 		for (;;) {
 			cp = fgetln(fi, &len);
 			if (!cp)
 				return;
-			cp2 = cp + len - 1;
-			while (len-- && isspace((unsigned char)*cp))
+
+			/* skip over leading space */
+			while (len > 0) {
+				if (!isspace((unsigned char)*cp))
+					break;
 				cp++;
-			while (cp2 > cp && isspace((unsigned char)*cp2))
-				cp2--;
-			if (cp == cp2)
+				len--;
+			}
+
+			/* clear trailing space */
+			while (len > 0) {
+				if (!isspace((unsigned char)cp[len-1]))
+					break;
+				len--;
+			}
+
+			if (len == 0) {
+				/* blank line */
 				(void)putchar('\n');
-			col = cp2 - cp;
-			if (goal_length > col)
-				for (c = 0; c < (goal_length - col) / 2; c++)
+				continue;
+			}
+
+			if (goal_length > len) {
+				for (i = 0; i < (goal_length - len) / 2; i++) {
 					(void)putchar(' ');
-			while (cp <= cp2)
-				(void)putchar(*cp++);
+				}
+			}
+			for (i = 0; i < len; i++) {
+				(void)putchar(cp[i]);
+			}
 			(void)putchar('\n');
 		}
 	}

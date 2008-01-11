@@ -1,4 +1,4 @@
-/*	$NetBSD: pass1.c,v 1.43 2006/11/14 21:01:46 apb Exp $	*/
+/*	$NetBSD: pass1.c,v 1.47 2011/03/06 17:08:16 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pass1.c	8.6 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: pass1.c,v 1.43 2006/11/14 21:01:46 apb Exp $");
+__RCSID("$NetBSD: pass1.c,v 1.47 2011/03/06 17:08:16 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,6 +56,7 @@ __RCSID("$NetBSD: pass1.c,v 1.43 2006/11/14 21:01:46 apb Exp $");
 #include "fsck.h"
 #include "extern.h"
 #include "fsutil.h"
+#include "exitvalues.h"
 
 static daddr_t badblk;
 static daddr_t dupblk;
@@ -65,7 +66,8 @@ static ino_t lastino;
 void
 pass1(void)
 {
-	ino_t inumber, inosused;
+	ino_t inumber, inosused, ninosused;
+	size_t inospace;
 	int c;
 	daddr_t i, cgd;
 	struct inodesc idesc;
@@ -150,12 +152,19 @@ pass1(void)
 			inostathead[c].il_stat = 0;
 			continue;
 		}
-		info = calloc((unsigned)inosused, sizeof(struct inostat));
-		if (info == NULL) {
-			pfatal("cannot alloc %u bytes for inoinfo\n",
-			    (unsigned)(sizeof(struct inostat) * inosused));
-			exit(EEXIT);
+		inospace = inosused * sizeof(*info);
+		if (inospace / sizeof(*info) != inosused) {
+			pfatal("too many inodes %llu\n", (unsigned long long)
+			    inosused);
+			exit(FSCK_EXIT_CHECK_FAILED);
 		}
+		info = malloc(inospace);
+		if (info == NULL) {
+			pfatal("cannot alloc %zu bytes for inoinfo\n",
+			    inospace);
+			exit(FSCK_EXIT_CHECK_FAILED);
+		}
+		(void)memset(info, 0, inospace);
 		inostathead[c].il_stat = info;
 		/*
 		 * Scan the allocated inodes.
@@ -177,24 +186,33 @@ pass1(void)
 		 * really found.
 		 */
 		if (lastino < (c * sblock->fs_ipg))
-			inosused = 0;
+			ninosused = 0;
 		else
-			inosused = lastino - (c * sblock->fs_ipg);
-		inostathead[c].il_numalloced = inosused;
-		if (inosused == 0) {
+			ninosused = lastino - (c * sblock->fs_ipg);
+		inostathead[c].il_numalloced = ninosused;
+		if (ninosused == 0) {
 			free(inostathead[c].il_stat);
 			inostathead[c].il_stat = 0;
 			continue;
 		}
-		info = calloc((unsigned)inosused, sizeof(struct inostat));
-		if (info == NULL) {
-			pfatal("cannot alloc %u bytes for inoinfo\n",
-			    (unsigned)(sizeof(struct inostat) * inosused));
-			exit(EEXIT);
+		if (ninosused != inosused) {
+			struct inostat *ninfo;
+			size_t ninospace = ninosused * sizeof(*ninfo);
+			if (ninospace / sizeof(*info) != ninosused) {
+				pfatal("too many inodes %llu\n",
+				    (unsigned long long)ninosused);
+				exit(FSCK_EXIT_CHECK_FAILED);
+			}
+			ninfo = realloc(info, ninospace);
+			if (ninfo == NULL) {
+				pfatal("cannot realloc %zu bytes to %zu "
+				    "for inoinfo\n", inospace, ninospace);
+				exit(FSCK_EXIT_CHECK_FAILED);
+			}
+			if (ninosused > inosused)
+				(void)memset(&ninfo[inosused], 0, ninospace - inospace);
+			inostathead[c].il_stat = ninfo;
 		}
-		memmove(info, inostathead[c].il_stat, inosused * sizeof(*info));
-		free(inostathead[c].il_stat);
-		inostathead[c].il_stat = info;
 	}
 #ifdef PROGRESS
 	if (!preen)
@@ -216,11 +234,15 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	int64_t blocks;
 	char symbuf[MAXBSIZE];
 	struct inostat *info;
+	uid_t uid;
+	gid_t gid;
 
 	dp = getnextinode(inumber);
 	info = inoinfo(inumber);
 	mode = iswap16(DIP(dp, mode)) & IFMT;
 	size = iswap64(DIP(dp, size));
+	uid = iswap32(DIP(dp, uid));
+	gid = iswap32(DIP(dp, gid));
 	if (mode == 0) {
 		if ((is_ufs2 && 
 		    (memcmp(dp->dp2.di_db, ufs2_zino.di_db,
@@ -288,7 +310,7 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 			if (bread(fsreadfd, symbuf,
 			    fsbtodb(sblock, iswap32(DIP(dp, db[0]))),
 			    (long)secsize) != 0)
-				errx(EEXIT, "cannot read symlink");
+				errexit("cannot read symlink");
 			if (debug) {
 				symbuf[size] = 0;
 				printf("convert symlink %llu(%s) "
@@ -364,7 +386,7 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 			pfatal("LINK COUNT TABLE OVERFLOW");
 			if (reply("CONTINUE") == 0) {
 				ckfini();
-				exit(EEXIT);
+				exit(FSCK_EXIT_CHECK_FAILED);
 			}
 		} else {
 			zlnp->zlncnt = inumber;
@@ -394,6 +416,8 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	}
 	badblk = dupblk = 0;
 	idesc->id_number = inumber;
+	idesc->id_uid = iswap32(DIP(dp, uid));
+	idesc->id_gid = iswap32(DIP(dp, gid));
 	if (iswap32(DIP(dp, flags)) & SF_SNAPSHOT)
 		idesc->id_type = SNAP;
 	else
@@ -442,6 +466,9 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 			dp->dp1.di_blocks = iswap32((int32_t)idesc->id_entryno);
 		inodirty();
 	}
+	if (idesc->id_type != SNAP)
+		update_uquot(inumber, idesc->id_uid, idesc->id_gid,
+		    idesc->id_entryno, 1);
 	return;
 unknown:
 	pfatal("UNKNOWN FILE TYPE I=%llu", (unsigned long long)inumber);
@@ -478,7 +505,7 @@ pass1check(struct inodesc *idesc)
 			else if (reply("CONTINUE") == 0) {
 				markclean = 0;
 				ckfini();
-				exit(EEXIT);
+				exit(FSCK_EXIT_CHECK_FAILED);
 			}
 			return (STOP);
 		}
@@ -499,7 +526,7 @@ pass1check(struct inodesc *idesc)
 				else if (reply("CONTINUE") == 0) {
 					markclean = 0;
 					ckfini();
-					exit(EEXIT);
+					exit(FSCK_EXIT_CHECK_FAILED);
 				}
 				return (STOP);
 			}
@@ -510,7 +537,7 @@ pass1check(struct inodesc *idesc)
 				if (reply("CONTINUE") == 0) {
 					markclean = 0;
 					ckfini();
-					exit(EEXIT);
+					exit(FSCK_EXIT_CHECK_FAILED);
 				}
 				return (STOP);
 			}

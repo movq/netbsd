@@ -1,4 +1,4 @@
-.\"	$NetBSD: netstat.1,v 1.48 2007/08/30 18:52:36 jnemeth Exp $
+.\"	$NetBSD: netstat.1,v 1.59 2010/12/06 09:28:38 pooka Exp $
 .\"
 .\" Copyright (c) 1983, 1990, 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)netstat.1	8.8 (Berkeley) 4/18/94
 .\"
-.Dd August 30, 2007
+.Dd June 29, 2010
 .Dt NETSTAT 1
 .Os
 .Sh NAME
@@ -42,7 +42,7 @@
 .Op Fl M Ar core
 .Op Fl N Ar system
 .Nm
-.Op Fl bdgiLmnqrsSv
+.Op Fl bdghiLmnqrSsTv
 .Op Fl f Ar address_family
 .Op Fl M Ar core
 .Op Fl N Ar system
@@ -53,22 +53,21 @@
 .Op Fl N Ar system
 .Op Fl w Ar wait
 .Nm
-.Op Fl p Ar protocol
 .Op Fl M Ar core
 .Op Fl N Ar system
+.Op Fl p Ar protocol
 .Nm
-.Op Fl p Ar protocol
 .Op Fl M Ar core
 .Op Fl N Ar system
+.Op Fl p Ar protocol
 .Fl P Ar pcbaddr
 .Nm
-.Op Fl p Ar protocol
 .Op Fl i
 .Op Fl I Ar Interface
+.Op Fl p Ar protocol
 .Nm
-.Op Fl s
+.Op Fl is
 .Op Fl f Ar address_family
-.Op Fl i
 .Op Fl I Ar Interface
 .Nm
 .Op Fl s
@@ -152,6 +151,9 @@ for
 .Ar atalk ,
 for
 .Dv AF_APPLETALK ;
+.Ar mpls ,
+for
+.Dv AF_MPLS ;
 and
 .Ar local
 or
@@ -182,6 +184,14 @@ for the specified
 or
 .Ar protocol ,
 respectively.
+.It Fl h
+When used with
+.Fl b
+in combination with either
+.Fl i
+or
+.Fl I ,
+output "human-readable" byte counts.
 .It Fl i
 Show the state of interfaces which have been auto-configured
 (interfaces statically configured into a system, but not
@@ -211,7 +221,7 @@ Extract values associated with the name list from the specified core
 instead of the default
 .Pa /dev/kmem .
 .It Fl m
-Show statistics recorded by the memory management routines
+Show statistics recorded by the mbuf memory management routines
 (the network manages a private pool of memory buffers).
 .It Fl N
 Extract the name list from the specified system instead of the default
@@ -222,10 +232,6 @@ Show network addresses and ports as numbers (normally
 interprets addresses and ports and attempts to display them
 symbolically).
 This option may be used with any of the display formats.
-.It Fl S
-Show network addresses as numbers (as with
-.Fl n ,
-but show ports symbolically).
 .It Fl P Ar pcbaddr
 Dump the contents of the protocol control block (PCB) located at kernel
 virtual address
@@ -249,14 +255,20 @@ The program will complain if
 is unknown or if there is no statistics routine for it.
 .It Fl q
 Show software interrupt queue setting/statistics for all protocols.
-.It Fl s
-Show per-protocol statistics.
-If this option is repeated, counters with a value of zero are suppressed.
 .It Fl r
 Show the routing tables.
 When
 .Fl s
 is also present, show routing statistics instead.
+.It Fl S
+Show network addresses as numbers (as with
+.Fl n ,
+but show ports symbolically).
+.It Fl s
+Show per-protocol statistics.
+If this option is repeated, counters with a value of zero are suppressed.
+.It Fl T
+Show MPLS Tags for the routing tables.
 .It Fl v
 Show extra (verbose) detail for the routing tables
 .Pq Fl r ,
@@ -265,6 +277,17 @@ or avoid truncation of long addresses.
 Show network interface statistics at intervals of
 .Ar wait
 seconds.
+.It Fl X
+Force use of
+.Xr sysctl 3
+when retrieving information.
+Some features of
+.Nm
+may not be (fully) supported when using
+.Xr sysctl 3 .
+This flag forces the use of the latter regardless, and emits a message if a
+not yet fully supported feature is used in conjunction with it.
+This flag might be removed at any time; do not rely on its presence.
 .El
 .Pp
 The default display, for active sockets, shows the local
@@ -291,7 +314,7 @@ Unspecified,
 or ``wildcard'', addresses and ports appear as ``*''.
 You can use the
 .Xr fstat 1
-to find out which process or processes hold references to a socket.
+command to find out which process or processes hold references to a socket.
 .Pp
 The interface display provides a table of cumulative
 statistics regarding packets transferred, errors, and collisions.
@@ -313,20 +336,20 @@ and
 manual pages.
 The mapping between letters and flags is:
 .Bl -column XXXX RTF_BLACKHOLE
-1	RTF_PROTO1	Protocol specific routing flag #1
-2	RTF_PROTO2	Protocol specific routing flag #2
-B	RTF_BLACKHOLE	Just discard pkts (during updates)
-C	RTF_CLONING	Generate new routes on use
-c	RTF_CLONED	Cloned routes (generated from RTF_CLONING)
-D	RTF_DYNAMIC	Created dynamically (by redirect)
-G	RTF_GATEWAY	Destination requires forwarding by intermediary
-H	RTF_HOST	Host entry (net otherwise)
-L	RTF_LLINFO	Valid protocol to link address translation.
-M	RTF_MODIFIED	Modified dynamically (by redirect)
-R	RTF_REJECT	Host or net unreachable
-S	RTF_STATIC	Manually added
-U	RTF_UP	Route usable
-X	RTF_XRESOLVE	External daemon translates proto to link address
+.It 1	RTF_PROTO1	Protocol specific routing flag #1
+.It 2	RTF_PROTO2	Protocol specific routing flag #2
+.It B	RTF_BLACKHOLE	Just discard pkts (during updates)
+.It C	RTF_CLONING	Generate new routes on use
+.It c	RTF_CLONED	Cloned routes (generated from RTF_CLONING)
+.It D	RTF_DYNAMIC	Created dynamically (by redirect)
+.It G	RTF_GATEWAY	Destination requires forwarding by intermediary
+.It H	RTF_HOST	Host entry (net otherwise)
+.It L	RTF_LLINFO	Valid protocol to link address translation.
+.It M	RTF_MODIFIED	Modified dynamically (by redirect)
+.It R	RTF_REJECT	Host or net unreachable
+.It S	RTF_STATIC	Manually added
+.It U	RTF_UP	Route usable
+.It X	RTF_XRESOLVE	External daemon translates proto to link address
 .El
 .Pp
 Direct routes are created for each
@@ -381,7 +404,7 @@ option shows the status of the
 .Xr bpf 4
 descriptor which has three different values:
 Idle ('I'), Waiting ('W') and Timed Out ('T').
-The second character indicates wheter the promisc flag is set.
+The second character indicates whether the promisc flag is set.
 The third character indicates the status of the immediate mode.
 The fourth character indicates whether the peer will have the ability
 to see the packets sent.
@@ -399,7 +422,7 @@ And the fifth character shows the header complete flag status.
 .Xr protocols 5 ,
 .Xr services 5 ,
 .Xr iostat 8 ,
-.Xr trpt 8 ,
+.Xr trpt 8
 .Sh HISTORY
 The
 .Nm

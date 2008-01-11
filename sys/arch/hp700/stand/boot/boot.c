@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.8 2007/03/04 05:59:52 christos Exp $	*/
+/*	$NetBSD: boot.c,v 1.12 2011/01/22 19:19:17 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -32,7 +32,7 @@
  */
 
 /*
- * Copyright (c) 1998 Michael Shalayeff
+ * Copyright (c) 1998-2004 Michael Shalayeff
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,24 +43,18 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Michael Shalayeff.
- *	This product includes software developed by Tobias Weingartner.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR 
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHOR OR HIS RELATIVES BE LIABLE FOR ANY DIRECT,
+ * INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+ * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
@@ -76,13 +70,17 @@
 
 #include <arch/hp700/stand/common/dev_hppa.h>
 
+#include "bootinfo.h"
+
 /*
  * Boot program... bits in `howto' determine whether boot stops to
  * ask for system name.	 Boot device is derived from ROM provided
  * information.
  */
 
-char line[100];
+#define	MAXLEN	100
+
+char line[MAXLEN];
 char devname_buffer[16];
 
 extern	u_int opendev;
@@ -110,7 +108,7 @@ void exec_hp700(char *, u_long, int);
 int tgets(char *);
 void _rtt(void);
 
-typedef void (*startfuncp)(int, int, int, int, int, int, void *)
+typedef void (*startfuncp)(int, int, int, int, int, void *)
     __attribute__ ((noreturn));
 
 int howto;
@@ -118,7 +116,7 @@ int howto;
 void
 boot(dev_t boot_dev)
 {
-        machdep();
+	machdep();
 #ifdef	DEBUGBUG
 	debug = 1;
 #endif
@@ -130,14 +128,18 @@ int
 main(void)
 {
 	int currname = 0;
-	char *filename, filename_buffer[100];
+	char *filename, filename_buffer[MAXLEN];
 
 	printf("\n");
-	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);  
-	printf(">> (%s, %s)\n", bootprog_maker, bootprog_date);
+	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
 	printf(">> Enter \"reset\" to reset system.\n");
 
 	for (;;) {
+		size_t size;
+
+		/* reset bootinfo structure */
+		bi_init();
+
 		name = names[currname++];
 		if (currname == NUMNAMES)
 			currname = 0;
@@ -155,6 +157,18 @@ main(void)
 			strcat(filename_buffer, name);
 			filename = filename_buffer;
 		}
+
+		size = sizeof(struct btinfo_common) + strlen(name) + 1;
+	        /* Impose limit (somewhat arbitrary) */
+		if (size < BOOTINFO_MAXSIZE / 2) {
+			union {
+				struct btinfo_kernelfile bi_file;
+				char x[size];
+			} U;
+			strcpy(U.bi_file.name, name);
+			BI_ADD(&U.bi_file, BTINFO_KERNELFILE, size);
+		}
+
 		exec_hp700(filename, 0, howto);
 		printf("boot: %s\n", strerror(errno));
 	}
@@ -211,15 +225,9 @@ exec_hp700(char *file, u_long loadaddr, int boot_howto)
 	extern int debug;
 	int i;
 #endif
-	size_t ac = BOOTARG_LEN;
-	void *av = (void *)BOOTARG_OFF;
-#define	BOOTARG_APIVER 2
+	struct btinfo_symtab bi_syms;
 	u_long marks[MARK_MAX];
 	int fd;
-
-#ifdef notyet
-	makebootargs(av, &ac);
-#endif
 
 	marks[MARK_START] = loadaddr;
 #ifdef EXEC_DEBUG
@@ -233,13 +241,6 @@ exec_hp700(char *file, u_long loadaddr, int boot_howto)
 	printf("Start @ 0x%lx [%ld=0x%lx-0x%lx]...\n",
 	    marks[MARK_ENTRY], marks[MARK_NSYM],
 	    marks[MARK_SYM], marks[MARK_END]);
-
-#if 0
-	bt = (struct btinfo_magic *)lowram;
-        bt->common.type = BTINFO_MAGIC;
-        bt->magic1 = BOOTINFO_MAGIC1;
-        bt->magic2 = BOOTINFO_MAGIC2;
-#endif
 
 #ifdef EXEC_DEBUG
 	if (debug) {
@@ -256,12 +257,18 @@ exec_hp700(char *file, u_long loadaddr, int boot_howto)
 	}
 #endif
 
+	bi_syms.nsym = marks[MARK_NSYM];
+	bi_syms.ssym = marks[MARK_SYM];
+	bi_syms.esym = marks[MARK_END];
+	BI_ADD(&bi_syms, BTINFO_SYMTAB, sizeof(bi_syms));
+
 	fcacheall();
 
 	__asm("mtctl %r0, %cr17");
 	__asm("mtctl %r0, %cr17");
+
 	/* stack and the gung is ok at this point, so, no need for asm setup */
-	(*(startfuncp)(marks[MARK_ENTRY])) ((int)pdc, boot_howto, bootdev, marks[MARK_END],
-				       BOOTARG_APIVER, ac, av);
+	(*(startfuncp)(marks[MARK_ENTRY])) ((int)pdc, boot_howto, bootdev,
+	     marks[MARK_END], BOOTARG_APIVER, &bootinfo);
 	/* not reached */
 }

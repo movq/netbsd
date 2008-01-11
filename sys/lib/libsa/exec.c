@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.c,v 1.25 2007/11/24 13:20:55 isaki Exp $	*/
+/*	$NetBSD: exec.c,v 1.28 2009/12/29 20:21:46 elad Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -29,16 +29,12 @@
  * SUCH DAMAGE.
  */
 
-#ifdef _KERNEL_OPT
-#include "opt_insecure.h"
-#endif
-
 #include <sys/param.h>
 #include <sys/reboot.h>
-#ifndef INSECURE
+#ifndef SA_EXEC_ANYOWNER
 #include <sys/stat.h>
 #endif
-#include <sys/exec.h>
+#include <sys/exec_aout.h>
 #ifdef _STANDALONE
 #include <lib/libkern/libkern.h>
 #else
@@ -50,7 +46,7 @@
 void
 exec(char *path, char *loadaddr, int howto)
 {
-#ifndef INSECURE
+#ifndef SA_EXEC_ANYOWNER
 	struct stat sb;
 #endif
 	struct exec x;
@@ -61,7 +57,7 @@ exec(char *path, char *loadaddr, int howto)
 	if (io < 0)
 		return;
 
-#ifndef INSECURE
+#ifndef SA_EXEC_ANYOWNER
 	(void) fstat(io, &sb);
 	if (sb.st_uid || (sb.st_mode & 2)) {
 		printf("non-secure file, will not load\n");
@@ -81,7 +77,7 @@ exec(char *path, char *loadaddr, int howto)
 	printf("%ld", x.a_text);
 	addr = loadaddr;
 	if (N_GETMAGIC(x) == ZMAGIC) {
-		bcopy(&x, addr, sizeof(x));
+		(void)memcpy(addr, &x, sizeof(x));
 		addr += sizeof(x);
 		x.a_text -= sizeof(x);
 	}
@@ -105,7 +101,7 @@ exec(char *path, char *loadaddr, int howto)
 
 	/* Symbols */
 	ssym = addr;
-	bcopy(&x.a_syms, addr, sizeof(x.a_syms));
+	(void)memcpy(addr, &x.a_syms, sizeof(x.a_syms));
 	addr += sizeof(x.a_syms);
 	if (x.a_syms) {
 		printf("+[%ld", x.a_syms);
@@ -118,7 +114,7 @@ exec(char *path, char *loadaddr, int howto)
 	if (x.a_syms && read(io, &i, sizeof(int)) != sizeof(int))
 		goto shread;
 
-	bcopy(&i, addr, sizeof(int));
+	(void)memcpy(addr, &i, sizeof(int));
 	if (i) {
 		i -= sizeof(int);
 		addr += sizeof(int);

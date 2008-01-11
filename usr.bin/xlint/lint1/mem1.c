@@ -1,4 +1,4 @@
-/*	$NetBSD: mem1.c,v 1.11 2004/06/20 22:20:17 jmc Exp $	*/
+/*	$NetBSD: mem1.c,v 1.14 2011/01/17 03:04:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: mem1.c,v 1.11 2004/06/20 22:20:17 jmc Exp $");
+__RCSID("$NetBSD: mem1.c,v 1.14 2011/01/17 03:04:10 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -132,8 +132,8 @@ getfnid(const char *s)
 /*
  * Memory for declarations and other things which must be available
  * until the end of a block (or the end of the translation unit)
- * are assoziated with the level (mblklev) of the block (or wiht 0).
- * Because these memory is allocated in large blocks associated with
+ * are associated with the level (mblklev) of the block (or with 0).
+ * Because this memory is allocated in large blocks associated with
  * a given level it can be freed easily at the end of a block.
  */
 #define	ML_INC	((size_t)32)		/* Increment for length of *mblks */
@@ -194,7 +194,7 @@ xgetblk(mbl_t **mbp, size_t s)
 
 	s = ALIGN(s);
 	if ((mb = *mbp) == NULL || mb->nfree < s) {
-		if ((mb = frmblks) == NULL) {
+		if ((mb = frmblks) == NULL || mb->size < s) {
 			if (s > mblklen) {
 				t = mblklen;
 				mblklen = s;
@@ -250,7 +250,7 @@ initmem(void)
  * Allocate memory associated with level l.
  */
 void *
-getlblk(int l, size_t s)
+getlblk(size_t l, size_t s)
 {
 
 	while (l >= nmblks) {

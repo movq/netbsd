@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.53 2007/10/17 19:55:04 garbled Exp $ */
+/* $NetBSD: machdep.c,v 1.79 2011/05/16 13:22:53 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,12 +31,14 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.53 2007/10/17 19:55:04 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.79 2011/05/16 13:22:53 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_compat_sunos.h"
+#include "opt_modular.h"
 #include "opt_panicbutton.h"
+#include "opt_m68k_arch.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,13 +55,14 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.53 2007/10/17 19:55:04 garbled Exp $")
 #include <sys/ioctl.h>
 #include <sys/tty.h>
 #include <sys/mount.h>
-#include <sys/user.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>		/* for MID_* */
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/vnode.h>
 #include <sys/syscallargs.h>
 #include <sys/ksyms.h>
+#include <sys/module.h>
 #ifdef	KGDB
 #include <sys/kgdb.h>
 #endif
@@ -78,6 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.53 2007/10/17 19:55:04 garbled Exp $")
 
 #include <machine/cpu.h>
 #include <machine/reg.h>
+#include <machine/pcb.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
 #include <machine/kcore.h>	/* XXX should be pulled in by sys/kcore.h */
@@ -101,8 +98,6 @@ char	cpu_model[60];
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-struct vm_map *exec_map = NULL;  
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	maxmem;			/* max memory per process */
@@ -113,16 +108,16 @@ int	physmem;		/* set by locore */
  */
 int	safepri = PSL_LOWIPL;
 
-void luna68k_init __P((void));
-void identifycpu __P((void));
-void dumpsys __P((void));
+void luna68k_init(void);
+void identifycpu(void);
+void dumpsys(void);
 
-void straytrap __P((int, u_short));
-void nmihand __P((struct frame));
+void straytrap(int, u_short);
+void nmihand(struct frame);
 
-int  cpu_dumpsize __P((void));
-int  cpu_dump __P((int (*)(dev_t, daddr_t, void *, size_t), daddr_t *));
-void cpu_init_kcore_hdr __P((void));
+int  cpu_dumpsize(void);
+int  cpu_dump(int (*)(dev_t, daddr_t, void *, size_t), daddr_t *);
+void cpu_init_kcore_hdr(void);
 
 /*
  * Machine-independent crash dump header info.
@@ -133,9 +128,9 @@ int	machtype;	/* model: 1 for LUNA-1, 2 for LUNA-2 */
 int	sysconsole;	/* console: 0 for ttya, 1 for video */
 
 extern struct consdev syscons;
-extern void omfb_cnattach __P((void));
-extern void ws_cnattach __P((void));
-extern void syscnattach __P((int));
+extern void omfb_cnattach(void);
+extern void ws_cnattach(void);
+extern void syscnattach(int);
 
 /*
  * On the 68020/68030, the value of delay_divisor is roughly
@@ -213,7 +208,7 @@ luna68k_init()
  * Console initialization: called early on from main,
  */
 void
-consinit()
+consinit(void)
 {
 	if (sysconsole == 0)
 		syscnattach(0);
@@ -222,12 +217,12 @@ consinit()
 		ws_cnattach();
 	}
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	{
 		extern char end[];
 		extern int *esym;
 
-		ksyms_init(*(int *)&end, ((int *)&end) + 1, esym);
+		ksyms_addsyms_elf(*(int *)&end, ((int *)&end) + 1, esym);
 	}
 #endif
 #ifdef DDB
@@ -240,11 +235,11 @@ consinit()
  * cpu_startup: allocate memory for variable-sized tables.
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
 	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
-	extern void greeting __P((void));
+	extern void greeting(void);
 
 	if (fputype != FPU_NONE)
 		m68k_make_fpu_idle_frame();
@@ -264,25 +259,12 @@ cpu_startup()
 	printf("total memory = %s\n", pbuf);
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				   VM_PHYS_SIZE, 0, false, NULL);
-
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -293,50 +275,13 @@ cpu_startup()
 	greeting();
 }
 
-/*
- * Set registers on exec.
- */
 void
-setregs(l, pack, stack)
-	struct lwp *l;
-	struct exec_package *pack;
-	u_long stack;
-{
-	struct frame *frame = (struct frame *)l->l_md.md_regs;
-	extern int fputype;
-
-	frame->f_sr = PSL_USERSET;
-	frame->f_pc = pack->ep_entry & ~1;
-	frame->f_regs[D0] = 0;
-	frame->f_regs[D1] = 0;
-	frame->f_regs[D2] = 0;
-	frame->f_regs[D3] = 0;
-	frame->f_regs[D4] = 0;
-	frame->f_regs[D5] = 0;
-	frame->f_regs[D6] = 0;
-	frame->f_regs[D7] = 0;
-	frame->f_regs[A0] = 0;
-	frame->f_regs[A1] = 0;
-	frame->f_regs[A2] = (int)l->l_proc->p_psstr;
-	frame->f_regs[A3] = 0;
-	frame->f_regs[A4] = 0;
-	frame->f_regs[A5] = 0;
-	frame->f_regs[A6] = 0;
-	frame->f_regs[SP] = stack;
-
-	/* restore a null state frame */
-	l->l_addr->u_pcb.pcb_fpregs.fpf_null = 0;
-	if (fputype)
-		m68881_restore(&l->l_addr->u_pcb.pcb_fpregs);
-}
-
-void
-identifycpu()
+identifycpu(void)
 {
 	extern int cputype;
 	const char *cpu;
 
-	bzero(cpu_model, sizeof(cpu_model));
+	memset(cpu_model, 0, sizeof(cpu_model));
 	switch (cputype) {
 	case CPU_68030:
 		cpu = "MC68030 CPU+MMU, MC68882 FPU";
@@ -380,15 +325,15 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 int	waittime = -1;
 
 void
-cpu_reboot(howto, bootstr)
-	volatile int howto; /* XXX to shutup GCC XXX */
-	char *bootstr;
+cpu_reboot(volatile int howto, char *bootstr)
+	/* howto:  XXX to shutup GCC XXX */
 {
-	extern void doboot __P((void));
+	struct pcb *pcb = lwp_getpcb(curlwp);
+	extern void doboot(void);
 
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
-		savectx(&curlwp->l_addr->u_pcb);
+	if (pcb != NULL)
+		savectx(pcb);
 
 	/* If system is hold, just halt. */
 	if (cold) {
@@ -418,6 +363,8 @@ haltsys:
 	/* Run any shutdown hooks. */
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	/* Finally, halt/reboot the system. */
 	if ((howto & RB_POWERDOWN) == RB_POWERDOWN) {
 		u_int8_t *pio = (void *)0x4d000000;
@@ -444,13 +391,13 @@ haltsys:
  * Initialize the kernel crash dump header.
  */
 void
-cpu_init_kcore_hdr()
+cpu_init_kcore_hdr(void)
 {
 	cpu_kcore_hdr_t *h = &cpu_kcore_hdr;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
 	extern char end[];
 
-	bzero(&cpu_kcore_hdr, sizeof(cpu_kcore_hdr)); 
+	memset(&cpu_kcore_hdr, 0, sizeof(cpu_kcore_hdr)); 
 
 	/*
 	 * Initialize the `dispatcher' portion of the header.
@@ -513,7 +460,7 @@ cpu_init_kcore_hdr()
 #define MDHDRSIZE roundup(CHDRSIZE, dbtob(1))
 
 int
-cpu_dumpsize()
+cpu_dumpsize(void)
 {
 
 	return btodb(MDHDRSIZE);
@@ -524,7 +471,7 @@ cpu_dumpsize()
  */
 int
 cpu_dump(dump, blknop)
-	int (*dump) __P((dev_t, daddr_t, void *, size_t)); 
+	int (*dump)(dev_t, daddr_t, void *, size_t); 
 	daddr_t *blknop;
 {
 	int buf[MDHDRSIZE / sizeof(int)]; 
@@ -540,7 +487,7 @@ cpu_dump(dump, blknop)
 	CORE_SETMAGIC(*kseg, KCORE_MAGIC, MID_MACHINE, CORE_CPU);
 	kseg->c_size = MDHDRSIZE - ALIGN(sizeof(kcore_seg_t));
 
-	bcopy(&cpu_kcore_hdr, chdr, sizeof(cpu_kcore_hdr_t));
+	memcpy(chdr, &cpu_kcore_hdr, sizeof(cpu_kcore_hdr_t));
 	error = (*dump)(dumpdev, *blknop, (void *)buf, sizeof(buf));
 	*blknop += btodb(sizeof(buf));
 	return (error);
@@ -561,7 +508,7 @@ long	dumplo = 0;		/* blocks */
  * reduce the chance that swapping trashes it.
  */
 void
-cpu_dumpconf()
+cpu_dumpconf(void)
 {
 	const struct bdevsw *bdev;
 	int chdrsize;	/* size of dump header */
@@ -601,12 +548,12 @@ cpu_dumpconf()
  * Dump physical memory onto the dump device.  Called by cpu_reboot().
  */
 void
-dumpsys()
+dumpsys(void)
 {
 	const struct bdevsw *bdev;
 	daddr_t blkno;		/* current block to write */
 				/* dump routine */
-	int (*dump) __P((dev_t, daddr_t, void *, size_t));
+	int (*dump)(dev_t, daddr_t, void *, size_t);
 	int pg;			/* page being dumped */
 	paddr_t maddr;		/* PA being dumped */
 	int error;		/* error code from (*dump)() */
@@ -627,15 +574,15 @@ dumpsys()
 			return;
 	}
 	if (dumplo <= 0) {
-		printf("\ndump to dev %u,%u not possible\n", major(dumpdev),
-		    minor(dumpdev));
+		printf("\ndump to dev %u,%u  not possible\n",
+		    major(dumpdev), minor(dumpdev));
 		return;
 	}
 	dump = bdev->d_dump;
 	blkno = dumplo;
 
-	printf("\ndumping to dev %u,%u offset %ld\n", major(dumpdev),
-	    minor(dumpdev), dumplo);
+	printf("\ndumping to dev %u,%u offset %ld\n",
+	    major(dumpdev), minor(dumpdev), dumplo);
 
 	printf("dump ");
 
@@ -691,9 +638,7 @@ dumpsys()
 }
 
 void
-straytrap(pc, evec)
-	int pc;
-	u_short evec;
+straytrap(int pc, u_short evec)
 {
 	printf("unexpected trap (vector offset %x) from %x\n",
 	       evec & 0xFFF, pc);
@@ -702,9 +647,7 @@ straytrap(pc, evec)
 int	*nofault;
 
 int
-badaddr(addr, nbytes)
-	register void *addr;
-	int nbytes;
+badaddr(register void *addr, int nbytes)
 {
 	register int i;
 	label_t faultbuf;
@@ -739,7 +682,7 @@ badaddr(addr, nbytes)
 	return (0);
 }
 
-void luna68k_abort __P((const char *));
+void luna68k_abort(const char *);
 
 static int innmihand;	/* simple mutex */
 
@@ -751,8 +694,7 @@ static int innmihand;	/* simple mutex */
  * panic'ing on ABORT with the kernel option "PANICBUTTON".
  */
 void
-nmihand(frame)
-	struct frame frame;
+nmihand(struct frame frame)
 {
 	/* Prevent unwanted recursion */
 	if (innmihand)
@@ -767,8 +709,7 @@ nmihand(frame)
  * serial lines, etc.
  */
 void
-luna68k_abort(cp)
-	const char *cp;
+luna68k_abort(const char *cp)
 {
 #ifdef DDB
 	printf("%s\n", cp);
@@ -790,19 +731,27 @@ luna68k_abort(cp)
  * understand and, if so, set up the vmcmds for it.
  */
 int
-cpu_exec_aout_makecmds(l, epp)
-	struct lwp *l;
-	struct exec_package *epp;
+cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 {
 	int error = ENOEXEC;
 #ifdef COMPAT_SUNOS
 	extern sunos_exec_aout_makecmds
-	__P((struct proc *, struct exec_package *));
+(struct proc *, struct exec_package *);
 	if ((error = sunos_exec_aout_makecmds(l->l_proc, epp)) == 0)
 		return 0;
 #endif
 	return error;
 }
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the bootloader etc.
+ */
+void
+module_init_md(void)
+{
+}
+#endif
 
 #if 1
 
@@ -813,8 +762,8 @@ struct consdev *cn_tab = &syscons;
 /*
  * romcons is useful until m68k TC register is initialized.
  */
-int  romcngetc __P((dev_t));
-void romcnputc __P((dev_t, int));
+int  romcngetc(dev_t);
+void romcnputc(dev_t, int);
 
 struct consdev romcons = {
 	NULL,
@@ -865,9 +814,7 @@ struct consdev *cn_tab = &romcons;
 })
 
 void
-romcnputc(dev, c)
-	dev_t dev;
-	int c;
+romcnputc(dev_t dev, int c)
 {
 	int s;
 
@@ -877,8 +824,7 @@ romcnputc(dev, c)
 }
 
 int
-romcngetc(dev)
-	dev_t dev;
+romcngetc(dev_t dev)
 {
 	int s, c;
 

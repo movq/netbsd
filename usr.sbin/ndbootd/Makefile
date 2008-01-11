@@ -1,4 +1,6 @@
-#	$NetBSD: Makefile,v 1.3 2007/05/28 12:06:38 tls Exp $
+#	$NetBSD: Makefile,v 1.7 2011/05/26 12:56:34 joerg Exp $
+
+WARNS?=	1	# XXX -Wsign-compare -Wshadow
 
 USE_FORT?= yes	# network server
 
@@ -8,10 +10,11 @@ MAN=	ndbootd.8
 
 CPPFLAGS+=-DHAVE_CONFIG_H -I${.CURDIR}
 
-.include <bsd.own.mk>
-
-.if ${HAVE_GCC} == 4 && ${MACHINE_ARCH} == "m68000"
-COPTS+=	-O0
+.if ${MACHINE_ARCH} == "m68000"
+COPTS.ndbootd.c+=	-fno-tree-ter -fno-tree-lrs
 .endif
 
+CWARNFLAGS.clang+=	-Wno-tautological-compare
+
+.include <bsd.own.mk>
 .include <bsd.prog.mk>

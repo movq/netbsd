@@ -1,4 +1,4 @@
-# $NetBSD: dot.profile,v 1.13 2004/03/26 15:27:56 pk Exp $
+# $NetBSD: dot.profile,v 1.15 2010/09/25 14:30:34 tsutsui Exp $
 #
 # Copyright (c) 1995 Jason R. Thorpe
 # Copyright (c) 1994 Christopher G. Demetriou
@@ -35,7 +35,7 @@
 
 PATH=/sbin:/bin:/usr/bin:/usr/sbin:/
 export PATH
-TERM=sun
+TERM=vt100
 export TERM
 HOME=/
 export HOME
@@ -49,8 +49,6 @@ if [ "X${DONEPROFILE}" = "X" ]; then
 	# set up some sane defaults
 	echo 'erase ^H, werase ^W, kill ^U, intr ^C'
 	stty newcrt werase ^W intr ^C kill ^U erase ^H
-
-	echo 'If you are using a SUN type 4 keyboard, please enter "sun-type4".'
 
 	# get the terminal type
 	_forceloop=""

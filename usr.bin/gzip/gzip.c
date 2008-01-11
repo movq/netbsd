@@ -1,4 +1,4 @@
-/*	$NetBSD: gzip.c,v 1.90 2007/01/31 08:23:22 martin Exp $	*/
+/*	$NetBSD: gzip.c,v 1.99 2011/03/23 12:59:44 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 2003, 2004, 2006 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,9 +28,9 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1997, 1998, 2003, 2004, 2006 Matthew R. Green\n\
-     All rights reserved.\n");
-__RCSID("$NetBSD: gzip.c,v 1.90 2007/01/31 08:23:22 martin Exp $");
+__COPYRIGHT("@(#) Copyright (c) 1997, 1998, 2003, 2004, 2006\
+ Matthew R. Green.  All rights reserved.");
+__RCSID("$NetBSD: gzip.c,v 1.99 2011/03/23 12:59:44 tsutsui Exp $");
 #endif /* not lint */
 
 /*
@@ -80,6 +78,9 @@ enum filetype {
 #ifndef NO_COMPRESS_SUPPORT
 	FT_Z,
 #endif
+#ifndef NO_PACK_SUPPORT
+	FT_PACK,
+#endif
 	FT_LAST,
 	FT_UNKNOWN
 };
@@ -94,6 +95,10 @@ enum filetype {
 #ifndef NO_COMPRESS_SUPPORT
 #define Z_SUFFIX	".Z"
 #define Z_MAGIC		"\037\235"
+#endif
+
+#ifndef NO_PACK_SUPPORT
+#define PACK_MAGIC	"\037\036"
 #endif
 
 #define GZ_SUFFIX	".gz"
@@ -141,8 +146,9 @@ static suffixes_t suffixes[] = {
 #undef SUFFIX
 };
 #define NUM_SUFFIXES (sizeof suffixes / sizeof suffixes[0])
+#define SUFFIX_MAXLEN	30
 
-static	const char	gzip_version[] = "NetBSD gzip 20060927";
+static	const char	gzip_version[] = "NetBSD gzip 20101018";
 
 static	int	cflag;			/* stdout mode */
 static	int	dflag;			/* decompress mode */
@@ -151,6 +157,7 @@ static	int	numflag = 6;		/* gzip -1..-9 value */
 
 #ifndef SMALL
 static	int	fflag;			/* force mode */
+static	int	kflag;			/* don't delete input files */
 static	int	nflag;			/* don't save name/timestamp */
 static	int	Nflag;			/* don't restore name/timestamp */
 static	int	qflag;			/* quiet mode */
@@ -168,7 +175,7 @@ static	char	*infile;		/* name of file coming in */
 
 static	void	maybe_err(const char *fmt, ...)
     __attribute__((__format__(__printf__, 1, 2)));
-#ifndef NO_BZIP2_SUPPORT
+#if !defined(NO_BZIP2_SUPPORT) || !defined(NO_PACK_SUPPORT)
 static	void	maybe_errx(const char *fmt, ...)
     __attribute__((__format__(__printf__, 1, 2)));
 #endif
@@ -216,6 +223,10 @@ static	FILE 	*zdopen(int);
 static	off_t	zuncompress(FILE *, FILE *, char *, size_t, off_t *);
 #endif
 
+#ifndef NO_PACK_SUPPORT
+static	off_t	unpack(int, int, char *, size_t, off_t *);
+#endif
+
 int main(int, char *p[]);
 
 #ifdef SMALL
@@ -228,6 +239,7 @@ static const struct option longopts[] = {
 	{ "uncompress",		no_argument,		0,	'd' },
 	{ "force",		no_argument,		0,	'f' },
 	{ "help",		no_argument,		0,	'h' },
+	{ "keep",		no_argument,		0,	'k' },
 	{ "list",		no_argument,		0,	'l' },
 	{ "no-name",		no_argument,		0,	'n' },
 	{ "name",		no_argument,		0,	'N' },
@@ -279,9 +291,9 @@ main(int argc, char **argv)
 		dflag = cflag = 1;
 
 #ifdef SMALL
-#define OPT_LIST "123456789cdhltV"
+#define OPT_LIST "123456789cdhlV"
 #else
-#define OPT_LIST "123456789cdfhlNnqrS:tVv"
+#define OPT_LIST "123456789cdfhklNnqrS:tVv"
 #endif
 
 	while ((ch = getopt_long(argc, argv, OPT_LIST, longopts, NULL)) != -1) {
@@ -308,6 +320,9 @@ main(int argc, char **argv)
 		case 'f':
 			fflag = 1;
 			break;
+		case 'k':
+			kflag = 1;
+			break;
 		case 'N':
 			nflag = 0;
 			Nflag = 1;
@@ -325,6 +340,8 @@ main(int argc, char **argv)
 		case 'S':
 			len = strlen(optarg);
 			if (len != 0) {
+				if (len > SUFFIX_MAXLEN)
+					errx(1, "incorrect suffix: '%s'", optarg);
 				suffixes[0].zipped = optarg;
 				suffixes[0].ziplen = len;
 			} else {
@@ -410,7 +427,7 @@ maybe_err(const char *fmt, ...)
 	exit(2);
 }
 
-#ifndef NO_BZIP2_SUPPORT
+#if !defined(NO_BZIP2_SUPPORT) || !defined(NO_PACK_SUPPORT)
 /* ... without an errno. */
 void
 maybe_errx(const char *fmt, ...)
@@ -874,6 +891,9 @@ gz_uncompress(int in, int out, char *pre, size_t prelen, off_t *gsizep,
 			switch (error) {
 			/* Z_BUF_ERROR goes with Z_FINISH... */
 			case Z_BUF_ERROR:
+				if (z.avail_out > 0 && !done_reading)
+					continue;
+
 			case Z_STREAM_END:
 			case Z_OK:
 				break;
@@ -1072,6 +1092,11 @@ file_gettype(u_char *buf)
 		return FT_Z;
 	else
 #endif
+#ifndef NO_PACK_SUPPORT
+	if (memcmp(buf, PACK_MAGIC, 2) == 0)
+		return FT_PACK;
+	else
+#endif
 		return FT_UNKNOWN;
 }
 
@@ -1110,8 +1135,10 @@ unlink_input(const char *file, const struct stat *sb)
 {
 	struct stat nsb;
 
+	if (kflag)
+		return;
 	if (stat(file, &nsb) != 0)
-		/* Must be gone alrady */
+		/* Must be gone already */
 		return;
 	if (nsb.st_dev != sb->st_dev || nsb.st_ino != sb->st_ino)
 		/* Definitely a different file */
@@ -1186,7 +1213,7 @@ file_compress(char *file, char *outfile, size_t outsize)
 		/* Add (usually) .gz to filename */
 		if ((size_t)snprintf(outfile, outsize, "%s%s",
 					file, suffixes[0].zipped) >= outsize)
-			memcpy(outfile - suffixes[0].ziplen - 1,
+			memcpy(outfile + outsize - suffixes[0].ziplen - 1,
 				suffixes[0].zipped, suffixes[0].ziplen + 1);
 
 #ifndef SMALL
@@ -1263,8 +1290,9 @@ file_uncompress(char *file, char *outfile, size_t outsize)
 	ssize_t rbytes;
 	unsigned char header1[4];
 	enum filetype method;
-	int rv, fd, ofd, zfd = -1;
+	int fd, ofd, zfd = -1;
 #ifndef SMALL
+	ssize_t rv;
 	time_t timestamp = 0;
 	unsigned char name[PATH_MAX + 1];
 #endif
@@ -1312,7 +1340,7 @@ file_uncompress(char *file, char *outfile, size_t outsize)
 		unsigned char ts[4];	/* timestamp */
 
 		rv = pread(fd, ts, sizeof ts, GZIP_TIMESTAMP);
-		if (rv >= 0 && rv < sizeof ts)
+		if (rv >= 0 && rv < (ssize_t)(sizeof ts))
 			goto unexpected_EOF;
 		if (rv == -1) {
 			if (!fflag)
@@ -1420,6 +1448,17 @@ file_uncompress(char *file, char *outfile, size_t outsize)
 			unlink(outfile);
 			goto lose;
 		}
+	} else
+#endif
+
+#ifndef NO_PACK_SUPPORT
+	if (method == FT_PACK) {
+		if (lflag) {
+			maybe_warnx("no -l with packed files");
+			goto lose;
+		}
+
+		size = unpack(fd, zfd, NULL, 0, NULL);
 	} else
 #endif
 
@@ -1614,6 +1653,12 @@ handle_stdin(void)
 
 		usize = zuncompress(in, stdout, header1, sizeof header1, &gsize);
 		fclose(in);
+		break;
+#endif
+#ifndef NO_PACK_SUPPORT
+	case FT_PACK:
+		usize = unpack(STDIN_FILENO, STDOUT_FILENO,
+			       (char *)header1, sizeof header1, &gsize);
 		break;
 #endif
 	}
@@ -1956,6 +2001,7 @@ usage(void)
     "    --uncompress\n"
     " -f --force           force overwriting & compress links\n"
     " -h --help            display this help\n"
+    " -k --keep            don't delete input files during operation\n"
     " -l --list            list compressed file contents\n"
     " -N --name            save or restore original file name and time stamp\n"
     " -n --no-name         don't save original file name or time stamp\n"
@@ -1987,6 +2033,9 @@ display_version(void)
 #endif
 #ifndef NO_COMPRESS_SUPPORT
 #include "zuncompress.c"
+#endif
+#ifndef NO_PACK_SUPPORT
+#include "unpack.c"
 #endif
 
 static ssize_t

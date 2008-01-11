@@ -1,4 +1,4 @@
-/*	$NetBSD: timedc.c,v 1.19 2007/01/28 13:51:29 cbiere Exp $	*/
+/*	$NetBSD: timedc.c,v 1.21 2008/07/21 13:37:00 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1985, 1993 The Regents of the University of California.
@@ -31,16 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1985, 1993 The Regents of the University of California.\n\
- All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1985, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)timedc.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: timedc.c,v 1.19 2007/01/28 13:51:29 cbiere Exp $");
+__RCSID("$NetBSD: timedc.c,v 1.21 2008/07/21 13:37:00 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -64,13 +63,13 @@ int	fromatty;
 char	*margv[MAX_MARGV];
 char	cmdline[200];
 jmp_buf	toplevel;
-static struct cmd *getcmd(char *);
+static const struct cmd *getcmd(char *);
 static int drop_privileges(void);
 
 int
 main(int argc, char *argv[])
 {
-	struct cmd *c;
+	const struct cmd *c;
 
 	fcntl(3, F_CLOSEM);
 	openlog("timedc", 0, LOG_AUTH);
@@ -140,14 +139,14 @@ intr(int signo)
 }
 
 
-static struct cmd *
+static const struct cmd *
 getcmd(char *name)
 {
 	const char *p;
 	char *q;
-	struct cmd *c, *found;
+	const struct cmd *c, *found;
 	int nmatches, longest;
-	extern struct cmd cmdtab[];
+	extern const struct cmd cmdtab[];
 	extern int NCMDS;
 
 	longest = 0;
@@ -209,8 +208,8 @@ makeargv(void)
 void
 help(int argc, char *argv[])
 {
-	struct cmd *c;
-	extern struct cmd cmdtab[];
+	const struct cmd *c;
+	extern const struct cmd cmdtab[];
 
 	if (argc == 1) {
 		int i, j, w;

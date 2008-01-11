@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.39 2008/01/10 20:14:10 ad Exp $	*/
+/*	$NetBSD: locore.S,v 1.65 2011/05/20 13:32:35 joerg Exp $	*/
 
 /*
  * Copyright-o-rama!
@@ -15,11 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -87,7 +82,7 @@
 
 
 /*-
- * Copyright (c) 1998, 2000, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2000, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -101,13 +96,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -167,6 +155,7 @@
 
 #include "opt_ddb.h"
 #include "opt_ddbparam.h"
+#include "opt_modular.h"
 #include "opt_realmem.h"
 
 #include "opt_compat_netbsd.h"
@@ -188,6 +177,7 @@
 #include <machine/trap.h>
 #include <machine/bootinfo.h>
 #include <machine/frameasm.h>
+#include <machine/cputypes.h>
 
 #if NLAPIC > 0
 #include <machine/i82489reg.h>
@@ -212,7 +202,7 @@
 	.ascii	",ELF_PADDR_OFFSET=0xffffffff80000000"
 	.ascii	",VIRT_ENTRY=0xffffffff80100000"
 	.ascii	",HYPERCALL_PAGE=0x00000101" /*  (???+HYPERCALL_PAGE_OFFSET)/PAGE_SIZE) */
-#if NKSYMS > 0 || defined(DDB) || defined(LKM)
+#if NKSYMS > 0 || defined(DDB) || defined(MODULAR)
 	.ascii	",BSD_SYMTAB=yes"
 #endif
 	.byte   0
@@ -241,27 +231,24 @@ _C_LABEL(lapic_isr):
 #endif
 
 	.globl	_C_LABEL(cpu_id),_C_LABEL(cpu_vendorname), _C_LABEL(cpu_brand_id)
-	.globl	_C_LABEL(cpuid_level),_C_LABEL(cpu_feature),_C_LABEL(cpu_feature2)
-	.globl	_C_LABEL(esym),_C_LABEL(boothowto)
+	.globl	_C_LABEL(cpuid_level)
+	.globl	_C_LABEL(esym),_C_LABEL(eblob),_C_LABEL(boothowto)
 	.globl	_C_LABEL(bootinfo),_C_LABEL(atdevbase)
-	.globl	_C_LABEL(proc0paddr),_C_LABEL(PDPpaddr)
+	.globl	_C_LABEL(PDPpaddr)
 	.globl	_C_LABEL(biosbasemem),_C_LABEL(biosextmem)
-	.globl	_C_LABEL(gdtstore)
+	.globl	_C_LABEL(gdtstore),_C_LABEL(cpu)
+
 _C_LABEL(cpu):		.long	0	# are we 386, 386sx, or 486,
 					#   or Pentium, or..
 _C_LABEL(cpu_id):	.long	0	# saved from `cpuid' instruction
-_C_LABEL(cpu_feature):	.long	0	# feature flags from 'cpuid'
-					#   instruction
-_C_LABEL(cpu_feature2):	.long	0	# feature flags from 'cpuid'
-					#   instruction
 _C_LABEL(cpuid_level):	.long	-1	# max. level accepted by 'cpuid'
 					#   instruction
 _C_LABEL(cpu_vendorname):	.space	16	# vendor string returned by `cpuid'
 					#   instruction
 _C_LABEL(cpu_brand_id):	.long	0	# brand ID from 'cpuid' instruction
 _C_LABEL(esym):		.quad	0	# ptr to end of syms
+_C_LABEL(eblob):	.quad	0	# ptr to end of modules
 _C_LABEL(atdevbase):	.quad	0	# location of start of iomem in virtual
-_C_LABEL(proc0paddr):	.quad	0
 _C_LABEL(PDPpaddr):	.quad	0	# paddr of PTD, for libkvm
 #ifndef REALBASEMEM
 _C_LABEL(biosbasemem):	.long	0	# base memory reported by BIOS
@@ -278,12 +265,24 @@ _C_LABEL(biosextmem):	.long	REALEXTMEM
 #define	RELOC(x)	_RELOC(_C_LABEL(x))
 
 #ifndef XEN
-	.globl	gdt64
+	.globl	gdt64_lo
+	.globl	gdt64_hi
 
-gdt64:
-	.word	gdt64_end-gdt64_start
+#define GDT64_LIMIT gdt64_end-gdt64_start-1
+
+/* Temporary gdt64, with base address in low memory */
+gdt64_lo:
+	.word	GDT64_LIMIT
 	.quad	_RELOC(gdt64_start)
 .align 64
+
+/* Temporary gdt64, with base address in high memory */
+gdt64_hi:
+	.word	GDT64_LIMIT
+	.quad	gdt64_start
+.align 64
+
+#undef GDT64_LIMIT
 
 gdt64_start:
 	.quad 0x0000000000000000	/* always empty */
@@ -292,7 +291,7 @@ gdt64_start:
 gdt64_end:
 
 farjmp64:
-	.long	longmode-KERNBASE
+	.long	_RELOC(longmode)
 	.word	GSEL(GCODE_SEL, SEL_KPL)
 	
 #endif	/* !XEN */
@@ -349,6 +348,17 @@ start:	movw	$0x1234,0x472			# warm boot
 	jg	2f
 	movl	%ecx,%esi
 	movl	%eax,%ecx
+	/*
+	 * If any modules were loaded, record where they
+	 * end.  We'll need to skip over them.
+	 */
+	cmpl	$BTINFO_MODULELIST, 4(%esi)
+	jne	0f
+	pushl	12(%esi)		/* endpa */
+	popl	RELOC(eblob)
+	addl	$KERNBASE_LO, RELOC(eblob)
+	adcl	$KERNBASE_HI, RELOC(eblob)+4
+0:
 	rep
 	movsb
 	popl	%eax
@@ -404,17 +414,10 @@ start:	movw	$0x1234,0x472			# warm boot
 	movl	$1,%eax
 	cpuid
 	movl	%eax,RELOC(cpu_id)
-	movl	%edx,RELOC(cpu_feature)
-	movl	%ecx,RELOC(cpu_feature2)
 
 	/* Brand ID is bits 0-7 of %ebx */
 	andl	$255,%ebx
 	movl	%ebx,RELOC(cpu_brand_id)
-
-	/* add AMD specific feature flags */
-	movl	$0x80000001,%eax
-	cpuid
-	orl	%edx,RELOC(cpu_feature)
 
 	/*
 	 * Finished with old stack; load new %esp now instead of later so we
@@ -469,7 +472,7 @@ start:	movw	$0x1234,0x472			# warm boot
 
 	/* Find end of kernel image. */
 	movl	$RELOC(end),%edi
-#if (NKSYMS || defined(DDB) || defined(LKM)) && !defined(SYMTAB_SPACE)
+#if (NKSYMS || defined(DDB) || defined(MODULAR)) && !defined(SYMTAB_SPACE)
 	/* Save the symbols (if loaded). */
 	movl	RELOC(esym),%eax
 	testl	%eax,%eax
@@ -478,6 +481,13 @@ start:	movw	$0x1234,0x472			# warm boot
 	movl	%eax,%edi
 1:
 #endif
+	/* Skip over any modules/blobs. */
+	movl	RELOC(eblob),%eax
+	testl	%eax,%eax
+	jz	1f
+	subl	$KERNBASE_LO,%eax	/* XXX */
+	movl	%eax,%edi
+1:
 	/* Clear tables */
 	movl	%edi,%esi
 	addl	$PGOFSET,%esi
@@ -629,7 +639,7 @@ compat:
 	 * in it to do that.
 	 */
 
-	movl	$RELOC(gdt64),%eax
+	movl	$RELOC(gdt64_lo),%eax
 	lgdt	(%eax)
 	movl	$RELOC(farjmp64),%eax
 	ljmp	*(%eax)
@@ -645,9 +655,17 @@ longmode:
 	 */
 	movabsq	$longmode_hi,%rax
 	jmp	*%rax
+
 longmode_hi:
+
 	/*
-	 * We have arrived.
+	 * We left the identity mapped area. Base address of
+	 * the temporary gdt64 should now be in high memory.
+	 */
+	movq	$RELOC(gdt64_hi),%rax
+	lgdt	(%rax)
+
+	/*
 	 * There's no need anymore for the identity mapping in low
 	 * memory, remove it.
 	 */
@@ -686,7 +704,7 @@ longmode_hi:
 	/* Set up bootstrap stack. */
 	leaq	(PROC0_STK_OFF)(%rsi),%rax
 	addq	%r8,%rax
-	movq	%rax,_C_LABEL(proc0paddr)(%rip)
+	movq	%rax,(_C_LABEL(lwp0)+L_PCB)(%rip) /* XXX L_PCB != uarea */
 	leaq	(USPACE-FRAMESIZE)(%rax),%rsp
 	movq	%rsi,PCB_CR3(%rax)	# pcb->pcb_cr3
 	xorq	%rbp,%rbp               # mark end of frames
@@ -696,7 +714,7 @@ longmode_hi:
 	movw	%ax,%fs
 
 	/* XXX merge these */
-	leaq	TABLESIZE(%rsi),%rdi
+	leaq	(TABLESIZE+IOM_SIZE)(%rsi),%rdi
 
 #else	/* XEN */
 	.globl	start
@@ -756,20 +774,18 @@ start:
 	subq	$8, %rax
 	movq	%rax, %rsp
 
+	xorl	%eax,%eax
+	cpuid
+	movl	%eax,_C_LABEL(cpuid_level)
+
 	call	xen_pmap_bootstrap
 
 	/*
 	 * First avail returned by xen_pmap_bootstrap in %rax
 	 */
 	movq	%rax, %rsi
-	movq	%rsi,_C_LABEL(proc0paddr)
+	movq	%rsi,(_C_LABEL(lwp0)+L_PCB)	/* XXX L_PCB != uarea */
 	
-	xorq	%rax,%rax
-	movq	%rsi,%rdi
-	movq	$USPACE,%rcx
-	rep
-	stosb
-
 	/*
 	 * Set new stack and clear segments
 	 */
@@ -777,6 +793,7 @@ start:
 	leaq	(USPACE-FRAMESIZE)(%rsi),%rsp
 	xorq	%rbp,%rbp
 
+	xorw	%ax,%ax
 	movw	%ax,%gs
 	movw	%ax,%fs
 	
@@ -865,7 +882,7 @@ ENTRY(dumpsys)
 	ret
 
 /*
- * struct lwp *cpu_switchto(struct lwp *oldlwp, struct newlwp,
+ * struct lwp *cpu_switchto(struct lwp *oldlwp, struct lwp *newlwp,
  *			    bool returning)
  *
  *	1. if (oldlwp != NULL), save its context.
@@ -889,12 +906,12 @@ ENTRY(cpu_switchto)
 	jz	1f
 
 	/* Save old context. */
-	movq	L_ADDR(%r13),%rax
+	movq	L_PCB(%r13),%rax
 	movq	%rsp,PCB_RSP(%rax)
 	movq	%rbp,PCB_RBP(%rax)
 
 	/* Switch to newlwp's stack. */
-1:	movq	L_ADDR(%r12),%r14
+1:	movq	L_PCB(%r12),%r14
 #ifdef XEN /* XXX debug code */
 	cmpq	$0, PCB_RSP(%r14)
 	jne 999f
@@ -934,31 +951,78 @@ ENTRY(cpu_switchto)
 	jne	5f
 
 	/*
-	 * Restore cr0 (including FPU state).  Raise the IPL to IPL_IPI.
+	 * Restore cr0 (including FPU state).  Raise the IPL to IPL_HIGH.
 	 * FPU IPIs can alter the LWP's saved cr0.  Dropping the priority
 	 * is deferred until mi_switch(), when cpu_switchto() returns.
 	 */
 2:
 #ifndef XEN
-	movl	$IPL_IPI,CPUVAR(ILEVEL)
-	movl	PCB_CR0(%r14),%ecx
+	movl	$IPL_HIGH,CPUVAR(ILEVEL)
+	movl	PCB_CR0(%r14),%ecx	/* has CR0_TS clear */
 	movq	%cr0,%rdx
 
 	/*
 	 * If our floating point registers are on a different CPU,
 	 * set CR0_TS so we'll trap rather than reuse bogus state.
 	 */
-	movq	PCB_FPCPU(%r14),%rax
-	cmpq	CPUVAR(SELF),%rax
+	cmpq	CPUVAR(FPCURLWP),%r12
 	je	3f
 	orq	$CR0_TS,%rcx
 
 	/* Reloading CR0 is very expensive - avoid if possible. */
 3:	cmpq	%rdx,%rcx
-	je	4f
+	je	6f
 	movq	%rcx,%cr0
-#endif
 
+6:	testl   $PCB_COMPAT32, PCB_FLAGS(%r14)
+	jne	32f
+
+	/* Zero out %fs/%gs registers and GDT descriptors. */
+	xorq	%rax, %rax
+	movw	%ax, %fs
+	CLI(cx)
+	swapgs
+	movw	%ax, %gs
+	swapgs
+	STI(cx)
+
+	movq	CPUVAR(GDT),%rcx
+	movq	%rax, (GUFS_SEL*8)(%rcx)
+	movq	%rax, (GUGS_SEL*8)(%rcx)
+
+	/* Reload 64-bit %fs/%gs MSRs. */
+	movl	$MSR_FSBASE, %ecx
+	movl	PCB_FS(%r14), %eax
+	movl	4+PCB_FS(%r14), %edx
+	wrmsr
+	movl	$MSR_KERNELGSBASE, %ecx
+	movl	PCB_GS(%r14), %eax
+	movl	4+PCB_GS(%r14), %edx
+	wrmsr
+	jmp	4f
+
+32:
+	/* Reload %fs/%gs GDT descriptors. */
+	movq	CPUVAR(GDT),%rcx
+	movq	PCB_FS(%r14), %rax
+	movq	%rax, (GUFS_SEL*8)(%rcx)
+	movq	PCB_GS(%r14), %rax
+	movq	%rax, (GUGS_SEL*8)(%rcx)
+
+	/* Reload %fs and %gs */
+	movq	L_MD_REGS(%r12), %rbx
+	movw	TF_FS(%rbx), %fs
+	CLI(ax)
+	swapgs
+	movw	TF_GS(%rbx), %gs
+	swapgs
+	STI(ax)
+
+#else
+	movq	%r12,%rdi
+	callq	_C_LABEL(x86_64_tls_switch)
+#endif
+	
 	/* Return to the new LWP, returning 'oldlwp' in %rax. */
 4:	movq	%r13,%rax
 	popq	%r15
@@ -1002,10 +1066,9 @@ IDTVEC(syscall)
 	swapgs
 	movq	%r15,CPUVAR(SCRATCH)
 	movq	CPUVAR(CURLWP),%r15
-	movq	L_ADDR(%r15),%r15
+	movq	L_PCB(%r15),%r15
 	movq	PCB_RSP0(%r15),%r15
 	xchgq	%r15,%rsp
-	sti
 
 	/*
 	 * XXX don't need this whole frame, split of the
@@ -1018,10 +1081,11 @@ IDTVEC(syscall)
 	pushq	%r15				/* User space rsp */
 	movq	CPUVAR(SCRATCH),%r15
 	subq	$TF_REGSIZE+(TF_RSP-TF_TRAPNO),%rsp
+	movw	%es,TF_ES(%rsp)
+	sti
 	INTR_SAVE_GPRS
 	movw	%fs,TF_FS(%rsp)
 	movw	%gs,TF_GS(%rsp)
-	movw	%es,TF_ES(%rsp)
 	movw	$(LSEL(LUDATA_SEL, SEL_UPL)),TF_DS(%rsp)
 	movq	%r11, TF_RFLAGS(%rsp)	/* old rflags from syscall insn */
 	movq	$(LSEL(LUCODE_SEL, SEL_UPL)), TF_CS(%rsp)
@@ -1045,6 +1109,7 @@ IDTVEC(syscall)
 #endif
 
 	movq	CPUVAR(CURLWP),%r14
+	incq	CPUVAR(NSYSCALL)	# count it atomically
 	movq	%rsp,L_MD_REGS(%r14)	# save pointer to frame
 	movq	L_PROC(%r14),%r15
 	andl	$~MDP_IRET,L_MD_FLAGS(%r14)
@@ -1053,40 +1118,22 @@ IDTVEC(syscall)
 .Lsyscall_checkast:
 	/* Check for ASTs on exit to user mode. */
 	CLI(si)
-	CHECK_ASTPENDING(%r14)
-	je	1f
-	/* Always returning to user mode here. */
-	CLEAR_ASTPENDING(%r14)
-	STI(si)
-	/* Pushed T_ASTFLT into tf_trapno on entry. */
-	movq	%rsp,%rdi
-	call	_C_LABEL(trap)
-	jmp	.Lsyscall_checkast	/* re-check ASTs */
-1:	CHECK_DEFERRED_SWITCH
+	movl	L_MD_ASTPENDING(%r14), %eax
+	orl	CPUVAR(WANT_PMAPLOAD), %eax
 	jnz	9f
-	STI(si)
 	testl	$MDP_IRET, L_MD_FLAGS(%r14)
 	jne	iret_return;
-syscall_return:
 #ifdef DIAGNOSTIC
 	cmpl	$IPL_NONE,CPUVAR(ILEVEL)
 	jne	3f
 #endif
-	/*
-	 * XXX interrupts off longer than they should be here.
-	 */
+	movw	TF_ES(%rsp),%es
 #ifndef XEN
-	cli
 	swapgs
 #endif
-	movw	TF_ES(%rsp),%es
-	movw	TF_FS(%rsp),%fs
-#ifndef XEN
-	movw	TF_GS(%rsp),%gs
-#endif
 	INTR_RESTORE_GPRS
-	movw	$(LSEL(LUDATA_SEL, SEL_UPL)),%r11
-	movw	%r11,%ds
+	movw	$(LSEL(LUDATA_SEL, SEL_UPL)), %r11w
+	movw	%r11w,%ds
 	addq	$TF_REGSIZE+16,%rsp	/* + T_xxx and error code */
 #ifndef XEN
 	popq	%rcx	/* return rip */
@@ -1112,9 +1159,18 @@ syscall_return:
 	jmp	.Lsyscall_checkast
 4:	.asciz	"WARNING: SPL NOT LOWERED ON SYSCALL %d %d EXIT %x %x\n"
 #endif
-
-9:	STI(si)
+9:
+	cmpl	$0, CPUVAR(WANT_PMAPLOAD)
+	jz	10f
+	STI(si)
 	call	_C_LABEL(do_pmap_load)
+	jmp	.Lsyscall_checkast	/* re-check ASTs */
+10:
+	CLEAR_ASTPENDING(%r14)
+	STI(si)
+	/* Pushed T_ASTFLT into tf_trapno on entry. */
+	movq	%rsp,%rdi
+	call	_C_LABEL(trap)
 	jmp	.Lsyscall_checkast	/* re-check ASTs */
 
 /*
@@ -1126,13 +1182,13 @@ syscall_return:
  */
 NENTRY(lwp_trampoline)
 	movq	%rbp,%rsi
+	movq	%rbp,%r14	/* for .Losyscall_checkast */
 	movq	%rax,%rdi
 	xorq	%rbp,%rbp
 	call	_C_LABEL(lwp_startup)
 	movq	%r13,%rdi
 	call	*%r12
-	DO_DEFERRED_SWITCH
-	INTRFASTEXIT
+	jmp	.Losyscall_checkast
 	/* NOTREACHED */
 
 /*
@@ -1142,13 +1198,13 @@ NENTRY(lwp_trampoline)
  */
 NENTRY(child_trampoline)
 	movq	%rbp,%rsi
+	movq	%rbp,%r14	/* for .Lsyscall_checkast */
 	movq	%rax,%rdi
 	xorq	%rbp,%rbp
 	call	_C_LABEL(lwp_startup)
 	movq	%r13,%rdi
 	call	*%r12
-	DO_DEFERRED_SWITCH
-	jmp	syscall_return
+	jmp	.Lsyscall_checkast
 
 	.globl  _C_LABEL(osyscall_return)
 
@@ -1197,48 +1253,57 @@ _C_LABEL(osyscall_return):
 .Losyscall_checkast:
 	/* Check for ASTs on exit to user mode. */
 	CLI(si)
-	CHECK_ASTPENDING(%r14)
-	je	1f
-	/* Always returning to user mode here. */
-	CLEAR_ASTPENDING(%r14)
-	STI(si)
-	/* Pushed T_ASTFLT into tf_trapno on entry. */
-	movq	%rsp,%rdi
-	call	_C_LABEL(trap)
-	jmp	.Losyscall_checkast
-1:	CHECK_DEFERRED_SWITCH
+	movl	L_MD_ASTPENDING(%r14), %eax
+	orl	CPUVAR(WANT_PMAPLOAD), %eax
 	jnz	9f
 iret_return:
-#ifndef DIAGNOSTIC
-	INTRFASTEXIT
-#else /* DIAGNOSTIC */
+#ifdef DIAGNOSTIC
 	cmpl	$IPL_NONE,CPUVAR(ILEVEL)
 	jne	3f
+#endif
 	INTRFASTEXIT
-3:
-	STI(si)
-	movabsq	$4f, %rdi
+#ifdef DIAGNOSTIC
+3:	movabsq	$4f, %rdi
+	movl	TF_RAX(%rsp),%esi
+	movl	TF_RDI(%rsp),%edx
+	movl	%ebx,%ecx
+	movl	CPUVAR(ILEVEL),%r8d
 	xorq	%rax,%rax
 	call	_C_LABEL(printf)
 	movl	$IPL_NONE,%edi
 	call	_C_LABEL(spllower)
 	jmp	.Losyscall_checkast
-4:	.asciz	"WARNING: SPL NOT LOWERED ON SYSCALL EXIT\n"
-#endif /* DIAGNOSTIC */
-9:	STI(si)
+4:	.asciz	"WARNING: SPL NOT LOWERED ON SYSCALL %d %d EXIT %x %x\n"
+#endif
+9:
+	cmpl	$0, CPUVAR(WANT_PMAPLOAD)
+	jz	10f
+	STI(si)
 	call	_C_LABEL(do_pmap_load)
+	jmp	.Losyscall_checkast	/* re-check ASTs */
+10:
+	CLEAR_ASTPENDING(%r14)
+	STI(si)
+	/* Pushed T_ASTFLT into tf_trapno on entry. */
+	movq	%rsp,%rdi
+	call	_C_LABEL(trap)
 	jmp	.Losyscall_checkast	/* re-check ASTs */
 
 /*
- * void sse2_zero_page(void *pg)
+ * void sse2_idlezero_page(void *pg)
  *
- * Zero a page without polluting the cache.
+ * Zero a page without polluting the cache.  Preemption must be
+ * disabled by the caller. Abort if a preemption is pending.
  */
-ENTRY(sse2_zero_page)
-	movl	$PAGE_SIZE, %ecx
+ENTRY(sse2_idlezero_page)
+	pushq	%rbp
+	movq	%rsp,%rbp
+	movl	$(PAGE_SIZE/64), %ecx
 	xorq	%rax, %rax
 	.align	16
 1:
+	testl	$RESCHED_KPREEMPT, CPUVAR(RESCHED)
+	jnz	2f
 	movnti	%rax, 0(%rdi)
 	movnti	%rax, 8(%rdi)
 	movnti	%rax, 16(%rdi)
@@ -1247,32 +1312,14 @@ ENTRY(sse2_zero_page)
 	movnti	%rax, 40(%rdi)
 	movnti	%rax, 48(%rdi)
 	movnti	%rax, 56(%rdi)
-	subl	$64, %ecx
-	leaq	64(%rdi), %rdi
+	addq	$64, %rdi
+	decl	%ecx
 	jnz	1b
 	sfence
+	incl	%eax
+	popq	%rbp
 	ret
-
-/*
- * void sse2_copy_page(void *src, void *dst)
- *
- * Copy a page without polluting the cache.
- */
-ENTRY(sse2_copy_page)
-	movl	$PAGE_SIZE, %ecx
-	.align	16
-1:
-	movq	0(%rdi), %rax
-	movq	8(%rdi), %rdx
-	movq	16(%rdi), %r8
-	movq	24(%rdi), %r9
-	movnti	%rax, 0(%rsi)
-	movnti	%rdx, 8(%rsi)
-	movnti	%r8, 16(%rsi)
-	movnti	%r9, 24(%rsi)
-	subl	$32, %ecx
-	leaq	32(%rdi), %rdi
-	leaq	32(%rsi), %rsi
-	jnz	1b
+2:
 	sfence
+	popq	%rbp
 	ret

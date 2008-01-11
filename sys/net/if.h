@@ -1,4 +1,4 @@
-/*	$NetBSD: if.h,v 1.132 2007/12/20 21:08:20 dyoung Exp $	*/
+/*	$NetBSD: if.h,v 1.150 2011/02/01 01:39:20 matt Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -80,6 +73,8 @@
 
 #if defined(_NETBSD_SOURCE)
 
+#include <sys/mutex.h>
+#include <sys/condvar.h>
 #include <sys/socket.h>
 #include <sys/queue.h>
 #include <net/dlt.h>
@@ -117,7 +112,6 @@
  * routing and gateway routines maintaining information used to locate
  * interfaces.  These routines live in the files if.c and route.c
  */
-/*  XXX fast fix for SNMP, going away soon */
 #include <sys/time.h>
 
 #if defined(_KERNEL_OPT)
@@ -169,22 +163,22 @@ struct if_data {
 	u_char	ifi_addrlen;		/* media address length */
 	u_char	ifi_hdrlen;		/* media header length */
 	int	ifi_link_state;		/* current link state */
-	u_quad_t ifi_mtu;		/* maximum transmission unit */
-	u_quad_t ifi_metric;		/* routing metric (external only) */
-	u_quad_t ifi_baudrate;		/* linespeed */
+	uint64_t ifi_mtu;		/* maximum transmission unit */
+	uint64_t ifi_metric;		/* routing metric (external only) */
+	uint64_t ifi_baudrate;		/* linespeed */
 	/* volatile statistics */
-	u_quad_t ifi_ipackets;		/* packets received on interface */
-	u_quad_t ifi_ierrors;		/* input errors on interface */
-	u_quad_t ifi_opackets;		/* packets sent on interface */
-	u_quad_t ifi_oerrors;		/* output errors on interface */
-	u_quad_t ifi_collisions;	/* collisions on csma interfaces */
-	u_quad_t ifi_ibytes;		/* total number of octets received */
-	u_quad_t ifi_obytes;		/* total number of octets sent */
-	u_quad_t ifi_imcasts;		/* packets received via multicast */
-	u_quad_t ifi_omcasts;		/* packets sent via multicast */
-	u_quad_t ifi_iqdrops;		/* dropped on input, this interface */
-	u_quad_t ifi_noproto;		/* destined for unsupported protocol */
-	struct	timeval ifi_lastchange;	/* last operational state change */
+	uint64_t ifi_ipackets;		/* packets received on interface */
+	uint64_t ifi_ierrors;		/* input errors on interface */
+	uint64_t ifi_opackets;		/* packets sent on interface */
+	uint64_t ifi_oerrors;		/* output errors on interface */
+	uint64_t ifi_collisions;	/* collisions on csma interfaces */
+	uint64_t ifi_ibytes;		/* total number of octets received */
+	uint64_t ifi_obytes;		/* total number of octets sent */
+	uint64_t ifi_imcasts;		/* packets received via multicast */
+	uint64_t ifi_omcasts;		/* packets sent via multicast */
+	uint64_t ifi_iqdrops;		/* dropped on input, this interface */
+	uint64_t ifi_noproto;		/* destined for unsupported protocol */
+	struct	timespec ifi_lastchange;/* last operational state change */
 };
 
 /*
@@ -193,32 +187,6 @@ struct if_data {
 #define	LINK_STATE_UNKNOWN	0	/* link invalid/unknown */
 #define	LINK_STATE_DOWN		1	/* link is down */
 #define	LINK_STATE_UP		2	/* link is up */
-
-#if defined(_KERNEL) && defined(COMPAT_14)
-/* Pre-1.5 if_data struct */
-struct if_data14 {
-	/* generic interface information */
-	u_char	ifi_type;		/* ethernet, tokenring, etc. */
-	u_char	ifi_addrlen;		/* media address length */
-	u_char	ifi_hdrlen;		/* media header length */
-	u_long	ifi_mtu;		/* maximum transmission unit */
-	u_long	ifi_metric;		/* routing metric (external only) */
-	u_long	ifi_baudrate;		/* linespeed */
-	/* volatile statistics */
-	u_long	ifi_ipackets;		/* packets received on interface */
-	u_long	ifi_ierrors;		/* input errors on interface */
-	u_long	ifi_opackets;		/* packets sent on interface */
-	u_long	ifi_oerrors;		/* output errors on interface */
-	u_long	ifi_collisions;		/* collisions on csma interfaces */
-	u_long	ifi_ibytes;		/* total number of octets received */
-	u_long	ifi_obytes;		/* total number of octets sent */
-	u_long	ifi_imcasts;		/* packets received via multicast */
-	u_long	ifi_omcasts;		/* packets sent via multicast */
-	u_long	ifi_iqdrops;		/* dropped on input, this interface */
-	u_long	ifi_noproto;		/* destined for unsupported protocol */
-	struct	timeval ifi_lastchange;	/* last operational state change */
-};
-#endif /* _KERNEL && COMPAT_14 */
 
 /*
  * Structure defining a queue for a network interface.
@@ -238,13 +206,13 @@ struct ifqueue {
  */
 TAILQ_HEAD(ifnet_head, ifnet);		/* the actual queue head */
 
-struct ifnet {				/* and the entries */
+typedef struct ifnet {
 	void	*if_softc;		/* lower-level data for this if */
 	TAILQ_ENTRY(ifnet) if_list;	/* all struct ifnets are chained */
 	TAILQ_HEAD(, ifaddr) if_addrlist; /* linked list of addresses per if */
 	char	if_xname[IFNAMSIZ];	/* external name (name + unit) */
 	int	if_pcount;		/* number of promiscuous listeners */
-	void *	if_bpf;			/* packet filter structure */
+	struct bpf_if *if_bpf;		/* packet filter structure */
 	u_short	if_index;		/* numeric abbreviation for this if */
 	short	if_timer;		/* time 'til if_watchdog called */
 	short	if_flags;		/* up/down, broadcast, etc. */
@@ -273,7 +241,17 @@ struct ifnet {				/* and the entries */
 		    (struct ifnet *);
 	struct ifaltq if_snd;		/* output queue (includes altq) */
 	struct ifaddr	*if_dl;		/* identity of this interface. */
-	const struct	sockaddr_dl *if_sadl;	/* pointer to our sockaddr_dl */
+	const struct	sockaddr_dl *if_sadl;	/* pointer to sockaddr_dl
+						 * of if_dl
+						 */
+	/* if_hwdl: h/w identity
+	 *
+	 * May be NULL.  If not NULL, it is the address assigned
+	 * to the interface by the manufacturer, so it very likely
+	 * to be unique.  It MUST NOT be deleted.  It is highly
+	 * suitable for deriving the EUI64 for the interface.
+	 */
+	struct ifaddr	*if_hwdl;
 	const uint8_t *if_broadcastaddr;/* linklevel broadcast bytestring */
 	void	*if_bridge;		/* bridge glue */
 	int	if_dlt;			/* data link type (<net/dlt.h>) */
@@ -297,7 +275,29 @@ struct ifnet {				/* and the entries */
 	struct	mowner *if_mowner;	/* who owns mbufs for this interface */
 
 	void	*if_agrprivate;		/* used only when #if NAGR > 0 */
-};
+
+	/*
+	 * pf specific data, used only when #if NPF > 0.
+	 */
+	void	*if_pf_kif;		/* pf interface abstraction */
+	void	*if_pf_groups;		/* pf interface groups */
+	/*
+	 * During an ifnet's lifetime, it has only one if_index, but
+	 * and if_index is not sufficient to identify an ifnet
+	 * because during the lifetime of the system, many ifnets may occupy a
+	 * given if_index.  Let us tell different ifnets at the same
+	 * if_index apart by their if_index_gen, a unique number that each ifnet
+	 * is assigned when it if_attach()s.  Now, the kernel can use the
+	 * pair (if_index, if_index_gen) as a weak reference to an ifnet.
+	 */
+	uint64_t if_index_gen;		/* generation number for the ifnet
+					 * at if_index: if two ifnets' index
+					 * and generation number are both the
+					 * same, they are the same ifnet.
+					 */
+	struct sysctllog	*if_sysctl_log;
+} ifnet_t;
+
 #define	if_mtu		if_data.ifi_mtu
 #define	if_type		if_data.ifi_type
 #define	if_addrlen	if_data.ifi_addrlen
@@ -459,7 +459,7 @@ struct ifaddr {
 	TAILQ_ENTRY(ifaddr) ifa_list;	/* list of addresses for interface */
 	struct	ifaddr_data	ifa_data;	/* statistics on the address */
 	void	(*ifa_rtrequest)	/* check or clean routes (+ or -)'d */
-		        (int, struct rtentry *, struct rt_addrinfo *);
+		        (int, struct rtentry *, const struct rt_addrinfo *);
 	u_int	ifa_flags;		/* mostly rt_flags for cloning */
 	int	ifa_refcnt;		/* count of references */
 	int	ifa_metric;		/* cost of going out this interface */
@@ -468,54 +468,51 @@ struct ifaddr {
 	uint32_t	*ifa_seqno;
 	int16_t	ifa_preference;	/* preference level for this address */
 };
-#define	IFA_ROUTE	RTF_UP /* 0x01 *//* route installed */
+#define	IFA_ROUTE	RTF_UP	/* (0x01) route installed */
 
 /*
- * Message format for use in obtaining information about interfaces
- * from sysctl and the routing socket.
+ * Message format for use in obtaining information about interfaces from
+ * sysctl and the routing socket.  We need to force 64-bit alignment if we
+ * aren't using compatiblity definitons.
  */
+#if !defined(_KERNEL) || !defined(COMPAT_RTSOCK)
+#define	__align64	__aligned(sizeof(uint64_t))
+#else
+#define	__align64
+#endif
 struct if_msghdr {
-	u_short	ifm_msglen;	/* to skip over non-understood messages */
+	u_short	ifm_msglen __align64;
+				/* to skip over non-understood messages */
 	u_char	ifm_version;	/* future binary compatibility */
 	u_char	ifm_type;	/* message type */
 	int	ifm_addrs;	/* like rtm_addrs */
 	int	ifm_flags;	/* value of if_flags */
 	u_short	ifm_index;	/* index for associated ifp */
-	struct	if_data ifm_data;/* statistics and other data about if */
+	struct	if_data ifm_data __align64;
+				/* statistics and other data about if */
 };
-
-#if defined(_KERNEL) && defined(COMPAT_14)
-/* pre-1.5 if_msghdr (ifm_data changed) */
-struct if_msghdr14 {
-	u_short	ifm_msglen;	/* to skip over non-understood messages */
-	u_char	ifm_version;	/* future binary compatibility */
-	u_char	ifm_type;	/* message type */
-	int	ifm_addrs;	/* like rtm_addrs */
-	int	ifm_flags;	/* value of if_flags */
-	u_short	ifm_index;	/* index for associated ifp */
-	struct	if_data14 ifm_data; /* statistics and other data about if */
-};
-#endif /* _KERNEL && COMPAT_14 */
 
 /*
  * Message format for use in obtaining information about interface addresses
  * from sysctl and the routing socket.
  */
 struct ifa_msghdr {
-	u_short	ifam_msglen;	/* to skip over non-understood messages */
+	u_short	ifam_msglen __align64;
+				/* to skip over non-understood messages */
 	u_char	ifam_version;	/* future binary compatibility */
 	u_char	ifam_type;	/* message type */
 	int	ifam_addrs;	/* like rtm_addrs */
 	int	ifam_flags;	/* value of ifa_flags */
-	u_short	ifam_index;	/* index for associated ifp */
 	int	ifam_metric;	/* value of ifa_metric */
+	u_short	ifam_index;	/* index for associated ifp */
 };
 
 /*
  * Message format announcing the arrival or departure of a network interface.
  */
 struct if_announcemsghdr {
-	u_short	ifan_msglen;	/* to skip over non-understood messages */
+	u_short	ifan_msglen __align64;
+				/* to skip over non-understood messages */
 	u_char	ifan_version;	/* future binary compatibility */
 	u_char	ifan_type;	/* message type */
 	u_short	ifan_index;	/* index for associated ifp */
@@ -525,6 +522,8 @@ struct if_announcemsghdr {
 
 #define	IFAN_ARRIVAL	0	/* interface arrival */
 #define	IFAN_DEPARTURE	1	/* interface departure */
+
+#undef __align64
 
 /*
  * Interface request structure used for socket
@@ -617,6 +616,8 @@ struct  ifdrv {
 	size_t		ifd_len;
 	void		*ifd_data;
 };
+#define IFLINKSTR_QUERYLEN	0x01
+#define IFLINKSTR_UNSET		0x02
 
 /*
  * Structure used in SIOCGIFCONF request.
@@ -641,6 +642,8 @@ struct if_laddrreq {
 	char iflr_name[IFNAMSIZ];
 	unsigned int flags;
 #define IFLR_PREFIX	0x8000	/* in: prefix given  out: kernel fills id */
+#define IFLR_ACTIVE	0x4000	/* in/out: link-layer address activation */
+#define IFLR_FACTORY	0x2000	/* in/out: factory link-layer address */
 	unsigned int prefixlen;		/* in/out */
 	struct sockaddr_storage addr;	/* in/out */
 	struct sockaddr_storage dstaddr; /* out */
@@ -819,7 +822,12 @@ void    ether_input(struct ifnet *, struct mbuf *);
 
 int ifreq_setaddr(u_long, struct ifreq *, const struct sockaddr *);
 
-void	if_set_sadl(struct ifnet *, const void *, u_char);
+struct ifnet *if_alloc(u_char);
+void if_initname(struct ifnet *, const char *, int);
+struct ifaddr *if_dl_create(const struct ifnet *, const struct sockaddr_dl **);
+void if_activate_sadl(struct ifnet *, struct ifaddr *,
+    const struct sockaddr_dl *);
+void	if_set_sadl(struct ifnet *, const void *, u_char, bool);
 void	if_alloc_sadl(struct ifnet *);
 void	if_free_sadl(struct ifnet *);
 void	if_attach(struct ifnet *);
@@ -834,7 +842,11 @@ void	if_slowtimo(void *);
 void	if_up(struct ifnet *);
 int	ifconf(u_long, void *);
 void	ifinit(void);
+void	ifinit1(void);
+int	ifaddrpref_ioctl(struct socket *, u_long, void *, struct ifnet *,
+    lwp_t *);
 int	ifioctl(struct socket *, u_long, void *, struct lwp *);
+int	ifioctl_common(struct ifnet *, u_long, void *);
 int	ifpromisc(struct ifnet *, int);
 struct	ifnet *ifunit(const char *);
 
@@ -850,7 +862,7 @@ struct	ifaddr *ifa_ifwithroute(int, const struct sockaddr *,
 					const struct sockaddr *);
 struct	ifaddr *ifaof_ifpforaddr(const struct sockaddr *, struct ifnet *);
 void	ifafree(struct ifaddr *);
-void	link_rtrequest(int, struct rtentry *, struct rt_addrinfo *);
+void	link_rtrequest(int, struct rtentry *, const struct rt_addrinfo *);
 
 void	if_clone_attach(struct if_clone *);
 void	if_clone_detach(struct if_clone *);
@@ -867,7 +879,7 @@ int	loioctl(struct ifnet *, u_long, void *);
 void	loopattach(int);
 int	looutput(struct ifnet *,
 	   struct mbuf *, const struct sockaddr *, struct rtentry *);
-void	lortrequest(int, struct rtentry *, struct rt_addrinfo *);
+void	lortrequest(int, struct rtentry *, const struct rt_addrinfo *);
 
 /*
  * These are exported because they're an easy way to tell if
@@ -898,6 +910,9 @@ __END_DECLS
 #endif /* _KERNEL */ /* XXX really ALTQ? */
 
 #ifdef _KERNEL
+
+ifnet_t *	if_byindex(u_int);
+
 /*
  * ifq sysctl support
  */

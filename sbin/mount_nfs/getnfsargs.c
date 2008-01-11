@@ -1,4 +1,4 @@
-/*	$NetBSD: getnfsargs.c,v 1.10 2007/08/05 22:09:12 yamt Exp $	*/
+/*	$NetBSD: getnfsargs.c,v 1.14 2010/07/23 19:25:23 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)mount_nfs.c	8.11 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: getnfsargs.c,v 1.10 2007/08/05 22:09:12 yamt Exp $");
+__RCSID("$NetBSD: getnfsargs.c,v 1.14 2010/07/23 19:25:23 pooka Exp $");
 #endif
 #endif /* not lint */
 
@@ -91,6 +91,10 @@ struct nfhret {
 
 static int	xdr_dir(XDR *, char *);
 static int	xdr_fh(XDR *, struct nfhret *);
+
+#ifndef MOUNTNFS_RETRYRPC
+#define MOUNTNFS_RETRYRPC 60
+#endif
 
 int
 getnfsargs(char *spec, struct nfs_args *nfsargsp)
@@ -214,9 +218,14 @@ tryagain:
 				nfhret.stat = EPROTONOSUPPORT;
 				break;
 			}
-			if ((opflags & ISBGRND) == 0)
-				clnt_pcreateerror(
-				    "mount_nfs: rpcbind to nfs on server");
+			if ((opflags & ISBGRND) == 0) {
+				char buf[64];
+
+				snprintf(buf, sizeof(buf),
+				    "%s: rpcbind to nfs on server",
+				    getprogname());
+				clnt_pcreateerror(buf);
+			}
 		} else {
 			pertry.tv_sec = 30;
 			pertry.tv_usec = 0;
@@ -272,7 +281,7 @@ tryagain:
 				opflags &= ~BGRND;
 				if ((i = fork()) != 0) {
 					if (i == -1)
-						err(1, "nqnfs 2");
+						err(1, "fork");
 					exit(0);
 				}
 				(void) setsid();
@@ -282,7 +291,7 @@ tryagain:
 				(void) chdir("/");
 				opflags |= ISBGRND;
 			}
-			sleep(60);
+			sleep(MOUNTNFS_RETRYRPC);
 		}
 	}
 	if (nfhret.stat == 0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: smdk2410_lcd.c,v 1.3 2007/03/04 05:59:45 christos Exp $ */
+/*	$NetBSD: smdk2410_lcd.c,v 1.5 2010/02/05 21:10:58 snj Exp $ */
 
 /*
  * Copyright (c) 2004  Genetec Corporation.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smdk2410_lcd.c,v 1.3 2007/03/04 05:59:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smdk2410_lcd.c,v 1.5 2010/02/05 21:10:58 snj Exp $");
 
 /*
  * LCD driver for Samsung SMDK2410.
@@ -60,6 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: smdk2410_lcd.c,v 1.3 2007/03/04 05:59:45 christos Ex
 #include <arm/s3c2xx0/s3c2410reg.h>
 #include <arm/s3c2xx0/s3c24x0_lcd.h>
 
+#include "locators.h"
 #include "wsdisplay.h"
 
 int	lcd_match(struct device *, struct cfdata *, void *);
@@ -274,7 +275,8 @@ lcdclose( dev_t dev, int fflag, int devtype, struct proc *p )
 paddr_t
 lcdmmap( dev_t dev, off_t offset, int size )
 {
-	struct s3c24x0_lcd_softc *sc = device_lookup(&lcd_cd, minor(dev));
+	struct s3c24x0_lcd_softc *sc =
+		device_lookup_private(&lcd_cd, minor(dev));
 	struct s3c24x0_lcd_screen *scr = sc->active;
 
 	return bus_dmamem_mmap(sc->dma_tag, scr->segs, scr->nsegs,

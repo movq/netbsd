@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.21 2007/10/17 19:57:16 garbled Exp $
+#	$NetBSD: Makefile,v 1.29 2011/05/21 15:50:42 tsutsui Exp $
 
 CURDIR=	${.CURDIR}
 S=	${CURDIR}/../../../..
@@ -7,12 +7,12 @@ S=	${CURDIR}/../../../..
 # Override normal settings
 #
 
-WARNS=		0
+WARNS?=		2
 
 PROG?=		ofwboot
 SRCS=		srt0.s Locore.c boot.c ofdev.c alloc.c net.c netif_of.c vers.c
-SRCS+=		bootinfo.c loadfile_machdep.c promlib.c prf.c
-.PATH:		${S}/arch/sparc64/sparc64
+SRCS+=		bootinfo.c loadfile_machdep.c promlib.c prf.c isfloppy.c
+.PATH:		${S}/arch/sparc64/sparc64 ${S}/arch/sparc/stand/common
 
 # XXX SHOULD NOT NEED TO DEFINE THESE!
 LIBCRT0=
@@ -49,6 +49,7 @@ RELOC=		100000
 ENTRY=		_start
 
 CPPFLAGS+=	-I${CURDIR}/../../.. -I${CURDIR}/../../../.. -I${CURDIR} -I.
+CPPFLAGS+=	-I${CURDIR}/../../../../../common/include
 CPPFLAGS+=	-DRELOC=0x${RELOC}
 
 #
@@ -58,7 +59,7 @@ CPPFLAGS+=	-DSPARC_BOOT_AOUT
 CPPFLAGS+=	-DSPARC_BOOT_ELF
 CPPFLAGS+=	-DSPARC_BOOT_UFS
 CPPFLAGS+=	-DSPARC_BOOT_NFS
-#CPPFLAGS+=	-DSPARC_BOOT_CD9660
+CPPFLAGS+=	-DSPARC_BOOT_CD9660
 
 ### find out what to use for libkern
 KERN_AS=	library
@@ -86,13 +87,16 @@ LIBSA=		${SALIB}
 .endif
 CLEANFILES+= machine sparc64 sparc
 
-cleandir distclean: cleanlibdir
+cleandir distclean: .WAIT cleanlibdir
 
 cleanlibdir:
 	-rm -rf lib
 
+.include <bsd.own.mk>
+
 vers.c: version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${CURDIR}/version "sparc64" ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${CURDIR}/version "sparc64" ${NEWVERSWHAT}
 
 CLEANFILES+= vers.c
 
@@ -116,10 +120,10 @@ AFLAGS+=		-Wa,-Av8plusa
 .endif
 
 .if CROSS
-AFLAGS+=		-x assembler-with-cpp -traditional-cpp -D_LOCORE -D__ELF__
+AFLAGS+=		-x assembler-with-cpp -D_LOCORE -D__ELF__
 CEXTRAFLAGS?=		-D_LP64
 .else
-AFLAGS+=		-x assembler-with-cpp -traditional-cpp -D_LOCORE -D__ELF__ ${CEXTRAFLAGS}
+AFLAGS+=		-x assembler-with-cpp -D_LOCORE -D__ELF__ ${CEXTRAFLAGS}
 .endif
 
 NORMAL_S=	${CC} ${AFLAGS} ${CPPFLAGS} -c $<

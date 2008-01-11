@@ -1,4 +1,4 @@
-/*	$NetBSD: ktrace.c,v 1.41 2007/02/08 21:40:31 drochner Exp $	*/
+/*	$NetBSD: ktrace.c,v 1.44 2011/02/05 15:22:17 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)ktrace.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: ktrace.c,v 1.41 2007/02/08 21:40:31 drochner Exp $");
+__RCSID("$NetBSD: ktrace.c,v 1.44 2011/02/05 15:22:17 yamt Exp $");
 #endif
 #endif /* not lint */
 
@@ -94,7 +94,7 @@ main(int argc, char *argv[])
 	append = ops = pidset = trset = synclog = 0;
 	trpoints = 0;
 	block = 1;
-	vers = 1;
+	vers = 2;
 	pid = 0;	/* Appease GCC */
 
 #ifdef KTRUSS
@@ -296,7 +296,7 @@ static void
 usage(void)
 {
 
-#define	TRPOINTS "[AaceilmnsUuvw+-]"
+#define	TRPOINTS "[AaceilmnSsuvw+-]"
 #ifdef KTRUSS
 	(void)fprintf(stderr, "usage:\t%s "
 	    "[-aCcdilnRT] [-e emulation] [-f infile] [-g pgrp] "

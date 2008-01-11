@@ -1,6 +1,7 @@
-# $NetBSD: Makefile,v 1.18 2007/05/28 12:06:39 tls Exp $
+# $NetBSD: Makefile,v 1.23 2011/05/30 14:41:27 joerg Exp $
 
-WARNS=	0	# Will be fixed later
+WARNS?=	0	# XXX third-party program, many issues
+NOCLANGERROR=	# defined
 
 .include <bsd.own.mk>
 
@@ -46,8 +47,10 @@ DPADD+=	${LIBPAM} ${PAM_STATIC_DPADD}
 .endif
 .if (${USE_KERBEROS} != "no")
 CPPFLAGS+=-DHAVE_GSSAPI
-LDADD+= -lgssapi -lkrb5 -lcom_err -lroken -lasn1
-DPADD+= ${LIBGSSAPI} ${LIBKRB5} ${LIBCOM_ERR} ${LIBROKEN} ${LIBASN1}
+LDADD+= -lgssapi -lkrb5 -lhx509 -lheimntlm -lcom_err \
+	-lroken -lasn1
+DPADD+= ${LIBGSSAPI} ${LIBKRB5} ${LIBHX509} ${LIBHEIMNTLM} ${LIBCOM_ERR} \
+	${LIBROKEN} ${LIBASN1}
 .endif
 .if (${MKCRYPTO_IDEA} != "no")
 CPPFLAGS+=-DHAVE_OPENSSL_IDEA_H

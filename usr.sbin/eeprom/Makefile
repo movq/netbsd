@@ -1,9 +1,9 @@
 #	from: @(#)Makefile	5.8 (Berkeley) 7/28/90
-#	$NetBSD: Makefile,v 1.14 2007/03/01 16:49:48 garbled Exp $
+#	$NetBSD: Makefile,v 1.16 2009/12/13 05:01:33 nakayama Exp $
 
-.if ${MACHINE} == "sun3" || ${MACHINE} == "sun3x" || ${MACHINE} == "sparc" \
-	|| ${MACHINE} == "sparc64" || ${MACHINE} == "macppc" \
-	|| ${MACHINE} == "prep"
+.if ${MACHINE} == "sun3" || ${MACHINE} == "sun3x" \
+	|| ${MACHINE} == "sparc" || ${MACHINE} == "sparc64" \
+	|| ${MACHINE} == "macppc" || ${MACHINE} == "prep"
 PROG=	eeprom
 
 SRCS=	main.c

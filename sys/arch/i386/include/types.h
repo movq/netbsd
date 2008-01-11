@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.54 2008/01/04 15:55:34 yamt Exp $	*/
+/*	$NetBSD: types.h,v 1.72 2011/03/12 22:54:37 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -31,9 +31,12 @@
  *	@(#)types.h	7.5 (Berkeley) 3/9/91
  */
 
-#ifndef	_MACHTYPES_H_
-#define	_MACHTYPES_H_
+#ifndef	_I386_MACHTYPES_H_
+#define	_I386_MACHTYPES_H_
 
+#ifdef _KERNEL_OPT
+#include "opt_xen.h"
+#endif
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
 #include <machine/int_types.h>
@@ -44,17 +47,48 @@ typedef struct label_t {
 } label_t;
 #endif
 
-/* NB: This should probably be if defined(_KERNEL) */
 #if defined(_NETBSD_SOURCE)
+#if defined(_KERNEL)
+
+/*
+ * XXX JYM for now, in kernel paddr_t can be 32 or 64 bits, depending
+ * on PAE. Revisit when paddr_t becomes 64 bits for !PAE systems.
+ */
+#ifdef PAE
+typedef __uint64_t	paddr_t;
+typedef __uint64_t	psize_t;
+#define	PRIxPADDR	"llx"
+#define	PRIxPSIZE	"llx"
+#define	PRIuPSIZE	"llu"
+#else /* PAE */
 typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#endif /* PAE */
+
+#else /* _KERNEL */
+/* paddr_t is always 64 bits for userland */
+typedef __uint64_t	paddr_t;
+typedef __uint64_t	psize_t;
+#define	PRIxPADDR	"llx"
+#define	PRIxPSIZE	"llx"
+#define	PRIuPSIZE	"llu"
+
+#endif /* _KERNEL */
+
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
-#endif
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
+#endif /* _NETBSD_SOURCE */
 
 typedef int		pmc_evid_t;
 typedef __uint64_t	pmc_ctr_t;
 typedef int		register_t;
+#define	PRIxREGISTER	"x"
 
 typedef	volatile unsigned char		__cpu_simple_lock_t;
 
@@ -68,16 +102,22 @@ typedef	volatile unsigned char		__cpu_simple_lock_t;
 #define	__NO_STRICT_ALIGNMENT
 
 #define	__HAVE_DEVICE_REGISTER
+#define	__HAVE_CPU_DATA_FIRST
 #define	__HAVE_CPU_COUNTER
+#define	__HAVE_MD_CPU_OFFLINE
 #define	__HAVE_SYSCALL_INTERN
 #define	__HAVE_MINIMAL_EMUL
 #define	__HAVE_OLD_DISKLABEL
-#define	__HAVE_TIMECOUNTER
-#define	__HAVE_GENERIC_TODR
-#define	__HAVE_ATOMIC64_OPS
+#define __HAVE_ATOMIC64_OPS
+#define	__HAVE_ATOMIC_AS_MEMBAR
+#define	__HAVE_CPU_LWP_SETPRIVATE
+#define	__HAVE_INTR_CONTROL
+#define	__HAVE___LWP_GETPRIVATE_FAST
+#define	__HAVE_TLS_VARIANT_II
+#define	__HAVE_COMMON___TLS_GET_ADDR
 
 #if defined(_KERNEL)
-#define __HAVE_RAS
+#define	__HAVE_RAS
 #endif
 
-#endif	/* _MACHTYPES_H_ */
+#endif	/* _I386_MACHTYPES_H_ */

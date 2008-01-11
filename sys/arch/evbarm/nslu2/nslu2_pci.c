@@ -1,4 +1,4 @@
-/*      $NetBSD: nslu2_pci.c,v 1.1 2006/02/28 20:40:33 scw Exp $	*/
+/*      $NetBSD: nslu2_pci.c,v 1.4 2011/04/04 20:37:49 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -48,12 +41,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Ichiro FUKUHARA.
- * 4. The name of the company nor the name of the author may be used to
- *    endorse or promote products derived from this software without specific
- *    prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY ICHIRO FUKUHARA ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -69,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nslu2_pci.c,v 1.1 2006/02/28 20:40:33 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nslu2_pci.c,v 1.4 2011/04/04 20:37:49 dyoung Exp $");
 
 /*
  * Linksys NSLU2 PCI support.
@@ -87,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: nslu2_pci.c,v 1.1 2006/02/28 20:40:33 scw Exp $");
 #include <evbarm/nslu2/nslu2reg.h>
 
 static int
-nslu2_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+nslu2_pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 
 	KASSERT(pa->pa_bus == 0 && pa->pa_device == 1);

@@ -1,4 +1,4 @@
-.\"	$NetBSD: core.5,v 1.23 2005/12/26 19:48:12 perry Exp $
+.\"	$NetBSD: core.5,v 1.25 2010/03/22 18:58:32 joerg Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -258,7 +251,7 @@ header file.
 The core file consists of a core header followed by a number of
 segments. Each segment is preceded by a core segment header.
 Both the core header and core segment header are defined in
-.Aq Pa sys/core.h .
+.In sys/core.h .
 .Pp
 The core header,
 .Fa struct core ,
@@ -293,7 +286,7 @@ These values may be extracted with the
 and
 .Fn CORE_GETFLAG
 macros. The machine ID values are listed in
-.Aq Pa sys/exec_aout.h .
+.In sys/exec_aout.h .
 For a valid core file, the magic value in the header must be
 .Dv COREMAGIC .
 No flags are defined for the core header.

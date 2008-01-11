@@ -1,4 +1,4 @@
-/*	$NetBSD: joy_eso.c,v 1.12 2007/10/19 12:00:51 ad Exp $	*/
+/*	$NetBSD: joy_eso.c,v 1.14 2008/04/28 20:23:55 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: joy_eso.c,v 1.12 2007/10/19 12:00:51 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: joy_eso.c,v 1.14 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,29 +55,29 @@ __KERNEL_RCSID(0, "$NetBSD: joy_eso.c,v 1.12 2007/10/19 12:00:51 ad Exp $");
 #include <dev/ic/joyvar.h>
 
 static int
-joy_eso_match(struct device *parent, struct cfdata *match,
-    void *aux)
+joy_eso_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct audio_attach_args *aa = (struct audio_attach_args *)aux;
+	struct audio_attach_args *aa = aux;
 
 	if (aa->type != AUDIODEV_TYPE_AUX)
-		return (0);
-	return (1);
+		return 0;
+	return 1;
 }
 
 static void
-joy_eso_attach(struct device *parent, struct device *self, void *aux)
+joy_eso_attach(device_t parent, device_t self, void *aux)
 {
-	struct eso_softc *esc = (struct eso_softc *)parent;
-	struct joy_softc *sc = (struct joy_softc *)self;
+	struct eso_softc *esc = device_private(parent);
+	struct joy_softc *sc = device_private(self);
 
-	printf("\n");
+	aprint_normal("\n");
 
 	sc->sc_ioh = esc->sc_game_ioh;
 	sc->sc_iot = esc->sc_game_iot;
+	sc->sc_dev = self;
 
 	joyattach(sc);
 }
 
-CFATTACH_DECL(joy_eso, sizeof (struct joy_softc),
+CFATTACH_DECL_NEW(joy_eso, sizeof (struct joy_softc),
     joy_eso_match, joy_eso_attach, NULL, NULL);

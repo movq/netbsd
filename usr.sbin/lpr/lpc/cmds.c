@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.c,v 1.19 2006/03/21 22:49:43 christos Exp $	*/
+/*	$NetBSD: cmds.c,v 1.23 2011/01/04 09:43:39 wiz Exp $	*/
 /*
  * Copyright (c) 1983, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -31,12 +31,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #if 0
 static char sccsid[] = "@(#)cmds.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: cmds.c,v 1.19 2006/03/21 22:49:43 christos Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.23 2011/01/04 09:43:39 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -103,7 +103,7 @@ doabort(int argc, char *argv[])
 			cp1 = prbuf;
 			cp2 = bp;
 			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			    (size_t)(cp1 - prbuf) < sizeof(prbuf))
 				*cp1++ = c;
 			*cp1 = '\0';
 			abortpr(1);
@@ -162,7 +162,7 @@ abortpr(int dis)
 		printf("\tcannot open lock file\n");
 		goto out;
 	}
-	if (!getline(fp) || flock(fileno(fp), LOCK_SH|LOCK_NB) == 0) {
+	if (!get_line(fp) || flock(fileno(fp), LOCK_SH|LOCK_NB) == 0) {
 		(void)fclose(fp);	/* unlocks as well */
 		printf("\tno daemon to abort\n");
 		goto out;
@@ -226,7 +226,7 @@ clean(int argc, char *argv[])
 			cp1 = prbuf;
 			cp2 = bp;
 			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			    (size_t)(cp1 - prbuf) < sizeof(prbuf))
 				*cp1++ = c;
 			*cp1 = '\0';
 			cleanpr();
@@ -293,7 +293,7 @@ cleanpr(void)
 
 	/* XXX depends on SD being non nul */
 	ep = line + sizeof(line);
-	for (lp = line, cp = SD; (lp - line) < sizeof(line) &&
+	for (lp = line, cp = SD; (size_t)(lp - line) < sizeof(line) &&
 	    (*lp++ = *cp++) != '\0'; )
 		;
 	lp[-1] = '/';
@@ -366,7 +366,7 @@ enable(int argc, char *argv[])
 			cp1 = prbuf;
 			cp2 = bp;
 			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			    (size_t)(cp1 - prbuf) < sizeof(prbuf))
 				*cp1++ = c;
 			*cp1 = '\0';
 			enablepr();
@@ -437,7 +437,7 @@ disable(int argc, char *argv[])
 			cp1 = prbuf;
 			cp2 = bp;
 			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			    (size_t)(cp1 - prbuf) < sizeof(prbuf))
 				*cp1++ = c;
 			*cp1 = '\0';
 			disablepr();
@@ -502,7 +502,7 @@ down(int argc, char *argv[])
 			cp1 = prbuf;
 			cp2 = bp;
 			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			    (size_t)(cp1 - prbuf) < sizeof(prbuf))
 				*cp1++ = c;
 			*cp1 = '\0';
 			putmsg(argc - 2, argv + 2);
@@ -563,6 +563,8 @@ putmsg(int argc, char **argv)
 	if (fd < 0 || flock(fd, LOCK_EX) < 0) {
 		printf("\tcannot create status file\n");
 		seteuid(uid);
+		if (fd >= 0)
+			(void)close(fd);
 		return;
 	}
 	seteuid(uid);
@@ -575,7 +577,7 @@ putmsg(int argc, char **argv)
 	cp1 = buf;
 	while (--argc >= 0) {
 		cp2 = *argv++;
-		while ((cp1 - buf) < sizeof(buf) && (*cp1++ = *cp2++))
+		while ((size_t)(cp1 - buf) < sizeof(buf) && (*cp1++ = *cp2++))
 			;
 		cp1[-1] = ' ';
 	}
@@ -614,7 +616,7 @@ restart(int argc, char *argv[])
 			cp1 = prbuf;
 			cp2 = bp;
 			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			    (size_t)(cp1 - prbuf) < sizeof(prbuf))
 				*cp1++ = c;
 			*cp1 = '\0';
 			abortpr(0);
@@ -651,7 +653,7 @@ startcmd(int argc, char *argv[])
 			cp1 = prbuf;
 			cp2 = bp;
 			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			    (size_t)(cp1 - prbuf) < sizeof(prbuf))
 				*cp1++ = c;
 			*cp1 = '\0';
 			startpr(1);
@@ -707,7 +709,7 @@ status(int argc, char *argv[])
 			cp1 = prbuf;
 			cp2 = bp;
 			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			    (size_t)(cp1 - prbuf) < sizeof(prbuf))
 				*cp1++ = c;
 			*cp1 = '\0';
 			prstat();
@@ -803,7 +805,7 @@ stop(int argc, char *argv[])
 			cp1 = prbuf;
 			cp2 = bp;
 			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			    (size_t)(cp1 - prbuf) < sizeof(prbuf))
 				*cp1++ = c;
 			*cp1 = '\0';
 			stoppr();
@@ -992,7 +994,7 @@ doarg(const char *job)
 		seteuid(uid);
 		if (fp == NULL)
 			continue;
-		while (getline(fp) > 0)
+		while (get_line(fp) > 0)
 			if (line[0] == 'P')
 				break;
 		(void)fclose(fp);
@@ -1026,7 +1028,7 @@ up(int argc, char *argv[])
 			cp1 = prbuf;
 			cp2 = bp;
 			while ((c = *cp2++) && c != '|' && c != ':' &&
-			    (cp1 - prbuf) < sizeof(prbuf))
+			    (size_t)(cp1 - prbuf) < sizeof(prbuf))
 				*cp1++ = c;
 			*cp1 = '\0';
 			startpr(2);

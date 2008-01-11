@@ -1,9 +1,7 @@
-#	$NetBSD: files.amd64,v 1.54 2008/01/09 16:40:17 joerg Exp $
+#	$NetBSD: files.amd64,v 1.72 2011/04/10 20:36:49 christos Exp $
 #
 # new style config file for amd64 architecture
 #
-
-version 20071109
 
 ifndef xen
 
@@ -30,38 +28,28 @@ defflag			USER_LDT
 defflag			VM86
 defflag eisa.h EISA
 
+file	arch/amd64/amd64/amd64func.S
 file	arch/amd64/amd64/autoconf.c
 file	arch/amd64/amd64/busfunc.S
+file	arch/amd64/amd64/cpu_in_cksum.S		(inet | inet6) & cpu_in_cksum
 file	arch/amd64/amd64/cpufunc.S
 file	arch/amd64/amd64/db_disasm.c		ddb
-file	arch/amd64/amd64/db_interface.c	ddb
+file	arch/amd64/amd64/db_interface.c		ddb
+file	arch/amd64/amd64/db_machdep.c		ddb
 file	arch/amd64/amd64/db_memrw.c		ddb | kgdb
-file	arch/amd64/amd64/db_trace.c		ddb
 file	arch/amd64/amd64/kobj_machdep.c		modular
 file	arch/amd64/amd64/kgdb_machdep.c		kgdb
 file	kern/subr_disk_mbr.c			disk
 file	arch/amd64/amd64/gdt.c
-file	arch/amd64/amd64/in_cksum.S		inet
-#
-# XXXfvdl write the optimized versions for these.
-#
-file	netinet/in4_cksum.c			inet
-
 file	arch/amd64/amd64/machdep.c
-file	arch/amd64/amd64/identcpu.c
-file	arch/amd64/amd64/math_emulate.c	math_emulate
 file	arch/amd64/amd64/mem.c
 file	arch/amd64/amd64/process_machdep.c
-file	arch/amd64/amd64/procfs_machdep.c	procfs
-file	arch/amd64/amd64/syscall.c
 file	arch/amd64/amd64/trap.c
-file	arch/amd64/amd64/vm_machdep.c
 file	arch/amd64/amd64/fpu.c
 file	arch/amd64/amd64/lock_stubs.S
 file	dev/cons.c
 
 file	arch/amd64/amd64/mptramp.S        multiprocessor
-file	arch/amd64/amd64/ipifuncs.c       multiprocessor
 
 #
 # Machine-independent SCSI drivers
@@ -97,8 +85,6 @@ device	mainbus: isabus, pcibus, bios32, acpibus, cpubus, ioapicbus, ipmibus
 attach	mainbus at root
 file	arch/amd64/amd64/mainbus.c		mainbus
 
-include "dev/wsfb/files.wsfb"
-
 #
 # PCI-only drivers
 # XXX MUST BE INCLUDED BEFORE files.isa, as long as files.isa attaches
@@ -120,6 +106,7 @@ include	"dev/isa/files.isa"
 
 # PC clock
 file 	arch/x86/isa/clock.c 			isa
+file	arch/x86/isa/rtc.c			isa
 
 # TSC timecounter support
 file	arch/x86/x86/tsc.c
@@ -127,9 +114,6 @@ file	arch/x86/x86/tsc.c
 # attribute used to represent the "keyboard controller"
 # XXX should be a real device
 define	pckbcport { [irq = -1], [port = -1] }
-
-include	"dev/wscons/files.wscons"
-include "dev/wsfont/files.wsfont"
 
 include	"dev/pckbport/files.pckbport"
 
@@ -188,7 +172,9 @@ include	"dev/usb/files.usb"
 
 include "dev/bluetooth/files.bluetooth"
 
-include	"dev/ieee1394/files.ieee1394"
+include "dev/sdmmc/files.sdmmc"
+
+include "dev/ieee1394/files.ieee1394"
 include "dev/apm/files.apm"
 include "dev/acpi/files.acpi"
 file	arch/amd64/acpi/acpi_wakeup_low.S	acpi

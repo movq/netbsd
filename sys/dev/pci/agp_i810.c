@@ -1,4 +1,4 @@
-/*	$NetBSD: agp_i810.c,v 1.48 2008/01/04 21:18:00 ad Exp $	*/
+/*	$NetBSD: agp_i810.c,v 1.73 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_i810.c,v 1.48 2008/01/04 21:18:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_i810.c,v 1.73 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,8 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: agp_i810.c,v 1.48 2008/01/04 21:18:00 ad Exp $");
 #include <sys/proc.h>
 #include <sys/device.h>
 #include <sys/conf.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -57,29 +55,14 @@ __KERNEL_RCSID(0, "$NetBSD: agp_i810.c,v 1.48 2008/01/04 21:18:00 ad Exp $");
 #define READ1(off)	bus_space_read_1(isc->bst, isc->bsh, off)
 #define READ4(off)	bus_space_read_4(isc->bst, isc->bsh, off)
 #define WRITE4(off,v)	bus_space_write_4(isc->bst, isc->bsh, off, v)
-#define WRITEGTT(off, v)						\
-	do {								\
-		if (isc->chiptype == CHIP_I915 || isc->chiptype == CHIP_G33) { \
-			bus_space_write_4(isc->gtt_bst, isc->gtt_bsh,	\
-			    (u_int32_t)((off) >> AGP_PAGE_SHIFT) * 4,	\
-			    (v));					\
-		} else if (isc->chiptype == CHIP_I965) {		\
-			WRITE4(AGP_I965_GTT +				\
-			    (u_int32_t)((off) >> AGP_PAGE_SHIFT) * 4,	\
-			    (v));					\
-		} else {						\
-			WRITE4(AGP_I810_GTT +				\
-			    (u_int32_t)((off) >> AGP_PAGE_SHIFT) * 4,	\
-			    (v));					\
-		}							\
-	} while (0)
 
 #define CHIP_I810 0	/* i810/i815 */
 #define CHIP_I830 1	/* 830M/845G */
 #define CHIP_I855 2	/* 852GM/855GM/865G */
-#define CHIP_I915 3	/* 915G/915GM/945G/945GM */
+#define CHIP_I915 3	/* 915G/915GM/945G/945GM/945GME */
 #define CHIP_I965 4	/* 965Q/965PM */
 #define CHIP_G33  5	/* G33/Q33/Q35 */
+#define CHIP_G4X  6	/* G45/Q45 */
 
 struct agp_i810_softc {
 	u_int32_t initial_aperture;	/* aperture size at startup */
@@ -97,6 +80,10 @@ struct agp_i810_softc {
 	u_int32_t pgtblctl;
 };
 
+/* XXX hack, see below */
+static bus_addr_t agp_i810_vga_regbase;
+static bus_space_handle_t agp_i810_vga_bsh;
+
 static u_int32_t agp_i810_get_aperture(struct agp_softc *);
 static int agp_i810_set_aperture(struct agp_softc *, u_int32_t);
 static int agp_i810_bind_page(struct agp_softc *, off_t, bus_addr_t);
@@ -109,10 +96,12 @@ static int agp_i810_free_memory(struct agp_softc *, struct agp_memory *);
 static int agp_i810_bind_memory(struct agp_softc *, struct agp_memory *, off_t);
 static int agp_i810_unbind_memory(struct agp_softc *, struct agp_memory *);
 
-static bool agp_i810_resume(device_t);
+static bool agp_i810_resume(device_t, const pmf_qual_t *);
 static int agp_i810_init(struct agp_softc *);
 
 static int agp_i810_init(struct agp_softc *);
+static int agp_i810_write_gtt_entry(struct agp_i810_softc *, off_t,
+				    bus_addr_t);
 
 static struct agp_methods agp_i810_methods = {
 	agp_i810_get_aperture,
@@ -127,9 +116,63 @@ static struct agp_methods agp_i810_methods = {
 	agp_i810_unbind_memory,
 };
 
-/* XXXthorpej -- duplicated code (see arch/i386/pci/pchb.c) */
 static int
-agp_i810_vgamatch(struct pci_attach_args *pa)
+agp_i810_write_gtt_entry(struct agp_i810_softc *isc, off_t off, bus_addr_t v)
+{
+	u_int32_t pte;
+	bus_size_t base_off, wroff;
+
+	/* Bits 11:4 (physical start address extension) should be zero. */
+	if ((v & 0xff0) != 0)
+		return EINVAL;
+
+	pte = (u_int32_t)v;
+	/*
+	 * We need to massage the pte if bus_addr_t is wider than 32 bits.
+	 * The compiler isn't smart enough, hence the casts to uintmax_t.
+	 */
+	if (sizeof(bus_addr_t) > sizeof(u_int32_t)) {
+		/* 965+ can do 36-bit addressing, add in the extra bits. */
+		if (isc->chiptype == CHIP_I965 ||
+		    isc->chiptype == CHIP_G33 ||
+		    isc->chiptype == CHIP_G4X) {
+			if (((uintmax_t)v >> 36) != 0)
+				return EINVAL;
+			pte |= (v >> 28) & 0xf0;
+		} else {
+			if (((uintmax_t)v >> 32) != 0)
+				return EINVAL;
+		}
+	}
+
+	base_off = 0;
+	wroff = (off >> AGP_PAGE_SHIFT) * 4;
+
+	switch (isc->chiptype) {
+	case CHIP_I810:
+	case CHIP_I830:
+	case CHIP_I855:
+		base_off = AGP_I810_GTT;
+		break;
+	case CHIP_I965:
+		base_off = AGP_I965_GTT;
+		break;
+	case CHIP_G4X:
+		base_off = AGP_G4X_GTT;
+		break;
+	case CHIP_I915:
+	case CHIP_G33:
+		bus_space_write_4(isc->gtt_bst, isc->gtt_bsh, wroff, pte);
+		return 0;
+	}
+
+	WRITE4(base_off + wroff, pte);
+	return 0;
+}
+
+/* XXXthorpej -- duplicated code (see arch/x86/pci/pchb.c) */
+static int
+agp_i810_vgamatch(const struct pci_attach_args *pa)
 {
 
 	if (PCI_CLASS(pa->pa_class) != PCI_CLASS_DISPLAY ||
@@ -150,6 +193,8 @@ agp_i810_vgamatch(struct pci_attach_args *pa)
 	case PCI_PRODUCT_INTEL_82945P_IGD:
 	case PCI_PRODUCT_INTEL_82945GM_IGD:
 	case PCI_PRODUCT_INTEL_82945GM_IGD_1:
+	case PCI_PRODUCT_INTEL_82945GME_IGD:
+	case PCI_PRODUCT_INTEL_E7221_IGD:
 	case PCI_PRODUCT_INTEL_82965Q_IGD:
 	case PCI_PRODUCT_INTEL_82965Q_IGD_1:
 	case PCI_PRODUCT_INTEL_82965PM_IGD:
@@ -158,10 +203,25 @@ agp_i810_vgamatch(struct pci_attach_args *pa)
 	case PCI_PRODUCT_INTEL_82G33_IGD_1:
 	case PCI_PRODUCT_INTEL_82965G_IGD:
 	case PCI_PRODUCT_INTEL_82965G_IGD_1:
+	case PCI_PRODUCT_INTEL_82965GME_IGD:
 	case PCI_PRODUCT_INTEL_82Q35_IGD:
 	case PCI_PRODUCT_INTEL_82Q35_IGD_1:
 	case PCI_PRODUCT_INTEL_82Q33_IGD:
 	case PCI_PRODUCT_INTEL_82Q33_IGD_1:
+	case PCI_PRODUCT_INTEL_82G35_IGD:
+	case PCI_PRODUCT_INTEL_82G35_IGD_1:
+	case PCI_PRODUCT_INTEL_82946GZ_IGD:
+	case PCI_PRODUCT_INTEL_82GM45_IGD:
+	case PCI_PRODUCT_INTEL_82GM45_IGD_1:
+	case PCI_PRODUCT_INTEL_82IGD_E_IGD:
+	case PCI_PRODUCT_INTEL_82Q45_IGD:
+	case PCI_PRODUCT_INTEL_82G45_IGD:
+	case PCI_PRODUCT_INTEL_82G41_IGD:
+	case PCI_PRODUCT_INTEL_82B43_IGD:
+	case PCI_PRODUCT_INTEL_IRONLAKE_D_IGD:
+	case PCI_PRODUCT_INTEL_IRONLAKE_M_IGD:
+	case PCI_PRODUCT_INTEL_PINEVIEW_IGD:
+	case PCI_PRODUCT_INTEL_PINEVIEW_M_IGD:
 		return (1);
 	}
 
@@ -186,12 +246,13 @@ agp_i965_map_aperture(struct pci_attach_args *pa, struct agp_softc *sc, int reg)
 }
 
 int
-agp_i810_attach(struct device *parent, struct device *self, void *aux)
+agp_i810_attach(device_t parent, device_t self, void *aux)
 {
-	struct agp_softc *sc = (void *)self;
+	struct agp_softc *sc = device_private(self);
 	struct agp_i810_softc *isc;
 	struct agp_gatt *gatt;
 	int error, apbase;
+	bus_addr_t mmadr;
 	bus_size_t mmadrsize;
 
 	isc = malloc(sizeof *isc, M_AGP, M_NOWAIT|M_ZERO);
@@ -211,6 +272,7 @@ agp_i810_attach(struct device *parent, struct device *self, void *aux)
 		case PCI_PRODUCT_INTEL_82865_HB:
 		case PCI_PRODUCT_INTEL_82845G_DRAM:
 		case PCI_PRODUCT_INTEL_82815_FULL_HUB:
+		case PCI_PRODUCT_INTEL_82855GM_MCH:
 			return agp_intel_attach(parent, self, aux);
 		}
 #endif
@@ -242,6 +304,10 @@ agp_i810_attach(struct device *parent, struct device *self, void *aux)
 	case PCI_PRODUCT_INTEL_82945P_IGD:
 	case PCI_PRODUCT_INTEL_82945GM_IGD:
 	case PCI_PRODUCT_INTEL_82945GM_IGD_1:
+	case PCI_PRODUCT_INTEL_82945GME_IGD:
+	case PCI_PRODUCT_INTEL_E7221_IGD:
+	case PCI_PRODUCT_INTEL_PINEVIEW_IGD:
+	case PCI_PRODUCT_INTEL_PINEVIEW_M_IGD:
 		isc->chiptype = CHIP_I915;
 		break;
 	case PCI_PRODUCT_INTEL_82965Q_IGD:
@@ -250,6 +316,10 @@ agp_i810_attach(struct device *parent, struct device *self, void *aux)
 	case PCI_PRODUCT_INTEL_82965PM_IGD_1:
 	case PCI_PRODUCT_INTEL_82965G_IGD:
 	case PCI_PRODUCT_INTEL_82965G_IGD_1:
+	case PCI_PRODUCT_INTEL_82965GME_IGD:
+	case PCI_PRODUCT_INTEL_82946GZ_IGD:
+	case PCI_PRODUCT_INTEL_82G35_IGD:
+	case PCI_PRODUCT_INTEL_82G35_IGD_1:
 		isc->chiptype = CHIP_I965;
 		break;
 	case PCI_PRODUCT_INTEL_82Q35_IGD:
@@ -260,6 +330,17 @@ agp_i810_attach(struct device *parent, struct device *self, void *aux)
 	case PCI_PRODUCT_INTEL_82Q33_IGD_1:
 		isc->chiptype = CHIP_G33;
 		break;
+	case PCI_PRODUCT_INTEL_82GM45_IGD:
+	case PCI_PRODUCT_INTEL_82GM45_IGD_1:
+	case PCI_PRODUCT_INTEL_82IGD_E_IGD:
+	case PCI_PRODUCT_INTEL_82Q45_IGD:
+	case PCI_PRODUCT_INTEL_82G45_IGD:
+	case PCI_PRODUCT_INTEL_82G41_IGD:
+	case PCI_PRODUCT_INTEL_82B43_IGD:
+	case PCI_PRODUCT_INTEL_IRONLAKE_D_IGD:
+	case PCI_PRODUCT_INTEL_IRONLAKE_M_IGD:
+		isc->chiptype = CHIP_G4X;
+		break;
 	}
 
 	switch (isc->chiptype) {
@@ -267,12 +348,17 @@ agp_i810_attach(struct device *parent, struct device *self, void *aux)
 	case CHIP_G33:
 		apbase = AGP_I915_GMADR;
 		break;
+	case CHIP_I965:
+	case CHIP_G4X:
+		apbase = AGP_I965_GMADR;
+		break;
 	default:
 		apbase = AGP_I810_GMADR;
 		break;
 	}
-	if (isc->chiptype == CHIP_I965) {
-		error = agp_i965_map_aperture(&isc->vga_pa, sc, AGP_I965_GMADR);
+
+	if (isc->chiptype == CHIP_I965 || isc->chiptype == CHIP_G4X) {
+		error = agp_i965_map_aperture(&isc->vga_pa, sc, apbase);
 	} else {
 		error = agp_map_aperture(&isc->vga_pa, sc, apbase);
 	}
@@ -285,7 +371,7 @@ agp_i810_attach(struct device *parent, struct device *self, void *aux)
 	if (isc->chiptype == CHIP_I915 || isc->chiptype == CHIP_G33) {
 		error = pci_mapreg_map(&isc->vga_pa, AGP_I915_MMADR,
 		    PCI_MAPREG_TYPE_MEM, 0, &isc->bst, &isc->bsh,
-		    NULL, &mmadrsize);
+		    &mmadr, &mmadrsize);
 		if (error != 0) {
 			aprint_error(": can't map mmadr registers\n");
 			agp_generic_detach(sc);
@@ -300,10 +386,10 @@ agp_i810_attach(struct device *parent, struct device *self, void *aux)
 			agp_generic_detach(sc);
 			return error;
 		}
-	} else if (isc->chiptype == CHIP_I965) {
+	} else if (isc->chiptype == CHIP_I965 || isc->chiptype == CHIP_G4X) {
 		error = pci_mapreg_map(&isc->vga_pa, AGP_I965_MMADR,
 		    PCI_MAPREG_TYPE_MEM, 0, &isc->bst, &isc->bsh,
-		    NULL, &mmadrsize);
+		    &mmadr, &mmadrsize);
 		if (error != 0) {
 			aprint_error(": can't map mmadr registers\n");
 			agp_generic_detach(sc);
@@ -312,7 +398,7 @@ agp_i810_attach(struct device *parent, struct device *self, void *aux)
 	} else {
 		error = pci_mapreg_map(&isc->vga_pa, AGP_I810_MMADR,
 		    PCI_MAPREG_TYPE_MEM, 0, &isc->bst, &isc->bsh,
-		    NULL, &mmadrsize);
+		    &mmadr, &mmadrsize);
 		if (error != 0) {
 			aprint_error(": can't map mmadr registers\n");
 			agp_generic_detach(sc);
@@ -334,7 +420,28 @@ agp_i810_attach(struct device *parent, struct device *self, void *aux)
 	if (!pmf_device_register(self, NULL, agp_i810_resume))
 		aprint_error_dev(self, "couldn't establish power handler\n");
 
+	/*
+	 * XXX horrible hack to allow drm code to use our mapping
+	 * of VGA chip registers
+	 */
+	agp_i810_vga_regbase = mmadr;
+	agp_i810_vga_bsh = isc->bsh;
+
 	return agp_i810_init(sc);
+}
+
+/*
+ * XXX horrible hack to allow drm code to use our mapping
+ * of VGA chip registers
+ */
+int
+agp_i810_borrow(bus_addr_t base, bus_space_handle_t *hdlp)
+{
+
+	if (!agp_i810_vga_regbase || base != agp_i810_vga_regbase)
+		return 0;
+	*hdlp = agp_i810_vga_bsh;
+	return 1;
 }
 
 static int agp_i810_init(struct agp_softc *sc)
@@ -397,8 +504,8 @@ static int agp_i810_init(struct agp_softc *sc)
 		}
 
 		if (isc->stolen > 0) {
-			aprint_error(": detected %dk stolen memory\n%s",
-			    isc->stolen * 4, sc->as_dev.dv_xname);
+			aprint_normal(": detected %dk stolen memory\n%s",
+			    isc->stolen * 4, device_xname(sc->as_dev));
 		}
 
 		/* GATT address is already in there, make sure it's enabled */
@@ -408,13 +515,16 @@ static int agp_i810_init(struct agp_softc *sc)
 
 		gatt->ag_physical = pgtblctl & ~1;
 	} else if (isc->chiptype == CHIP_I855 || isc->chiptype == CHIP_I915 ||
-		   isc->chiptype == CHIP_I965 || isc->chiptype == CHIP_G33) {
+		   isc->chiptype == CHIP_I965 || isc->chiptype == CHIP_G33 ||
+		   isc->chiptype == CHIP_G4X) {
 		pcireg_t reg;
-		u_int32_t pgtblctl, stolen;
+		u_int32_t pgtblctl, gtt_size, stolen;
 		u_int16_t gcc1;
 
 		reg = pci_conf_read(sc->as_pc, sc->as_tag, AGP_I855_GCC1);
 		gcc1 = (u_int16_t)(reg >> 16);
+
+		pgtblctl = READ4(AGP_I810_PGTBL_CTL);
 
 		/* Stolen memory is set up at the beginning of the aperture by
                  * the BIOS, consisting of the GATT followed by 4kb for the
@@ -422,76 +532,139 @@ static int agp_i810_init(struct agp_softc *sc)
                  */
                 switch (isc->chiptype) {
 		case CHIP_I855:
-			stolen = 128 + 4;
+			gtt_size = 128;
 			break;
                 case CHIP_I915:
-			stolen = 256 + 4;
+			gtt_size = 256;
 			break;
 		case CHIP_I965:
-			stolen = 512 + 4;
+			switch (pgtblctl & AGP_I810_PGTBL_SIZE_MASK) {
+			case AGP_I810_PGTBL_SIZE_128KB:
+			case AGP_I810_PGTBL_SIZE_512KB:
+				gtt_size = 512;
+				break;
+			case AGP_I965_PGTBL_SIZE_1MB:
+				gtt_size = 1024;
+				break;
+			case AGP_I965_PGTBL_SIZE_2MB:
+				gtt_size = 2048;
+				break;
+			case AGP_I965_PGTBL_SIZE_1_5MB:
+				gtt_size = 1024 + 512;
+				break;
+			default:
+				aprint_error("Bad PGTBL size\n");
+				agp_generic_detach(sc);
+				return EINVAL;
+			}
 			break;
 		case CHIP_G33:
 			switch (gcc1 & AGP_G33_PGTBL_SIZE_MASK) {
 			case AGP_G33_PGTBL_SIZE_1M:
-				stolen = 1024 + 4;
+				gtt_size = 1024;
 				break;
 			case AGP_G33_PGTBL_SIZE_2M:
-				stolen = 2048 + 4;
+				gtt_size = 2048;
 				break;
 			default:
-				aprint_error(": bad gtt size\n");
+				aprint_error(": Bad PGTBL size\n");
 				agp_generic_detach(sc);
 				return EINVAL;
 			}
+			break;
+		case CHIP_G4X:
+			gtt_size = 0;
 			break;
 		default:
 			aprint_error(": bad chiptype\n");
 			agp_generic_detach(sc);
 			return EINVAL;
-               }
+		}
 
 		switch (gcc1 & AGP_I855_GCC1_GMS) {
 		case AGP_I855_GCC1_GMS_STOLEN_1M:
-			isc->stolen = (1024 - stolen) * 1024 / 4096;
+			stolen = 1024;
 			break;
 		case AGP_I855_GCC1_GMS_STOLEN_4M:
-			isc->stolen = (4096 - stolen) * 1024 / 4096;
+			stolen = 4 * 1024;
 			break;
 		case AGP_I855_GCC1_GMS_STOLEN_8M:
-			isc->stolen = (8192 - stolen) * 1024 / 4096;
+			stolen = 8 * 1024;
 			break;
 		case AGP_I855_GCC1_GMS_STOLEN_16M:
-			isc->stolen = (16384 - stolen) * 1024 / 4096;
+			stolen = 16 * 1024;
 			break;
 		case AGP_I855_GCC1_GMS_STOLEN_32M:
-			isc->stolen = (32768 - stolen) * 1024 / 4096;
+			stolen = 32 * 1024;
 			break;
 		case AGP_I915_GCC1_GMS_STOLEN_48M:
-			isc->stolen = (49152 - stolen) * 1024 / 4096;
+			stolen = 48 * 1024;
 			break;
 		case AGP_I915_GCC1_GMS_STOLEN_64M:
-			isc->stolen = (65536 - stolen) * 1024 / 4096;
+			stolen = 64 * 1024;
 			break;
 		case AGP_G33_GCC1_GMS_STOLEN_128M:
-			isc->stolen = ((128 * 1024) - stolen) * 1024 / 4096;
+			stolen = 128 * 1024;
 			break;
 		case AGP_G33_GCC1_GMS_STOLEN_256M:
-			isc->stolen = ((256 * 1024) - stolen) * 1024 / 4096;
+			stolen = 256 * 1024;
+			break;
+		case AGP_G4X_GCC1_GMS_STOLEN_96M:
+			stolen = 96 * 1024;
+			break;
+		case AGP_G4X_GCC1_GMS_STOLEN_160M:
+			stolen = 160 * 1024;
+			break;
+		case AGP_G4X_GCC1_GMS_STOLEN_224M:
+			stolen = 224 * 1024;
+			break;
+		case AGP_G4X_GCC1_GMS_STOLEN_352M:
+			stolen = 352 * 1024;
 			break;
 		default:
-			isc->stolen = 0;
 			aprint_error(
 			    ": unknown memory configuration, disabling\n");
 			agp_generic_detach(sc);
 			return EINVAL;
 		}
+
+		switch (gcc1 & AGP_I855_GCC1_GMS) {
+		case AGP_I915_GCC1_GMS_STOLEN_48M:
+		case AGP_I915_GCC1_GMS_STOLEN_64M:
+			if (isc->chiptype != CHIP_I915 &&
+			    isc->chiptype != CHIP_I965 &&
+			    isc->chiptype != CHIP_G33 &&
+			    isc->chiptype != CHIP_G4X)
+				stolen = 0;
+			break;
+		case AGP_G33_GCC1_GMS_STOLEN_128M:
+		case AGP_G33_GCC1_GMS_STOLEN_256M:
+			if (isc->chiptype != CHIP_I965 &&
+			    isc->chiptype != CHIP_G33 &&
+			    isc->chiptype != CHIP_G4X)
+				stolen = 0;
+			break;
+		case AGP_G4X_GCC1_GMS_STOLEN_96M:
+		case AGP_G4X_GCC1_GMS_STOLEN_160M:
+		case AGP_G4X_GCC1_GMS_STOLEN_224M:
+		case AGP_G4X_GCC1_GMS_STOLEN_352M:
+			if (isc->chiptype != CHIP_I965 &&
+			    isc->chiptype != CHIP_G4X)
+				stolen = 0;
+			break;
+		}
+
+		/* BIOS space */
+		gtt_size += 4;
+
+		isc->stolen = (stolen - gtt_size) * 1024 / 4096;
+
 		if (isc->stolen > 0) {
-			aprint_error(": detected %dk stolen memory\n%s",
-			    isc->stolen * 4, sc->as_dev.dv_xname);
+			aprint_normal(": detected %dk stolen memory\n%s",
+			    isc->stolen * 4, device_xname(sc->as_dev));
 		}
 
 		/* GATT address is already in there, make sure it's enabled */
-		pgtblctl = READ4(AGP_I810_PGTBL_CTL);
 		pgtblctl |= 1;
 		WRITE4(AGP_I810_PGTBL_CTL, pgtblctl);
 
@@ -502,14 +675,6 @@ static int agp_i810_init(struct agp_softc *sc)
 	 * Make sure the chipset can see everything.
 	 */
 	agp_flush_cache();
-
-#if 0
-	/*      
-	 * another device (drm) may need access to this region
-	 * we do not need it anymore
-	 */     
-	bus_space_unmap(isc->bst, isc->bsh, mmadrsize);
-#endif
 
 	return 0;
 }
@@ -553,7 +718,10 @@ agp_i810_get_aperture(struct agp_softc *sc)
 {
 	struct agp_i810_softc *isc = sc->as_chipc;
 	pcireg_t reg;
+	u_int32_t size;
 	u_int16_t miscc, gcc1, msac;
+
+	size = 0;
 
 	switch (isc->chiptype) {
 	case CHIP_I810:
@@ -561,33 +729,39 @@ agp_i810_get_aperture(struct agp_softc *sc)
 		miscc = (u_int16_t)(reg >> 16);
 		if ((miscc & AGP_I810_MISCC_WINSIZE) ==
 		    AGP_I810_MISCC_WINSIZE_32)
-			return 32 * 1024 * 1024;
+			size = 32 * 1024 * 1024;
 		else
-			return 64 * 1024 * 1024;
+			size = 64 * 1024 * 1024;
+		break;
 	case CHIP_I830:
 		reg = pci_conf_read(sc->as_pc, sc->as_tag, AGP_I830_GCC0);
 		gcc1 = (u_int16_t)(reg >> 16);
 		if ((gcc1 & AGP_I830_GCC1_GMASIZE) == AGP_I830_GCC1_GMASIZE_64)
-			return 64 * 1024 * 1024;
+			size = 64 * 1024 * 1024;
 		else
-			return 128 * 1024 * 1024;
+			size = 128 * 1024 * 1024;
+		break;
 	case CHIP_I855:
-		return 128 * 1024 * 1024;
+		size = 128 * 1024 * 1024;
+		break;
 	case CHIP_I915:
 	case CHIP_G33:
+	case CHIP_G4X:
 		reg = pci_conf_read(sc->as_pc, sc->as_tag, AGP_I915_MSAC);
 		msac = (u_int16_t)(reg >> 16);
 		if (msac & AGP_I915_MSAC_APER_128M)
-			return 128 * 1024 * 1024;
+			size = 128 * 1024 * 1024;
 		else
-			return 256 * 1024 * 1024;
+			size = 256 * 1024 * 1024;
+		break;
 	case CHIP_I965:
-		return 512 * 1024 * 1024;
+		size = 512 * 1024 * 1024;
+		break;
 	default:
 		aprint_error(": Unknown chipset\n");
 	}
 
-	return 0;
+	return size;
 }
 
 static int
@@ -604,8 +778,8 @@ agp_i810_set_aperture(struct agp_softc *sc, u_int32_t aperture)
 		 */
 		if (aperture != (32 * 1024 * 1024) &&
 		    aperture != (64 * 1024 * 1024)) {
-			printf("%s: bad aperture size %d\n",
-			    sc->as_dev.dv_xname, aperture);
+			aprint_error_dev(sc->as_dev, "bad aperture size %d\n",
+			    aperture);
 			return EINVAL;
 		}
 
@@ -624,8 +798,8 @@ agp_i810_set_aperture(struct agp_softc *sc, u_int32_t aperture)
 	case CHIP_I830:
 		if (aperture != (64 * 1024 * 1024) &&
 		    aperture != (128 * 1024 * 1024)) {
-			printf("%s: bad aperture size %d\n",
-			    sc->as_dev.dv_xname, aperture);
+			aprint_error_dev(sc->as_dev, "bad aperture size %d\n",
+			    aperture);
 			return EINVAL;
 		}
 		reg = pci_conf_read(sc->as_pc, sc->as_tag, AGP_I830_GCC0);
@@ -643,15 +817,15 @@ agp_i810_set_aperture(struct agp_softc *sc, u_int32_t aperture)
 	case CHIP_I855:
 	case CHIP_I915:
 		if (aperture != agp_i810_get_aperture(sc)) {
-			printf("%s: bad aperture size %d\n",
-			    sc->as_dev.dv_xname, aperture);
+			aprint_error_dev(sc->as_dev, "bad aperture size %d\n",
+			    aperture);
 			return EINVAL;
 		}
 		break;
 	case CHIP_I965:
 		if (aperture != 512 * 1024 * 1024) {
-			printf("%s: bad aperture size %d\n",
-			    sc->as_dev.dv_xname, aperture);
+			aprint_error_dev(sc->as_dev, "bad aperture size %d\n",
+			    aperture);
 			return EINVAL;
 		}
 		break;
@@ -668,24 +842,23 @@ agp_i810_bind_page(struct agp_softc *sc, off_t offset, bus_addr_t physical)
 	if (offset < 0 || offset >= (isc->gatt->ag_entries << AGP_PAGE_SHIFT)) {
 #ifdef AGP_DEBUG
 		printf("%s: failed: offset 0x%08x, shift %d, entries %d\n",
-		    sc->as_dev.dv_xname, (int)offset, AGP_PAGE_SHIFT,
+		    device_xname(sc->as_dev), (int)offset, AGP_PAGE_SHIFT,
 		    isc->gatt->ag_entries);
 #endif
 		return EINVAL;
 	}
 
-	if (isc->chiptype != CHIP_I830) {
+	if (isc->chiptype != CHIP_I810) {
 		if ((offset >> AGP_PAGE_SHIFT) < isc->stolen) {
 #ifdef AGP_DEBUG
-			printf("%s: trying to bind into stolen memory",
-			    sc->as_dev.dv_xname);
+			printf("%s: trying to bind into stolen memory\n",
+			    device_xname(sc->as_dev));
 #endif
 			return EINVAL;
 		}
 	}
 
-	WRITEGTT(offset, physical | 1);
-	return 0;
+	return agp_i810_write_gtt_entry(isc, offset, physical | 1);
 }
 
 static int
@@ -699,15 +872,14 @@ agp_i810_unbind_page(struct agp_softc *sc, off_t offset)
 	if (isc->chiptype != CHIP_I810 ) {
 		if ((offset >> AGP_PAGE_SHIFT) < isc->stolen) {
 #ifdef AGP_DEBUG
-			printf("%s: trying to unbind from stolen memory",
-			    sc->as_dev.dv_xname);
+			printf("%s: trying to unbind from stolen memory\n",
+			    device_xname(sc->as_dev));
 #endif
 			return EINVAL;
 		}
 	}
 
-	WRITEGTT(offset, 0);
-	return 0;
+	return agp_i810_write_gtt_entry(isc, offset, 0);
 }
 
 /*
@@ -823,14 +995,15 @@ agp_i810_bind_memory(struct agp_softc *sc, struct agp_memory *mem,
 	struct agp_i810_softc *isc = sc->as_chipc;
 	u_int32_t regval, i;
 
+	if (mem->am_is_bound != 0)
+		return EINVAL;
+
 	/*
 	 * XXX evil hack: the PGTBL_CTL appearently gets overwritten by the
 	 * X server for mysterious reasons which leads to crashes if we write
 	 * to the GTT through the MMIO window.
 	 * Until the issue is solved, simply restore it.
 	 */
-
-#if 0
 	regval = bus_space_read_4(isc->bst, isc->bsh, AGP_I810_PGTBL_CTL);
 	if (regval != (isc->gatt->ag_physical | 1)) {
 		printf("agp_i810_bind_memory: PGTBL_CTL is 0x%x - fixing\n",
@@ -838,11 +1011,11 @@ agp_i810_bind_memory(struct agp_softc *sc, struct agp_memory *mem,
 		bus_space_write_4(isc->bst, isc->bsh, AGP_I810_PGTBL_CTL,
 				  isc->gatt->ag_physical | 1);
 	}
-#endif
-	regval = 0;
 
 	if (mem->am_type == 2) {
-		WRITEGTT(offset, mem->am_physical | 1);
+		for (i = 0; i < mem->am_size; i += AGP_PAGE_SIZE)
+			agp_i810_bind_page(sc, offset + i,
+			    mem->am_physical + i);
 		mem->am_offset = offset;
 		mem->am_is_bound = 1;
 		return 0;
@@ -855,7 +1028,7 @@ agp_i810_bind_memory(struct agp_softc *sc, struct agp_memory *mem,
 		return EINVAL;
 
 	for (i = 0; i < mem->am_size; i += AGP_PAGE_SIZE)
-		WRITEGTT(offset, i | 3);
+		agp_i810_write_gtt_entry(isc, i, i | 3);
 	mem->am_is_bound = 1;
 	return 0;
 }
@@ -866,8 +1039,12 @@ agp_i810_unbind_memory(struct agp_softc *sc, struct agp_memory *mem)
 	struct agp_i810_softc *isc = sc->as_chipc;
 	u_int32_t i;
 
+	if (mem->am_is_bound == 0)
+		return EINVAL;
+
 	if (mem->am_type == 2) {
-		WRITEGTT(mem->am_offset, 0);
+		for (i = 0; i < mem->am_size; i += AGP_PAGE_SIZE)
+			agp_i810_unbind_page(sc, mem->am_offset + i);
 		mem->am_offset = 0;
 		mem->am_is_bound = 0;
 		return 0;
@@ -880,13 +1057,13 @@ agp_i810_unbind_memory(struct agp_softc *sc, struct agp_memory *mem)
 		return EINVAL;
 
 	for (i = 0; i < mem->am_size; i += AGP_PAGE_SIZE)
-		WRITEGTT(i, 0);
+		agp_i810_write_gtt_entry(isc, i, 0);
 	mem->am_is_bound = 0;
 	return 0;
 }
 
 static bool
-agp_i810_resume(device_t dv)
+agp_i810_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct agp_softc *sc = device_private(dv);
 	struct agp_i810_softc *isc = sc->as_chipc;

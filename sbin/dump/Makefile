@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.33 2006/05/11 23:16:29 mrg Exp $
+#	$NetBSD: Makefile,v 1.36 2009/04/11 07:58:11 lukem Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
 #	dump.h			header file
@@ -20,6 +20,8 @@
 #	STATS			read cache statistics
 #	DIAGNOSTICS		read cache diagnostic checks
 
+WARNS?=	3	# XXX: sign-compare issues
+
 .include <bsd.own.mk>
 
 PROG=	dump
@@ -33,10 +35,7 @@ MLINKS+=dump.8 rdump.8
 
 .PATH:  ${NETBSDSRCDIR}/sys/ufs/ffs
 
-CFLAGS+=-g
-LDFLAGS+=-g
-
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 COPTS.ffs_inode.c+=	-Wno-pointer-sign
 .endif
 

@@ -29,7 +29,7 @@
 __FBSDID("$FreeBSD: src/sbin/gpt/show.c,v 1.14 2006/06/22 22:22:32 marcel Exp $");
 #endif
 #ifdef __RCSID
-__RCSID("$NetBSD: show.c,v 1.4 2007/12/28 19:53:10 riz Exp $");
+__RCSID("$NetBSD: show.c,v 1.6 2011/01/06 16:30:40 jakllsch Exp $");
 #endif
 
 #include <sys/types.h>
@@ -62,6 +62,7 @@ static const char *
 friendly(uuid_t *t)
 {
 	static uuid_t efi_slice = GPT_ENT_TYPE_EFI;
+	static uuid_t bios_boot = GPT_ENT_TYPE_BIOS;
 	static uuid_t mslinux = GPT_ENT_TYPE_MS_BASIC_DATA;
 	static uuid_t freebsd = GPT_ENT_TYPE_FREEBSD;
 	static uuid_t hfs = GPT_ENT_TYPE_APPLE_HFS;
@@ -71,7 +72,7 @@ friendly(uuid_t *t)
 	static uuid_t ufs = GPT_ENT_TYPE_FREEBSD_UFS;
 	static uuid_t vinum = GPT_ENT_TYPE_FREEBSD_VINUM;
 	static uuid_t nb_swap = GPT_ENT_TYPE_NETBSD_SWAP;
-	static uuid_t nb_ufs = GPT_ENT_TYPE_NETBSD_FFS;
+	static uuid_t nb_ffs = GPT_ENT_TYPE_NETBSD_FFS;
 	static uuid_t nb_lfs = GPT_ENT_TYPE_NETBSD_LFS;
 	static uuid_t nb_raid = GPT_ENT_TYPE_NETBSD_RAIDFRAME;
 	static uuid_t nb_ccd = GPT_ENT_TYPE_NETBSD_CCD;
@@ -84,10 +85,12 @@ friendly(uuid_t *t)
 
 	if (uuid_equal(t, &efi_slice, NULL))
 		return ("EFI System");
+	if (uuid_equal(t, &bios_boot, NULL))
+		return ("BIOS Boot");
 	if (uuid_equal(t, &nb_swap, NULL))
 		return ("NetBSD swap");
-	if (uuid_equal(t, &nb_ufs, NULL))
-		return ("NetBSD UFS/UFS2");
+	if (uuid_equal(t, &nb_ffs, NULL))
+		return ("NetBSD FFSv1/FFSv2");
 	if (uuid_equal(t, &nb_lfs, NULL))
 		return ("NetBSD LFS");
 	if (uuid_equal(t, &nb_raid, NULL))

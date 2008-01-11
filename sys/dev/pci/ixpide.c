@@ -1,4 +1,4 @@
-/*	$NetBSD: ixpide.c,v 1.10 2007/09/10 10:35:54 cube Exp $	*/
+/*	$NetBSD: ixpide.c,v 1.19 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*
  *  Copyright (c) 2004 The NetBSD Foundation.
@@ -12,9 +12,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -30,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixpide.c,v 1.10 2007/09/10 10:35:54 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixpide.c,v 1.19 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,14 +38,16 @@ __KERNEL_RCSID(0, "$NetBSD: ixpide.c,v 1.10 2007/09/10 10:35:54 cube Exp $");
 #include <dev/pci/pciidevar.h>
 #include <dev/pci/pciide_ixp_reg.h>
 
-static int	ixpide_match(struct device *, struct cfdata *, void *);
-static void	ixpide_attach(struct device *, struct device *, void *);
+static bool	ixpide_resume(device_t, const pmf_qual_t *);
+static bool	ixpide_suspend(device_t, const pmf_qual_t *);
+static int	ixpide_match(device_t, cfdata_t, void *);
+static void	ixpide_attach(device_t, device_t, void *);
 
-static void	ixp_chip_map(struct pciide_softc *, struct pci_attach_args *);
+static void	ixp_chip_map(struct pciide_softc *, const struct pci_attach_args *);
 static void	ixp_setup_channel(struct ata_channel *);
 
-CFATTACH_DECL(ixpide, sizeof(struct pciide_softc),
-    ixpide_match, ixpide_attach, NULL, NULL);
+CFATTACH_DECL_NEW(ixpide, sizeof(struct pciide_softc),
+    ixpide_match, ixpide_attach, pciide_detach, NULL);
 
 static const char ixpdesc[] = "ATI Technologies IXP IDE Controller";
 
@@ -61,12 +60,13 @@ static const struct pciide_product_desc pciide_ixpide_products[] = {
 	{ PCI_PRODUCT_ATI_SB400_SATA_2, 0, ixpdesc, ixp_chip_map },
 	{ PCI_PRODUCT_ATI_SB600_SATA_1, 0, ixpdesc, ixp_chip_map },
 	{ PCI_PRODUCT_ATI_SB600_SATA_2, 0, ixpdesc, ixp_chip_map },
+	{ PCI_PRODUCT_ATI_SB700_SATA_IDE, 0, ixpdesc, ixp_chip_map },
+	{ PCI_PRODUCT_ATI_SB700_IDE, 0, ixpdesc, ixp_chip_map },
 	{ 0, 			       0, NULL,	   NULL }
 };
 
 static int
-ixpide_match(struct device *parent, struct cfdata *cfdata,
-    void *aux)
+ixpide_match(device_t parent, cfdata_t cfdata, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -79,28 +79,32 @@ ixpide_match(struct device *parent, struct cfdata *cfdata,
 }
 
 static void
-ixpide_attach(struct device *parent, struct device *self, void *aux)
+ixpide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_ixpide_products));
+
+	if (!pmf_device_register(self, ixpide_suspend, ixpide_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static void
-ixp_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+ixp_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
 	pcireg_t interface;
-	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 
@@ -126,8 +130,7 @@ ixp_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
-		    pciide_pci_intr);
+		pciide_mapchan(pa, cp, interface, pciide_pci_intr);
 	}
 }
 
@@ -139,6 +142,32 @@ static const uint8_t ixp_pio_timings[] = {
 static const uint8_t ixp_mdma_timings[] = {
 	0x77, 0x21, 0x20
 };
+
+static bool
+ixpide_resume(device_t dv, const pmf_qual_t *qual)
+{
+	struct pciide_softc *sc = device_private(dv);
+
+	pci_conf_write(sc->sc_pc, sc->sc_tag, IXP_MDMA_TIMING,
+	    sc->sc_pm_reg[0]);
+	pci_conf_write(sc->sc_pc, sc->sc_tag, IXP_PIO_TIMING,
+	    sc->sc_pm_reg[1]);
+
+	return true;
+}
+
+static bool
+ixpide_suspend(device_t dv, const pmf_qual_t *qual)
+{
+	struct pciide_softc *sc = device_private(dv);
+
+	sc->sc_pm_reg[0] = pci_conf_read(sc->sc_pc, sc->sc_tag,
+	    IXP_MDMA_TIMING);
+	sc->sc_pm_reg[1] = pci_conf_read(sc->sc_pc, sc->sc_tag,
+	    IXP_PIO_TIMING);
+
+	return true;
+}
 
 static void
 ixp_setup_channel(struct ata_channel *chp)

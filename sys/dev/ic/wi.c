@@ -1,4 +1,4 @@
-/*	$NetBSD: wi.c,v 1.224 2007/12/20 21:08:18 dyoung Exp $	*/
+/*	$NetBSD: wi.c,v 1.234 2010/11/23 04:33:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -106,7 +99,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wi.c,v 1.224 2007/12/20 21:08:18 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wi.c,v 1.234 2010/11/23 04:33:09 christos Exp $");
 
 #define WI_HERMES_AUTOINC_WAR	/* Work around data write autoinc bug. */
 #define WI_HERMES_STATS_WAR	/* Work around stats counter bug. */
@@ -114,7 +107,6 @@ __KERNEL_RCSID(0, "$NetBSD: wi.c,v 1.224 2007/12/20 21:08:18 dyoung Exp $");
 #undef WI_RING_DEBUG
 #define STATIC static
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
@@ -141,10 +133,8 @@ __KERNEL_RCSID(0, "$NetBSD: wi.c,v 1.224 2007/12/20 21:08:18 dyoung Exp $");
 #include <net80211/ieee80211_radiotap.h>
 #include <net80211/ieee80211_rssadapt.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
-#endif
 
 #include <sys/bus.h>
 
@@ -279,11 +269,11 @@ wi_card_ident[] = {
 	{ 0,	NULL,	0 },
 };
 
-#ifndef _LKM
+#ifndef _MODULE
 /*
  * Setup sysctl(3) MIB, hw.wi.*
  *
- * TBD condition CTLFLAG_PERMANENT on being an LKM or not
+ * TBD condition CTLFLAG_PERMANENT on being a module or not
  */
 SYSCTL_SETUP(sysctl_wi, "sysctl wi(4) subtree setup")
 {
@@ -415,7 +405,7 @@ wi_attach(struct wi_softc *sc, const u_int8_t *macaddr)
 	/* Read NIC identification */
 	wi_read_nicid(sc);
 
-	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = wi_start;
 	ifp->if_ioctl = wi_ioctl;
@@ -436,7 +426,7 @@ wi_attach(struct wi_softc *sc, const u_int8_t *macaddr)
 	/* Find available channel */
 	if (wi_read_xrid(sc, WI_RID_CHANNEL_LIST, &chanavail,
 	                 sizeof(chanavail)) != 0) {
-		aprint_normal("%s: using default channel list\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(sc->sc_dev, "using default channel list\n");
 		chanavail = htole16(0x1fff);	/* assume 1-13 */
 	}
 	for (chan = 16; chan > 0; chan--) {
@@ -455,7 +445,7 @@ wi_attach(struct wi_softc *sc, const u_int8_t *macaddr)
 			ic->ic_ibss_chan = &ic->ic_channels[chan];
 	}
 	if (ic->ic_ibss_chan == NULL) {
-		aprint_error("%s: no available channel\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "no available channel\n");
 		return 1;
 	}
 
@@ -536,7 +526,7 @@ wi_attach(struct wi_softc *sc, const u_int8_t *macaddr)
 		    &ratebuf.rates[0], nrate);
 		ic->ic_sup_rates[IEEE80211_MODE_11B].rs_nrates = nrate;
 	} else {
-		aprint_error("%s: no supported rate list\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "no supported rate list\n");
 		return 1;
 	}
 
@@ -569,10 +559,8 @@ wi_attach(struct wi_softc *sc, const u_int8_t *macaddr)
 
 	ieee80211_media_init(ic, wi_media_change, wi_media_status);
 
-#if NBPFILTER > 0
-	bpfattach2(ifp, DLT_IEEE802_11_RADIO,
+	bpf_attach2(ifp, DLT_IEEE802_11_RADIO,
 	    sizeof(struct ieee80211_frame) + 64, &sc->sc_drvbpf);
-#endif
 
 	memset(&sc->sc_rxtapu, 0, sizeof(sc->sc_rxtapu));
 	sc->sc_rxtap.wr_ihdr.it_len = htole16(sizeof(sc->sc_rxtapu));
@@ -610,27 +598,19 @@ wi_detach(struct wi_softc *sc)
 	return 0;
 }
 
-#ifdef __NetBSD__
 int
-wi_activate(struct device *self, enum devact act)
+wi_activate(device_t self, enum devact act)
 {
-	struct wi_softc *sc = (struct wi_softc *)self;
-	int rv = 0, s;
+	struct wi_softc *sc = device_private(self);
 
-	s = splnet();
 	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
 	case DVACT_DEACTIVATE:
 		if_deactivate(&sc->sc_if);
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	splx(s);
-	return rv;
 }
-#endif /* __NetBSD__ */
 
 int
 wi_intr(void *arg)
@@ -641,7 +621,7 @@ wi_intr(void *arg)
 	u_int16_t status;
 
 	if (sc->sc_enabled == 0 ||
-	    !device_is_active(&sc->sc_dev) ||
+	    !device_is_active(sc->sc_dev) ||
 	    (ifp->if_flags & IFF_RUNNING) == 0)
 		return 0;
 
@@ -750,7 +730,7 @@ wi_init(struct ifnet *ifp)
 	DPRINTF(("wi_init: enabled %d\n", sc->sc_enabled));
 	wasenabled = sc->sc_enabled;
 	if (!sc->sc_enabled) {
-		if ((error = (*sc->sc_enable)(sc)) != 0)
+		if ((error = (*sc->sc_enable)(sc->sc_dev, 1)) != 0)
 			goto out;
 		sc->sc_enabled = 1;
 	} else
@@ -898,8 +878,8 @@ wi_init(struct ifnet *ifp)
 			error = wi_alloc_fid(sc, sc->sc_buflen,
 			    &sc->sc_txd[i].d_fid);
 			if (error) {
-				printf("%s: tx buffer allocation failed\n",
-				    sc->sc_dev.dv_xname);
+				aprint_error_dev(sc->sc_dev,
+				    "tx buffer allocation failed\n");
 				goto out;
 			}
 			DPRINTF2(("wi_init: txbuf %d allocated %x\n", i,
@@ -951,7 +931,7 @@ wi_init(struct ifnet *ifp)
 
  out:
 	if (error) {
-		printf("%s: interface not running\n", sc->sc_dev.dv_xname);
+		printf("%s: interface not running\n", device_xname(sc->sc_dev));
 		wi_stop(ifp, 0);
 	}
 	DPRINTF(("wi_init: return %d\n", error));
@@ -1009,8 +989,7 @@ wi_stop(struct ifnet *ifp, int disable)
 	ifp->if_timer = 0;
 
 	if (disable) {
-		if (sc->sc_disable)
-			(*sc->sc_disable)(sc);
+		(*sc->sc_enable)(sc->sc_dev, 0);
 		sc->sc_enabled = 0;
 	}
 	splx(s);
@@ -1134,10 +1113,7 @@ wi_start(struct ifnet *ifp)
 			ifp->if_opackets++;
 			m_copydata(m0, 0, ETHER_HDR_LEN,
 			    (void *)&frmhdr.wi_ehdr);
-#if NBPFILTER > 0
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m0);
-#endif
+			bpf_mtap(ifp, m0);
 
 			eh = mtod(m0, struct ether_header *);
 			ni = ieee80211_find_txnode(ic, eh->ether_dhost);
@@ -1158,10 +1134,7 @@ wi_start(struct ifnet *ifp)
 			wh = mtod(m0, struct ieee80211_frame *);
 		} else
 			break;
-#if NBPFILTER > 0
-		if (ic->ic_rawbpf)
-			bpf_mtap(ic->ic_rawbpf, m0);
-#endif
+		bpf_mtap3(ic->ic_rawbpf, m0);
 		frmhdr.wi_tx_ctl =
 		    htole16(WI_ENC_TX_802_11|WI_TXCNTL_TX_EX|WI_TXCNTL_TX_OK);
 #ifndef	IEEE80211_NO_HOSTAP
@@ -1181,7 +1154,6 @@ wi_start(struct ifnet *ifp)
 		rateidx = wi_choose_rate(ic, ni, wh, m0->m_pkthdr.len);
 		rs = &ni->ni_rates;
 
-#if NBPFILTER > 0
 		if (sc->sc_drvbpf) {
 			struct wi_tx_radiotap_header *tap = &sc->sc_txtap;
 
@@ -1194,7 +1166,6 @@ wi_start(struct ifnet *ifp)
 
 			bpf_mtap2(sc->sc_drvbpf, tap, tap->wt_ihdr.it_len, m0);
 		}
-#endif
 
 		rd = SLIST_FIRST(&sc->sc_rssdfree);
 		id = &rd->rd_desc;
@@ -1220,8 +1191,8 @@ wi_start(struct ifnet *ifp)
 		off = sizeof(frmhdr);
 		if (wi_write_bap(sc, fid, 0, &frmhdr, sizeof(frmhdr)) != 0 ||
 		    wi_mwrite_bap(sc, fid, off, m0, m0->m_pkthdr.len) != 0) {
-			printf("%s: %s write fid %x failed\n",
-			    sc->sc_dev.dv_xname, __func__, fid);
+			aprint_error_dev(sc->sc_dev, "%s write fid %x failed\n",
+			    __func__, fid);
 			ifp->if_oerrors++;
 			m_freem(m0);
 			goto next;
@@ -1233,13 +1204,13 @@ wi_start(struct ifnet *ifp)
 #ifdef DIAGNOSTIC
 			if (cur != sc->sc_txstart)
 				printf("%s: ring is desynchronized\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 #endif
 			wi_push_packet(sc);
 		} else {
 #ifdef WI_RING_DEBUG
 	printf("%s: queue %04x, alloc %d queue %d start %d alloced %d queued %d started %d\n",
-	    sc->sc_dev.dv_xname, fid,
+	    device_xname(sc->sc_dev), fid,
 	    sc->sc_txalloc, sc->sc_txqueue, sc->sc_txstart,
 	    sc->sc_txalloced, sc->sc_txqueued, sc->sc_txstarted);
 #endif
@@ -1274,7 +1245,7 @@ wi_reset(struct wi_softc *sc)
 			break;
 	}
 	if (error) {
-		printf("%s: init failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "init failed\n");
 		return error;
 	}
 	CSR_WRITE_2(sc, WI_INT_EN, 0);
@@ -1326,13 +1297,15 @@ wi_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
-	if (!device_is_active(&sc->sc_dev))
+	if (!device_is_active(sc->sc_dev))
 		return ENXIO;
 
 	s = splnet();
 
 	switch (cmd) {
 	case SIOCSIFFLAGS:
+		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
+			break;
 		/*
 		 * Can't do promisc and hostap at the same time.  If all that's
 		 * changing is the promisc flag, try to short-circuit a call to
@@ -1368,8 +1341,10 @@ wi_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		error = wi_get_cfg(ifp, cmd, data);
 		break;
 	case SIOCSIFGENERIC:
-		error = kauth_authorize_generic(curlwp->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
+		error = kauth_authorize_network(curlwp->l_cred,
+		    KAUTH_NETWORK_INTERFACE,
+		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, KAUTH_ARG(cmd),
+		    NULL);
 		if (error)
 			break;
 		error = wi_set_cfg(ifp, cmd, data);
@@ -1562,7 +1537,7 @@ wi_rx_intr(struct wi_softc *sc)
 
 	/* First read in the frame header */
 	if (wi_read_bap(sc, fid, 0, &frmhdr, sizeof(frmhdr))) {
-		printf("%s: %s read fid %x failed\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "%s read fid %x failed\n",
 		    __func__, fid);
 		ifp->if_ierrors++;
 		return;
@@ -1631,7 +1606,6 @@ wi_rx_intr(struct wi_softc *sc)
 		 */
 		wh->i_fc[1] &= ~IEEE80211_FC1_WEP;
 	}
-#if NBPFILTER > 0
 	if (sc->sc_drvbpf) {
 		struct wi_rx_radiotap_header *tap = &sc->sc_rxtap;
 
@@ -1646,7 +1620,6 @@ wi_rx_intr(struct wi_softc *sc)
 		/* XXX IEEE80211_RADIOTAP_F_WEP */
 		bpf_mtap2(sc->sc_drvbpf, tap, tap->wr_ihdr.it_len, m);
 	}
-#endif
 
 	/* synchronize driver's BSSID with firmware's BSSID */
 	dir = wh->i_fc[1] & IEEE80211_FC1_DIR_MASK;
@@ -1682,7 +1655,7 @@ wi_tx_ex_intr(struct wi_softc *sc)
 	fid = CSR_READ_2(sc, WI_TX_CMP_FID);
 	/* Read in the frame header */
 	if (wi_read_bap(sc, fid, 0, &frmhdr, sizeof(frmhdr)) != 0) {
-		printf("%s: %s read fid %x failed\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "%s read fid %x failed\n",
 		    __func__, fid);
 		wi_rssdescs_reset(ic, &sc->sc_rssd, &sc->sc_rssdfree,
 		    &sc->sc_txpending);
@@ -1690,8 +1663,8 @@ wi_tx_ex_intr(struct wi_softc *sc)
 	}
 
 	if (frmhdr.wi_tx_idx >= WI_NTXRSS) {
-		printf("%s: %s bad idx %02x\n",
-		    sc->sc_dev.dv_xname, __func__, frmhdr.wi_tx_idx);
+		aprint_error_dev(sc->sc_dev, "%s bad idx %02x\n",
+		    __func__, frmhdr.wi_tx_idx);
 		wi_rssdescs_reset(ic, &sc->sc_rssd, &sc->sc_rssdfree,
 		    &sc->sc_txpending);
 		goto out;
@@ -1705,7 +1678,7 @@ wi_tx_ex_intr(struct wi_softc *sc)
 	 * as an output error.
 	 */
 	if (ppsratecheck(&lasttxerror, &curtxeps, wi_txerate)) {
-		printf("%s: tx failed", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "tx failed");
 		if (status & WI_TXSTAT_RET_ERR)
 			printf(", retry limit exceeded");
 		if (status & WI_TXSTAT_AGED_ERR)
@@ -1730,13 +1703,13 @@ wi_tx_ex_intr(struct wi_softc *sc)
 	id->id_node = NULL;
 
 	if (ni == NULL) {
-		printf("%s: %s null node, rssdesc %02x\n",
-		    sc->sc_dev.dv_xname, __func__, frmhdr.wi_tx_idx);
+		aprint_error_dev(sc->sc_dev, "%s null node, rssdesc %02x\n",
+		    __func__, frmhdr.wi_tx_idx);
 		goto out;
 	}
 
 	if (sc->sc_txpending[id->id_rateidx]-- == 0) {
-	        printf("%s: %s txpending[%i] wraparound", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "%s txpending[%i] wraparound",
 		    __func__, id->id_rateidx);
 		sc->sc_txpending[id->id_rateidx] = 0;
 	}
@@ -1758,7 +1731,7 @@ wi_txalloc_intr(struct wi_softc *sc)
 #ifdef DIAGNOSTIC
 	if (sc->sc_txstarted == 0) {
 		printf("%s: spurious alloc %x != %x, alloc %d queue %d start %d alloced %d queued %d started %d\n",
-		    sc->sc_dev.dv_xname, fid, sc->sc_txd[cur].d_fid, cur,
+		    device_xname(sc->sc_dev), fid, sc->sc_txd[cur].d_fid, cur,
 		    sc->sc_txqueue, sc->sc_txstart, sc->sc_txalloced, sc->sc_txqueued, sc->sc_txstarted);
 		return;
 	}
@@ -1769,7 +1742,7 @@ wi_txalloc_intr(struct wi_softc *sc)
 	sc->sc_txalloc = (cur + 1) % WI_NTXBUF;
 #ifdef WI_RING_DEBUG
 	printf("%s: alloc %04x, alloc %d queue %d start %d alloced %d queued %d started %d\n",
-	    sc->sc_dev.dv_xname, fid,
+	    device_xname(sc->sc_dev), fid,
 	    sc->sc_txalloc, sc->sc_txqueue, sc->sc_txstart,
 	    sc->sc_txalloced, sc->sc_txqueued, sc->sc_txstarted);
 #endif
@@ -1795,7 +1768,7 @@ wi_cmd_intr(struct wi_softc *sc)
 		ifp->if_flags &= ~IFF_OACTIVE;
 #ifdef WI_RING_DEBUG
 	printf("%s: cmd       , alloc %d queue %d start %d alloced %d queued %d started %d\n",
-	    sc->sc_dev.dv_xname,
+	    device_xname(sc->sc_dev),
 	    sc->sc_txalloc, sc->sc_txqueue, sc->sc_txstart,
 	    sc->sc_txalloced, sc->sc_txqueued, sc->sc_txstarted);
 #endif
@@ -1815,7 +1788,7 @@ wi_push_packet(struct wi_softc *sc)
 	KASSERT(sc->sc_txcmds == 0);
 
 	if (wi_cmd_start(sc, WI_CMD_TX | WI_RECLAIM, fid, 0, 0)) {
-		printf("%s: xmit failed\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "xmit failed\n");
 		/* XXX ring might have a hole */
 	}
 
@@ -1825,14 +1798,14 @@ wi_push_packet(struct wi_softc *sc)
 	++sc->sc_txstarted;
 #ifdef DIAGNOSTIC
 	if (sc->sc_txstarted > WI_NTXBUF)
-		printf("%s: too many buffers started\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "too many buffers started\n");
 #endif
 	sc->sc_txstart = (cur + 1) % WI_NTXBUF;
 	sc->sc_tx_timer = 5;
 	ifp->if_timer = 1;
 #ifdef WI_RING_DEBUG
 	printf("%s: push  %04x, alloc %d queue %d start %d alloced %d queued %d started %d\n",
-	    sc->sc_dev.dv_xname, fid,
+	    device_xname(sc->sc_dev), fid,
 	    sc->sc_txalloc, sc->sc_txqueue, sc->sc_txstart,
 	    sc->sc_txalloced, sc->sc_txqueued, sc->sc_txstarted);
 #endif
@@ -1853,7 +1826,7 @@ wi_tx_intr(struct wi_softc *sc)
 	/* Read in the frame header */
 	if (wi_read_bap(sc, fid, offsetof(struct wi_frame, wi_tx_swsup2),
 	                &frmhdr.wi_tx_swsup2, 2) != 0) {
-		printf("%s: %s read fid %x failed\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "%s read fid %x failed\n",
 		    __func__, fid);
 		wi_rssdescs_reset(ic, &sc->sc_rssd, &sc->sc_rssdfree,
 		    &sc->sc_txpending);
@@ -1861,8 +1834,8 @@ wi_tx_intr(struct wi_softc *sc)
 	}
 
 	if (frmhdr.wi_tx_idx >= WI_NTXRSS) {
-		printf("%s: %s bad idx %02x\n",
-		    sc->sc_dev.dv_xname, __func__, frmhdr.wi_tx_idx);
+		aprint_error_dev(sc->sc_dev, "%s bad idx %02x\n",
+		    __func__, frmhdr.wi_tx_idx);
 		wi_rssdescs_reset(ic, &sc->sc_rssd, &sc->sc_rssdfree,
 		    &sc->sc_txpending);
 		goto out;
@@ -1876,13 +1849,13 @@ wi_tx_intr(struct wi_softc *sc)
 	id->id_node = NULL;
 
 	if (ni == NULL) {
-		printf("%s: %s null node, rssdesc %02x\n",
-		    sc->sc_dev.dv_xname, __func__, frmhdr.wi_tx_idx);
+		aprint_error_dev(sc->sc_dev, "%s null node, rssdesc %02x\n",
+		    __func__, frmhdr.wi_tx_idx);
 		goto out;
 	}
 
 	if (sc->sc_txpending[id->id_rateidx]-- == 0) {
-	        printf("%s: %s txpending[%i] wraparound", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "%s txpending[%i] wraparound",
 		    __func__, id->id_rateidx);
 		sc->sc_txpending[id->id_rateidx] = 0;
 	}
@@ -2021,7 +1994,7 @@ wi_read_nicid(struct wi_softc *sc)
 	memset(ver, 0, sizeof(ver));
 	len = sizeof(ver);
 	wi_read_rid(sc, WI_RID_CARD_ID, ver, &len);
-	printf("%s: using ", sc->sc_dev.dv_xname);
+	printf("%s: using ", device_xname(sc->sc_dev));
 DPRINTF2(("wi_read_nicid: CARD_ID: %x %x %x %x\n", le16toh(ver[0]), le16toh(ver[1]), le16toh(ver[2]), le16toh(ver[3])));
 
 	sc->sc_firmware_type = WI_NOTYPE;
@@ -2074,7 +2047,7 @@ DPRINTF2(("wi_read_nicid: CARD_ID: %x %x %x %x\n", le16toh(ver[0]), le16toh(ver[
 		}
 	}
 
-	printf("\n%s: %s Firmware: ", sc->sc_dev.dv_xname,
+	printf("\n%s: %s Firmware: ", device_xname(sc->sc_dev),
 	     sc->sc_firmware_type == WI_LUCENT ? "Lucent" :
 	    (sc->sc_firmware_type == WI_SYMBOL ? "Symbol" : "Intersil"));
 	if (sc->sc_firmware_type != WI_LUCENT)	/* XXX */
@@ -2268,8 +2241,9 @@ wi_set_cfg(struct ifnet *ifp, u_long cmd, void *data)
 	len = (wreq.wi_len - 1) * 2;
 	switch (wreq.wi_type) {
         case WI_RID_MAC_NODE:
+		/* XXX convert to SIOCALIFADDR, AF_LINK, IFLR_ACTIVE */
 		(void)memcpy(ic->ic_myaddr, wreq.wi_val, ETHER_ADDR_LEN);
-		if_set_sadl(ifp, ic->ic_myaddr, ETHER_ADDR_LEN);
+		if_set_sadl(ifp, ic->ic_myaddr, ETHER_ADDR_LEN, false);
 		wi_write_rid(sc, WI_RID_MAC_NODE, ic->ic_myaddr,
 		    IEEE80211_ADDR_LEN);
 		break;
@@ -2658,8 +2632,7 @@ wi_cmd_start(struct wi_softc *sc, int cmd, int val0, int val1, int val2)
 		DELAY(1000);	/* 1 m sec */
 	}
 	if (i == 0) {
-		printf("%s: wi_cmd: busy bit won't clear.\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "wi_cmd: busy bit won't clear.\n");
 		return(ETIMEDOUT);
   	}
 #ifdef WI_HISTOGRAM
@@ -2670,7 +2643,7 @@ wi_cmd_start(struct wi_softc *sc, int cmd, int val0, int val1, int val2)
 	if (++hist1count == 1000) {
 		hist1count = 0;
 		printf("%s: hist1: %d %d %d %d %d %d %d %d %d %d %d\n",
-		    sc->sc_dev.dv_xname,
+		    device_xname(sc->sc_dev),
 		    hist1[0], hist1[1], hist1[2], hist1[3], hist1[4],
 		    hist1[5], hist1[6], hist1[7], hist1[8], hist1[9],
 		    hist1[10]);
@@ -2757,7 +2730,7 @@ wi_cmd_wait(struct wi_softc *sc, int cmd, int val0)
 	if (++hist2count == 1000) {
 		hist2count = 0;
 		printf("%s: hist2: %d %d %d %d %d %d %d %d %d %d %d\n",
-		    sc->sc_dev.dv_xname,
+		    device_xname(sc->sc_dev),
 		    hist2[0], hist2[1], hist2[2], hist2[3], hist2[4],
 		    hist2[5], hist2[6], hist2[7], hist2[8], hist2[9],
 		    hist2[10]);
@@ -2767,16 +2740,18 @@ wi_cmd_wait(struct wi_softc *sc, int cmd, int val0)
 	status = CSR_READ_2(sc, WI_STATUS);
 
 	if (i == WI_TIMEOUT) {
-		printf("%s: command timed out, cmd=0x%x, arg=0x%x\n",
-		    sc->sc_dev.dv_xname, cmd, val0);
+		aprint_error_dev(sc->sc_dev,
+		    "command timed out, cmd=0x%x, arg=0x%x\n",
+		    cmd, val0);
 		return ETIMEDOUT;
 	}
 
 	CSR_WRITE_2(sc, WI_EVENT_ACK, WI_EV_CMD);
 
 	if (status & WI_STAT_CMD_RESULT) {
-		printf("%s: command failed, cmd=0x%x, arg=0x%x\n",
-		    sc->sc_dev.dv_xname, cmd, val0);
+		aprint_error_dev(sc->sc_dev,
+		    "command failed, cmd=0x%x, arg=0x%x\n",
+		    cmd, val0);
 		return EIO;
 	}
 	return 0;
@@ -2799,8 +2774,9 @@ wi_seek_bap(struct wi_softc *sc, int id, int off)
 		if ((status & WI_OFF_BUSY) == 0)
 			break;
 		if (i == WI_TIMEOUT) {
-			printf("%s: timeout in wi_seek to %x/%x\n",
-			    sc->sc_dev.dv_xname, id, off);
+			aprint_error_dev(sc->sc_dev,
+			    "timeout in wi_seek to %x/%x\n",
+			    id, off);
 			sc->sc_bap_off = WI_OFF_ERR;	/* invalidate */
 			return ETIMEDOUT;
 		}
@@ -2816,7 +2792,7 @@ wi_seek_bap(struct wi_softc *sc, int id, int off)
 	if (++hist4count == 2500) {
 		hist4count = 0;
 		printf("%s: hist4: %d %d %d %d %d %d %d %d %d %d %d\n",
-		    sc->sc_dev.dv_xname,
+		    device_xname(sc->sc_dev),
 		    hist4[0], hist4[1], hist4[2], hist4[3], hist4[4],
 		    hist4[5], hist4[6], hist4[7], hist4[8], hist4[9],
 		    hist4[10]);
@@ -2824,7 +2800,7 @@ wi_seek_bap(struct wi_softc *sc, int id, int off)
 #endif
 	if (status & WI_OFF_ERR) {
 		printf("%s: failed in wi_seek to %x/%x\n",
-		    sc->sc_dev.dv_xname, id, off);
+		    device_xname(sc->sc_dev), id, off);
 		sc->sc_bap_off = WI_OFF_ERR;	/* invalidate */
 		return EIO;
 	}
@@ -2890,8 +2866,8 @@ wi_write_bap(struct wi_softc *sc, int id, int off, void *buf, int buflen)
 		sc->sc_bap_off = WI_OFF_ERR;	/* invalidate */
 		if (CSR_READ_2(sc, WI_DATA0) != 0x1234 ||
 		    CSR_READ_2(sc, WI_DATA0) != 0x5678) {
-			printf("%s: detect auto increment bug, try again\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev,
+			    "detect auto increment bug, try again\n");
 			goto again;
 		}
 	}
@@ -2932,8 +2908,7 @@ wi_alloc_fid(struct wi_softc *sc, int len, int *idp)
 	int i;
 
 	if (wi_cmd(sc, WI_CMD_ALLOC_MEM, len, 0, 0)) {
-		printf("%s: failed to allocate %d bytes on NIC\n",
-		    sc->sc_dev.dv_xname, len);
+		aprint_error_dev(sc->sc_dev, "failed to allocate %d bytes on NIC\n", len);
 		return ENOMEM;
 	}
 
@@ -2943,7 +2918,7 @@ wi_alloc_fid(struct wi_softc *sc, int len, int *idp)
 		DELAY(1);
 	}
 	if (i == WI_TIMEOUT) {
-		printf("%s: timeout in alloc\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "timeout in alloc\n");
 		return ETIMEDOUT;
 	}
 	*idp = CSR_READ_2(sc, WI_ALLOC_FID);
@@ -2969,15 +2944,16 @@ wi_read_rid(struct wi_softc *sc, int rid, void *buf, int *buflenp)
 	if (le16toh(ltbuf[0]) == 0)
 		return EOPNOTSUPP;
 	if (le16toh(ltbuf[1]) != rid) {
-		printf("%s: record read mismatch, rid=%x, got=%x\n",
-		    sc->sc_dev.dv_xname, rid, le16toh(ltbuf[1]));
+		aprint_error_dev(sc->sc_dev,
+		    "record read mismatch, rid=%x, got=%x\n",
+		    rid, le16toh(ltbuf[1]));
 		return EIO;
 	}
 	len = (le16toh(ltbuf[0]) - 1) * 2;	 /* already got rid */
 	if (*buflenp < len) {
-		printf("%s: record buffer is too small, "
+		aprint_error_dev(sc->sc_dev, "record buffer is too small, "
 		    "rid=%x, size=%d, len=%d\n",
-		    sc->sc_dev.dv_xname, rid, *buflenp, len);
+		    rid, *buflenp, len);
 		return ENOSPC;
 	}
 	*buflenp = len;
@@ -3096,8 +3072,8 @@ wi_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 		IEEE80211_ADDR_COPY(ni->ni_macaddr, &bssid);
 		wi_read_xrid(sc, WI_RID_CURRENT_CHAN, &val, sizeof(val));
 		if (!isset(ic->ic_chan_avail, le16toh(val)))
-			panic("%s: invalid channel %d\n", sc->sc_dev.dv_xname,
-			    le16toh(val));
+			panic("%s: invalid channel %d\n",
+			    device_xname(sc->sc_dev), le16toh(val));
 		ni->ni_chan = &ic->ic_channels[le16toh(val)];
 
 		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
@@ -3212,8 +3188,9 @@ wi_scan_result(struct wi_softc *sc, int fid, int cnt)
 		szbuf = sizeof(struct wi_scan_data);
 		break;
 	default:
-		printf("%s: wi_scan_result: unknown firmware type %u\n",
-		    sc->sc_dev.dv_xname, sc->sc_firmware_type);
+		aprint_error_dev(sc->sc_dev,
+		    "wi_scan_result: unknown firmware type %u\n",
+		    sc->sc_firmware_type);
 		naps = 0;
 		goto done;
 	}

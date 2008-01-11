@@ -1,7 +1,7 @@
-/* $NetBSD: loadfile_elf32.c,v 1.21 2007/12/29 17:54:42 tsutsui Exp $ */
+/* $NetBSD: loadfile_elf32.c,v 1.29 2011/02/17 21:15:31 christos Exp $ */
 
 /*-
- * Copyright (c) 1997 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -270,12 +263,20 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 	int i, j;
 	ssize_t sz;
 	int first;
-	paddr_t minp = ~0, maxp = 0, pos = 0;
-	paddr_t offset = marks[MARK_START], shpp, elfp = 0;
+	Elf_Addr shpp;
+	Elf_Addr minp = ~0, maxp = 0, pos = 0, elfp = 0;
+	u_long offset = marks[MARK_START];
 	ssize_t nr;
+	struct __packed {
+		Elf_Nhdr	nh;
+		uint8_t		name[ELF_NOTE_NETBSD_NAMESZ + 1];
+		uint8_t		desc[ELF_NOTE_NETBSD_DESCSZ];
+	} note;
+	char *shstr = NULL;
+	int boot_load_ctf = 1;
 
 	/* some ports dont use the offset */
-	offset = offset;
+	(void)&offset;
 
 	internalize_ehdr(elf->e_ident[EI_DATA], elf);
 
@@ -305,7 +306,6 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 #endif
 		if (MD_LOADSEG(&phdr[i]))
 			goto loadseg;
-
 
 		if (phdr[i].p_type != PT_LOAD ||
 		    (phdr[i].p_flags & (PF_W|PF_X)) == 0)
@@ -409,13 +409,70 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 #endif /* ! _STANDALONE */
 
 		/*
+		 * First load the section names section.
+		 */
+		if (boot_load_ctf && (elf->e_shstrndx != 0)) {
+			if (flags & LOAD_SYM) {
+				if (lseek(fd, shp[elf->e_shstrndx].sh_offset,
+				    SEEK_SET) == -1) {
+					WARN(("lseek symbols"));
+					goto freeshp;
+				}
+				nr = READ(fd, maxp,
+				    shp[elf->e_shstrndx].sh_size);
+				if (nr == -1) {
+					WARN(("read symbols"));
+					goto freeshp;
+				}
+				if (nr !=
+				    (ssize_t)shp[elf->e_shstrndx].sh_size) {
+					errno = EIO;
+					WARN(("read symbols"));
+					goto freeshp;
+				}
+
+				shstr = ALLOC(shp[elf->e_shstrndx].sh_size);
+				if (lseek(fd, shp[elf->e_shstrndx].sh_offset,
+				    SEEK_SET) == -1) {
+					WARN(("lseek symbols"));
+					goto freeshp;
+				}
+				nr = read(fd, shstr,
+				    shp[elf->e_shstrndx].sh_size);
+				if (nr == -1) {
+					WARN(("read symbols"));
+					goto freeshp;
+				}
+			}
+			shp[elf->e_shstrndx].sh_offset = maxp - elfp;
+			maxp += roundup(shp[elf->e_shstrndx].sh_size, ELFROUND);
+		}
+
+		/*
 		 * Now load the symbol sections themselves.  Make sure
 		 * the sections are aligned. Don't bother with any
 		 * string table that isn't referenced by a symbol
 		 * table.
 		 */
 		for (first = 1, i = 0; i < elf->e_shnum; i++) {
+		    	if (i == elf->e_shstrndx) {
+			    /* already loaded this section */
+			    continue;
+			}
 			switch (shp[i].sh_type) {
+			case SHT_PROGBITS:
+			    	if (boot_load_ctf && shstr) {
+					/* got a CTF section? */
+					if (strncmp(".SUNW_ctf",
+						    &shstr[shp[i].sh_name],
+						    10) == 0) {
+					    	goto havesym;
+					}
+				}
+
+				/* Not loading this, so zero out the offset. */
+				shp[i].sh_offset = 0;
+			    	break;
 			case SHT_STRTAB:
 				for (j = 0; j < elf->e_shnum; j++)
 					if (shp[j].sh_type == SHT_SYMTAB &&
@@ -450,9 +507,38 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 				shp[i].sh_offset = maxp - elfp;
 				maxp += roundup(shp[i].sh_size, ELFROUND);
 				first = 0;
+				break;
+			case SHT_NOTE:
+				if ((flags & LOAD_NOTE) == 0)
+					break;
+				if (shp[i].sh_size < sizeof(note)) {
+					shp[i].sh_offset = 0;
+					break;
+				}
+				if (lseek(fd, shp[i].sh_offset, SEEK_SET)
+				    == -1) {
+					WARN(("lseek note"));
+					goto freeshp;
+				}
+				nr = read(fd, &note, sizeof(note));
+				if (nr == -1) {
+					WARN(("read note"));
+					goto freeshp;
+				}
+				if (note.nh.n_namesz ==
+				    ELF_NOTE_NETBSD_NAMESZ &&
+				    note.nh.n_descsz ==
+				    ELF_NOTE_NETBSD_DESCSZ &&
+				    note.nh.n_type ==
+				    ELF_NOTE_TYPE_NETBSD_TAG &&
+				    memcmp(note.name, ELF_NOTE_NETBSD_NAME,
+				    sizeof(note.name)) == 0) {
+				    	memcpy(&netbsd_version, &note.desc,
+				    	    sizeof(netbsd_version));
+				}
+				shp[i].sh_offset = 0;
+				break;
 			}
-			/* Since we don't load .shstrtab, zero the name. */
-			shp[i].sh_name = 0;
 		}
 		if (flags & LOAD_SYM) {
 #ifndef _STANDALONE
@@ -468,6 +554,10 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 		}
 		DEALLOC(shp, sz);
 	}
+	
+	if (shstr) {
+	    DEALLOC(shstr, shp[elf->e_shstrndx].sh_size);
+	}
 
 	/*
 	 * Frob the copied ELF header to give information relative
@@ -478,7 +568,6 @@ ELFNAMEEND(loadfile)(int fd, Elf_Ehdr *elf, u_long *marks, int flags)
 		elf->e_shoff = sizeof(Elf_Ehdr);
 		elf->e_phentsize = 0;
 		elf->e_phnum = 0;
-		elf->e_shstrndx = SHN_UNDEF;
 		externalize_ehdr(elf->e_ident[EI_DATA], elf);
 		BCOPY(elf, elfp, sizeof(*elf));
 		internalize_ehdr(elf->e_ident[EI_DATA], elf);
@@ -504,5 +593,33 @@ freeshp:
 	DEALLOC(shp, sz);
 	return 1;
 }
+
+#ifdef TEST
+#include <stdlib.h>
+#include <fcntl.h>
+#include <err.h>
+#include <stdio.h>
+u_int32_t netbsd_version;
+int
+main(int argc, char *argv[])
+{
+	int fd;
+	u_long marks[MARK_MAX];
+	Elf_Ehdr elf;
+	if (argc != 2) {
+		(void)fprintf(stderr, "Usage: %s <file>\n", getprogname());
+		return 1;
+	}
+	if ((fd = open(argv[1], O_RDONLY)) == -1)
+		err(1, "Can't open `%s'", argv[1]);
+	if (read(fd, &elf, sizeof(elf)) != sizeof(elf))
+		err(1, "Can't read `%s'", argv[1]);
+	memset(marks, 0, sizeof(marks));
+	marks[MARK_START] = (u_long)malloc(2LL * 1024 * 2024 * 1024);
+	ELFNAMEEND(loadfile)(fd, &elf, marks, LOAD_ALL);
+	printf("%d\n", netbsd_version);
+	return 0;
+}
+#endif
 
 #endif /* (ELFSIZE == 32 && BOOT_ELF32) || (ELFSIZE == 64 && BOOT_ELF64) */

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_swap.h,v 1.16 2007/02/22 06:05:02 thorpej Exp $	*/
+/*	$NetBSD: uvm_swap.h,v 1.18 2011/04/27 00:35:52 rmind Exp $	*/
 
 /*
  * Copyright (c) 1997 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -52,7 +50,6 @@ bool	uvm_swapisfull(void);
 #else /* defined(VMSWAP) */
 #define	uvm_swapisfull()	true
 #endif /* defined(VMSWAP) */
-void	uvm_swap_stats(int, struct swapent *, int, register_t *);
 
 #endif /* _KERNEL */
 

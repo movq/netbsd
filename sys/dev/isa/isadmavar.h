@@ -1,4 +1,4 @@
-/*	$NetBSD: isadmavar.h,v 1.22 2007/03/04 06:02:12 christos Exp $	*/
+/*	$NetBSD: isadmavar.h,v 1.25 2009/08/18 16:52:42 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -53,7 +46,7 @@
  * frob the controller.
  */
 struct isa_dma_state {
-	struct device *ids_dev;		/* associated device (for dv_xname) */
+	device_t ids_dev;		/* associated device (for dv_xname) */
 	bus_space_tag_t ids_bst;	/* bus space tag for DMA controller */
 	bus_space_handle_t ids_dma1h;	/* handle for DMA controller #1 */
 	bus_space_handle_t ids_dma2h;	/* handle for DMA controller #2 */
@@ -102,9 +95,12 @@ struct proc;
 struct malloc_type;
 
 void	   _isa_dmainit(struct isa_dma_state *, bus_space_tag_t,
-	       bus_dma_tag_t, struct device *);
+	       bus_dma_tag_t, device_t);
+
+void	   _isa_dmadestroy(struct isa_dma_state *);
 
 int	   _isa_dmacascade(struct isa_dma_state *, int);
+int	   _isa_dmacascade_stop(struct isa_dma_state *, int);
 
 bus_size_t _isa_dmamaxsize(struct isa_dma_state *, int);
 

@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep.h,v 1.6 2007/12/26 00:58:05 mrg Exp $ */
+/* $NetBSD: pci_machdep.h,v 1.10 2011/04/04 20:37:52 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2002,2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,15 +66,15 @@ struct genppc_pci_chipset_businfo {
  */
 struct genppc_pci_chipset {
 	void		*pc_conf_v;
-	void		(*pc_attach_hook)(struct device *,
-			    struct device *, struct pcibus_attach_args *);
-	int		(*pc_bus_maxdevs)(pci_chipset_tag_t, int);
+	void		(*pc_attach_hook)(device_t, device_t,
+			    struct pcibus_attach_args *);
+	int		(*pc_bus_maxdevs)(void *, int);
 	pcitag_t	(*pc_make_tag)(void *, int, int, int);
 	pcireg_t	(*pc_conf_read)(void *, pcitag_t, int);
 	void		(*pc_conf_write)(void *, pcitag_t, int, pcireg_t);
 
 	void		*pc_intr_v;
-	int		(*pc_intr_map)(struct pci_attach_args *, 
+	int		(*pc_intr_map)(const struct pci_attach_args *, 
 			    pci_intr_handle_t *);
 	const char	*(*pc_intr_string)(void *, pci_intr_handle_t);
 	const struct evcnt *(*pc_intr_evcnt)(void *, pci_intr_handle_t);
@@ -142,7 +135,7 @@ struct genppc_pci_chipset {
  * Generic PowerPC PCI functions.  Override if necc.
  */
 
-int genppc_pci_bus_maxdevs(pci_chipset_tag_t, int);
+int genppc_pci_bus_maxdevs(void *, int);
 const char *genppc_pci_intr_string(void *, pci_intr_handle_t);
 const struct evcnt *genppc_pci_intr_evcnt(void *, pci_intr_handle_t);
 void *genppc_pci_intr_establish(void *, pci_intr_handle_t, int, int (*)(void *),
@@ -150,10 +143,11 @@ void *genppc_pci_intr_establish(void *, pci_intr_handle_t, int, int (*)(void *),
 void genppc_pci_intr_disestablish(void *, void *);
 void genppc_pci_conf_interrupt(pci_chipset_tag_t, int, int, int, int, int *);
 int genppc_pci_conf_hook(pci_chipset_tag_t, int, int, int, pcireg_t);
-int genppc_pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp);
+int genppc_pci_intr_map(const struct pci_attach_args *pa,
+    pci_intr_handle_t *ihp);
 
 /* generic indirect PCI functions */
-void genppc_pci_indirect_attach_hook(struct device *, struct device *,
+void genppc_pci_indirect_attach_hook(device_t, device_t,
     struct pcibus_attach_args *);
 pcitag_t genppc_pci_indirect_make_tag(void *, int, int, int);
 pcireg_t genppc_pci_indirect_conf_read(void *, pcitag_t, int);
@@ -161,7 +155,7 @@ void genppc_pci_indirect_conf_write(void *, pcitag_t, int, pcireg_t);
 void genppc_pci_indirect_decompose_tag(void *, pcitag_t, int *, int *, int *);
 
 /* generic OFW method PCI functions */
-void genppc_pci_ofmethod_attach_hook(struct device *, struct device *,
+void genppc_pci_ofmethod_attach_hook(device_t, device_t,
     struct pcibus_attach_args *);
 pcitag_t genppc_pci_ofmethod_make_tag(void *, int, int, int);
 pcireg_t genppc_pci_ofmethod_conf_read(void *, pcitag_t, int);
@@ -175,7 +169,7 @@ void genofw_find_ofpics(int);
 void genofw_fixup_picnode_offsets(void);
 void genofw_setup_pciintr_map(void *, struct genppc_pci_chipset_businfo *, int);
 int genofw_find_node_by_devfunc(int, int, int, int);
-int genofw_pci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
+int genofw_pci_intr_map(const struct pci_attach_args *, pci_intr_handle_t *);
 int genofw_pci_conf_hook(pci_chipset_tag_t, int, int, int, pcireg_t);
 
 
@@ -184,6 +178,7 @@ int genofw_pci_conf_hook(pci_chipset_tag_t, int, int, int, pcireg_t);
 #define PICNODE_TYPE_8259	2
 #define PICNODE_TYPE_HEATHROW	3
 #define PICNODE_TYPE_OHARE	4
+#define PICNODE_TYPE_IVR	5
 
 typedef struct _ofw_pic_node_t {
 	int node;

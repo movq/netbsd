@@ -1,4 +1,4 @@
-/*	$NetBSD: cgsix_sbus.c,v 1.22 2007/10/19 12:01:10 ad Exp $ */
+/*	$NetBSD: cgsix_sbus.c,v 1.30 2009/09/17 16:28:12 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgsix_sbus.c,v 1.22 2007/10/19 12:01:10 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgsix_sbus.c,v 1.30 2009/09/17 16:28:12 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,26 +64,17 @@ __KERNEL_RCSID(0, "$NetBSD: cgsix_sbus.c,v 1.22 2007/10/19 12:01:10 ad Exp $");
 #include <dev/sun/cgsixvar.h>
 
 /* autoconfiguration driver */
-static int	cgsixmatch(struct device *, struct cfdata *, void *);
-static void	cgsixattach(struct device *, struct device *, void *);
+static int	cgsixmatch(device_t, cfdata_t, void *);
+static void	cgsixattach(device_t, device_t, void *);
 
-/* Allocate an `sbusdev' in addition to the cgsix softc */
-struct cgsix_sbus_softc {
-	struct cgsix_softc bss_softc;
-	struct sbusdev bss_sd;
-};
-
-CFATTACH_DECL(cgsix_sbus, sizeof(struct cgsix_sbus_softc),
+CFATTACH_DECL_NEW(cgsix_sbus, sizeof(struct cgsix_softc),
     cgsixmatch, cgsixattach, NULL, NULL);
 
 /*
  * Match a cgsix.
  */
 int
-cgsixmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+cgsixmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -102,12 +86,9 @@ cgsixmatch(parent, cf, aux)
  * Attach a cgsix.
  */
 void
-cgsixattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+cgsixattach(device_t parent, device_t self, void *aux)
 {
-	struct cgsix_softc *sc = (struct cgsix_softc *)self;
-	struct sbusdev *sd = &((struct cgsix_sbus_softc *)self)->bss_sd;
+	struct cgsix_softc *sc = device_private(self);
 	struct sbus_attach_args *sa = aux;
 	struct fbdevice *fb = &sc->sc_fb;
 	int node, isconsole;
@@ -117,12 +98,13 @@ cgsixattach(parent, self, aux)
 	/* Remember cookies for cgsix_mmap() */
 	sc->sc_bustag = sa->sa_bustag;
 	sc->sc_paddr = sbus_bus_addr(sa->sa_bustag, sa->sa_slot, sa->sa_offset);
+	sc->sc_dev = self;
 
 	node = sa->sa_node;
 	
-	fb->fb_device = &sc->sc_dev;
+	fb->fb_device = sc->sc_dev;
 	fb->fb_type.fb_type = FBTYPE_SUNFAST_COLOR;
-	fb->fb_flags = device_cfdata(&sc->sc_dev)->cf_flags & FB_USERMASK;
+	fb->fb_flags = device_cfdata(sc->sc_dev)->cf_flags & FB_USERMASK;
 	fb->fb_type.fb_depth = 8;
 
 	fb_setsize_obp(fb, fb->fb_type.fb_depth, 1152, 900, node);
@@ -137,7 +119,7 @@ cgsixattach(parent, self, aux)
 			 sa->sa_offset + CGSIX_BT_OFFSET,
 			 sizeof(*sc->sc_bt),
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: cannot map brooktree registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map brooktree registers\n");
 		return;
 	}
 	sc->sc_bt = (struct bt_regs *)bus_space_vaddr(sa->sa_bustag, bh);
@@ -147,7 +129,7 @@ cgsixattach(parent, self, aux)
 			 sa->sa_offset + CGSIX_FHC_OFFSET,
 			 sizeof(*sc->sc_fhc),
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: cannot map FHC registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map FHC registers\n");
 		return;
 	}
 	sc->sc_fhc = (int *)bus_space_vaddr(sa->sa_bustag, bh);
@@ -157,7 +139,7 @@ cgsixattach(parent, self, aux)
 			 sa->sa_offset + CGSIX_THC_OFFSET,
 			 sizeof(*sc->sc_thc),
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: cannot map THC registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map THC registers\n");
 		return;
 	}
 	sc->sc_thc = (struct cg6_thc *)bus_space_vaddr(sa->sa_bustag, bh);
@@ -167,7 +149,7 @@ cgsixattach(parent, self, aux)
 			 sa->sa_offset + CGSIX_TEC_OFFSET,
 			 sizeof(*sc->sc_tec),
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: cannot map TEC registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map TEC registers\n");
 		return;
 	}
 	sc->sc_tec = (struct cg6_tec_xxx *)bus_space_vaddr(sa->sa_bustag, bh);
@@ -177,12 +159,11 @@ cgsixattach(parent, self, aux)
 			 sa->sa_offset + CGSIX_FBC_OFFSET,
 			 sizeof(*sc->sc_fbc),
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: cannot map FBC registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map FBC registers\n");
 		return;
 	}
 	sc->sc_fbc = (struct cg6_fbc *)bus_space_vaddr(sa->sa_bustag, bh);
 
-	sbus_establish(sd, &sc->sc_dev);
 	name = prom_getpropstring(node, "model");
 
 	isconsole = fb_is_console(node);
@@ -196,8 +177,9 @@ cgsixattach(parent, self, aux)
 			sa->sa_slot,
 			sa->sa_offset + CGSIX_RAM_OFFSET,
 			sc->sc_ramsize,
-			BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: cannot map pixels\n", self->dv_xname);
+			BUS_SPACE_MAP_LINEAR | BUS_SPACE_MAP_LARGE,
+			&bh) != 0) {
+		aprint_error_dev(self, "cannot map pixels\n");
 		return;
 	}
 	sc->sc_fb.fb_pixels = (void *)bus_space_vaddr(sa->sa_bustag, bh);

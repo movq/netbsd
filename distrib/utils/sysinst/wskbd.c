@@ -1,4 +1,4 @@
-/*	$NetBSD: wskbd.c,v 1.5 2005/03/09 20:59:09 dsl Exp $	*/
+/*	$NetBSD: wskbd.c,v 1.9 2010/01/17 22:48:50 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: wskbd.c,v 1.5 2005/03/09 20:59:09 dsl Exp $");
+__RCSID("$NetBSD: wskbd.c,v 1.9 2010/01/17 22:48:50 wiz Exp $");
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -65,6 +62,8 @@ static const struct kb_types kb_types[] = {
 #define KB_sysinst(tag, tagf, value, cc, ccf, country) \
 	{tag | tagf, cc ccf, country},
 KB_ENC_FUN(KB_sysinst)
+{KB_US | KB_COLEMAK, "us" ".colemak", "US-Colemak"},
+{KB_US | KB_DVORAK, "us" ".dvorak", "US-Dvorak"}
 };
 
 static int
@@ -90,14 +89,14 @@ void
 get_kb_encoding(void)
 {
 	int fd;
-	int i;
+	unsigned int i;
 	int kb_menu;
 	kbd_t kbdencoding;
 	menu_ent opt[nelem(kb_types)];
 	const char *dflt = msg_string(MSG_kb_default);
 
 	fd = open("/dev/wskbd0", O_WRONLY);
-	if (fd <= 0)
+	if (fd < 0)
 		return;
 	if (ioctl(fd, WSKBDIO_GETENCODING, &kbdencoding) >=  0) {
 		memset(&opt, 0, sizeof opt);

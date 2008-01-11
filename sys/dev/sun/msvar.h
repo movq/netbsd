@@ -1,4 +1,4 @@
-/*	$NetBSD: msvar.h,v 1.7 2005/12/11 12:23:56 christos Exp $	*/
+/*	$NetBSD: msvar.h,v 1.9 2009/05/12 14:46:39 cegger Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -69,16 +69,21 @@
  * us sync up with the mouse after an error.)
  */
 struct ms_softc {
-	struct	device ms_dev;		/* required first: base device */
-	struct	zs_chanstate *ms_cs;
+	device_t ms_dev;		/* required first: base device */
+	union {
+		void *msu_priv;
+		struct zs_chanstate *msu_cs;
+	} ms_u;
+#define ms_priv	ms_u.msu_priv
+#define ms_cs	ms_u.msu_cs
 
 	/*
 	 * The deviopen and deviclose routines are provided
 	 * by the lower level driver and used as a back door
 	 * when opening and closing the internal device.
 	 */
-	int	(*ms_deviopen)	(struct device *, int);
-	int	(*ms_deviclose)	(struct device *, int);
+	int	(*ms_deviopen)	(device_t, int);
+	int	(*ms_deviclose)	(device_t, int);
 
 	/* Flags to communicate with ms_softintr() */
 	volatile int ms_intr_flags;
@@ -108,7 +113,7 @@ struct ms_softc {
 	volatile int ms_ready;		/* event queue is ready */
 	struct	evvar ms_events;	/* event queue state */
 
-	struct device *ms_wsmousedev;
+	device_t ms_wsmousedev;
 };
 
 /* front-end call back for mouse input */

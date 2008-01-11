@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_ctl.c,v 1.42 2007/11/07 00:23:37 ad Exp $	*/
+/*	$NetBSD: procfs_ctl.c,v 1.47 2009/10/21 21:12:06 rmind Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_ctl.c,v 1.42 2007/11/07 00:23:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_ctl.c,v 1.47 2009/10/21 21:12:06 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -132,18 +132,14 @@ static int procfs_control(struct lwp *, struct lwp *, int, int,
     struct pfsnode *);
 
 int
-procfs_control(curl, l, op, sig, pfs)
-	struct lwp *curl;
-	struct lwp *l;
-	int op, sig;
-	struct pfsnode *pfs;
+procfs_control(struct lwp *curl, struct lwp *l, int op, int sig, struct pfsnode *pfs)
 {
 	struct proc *curp = curl->l_proc;
 	struct proc *p = l->l_proc;
 	int error = 0;
 
-	mutex_enter(&proclist_lock);
-	mutex_enter(&p->p_mutex);
+	mutex_enter(proc_lock);
+	mutex_enter(p->p_lock);
 
 	switch (op) {
 	/*
@@ -172,8 +168,8 @@ procfs_control(curl, l, op, sig, pfs)
 		 *      (3) the security model prevents it.
 		 */
 		if ((error = kauth_authorize_process(curl->l_cred,
-		    KAUTH_PROCESS_CANPROCFS, p, pfs,
-		    KAUTH_ARG(KAUTH_REQ_PROCESS_CANPROCFS_CTL), NULL)) != 0)
+		    KAUTH_PROCESS_PROCFS, p, pfs,
+		    KAUTH_ARG(KAUTH_REQ_PROCESS_PROCFS_CTL), NULL)) != 0)
 		    	break;
 
 		break;
@@ -252,8 +248,8 @@ procfs_control(curl, l, op, sig, pfs)
 	}
 
 	if (error != 0) {
-		mutex_exit(&p->p_mutex);
-		mutex_exit(&proclist_lock);
+		mutex_exit(p->p_lock);
+		mutex_exit(proc_lock);
 		return (error);
 	}
 
@@ -270,15 +266,21 @@ procfs_control(curl, l, op, sig, pfs)
 		 *   proc gets to see all the action.
 		 * Stop the target.
 		 */
-		mutex_enter(&p->p_smutex);
 		SET(p->p_slflag, PSL_TRACED|PSL_FSTRACE);
-		mutex_exit(&p->p_smutex);
 		p->p_opptr = p->p_pptr;
 		if (p->p_pptr != curp) {
-			mutex_enter(&p->p_pptr->p_smutex);
+			if (p->p_pptr->p_lock < p->p_lock) {
+				if (!mutex_tryenter(p->p_pptr->p_lock)) {
+					mutex_exit(p->p_lock);
+					mutex_enter(p->p_pptr->p_lock);
+				}
+			} else if (p->p_pptr->p_lock > p->p_lock) {
+				mutex_enter(p->p_pptr->p_lock);
+			}
 			p->p_pptr->p_slflag |= PSL_CHTRACED;
-			mutex_exit(&p->p_pptr->p_smutex);
 			proc_reparent(p, curp);
+			if (p->p_pptr->p_lock != p->p_lock)
+				mutex_exit(p->p_pptr->p_lock);
 		}
 		sig = SIGSTOP;
 		goto sendsig;
@@ -292,10 +294,8 @@ procfs_control(curl, l, op, sig, pfs)
 	case PROCFS_CTL_RUN:
 	case PROCFS_CTL_DETACH:
 #ifdef PT_STEP
-		uvm_lwp_hold(l);
 		/* XXXAD locking? */
 		error = process_sstep(l, op == PROCFS_CTL_STEP);
-		uvm_lwp_rele(l);
 		if (error)
 			break;
 #endif
@@ -309,16 +309,12 @@ procfs_control(curl, l, op, sig, pfs)
 
 			/* not being traced any more */
 			p->p_opptr = NULL;
-			mutex_enter(&p->p_smutex);
 			CLR(p->p_slflag, PSL_TRACED|PSL_FSTRACE);
 			p->p_waited = 0;	/* XXXSMP */
-			mutex_exit(&p->p_smutex);
 		}
 
 	sendsig:
 		/* Finally, deliver the requested signal (or none). */
-		mutex_exit(&p->p_mutex);
-		mutex_enter(&p->p_smutex);
 		lwp_lock(l);
 		if (l->l_stat == LSSTOP) {
 			p->p_xstat = sig;
@@ -326,19 +322,23 @@ procfs_control(curl, l, op, sig, pfs)
 			setrunnable(l);
 		} else {
 			lwp_unlock(l);
-			if (sig != 0)
+			if (sig != 0) {
+				mutex_exit(p->p_lock);
 				psignal(p, sig);
+				mutex_enter(p->p_lock);
+			}
 		}
-		mutex_exit(&p->p_smutex);
-		mutex_exit(&proclist_lock);
+		mutex_exit(p->p_lock);
+		mutex_exit(proc_lock);
 		return (error);
 
 	case PROCFS_CTL_WAIT:
-		mutex_exit(&p->p_mutex);
-		mutex_exit(&proclist_lock);
+		mutex_exit(p->p_lock);
+		mutex_exit(proc_lock);
 
 		/*
 		 * Wait for the target process to stop.
+		 * XXXSMP WTF is this?
 		 */
 		while (l->l_stat != LSSTOP && P_ZOMBIE(p)) {
 			error = tsleep(l, PWAIT|PCATCH, "procfsx", hz);
@@ -353,8 +353,8 @@ procfs_control(curl, l, op, sig, pfs)
 		/* NOTREACHED */
 	}
 
-	mutex_exit(&p->p_mutex);
-	mutex_exit(&proclist_lock);
+	mutex_exit(p->p_lock);
+	mutex_exit(proc_lock);
 	return (error);
 }
 

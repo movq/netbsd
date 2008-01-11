@@ -1,4 +1,4 @@
-/*	$NetBSD: sl811hsvar.h,v 1.3 2008/01/04 21:17:58 ad Exp $	*/
+/*	$NetBSD: sl811hsvar.h,v 1.7 2010/05/08 01:33:00 isaki Exp $	*/
 
 /*
  * Not (c) 2007 Matthew Orgass
@@ -15,10 +15,9 @@
 
 #include <sys/gcq.h>
 #include <sys/simplelock.h>
-#include "opt_slhci.h"
 
-#define SC_DEV(sc)	(&((sc)->sc_bus.bdev))
-#define SC_NAME(sc)	(SC_DEV(sc)->dv_xname)
+#define SC_DEV(sc)	((sc)->sc_dev)
+#define SC_NAME(sc)	(device_xname(SC_DEV(sc)))
 
 typedef unsigned int Frame;
 struct slhci_pipe;
@@ -53,6 +52,7 @@ typedef void (*PowerFunc)(void *, enum power_change);
 
 /* Attachment code must call slhci_preinit before registering the ISR */
 struct slhci_softc {
+	device_t		sc_dev;
 	struct usbd_bus		sc_bus;
 
 	struct simplelock	sc_lock;
@@ -91,6 +91,6 @@ void slhci_preinit(struct slhci_softc *, PowerFunc, bus_space_tag_t,
     bus_space_handle_t, uint16_t, uint8_t);
 int  slhci_attach(struct slhci_softc *);
 int  slhci_detach(struct slhci_softc *, int);
-int  slhci_activate(struct device *, enum devact);
+int  slhci_activate(device_t, enum devact);
 int  slhci_intr(void *);
 

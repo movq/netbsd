@@ -1,4 +1,4 @@
-/*	$NetBSD: agpreg.h,v 1.16 2007/11/24 02:19:37 markd Exp $	*/
+/*	$NetBSD: agpreg.h,v 1.20 2008/11/29 23:48:12 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -59,7 +59,7 @@
 #define	AGP_INTEL_I8XX_ERRSTS	0xc8
 
 /* Common register */
-#define	AGP_INTEL_ERRSTS	0x91	/* Not i8XX */
+#define	AGP_INTEL_ERRSTS	0x90 /* bytes at 0x91 and 0x92, not i8XX */
 #define AGP_INTEL_AGPCMD	0xa8
 # define AGPCMD_SBA		(1U << 9)
 # define AGPCMD_AGPEN		(1U << 8)
@@ -90,7 +90,7 @@
 #define AGP3_VIA_GARTCTRL	0x90
 #define AGP3_VIA_APSIZE		0x94
 #define AGP3_VIA_ATTBASE	0x98
-#define AGP_VIA_AGPSEL		0xfd
+#define AGP_VIA_AGPSEL		0xfc
 
 /*
  * Config offsets for SiS AGP chipsets.
@@ -176,10 +176,19 @@
  * Memory mapped register offsets for i810 chipset.
  */
 #define AGP_I810_PGTBL_CTL	0x2020
-#define AGP_I810_DRT		0x3000
-#define AGP_I810_DRT_UNPOPULATED 0x00
-#define AGP_I810_DRT_POPULATED	0x01
-#define AGP_I810_GTT		0x10000
+
+/**
+ * This field determines the actual size of the global GTT on the 965
+ * and G33
+ */
+#define AGP_I810_PGTBL_SIZE_MASK	0x0000000e
+#define AGP_I810_PGTBL_SIZE_512KB	(0 << 1)
+#define AGP_I810_PGTBL_SIZE_256KB	(1 << 1)
+#define AGP_I810_PGTBL_SIZE_128KB	(2 << 1)
+#define AGP_I810_DRT			0x3000
+#define AGP_I810_DRT_UNPOPULATED	0x00
+#define AGP_I810_DRT_POPULATED		0x01
+#define AGP_I810_GTT			0x10000
 
 /*
  * Config registers for i830MG device 0
@@ -201,7 +210,7 @@
 /*
  * Config registers for 852GM/855GM/865G device 0
  */
-#define AGP_I855_GCC1			0x52
+#define AGP_I855_GCC1			0x50 /* upper word */
 #define AGP_I855_GCC1_DEV2		0x08
 #define AGP_I855_GCC1_DEV2_ENABLED	0x00
 #define AGP_I855_GCC1_DEV2_DISABLED	0x08
@@ -220,16 +229,16 @@
 #define AGP_I915_GMADR			0x18
 #define AGP_I915_GTTADR			0x1c
 #define AGP_I915_GCC1			0x52
-#define 	AGP_I915_GCC1_GMS		0x70
-#define 	AGP_I915_GCC1_GMS_STOLEN_0M	0x00
-#define 	AGP_I915_GCC1_GMS_STOLEN_1M	0x10
-#define 	AGP_I915_GCC1_GMS_STOLEN_8M	0x30
-#define 	AGP_I915_GCC1_GMS_STOLEN_16M	0x40
-#define 	AGP_I915_GCC1_GMS_STOLEN_32M	0x50
-#define 	AGP_I915_GCC1_GMS_STOLEN_48M	0x60
-#define 	AGP_I915_GCC1_GMS_STOLEN_64M	0x70
-#define AGP_I915_MSAC			0x62
-#define 	AGP_I915_MSAC_APER_128M		0x02
+#define AGP_I915_GCC1_GMS		0x70
+#define AGP_I915_GCC1_GMS_STOLEN_0M	0x00
+#define AGP_I915_GCC1_GMS_STOLEN_1M	0x10
+#define	AGP_I915_GCC1_GMS_STOLEN_8M	0x30
+#define AGP_I915_GCC1_GMS_STOLEN_16M	0x40
+#define AGP_I915_GCC1_GMS_STOLEN_32M	0x50
+#define AGP_I915_GCC1_GMS_STOLEN_48M	0x60
+#define AGP_I915_GCC1_GMS_STOLEN_64M	0x70
+#define AGP_I915_MSAC			0x60 /* upper word */
+#define AGP_I915_MSAC_APER_128M		0x02
 
 /*
  * Config registers for 965G/965Q
@@ -237,7 +246,12 @@
 #define AGP_I965_MMADR			0x10
 #define AGP_I965_GMADR			0x18
 
-#define AGP_I965_GTT			0x80000
+#define AGP_I965_GTT			(512*1024)
+
+#define AGP_I965_PGTBL_SIZE_1MB		(3 << 1)
+#define AGP_I965_PGTBL_SIZE_2MB		(4 << 1)
+#define AGP_I965_PGTBL_SIZE_1_5MB	(5 << 1)
+
 
 /*
  * Config registers for G33
@@ -248,6 +262,21 @@
 
 #define AGP_G33_GCC1_GMS_STOLEN_128M	0x80
 #define AGP_G33_GCC1_GMS_STOLEN_256M	0x90
+
+/*
+ * Config registers for G4X
+ */
+#define AGP_G4X_MSAC			0x64 /* upper word */
+#define AGP_G4X_MSAC_MASK		0xff
+#define AGP_G4X_MSAC_APER_256M		0x02
+#define AGP_G4X_MSAC_APER_512M		0x04
+
+#define AGP_G4X_GTT			(2*1024*1024)
+
+#define AGP_G4X_GCC1_GMS_STOLEN_96M	0xa0
+#define AGP_G4X_GCC1_GMS_STOLEN_160M	0xb0
+#define AGP_G4X_GCC1_GMS_STOLEN_224M	0xc0
+#define AGP_G4X_GCC1_GMS_STOLEN_352M	0xd0
 
 /*
  * AMD64 GART registers

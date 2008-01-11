@@ -1,4 +1,4 @@
-/*	 $NetBSD: rasops32.c,v 1.15 2006/02/18 13:57:33 jmcneill Exp $	*/
+/*	 $NetBSD: rasops32.c,v 1.19 2010/05/04 04:57:34 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rasops32.c,v 1.15 2006/02/18 13:57:33 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rasops32.c,v 1.19 2010/05/04 04:57:34 macallan Exp $");
 
 #include "opt_rasops.h"
 
@@ -55,8 +48,7 @@ static void 	rasops32_putchar(void *, int, int, u_int, long attr);
  * Initialize a 'rasops_info' descriptor for this depth.
  */
 void
-rasops32_init(ri)
-	struct rasops_info *ri;
+rasops32_init(struct rasops_info *ri)
 {
 
 	if (ri->ri_rnum == 0) {
@@ -75,18 +67,14 @@ rasops32_init(ri)
  * Paint a single character.
  */
 static void
-rasops32_putchar(cookie, row, col, uc, attr)
-	void *cookie;
-	int row, col;
-	u_int uc;
-	long attr;
+rasops32_putchar(void *cookie, int row, int col, u_int uc, long attr)
 {
 	int width, height, cnt, fs, fb, clr[2];
-	struct rasops_info *ri;
+	struct rasops_info *ri = (struct rasops_info *)cookie;
+	struct wsdisplay_font *font = PICK_FONT(ri, uc);
 	int32_t *dp, *rp, *hp, *hrp;
 	u_char *fr;
 
-	ri = (struct rasops_info *)cookie;
 	hp = hrp = NULL;
 
 #ifdef RASOPS_CLIPPING
@@ -99,8 +87,8 @@ rasops32_putchar(cookie, row, col, uc, attr)
 #endif
 
 	/* check if character fits into font limits */
-	if (uc < ri->ri_font->firstchar ||
-	    (uc - ri->ri_font->firstchar) >= ri->ri_font->numchars)
+	if (uc < font->firstchar ||
+	    (uc - font->firstchar) >= font->numchars)
 	    return;
 
 	rp = (int32_t *)(ri->ri_bits + row*ri->ri_yscale + col*ri->ri_xscale);
@@ -108,8 +96,8 @@ rasops32_putchar(cookie, row, col, uc, attr)
 		hrp = (int32_t *)(ri->ri_hwbits + row*ri->ri_yscale +
 		    col*ri->ri_xscale);
 
-	height = ri->ri_font->fontheight;
-	width = ri->ri_font->fontwidth;
+	height = font->fontheight;
+	width = font->fontwidth;
 
 	clr[0] = ri->ri_devcmap[(attr >> 16) & 0xf];
 	clr[1] = ri->ri_devcmap[(attr >> 24) & 0xf];
@@ -130,9 +118,9 @@ rasops32_putchar(cookie, row, col, uc, attr)
 			}
 		}
 	} else {
-		uc -= ri->ri_font->firstchar;
-		fr = (u_char *)ri->ri_font->data + uc * ri->ri_fontscale;
-		fs = ri->ri_font->stride;
+		uc -= font->firstchar;
+		fr = (u_char *)font->data + uc * ri->ri_fontscale;
+		fs = font->stride;
 
 		while (height--) {
 			dp = rp;

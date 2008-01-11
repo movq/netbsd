@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_isapnp.c,v 1.24 2007/10/19 12:00:31 ad Exp $	*/
+/*	$NetBSD: if_ne_isapnp.c,v 1.27 2010/03/03 13:39:57 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_isapnp.c,v 1.24 2007/10/19 12:00:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_isapnp.c,v 1.27 2010/03/03 13:39:57 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,17 +57,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_ne_isapnp.c,v 1.24 2007/10/19 12:00:31 ad Exp $")
 #include <dev/ic/ne2000reg.h>
 #include <dev/ic/ne2000var.h>
 
-#include <dev/ic/rtl80x9reg.h>
-#include <dev/ic/rtl80x9var.h>
-
 #include <dev/isa/isavar.h>
 
 #include <dev/isapnp/isapnpreg.h>
 #include <dev/isapnp/isapnpvar.h>
 #include <dev/isapnp/isapnpdevs.h>
 
-static int ne_isapnp_match(struct device *, struct cfdata *, void *);
-static void ne_isapnp_attach(struct device *, struct device *, void *);
+static int ne_isapnp_match(device_t, cfdata_t , void *);
+static void ne_isapnp_attach(device_t, device_t, void *);
 
 struct ne_isapnp_softc {
 	struct	ne2000_softc sc_ne2000;		/* real "ne2000" softc */
@@ -83,12 +73,11 @@ struct ne_isapnp_softc {
 	void	*sc_ih;				/* interrupt cookie */
 };
 
-CFATTACH_DECL(ne_isapnp, sizeof(struct ne_isapnp_softc),
+CFATTACH_DECL_NEW(ne_isapnp, sizeof(struct ne_isapnp_softc),
     ne_isapnp_match, ne_isapnp_attach, NULL, NULL);
 
 static int
-ne_isapnp_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ne_isapnp_match(device_t parent, cfdata_t match, void *aux)
 {
 	int pri, variant;
 
@@ -99,10 +88,7 @@ ne_isapnp_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-ne_isapnp_attach(
-	struct device *parent,
-	struct device *self,
-	void *aux)
+ne_isapnp_attach(device_t parent, device_t self, void *aux)
 {
 	struct ne_isapnp_softc * const isc = device_private(self);
 	struct ne2000_softc * const nsc = &isc->sc_ne2000;
@@ -115,11 +101,12 @@ ne_isapnp_attach(
 	const char *typestr;
 	int netype;
 
-	printf("\n");
+	aprint_normal("\n");
+
+	dsc->sc_dev = self;
 
 	if (isapnp_config(ipa->ipa_iot, ipa->ipa_memt, ipa)) {
-		printf("%s: can't configure isapnp resources\n",
-		    dsc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't configure isapnp resources\n");
 		return;
 	}
 
@@ -130,7 +117,7 @@ ne_isapnp_attach(
 
 	if (bus_space_subregion(nict, nich, NE2000_ASIC_OFFSET,
 	    NE2000_ASIC_NPORTS, &asich)) {
-		printf("%s: can't subregion i/o space\n", dsc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't subregion i/o space\n");
 		return;
 	}
 
@@ -152,29 +139,18 @@ ne_isapnp_attach(
 
 	case NE2000_TYPE_NE2000:
 		typestr = "NE2000";
-		/*
-		 * Check for a Realtek 8019.
-		 */
-		bus_space_write_1(nict, nich, ED_P0_CR,
-		    ED_CR_PAGE_0 | ED_CR_STP);
-		if (bus_space_read_1(nict, nich, NERTL_RTL0_8019ID0) ==
-								RTL0_8019ID0 &&
-		    bus_space_read_1(nict, nich, NERTL_RTL0_8019ID1) ==
-								RTL0_8019ID1) {
-			typestr = "NE2000 (RTL8019)";
-			dsc->sc_mediachange = rtl80x9_mediachange;
-			dsc->sc_mediastatus = rtl80x9_mediastatus;
-			dsc->init_card = rtl80x9_init_card;
-			dsc->sc_media_init = rtl80x9_media_init;
-		}
+		break;
+
+	case NE2000_TYPE_RTL8019:
+		typestr = "NE2000 (RTL8019)";
 		break;
 
 	default:
-		printf("%s: where did the card go?!\n", dsc->sc_dev.dv_xname);
+		aprint_error_dev(self, "where did the card go?!\n");
 		return;
 	}
 
-	printf("%s: %s Ethernet\n", dsc->sc_dev.dv_xname, typestr);
+	aprint_normal_dev(self, "%s Ethernet\n", typestr);
 
 	/* This interface is always enabled. */
 	dsc->sc_enabled = 1;
@@ -189,6 +165,6 @@ ne_isapnp_attach(
 	isc->sc_ih = isa_intr_establish(ipa->ipa_ic, ipa->ipa_irq[0].num,
 	    ipa->ipa_irq[0].type, IPL_NET, dp8390_intr, dsc);
 	if (isc->sc_ih == NULL)
-		printf("%s: couldn't establish interrupt handler\n",
-		    dsc->sc_dev.dv_xname);
+		aprint_error_dev(self,
+		    "couldn't establish interrupt handler\n");
 }

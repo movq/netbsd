@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.41 2007/12/20 23:02:51 dsl Exp $	*/
+/*	$NetBSD: linux_machdep.c,v 1.47 2011/03/04 22:25:31 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,14 +35,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.41 2007/12/20 23:02:51 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.47 2011/03/04 22:25:31 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/conf.h>
@@ -99,7 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.41 2007/12/20 23:02:51 dsl Exp $
  */
 
 void
-linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
+linux_setregs(struct lwp *l, struct exec_package *epp, vaddr_t stack)
 {
 #ifdef DEBUG
 	struct trapframe *tfp = l->l_md.md_tf;
@@ -184,9 +176,9 @@ setup_linux_rt_sigframe(struct trapframe *tf, int sig, const sigset_t *mask)
 	sigframe.info.lsi_uid = kauth_cred_geteuid(l->l_cred);	/* Use real uid here? */
 
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout((void *)&sigframe, (void *)sfp, fsize);
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 #ifdef DEBUG
@@ -208,7 +200,7 @@ setup_linux_rt_sigframe(struct trapframe *tf, int sig, const sigset_t *mask)
 
 	/* Address of trampoline code.  End up at this PC after mi_switch */
 	tf->tf_regs[FRAME_PC] =
-	    (u_int64_t)(p->p_psstr - (linux_rt_esigcode - linux_rt_sigcode));
+	    (u_int64_t)(p->p_psstrp - (linux_rt_esigcode - linux_rt_sigcode));
 
 	/* Adjust the stack */
 	alpha_pal_wrusp((unsigned long)sfp);
@@ -263,11 +255,13 @@ void setup_linux_sigframe(tf, sig, mask)
 	sigframe.sf_sc.sc_regs[R_SP] = alpha_pal_rdusp();
 
 	if (l == fpcurlwp) {
-	    alpha_pal_wrfen(1);
-	    savefpstate(&l->l_addr->u_pcb.pcb_fp);
-	    alpha_pal_wrfen(0);
-	    sigframe.sf_sc.sc_fpcr = l->l_addr->u_pcb.pcb_fp.fpr_cr;
-	    fpcurlwp = NULL;
+		struct pcb *pcb = lwp_getpcb(l);
+
+		alpha_pal_wrfen(1);
+		savefpstate(&pcb->pcb_fp);
+		alpha_pal_wrfen(0);
+		sigframe.sf_sc.sc_fpcr = pcb->pcb_fp.fpr_cr;
+		fpcurlwp = NULL;
 	}
 	/* XXX ownedfp ? etc...? */
 
@@ -276,9 +270,9 @@ void setup_linux_sigframe(tf, sig, mask)
 	sigframe.sf_sc.sc_traparg_a2 = tf->tf_regs[FRAME_A2];
 
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout((void *)&sigframe, (void *)sfp, fsize);
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 #ifdef DEBUG
@@ -300,7 +294,7 @@ void setup_linux_sigframe(tf, sig, mask)
 
 	/* Address of trampoline code.  End up at this PC after mi_switch */
 	tf->tf_regs[FRAME_PC] =
-	    (u_int64_t)(p->p_psstr - (linux_esigcode - linux_sigcode));
+	    (u_int64_t)(p->p_psstrp - (linux_esigcode - linux_sigcode));
 
 	/* Adjust the stack */
 	alpha_pal_wrusp((unsigned long)sfp);
@@ -381,13 +375,14 @@ linux_restore_sigcontext(struct lwp *l, struct linux_sigcontext context,
 			 sigset_t *mask)
 {
 	struct proc *p = l->l_proc;
+	struct pcb *pcb;
 
 	/*
 	 * Linux doesn't (yet) have alternate signal stacks.
 	 * However, the OSF/1 sigcontext which they use has
 	 * an onstack member.  This could be needed in the future.
 	 */
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	if (context.sc_onstack & LINUX_SA_ONSTACK)
 	    l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
@@ -395,7 +390,7 @@ linux_restore_sigcontext(struct lwp *l, struct linux_sigcontext context,
 
 	/* Reset the signal mask */
 	(void) sigprocmask1(l, SIG_SETMASK, mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	/*
 	 * Check for security violations.
@@ -414,7 +409,8 @@ linux_restore_sigcontext(struct lwp *l, struct linux_sigcontext context,
 	    fpcurlwp = NULL;
 
 	/* Restore fp regs and fpr_cr */
-	bcopy((struct fpreg *)context.sc_fpregs, &l->l_addr->u_pcb.pcb_fp,
+	pcb = lwp_getpcb(l);
+	memcpy(&pcb->pcb_fp, (struct fpreg *)context.sc_fpregs,
 	    sizeof(struct fpreg));
 	/* XXX sc_ownedfp ? */
 	/* XXX sc_fp_control ? */

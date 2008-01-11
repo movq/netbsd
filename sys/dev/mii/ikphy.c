@@ -1,4 +1,4 @@
-/*	$NetBSD: ikphy.c,v 1.5 2007/12/29 19:34:55 dyoung Exp $	*/
+/*	$NetBSD: ikphy.c,v 1.9 2009/10/19 18:41:14 bouyer Exp $	*/
 
 /*******************************************************************************
 Copyright (c) 2001-2005, Intel Corporation 
@@ -41,11 +41,6 @@ POSSIBILITY OF SUCH DAMAGE.
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -64,7 +59,7 @@ POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ikphy.c,v 1.5 2007/12/29 19:34:55 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ikphy.c,v 1.9 2009/10/19 18:41:14 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,10 +77,10 @@ __KERNEL_RCSID(0, "$NetBSD: ikphy.c,v 1.5 2007/12/29 19:34:55 dyoung Exp $");
 
 #include <dev/mii/ikphyreg.h>
 
-static int	ikphymatch(struct device *, struct cfdata *, void *);
-static void	ikphyattach(struct device *, struct device *, void *);
+static int	ikphymatch(device_t, cfdata_t, void *);
+static void	ikphyattach(device_t, device_t, void *);
 
-CFATTACH_DECL(ikphy, sizeof(struct mii_softc),
+CFATTACH_DECL_NEW(ikphy, sizeof(struct mii_softc),
     ikphymatch, ikphyattach, mii_phy_detach, mii_phy_activate);
 
 static int	ikphy_service(struct mii_softc *, struct mii_data *, int);
@@ -105,8 +100,7 @@ static const struct mii_phydesc ikphys[] = {
 };
 
 static int
-ikphymatch(struct device *parent, struct cfdata *match,
-    void *aux)
+ikphymatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
@@ -117,7 +111,7 @@ ikphymatch(struct device *parent, struct cfdata *match,
 }
 
 static void
-ikphyattach(struct device *parent, struct device *self, void *aux)
+ikphyattach(device_t parent, device_t self, void *aux)
 {
 	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
@@ -128,6 +122,7 @@ ikphyattach(struct device *parent, struct device *self, void *aux)
 	aprint_naive(": Media interface\n");
 	aprint_normal(": %s, rev. %d\n", mpd->mpd_name, MII_REV(ma->mii_id2));
 
+	sc->mii_dev = self;
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
 	sc->mii_funcs = &ikphy_funcs;
@@ -141,16 +136,13 @@ ikphyattach(struct device *parent, struct device *self, void *aux)
 	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
 	if (sc->mii_capabilities & BMSR_EXTSTAT)
 	    sc->mii_extcapabilities = PHY_READ(sc, MII_EXTSR);
-	aprint_normal("%s: ", sc->mii_dev.dv_xname);
+	aprint_normal_dev(self, "");
 	if ((sc->mii_capabilities & BMSR_MEDIAMASK) == 0 &&
 	    (sc->mii_extcapabilities & EXTSR_MEDIAMASK) == 0)
 		aprint_error("no media present");
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
-
-	if (!pmf_device_register(self, NULL, mii_phy_resume))
-		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int

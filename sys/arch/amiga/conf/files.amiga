@@ -1,4 +1,4 @@
-#	$NetBSD: files.amiga,v 1.139 2007/10/17 19:53:14 garbled Exp $
+#	$NetBSD: files.amiga,v 1.143 2011/01/14 10:01:12 phx Exp $
 
 # maxpartitions must be first item in files.${ARCH}.newconf
 maxpartitions 16			# NOTE THAT AMIGA IS SPECIAL!
@@ -157,9 +157,6 @@ file	arch/amiga/dev/ite_cc.c		grfcc & ite
 device	amidisplaycc: wsemuldisplaydev
 attach	amidisplaycc at mainbus
 file	arch/amiga/dev/amidisplaycc.c	amidisplaycc needs-flag
-
-include "dev/wscons/files.wscons"
-include "dev/wsfont/files.wsfont"
 
 defpseudo	view
 file	arch/amiga/dev/view.c		view | grfcc needs-count
@@ -357,6 +354,11 @@ device	wesc: scsi, asiop
 attach	wesc at zbus
 file	arch/amiga/dev/wesc.c		wesc needs-flag
 
+# Phase5 Blizzard 603e+ SCSI
+device	bppcsc: scsi, asiop
+attach	bppcsc at zbus
+file	arch/amiga/dev/bppcsc.c		bppcsc needs-flag
+
 # C= A4091 & A4000T
 device	afsc: scsi, asiop
 attach	afsc at zbus
@@ -438,14 +440,13 @@ file	arch/amiga/amiga/disksubr.c
 file	arch/amiga/amiga/dkbad.c
 file	arch/amiga/amiga/machdep.c
 file	arch/amiga/amiga/mem.c
-file	arch/amiga/amiga/pmap.c
 file	arch/amiga/amiga/pmap_bootstrap.c
 file	arch/amiga/amiga/trap.c
 file	arch/amiga/amiga/cc.c
 file	dev/md_root.c			memory_disk_hooks
 file	arch/m68k/m68k/cacheops.c
 file	arch/m68k/m68k/db_memrw.c	ddb
-#file	arch/m68k/m68k/pmap_motorola.c
+file	arch/m68k/m68k/pmap_motorola.c
 file	arch/m68k/m68k/procfs_machdep.c	procfs
 file	arch/m68k/m68k/sys_machdep.c
 file	arch/m68k/m68k/vm_machdep.c

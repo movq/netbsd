@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.11 2006/08/28 13:43:35 yamt Exp $	*/
+/*	$NetBSD: param.h,v 1.13 2010/05/06 19:10:26 joerg Exp $	*/
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe.
@@ -61,7 +61,7 @@
 #define	MACHINE_ARCH	"armeb"
 #endif /* __ARMEB__ */
 #endif /* MACHINE_ARCH */
-#elif defined(__ELF__)
+#else
 #undef _MACHINE
 #undef MACHINE
 #undef _MACHINE_ARCH
@@ -75,7 +75,7 @@
 #define	_MACHINE_ARCH	armeb
 #define	MACHINE_ARCH	"armeb"
 #endif /* __ARMEB__ */
-#endif /* __ELF__ */
+#endif /* !_KERNEL */
 
 #define	MID_MACHINE	MID_ARM6
 
@@ -120,6 +120,10 @@
 #endif	/* MCLSHIFT */
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
+
+#ifndef NMBCLUSTERS_MAX
+#define	NMBCLUSTERS_MAX	(0x2000000 / MCLBYTES)	/* Limit to 64MB for clusters */
+#endif
 
 /*
  * Compatibility /dev/zero mapping.

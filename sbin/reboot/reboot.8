@@ -1,4 +1,4 @@
-.\"	$NetBSD: reboot.8,v 1.23 2007/06/03 22:39:47 uwe Exp $
+.\"	$NetBSD: reboot.8,v 1.29 2011/02/16 19:32:26 wiz Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)reboot.8	8.1 (Berkeley) 6/9/93
 .\"
-.Dd June 3, 2007
+.Dd February 16, 2011
 .Dt REBOOT 8
 .Os
 .Sh NAME
@@ -39,11 +39,11 @@
 .Nd restarting, powering down and stopping the system
 .Sh SYNOPSIS
 .Nm halt
-.Op Fl dlnpq
+.Op Fl dlnpqvxz
 .Nm poweroff
-.Op Fl dlnq
+.Op Fl dlnqvxz
 .Nm
-.Op Fl dlnq
+.Op Fl dlnqvxz
 .Op Ar arg ...
 .Sh DESCRIPTION
 The
@@ -52,8 +52,11 @@ The
 and
 .Nm
 utilities flush the file system cache to disk, send all running processes
-a SIGTERM, wait for several seconds for them to die, send a SIGKILL to the
-survivors and, respectively, power down, halt or restart the system.
+a
+.Dv SIGTERM ,
+wait for up to 30 seconds for them to die, send a
+.Dv SIGKILL
+to the survivors and, respectively, power down, halt or restart the system.
 The action is logged, including entering a shutdown record into the login
 accounting file and sending a message via
 .Xr syslog 3 .
@@ -71,13 +74,34 @@ before halting or restarting.
 .It Fl n
 Do not flush the file system cache.
 This option should be used with extreme caution.
-It can be used if a disk or the processor is on fire.
+It can be used if a disk or a processor is on fire.
 .It Fl p
 Attempt to powerdown the system.
 If the powerdown fails, or the system does not support
 software powerdown, the system will halt.
 This option is only valid for
 .Nm halt .
+.It Fl v
+To enable verbose messages on the console, pass the
+.Xr boothowto 9
+flag
+.Dv AB_VERBOSE
+to
+.Xr reboot 2 .
+.It Fl x
+To enable debugging messages on the console, pass the
+.Xr boothowto 9
+flag
+.Dv AB_DEBUG
+to
+.Xr reboot 2 .
+.It Fl z
+To silence some shutdown messages on the console, pass the
+.Xr boothowto 9
+flag
+.Dv AB_SILENT
+to
+.Xr reboot 2 .
 .It Fl q
 Do not give processes a chance to shut down before halting or restarting.
 This option should not normally be used.
@@ -87,7 +111,7 @@ If there are any arguments passed to
 .Nm reboot
 they are concatenated with spaces and passed as
 .Fa bootstr
-to
+to the
 .Xr reboot 2
 system call.
 The string is passed to the firmware on platforms that support it.
@@ -101,6 +125,8 @@ users advance warning of their impending doom.
 .Xr syslog 3 ,
 .Xr utmp 5 ,
 .Xr boot 8 ,
+.Xr init 8 ,
+.Xr rescue 8 ,
 .Xr shutdown 8 ,
 .Xr sync 8
 .Sh HISTORY
@@ -123,14 +149,18 @@ However, nothing can defend against deliberate attempts to evade this.
 .Pp
 This command will stop the system without running any
 .Xr shutdown 8
-scripts.  Amongst other things, this means that swapping will not be
+scripts.
+Amongst other things, this means that swapping will not be
 disabled so that
 .Xr raid 4
-can shutdown cleanly.  You should normally use
+can shutdown cleanly.
+You should normally use
 .Xr shutdown 8
 unless you are running in single user mode.
 .Sh BUGS
-The single user shell will ignore the SIGTERM signal.
+The single user shell will ignore the
+.Dv SIGTERM
+signal.
 To avoid waiting for the timeout when
 rebooting or halting from the single user shell, you have to
 .Ic exec reboot

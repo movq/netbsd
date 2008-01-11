@@ -1,4 +1,4 @@
-/*	$NetBSD: quotaon.c,v 1.21 2004/04/21 01:05:48 christos Exp $	*/
+/*	$NetBSD: quotaon.c,v 1.26 2011/03/24 17:05:47 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -34,15 +34,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)quotaon.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: quotaon.c,v 1.21 2004/04/21 01:05:48 christos Exp $");
+__RCSID("$NetBSD: quotaon.c,v 1.26 2011/03/24 17:05:47 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,38 +52,36 @@ __RCSID("$NetBSD: quotaon.c,v 1.21 2004/04/21 01:05:48 christos Exp $");
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/mount.h>
-#include <ufs/ufs/quota.h>
+
+#include <quota/quotaprop.h>
+#include <ufs/ufs/quota1.h>
+#include <sys/quota.h>
+
 
 #include <err.h>
 #include <fstab.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-char *qfname = QUOTAFILENAME;
-char *qfextension[] = INITQFNAMES;
+#include "quotautil.h"
 
-int	aflag;		/* all file systems */
-int	gflag;		/* operate on group quotas */
-int	uflag;		/* operate on user quotas */
-int	vflag;		/* verbose */
+static int	aflag;		/* all file systems */
+static int	gflag;		/* operate on group quotas */
+static int	uflag;		/* operate on user quotas */
+static int	vflag;		/* verbose */
 
-int main __P((int, char *[]));
-
-static void usage __P((void));
-static int quotaonoff __P((struct fstab *, int, int, char *));
-static int oneof __P((const char *, char *[], int));
-static int hasquota __P((struct fstab *, int, char **));
-static int readonly __P((struct fstab *));
+static void usage(void) __attribute__((__noreturn__));
+static int quotaonoff(struct fstab *, int, int, const char *);
+static int readonly(struct fstab *);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct fstab *fs;
-	char *qfnp;
+	char qfnp[MAXPATHLEN];
 	long argnum, done = 0;
 	int i, offmode = 0, errs = 0;
 	int ch;
@@ -129,134 +127,117 @@ main(argc, argv)
 		    strcmp(fs->fs_type, FSTAB_RW))
 			continue;
 		if (aflag) {
-			if (gflag && hasquota(fs, GRPQUOTA, &qfnp))
+			if (gflag && hasquota(qfnp, sizeof(qfnp), fs, GRPQUOTA))
 				errs += quotaonoff(fs, offmode, GRPQUOTA, qfnp);
-			if (uflag && hasquota(fs, USRQUOTA, &qfnp))
+			if (uflag && hasquota(qfnp, sizeof(qfnp), fs, USRQUOTA))
 				errs += quotaonoff(fs, offmode, USRQUOTA, qfnp);
 			continue;
 		}
 		if ((argnum = oneof(fs->fs_file, argv, argc)) >= 0 ||
 		    (argnum = oneof(fs->fs_spec, argv, argc)) >= 0) {
-			done |= 1 << argnum;
-			if (gflag && hasquota(fs, GRPQUOTA, &qfnp))
+			done |= 1U << argnum;
+			if (gflag && hasquota(qfnp, sizeof(qfnp), fs, GRPQUOTA))
 				errs += quotaonoff(fs, offmode, GRPQUOTA, qfnp);
-			if (uflag && hasquota(fs, USRQUOTA, &qfnp))
+			if (uflag && hasquota(qfnp, sizeof(qfnp), fs, USRQUOTA))
 				errs += quotaonoff(fs, offmode, USRQUOTA, qfnp);
 		}
 	}
 	endfsent();
 	for (i = 0; i < argc; i++)
-		if ((done & (1 << i)) == 0)
+		if ((done & (1U << i)) == 0)
 			warnx("%s not found in fstab", argv[i]);
-	exit(errs);
+	return errs;
 }
 
 static void
-usage()
+usage(void)
 {
-
-	(void) fprintf(stderr, "usage:\n\t%s [-g] [-u] [-v] -a\n",
-	    getprogname());
-	(void) fprintf(stderr, "\t%s [-g] [-u] [-v] filesys ...\n",
-	    getprogname());
+	const char *p = getprogname();
+	(void) fprintf(stderr, "Usage: %s [-g] [-u] [-v] -a\n"
+	    "\t%s [-g] [-u] [-v] filesys ...\n", p, p);
 	exit(1);
 }
 
 static int
-quotaonoff(fs, offmode, type, qfpathname)
-	struct fstab *fs;
-	int offmode, type;
-	char *qfpathname;
+quotaonoff( struct fstab *fs, int offmode, int type, const char *qfpathname)
 {
+	const char *mode = (offmode == 1) ? "off" : "on";
+	prop_dictionary_t dict, data, cmd;
+	prop_array_t cmds, datas;
+	struct plistref pref;
+	int8_t error8;
+
+	dict = quota_prop_create();
+	cmds = prop_array_create();
+	datas = prop_array_create();
 
 	if (strcmp(fs->fs_file, "/") && readonly(fs))
-		return (1);
+		return 1;
+
+	if (dict == NULL || cmds == NULL || datas == NULL)
+		errx(1, "can't allocate proplist");
+
 	if (offmode) {
-		if (quotactl(fs->fs_file, QCMD(Q_QUOTAOFF, type), 0, 0) < 0) {
-			warn("%s", fs->fs_file);
-			return (1);
-		}
-		if (vflag)
-			printf("%s: %s quotas turned off\n",
-			    fs->fs_file, qfextension[type]);
-		return (0);
+		if (!quota_prop_add_command(cmds, "quotaoff",
+		    qfextension[type], datas))
+			err(1, "prop_add_command");
+	} else {
+		data = prop_dictionary_create();
+		if (data == NULL)
+			errx(1, "can't allocate proplist");
+		if (!prop_dictionary_set_cstring(data, "quotafile", 
+		    qfpathname))
+			err(1, "prop_dictionary_set(quotafile)");
+		if (!prop_array_add_and_rel(datas, data))
+			err(1, "prop_array_add(data)");
+		if (!quota_prop_add_command(cmds, "quotaon",
+		    qfextension[type], datas))
+			err(1, "prop_add_command");
 	}
-	if (quotactl(fs->fs_file, QCMD(Q_QUOTAON, type), 0, qfpathname) < 0) {
-		warn("%s quotas using %s on %s",
-		    qfextension[type], qfpathname, fs->fs_file);
-		return (1);
-	}
-	if (vflag)
-		printf("%s: %s quotas turned on\n", fs->fs_file,
-		    qfextension[type]);
-	return (0);
-}
+	if (!prop_dictionary_set(dict, "commands", cmds))
+		err(1, "prop_dictionary_set(command)");
 
-/*
- * Check to see if target appears in list of size cnt.
- */
-static int
-oneof(target, list, cnt)
-	const char *target;
-	char *list[];
-	int cnt;
-{
-	int i;
+	if (!prop_dictionary_send_syscall(dict, &pref))
+		err(1, "prop_dictionary_send_syscall");
+	prop_object_release(dict);
 
-	for (i = 0; i < cnt; i++)
-		if (strcmp(target, list[i]) == 0)
-			return (i);
-	return (-1);
-}
+	if (quotactl(fs->fs_file, &pref) != 0) {
+		warn("quotactl(%s)", fs->fs_file);
+		return(1);
+	}
 
-/*
- * Check to see if a particular quota is to be enabled.
- */
-static int
-hasquota(fs, type, qfnamep)
-	struct fstab *fs;
-	int type;
-	char **qfnamep;
-{
-	char *opt;
-	char *cp = NULL;
-	static char initname, usrname[100], grpname[100];
-	static char buf[BUFSIZ];
+	if ((errno = prop_dictionary_recv_syscall(&pref, &dict)) != 0)
+		err(1, "prop_dictionary_recv_syscall");
 
-	if (!initname) {
-		(void) snprintf(usrname, sizeof(usrname), "%s%s",
-		    qfextension[USRQUOTA], qfname);
-		(void) snprintf(grpname, sizeof(grpname), "%s%s",
-		    qfextension[GRPQUOTA], qfname);
-		initname = 1;
+	if ((errno = quota_get_cmds(dict, &cmds)) != 0)
+		err(1, "quota_get_cmds");
+
+	/* only one command, no need to iter */
+	cmd = prop_array_get(cmds, 0);
+	if (cmd == NULL)
+		err(1, "prop_array_get(cmd)");
+
+	if (!prop_dictionary_get_int8(cmd, "return", &error8))
+		err(1, "prop_get(return)");
+
+	if (error8) {
+		errno = error8;
+		warn("quota%s for %s", mode, fs->fs_file);
+		return 1;
 	}
-	strcpy(buf, fs->fs_mntops);
-	for (opt = strtok(buf, ","); opt; opt = strtok(NULL, ",")) {
-		if ((cp = strchr(opt, '=')) != NULL)
-			*cp++ = '\0';
-		if (type == USRQUOTA && strcmp(opt, usrname) == 0)
-			break;
-		if (type == GRPQUOTA && strcmp(opt, grpname) == 0)
-			break;
+
+	if (vflag) {
+		printf("%s: %s quotas turned %s\n",
+		    fs->fs_file, qfextension[type], mode);
 	}
-	if (!opt)
-		return (0);
-	if (cp) {
-		*qfnamep = cp;
-		return (1);
-	}
-	(void) snprintf(buf, sizeof(buf), "%s/%s.%s", fs->fs_file, qfname,
-	    qfextension[type]);
-	*qfnamep = buf;
-	return (1);
+	return 0;
 }
 
 /*
  * Verify file system is mounted and not readonly.
  */
 static int
-readonly(fs)
-	struct fstab *fs;
+readonly(struct fstab *fs)
 {
 	struct statvfs fsbuf;
 
@@ -264,11 +245,11 @@ readonly(fs)
 	    strcmp(fsbuf.f_mntonname, fs->fs_file) ||
 	    strcmp(fsbuf.f_mntfromname, fs->fs_spec)) {
 		printf("%s: not mounted\n", fs->fs_file);
-		return (1);
+		return 1;
 	}
 	if (fsbuf.f_flag & MNT_RDONLY) {
 		printf("%s: mounted read-only\n", fs->fs_file);
-		return (1);
+		return 1;
 	}
-	return (0);
+	return 0;
 }

@@ -1,10 +1,11 @@
-#	$NetBSD: Makefile,v 1.17 2006/05/11 23:16:31 mrg Exp $
+#	$NetBSD: Makefile,v 1.21 2008/09/30 06:25:22 dholland Exp $
 
 .include <bsd.own.mk>
 
 PROG=	rpc.pcnfsd
-MAN=	pcnfsd.8
-MLINKS= pcnfsd.8 rpc.pcnfsd.8
+MAN=	rpc.pcnfsd.8
+BUILDSYMLINKS+=	pcnfsd.8 rpc.pcnfsd.8
+MLINKS= rpc.pcnfsd.8 pcnfsd.8
 CPPFLAGS += -DUSER_CACHE -DWTMP -I. -DSUPPORT_UTMP -DSUPPORT_UTMPX
 
 .if (${USE_YP} != "no")
@@ -23,7 +24,7 @@ RPC_SVCFILES=	pcnfsd_svc.c
 RPC_SVCCLASS=	udp tcp
 RPC_SVCFLAGS=	-I
 
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 COPTS.pcnfsd_v1.c+=	-Wno-pointer-sign
 COPTS.pcnfsd_v2.c+=	-Wno-pointer-sign
 .endif

@@ -1,4 +1,4 @@
-.\" $NetBSD: amldb.8,v 1.2 2007/01/14 12:30:24 wiz Exp $
+.\" $NetBSD: amldb.8,v 1.4 2009/11/02 00:35:32 joerg Exp $
 .\" ACPI (ACPI Package)
 .\"
 .\" Copyright (c) 2000 Takanori Watanabe <takawata@FreeBSD.org>
@@ -119,17 +119,20 @@ when it terminates.
 Each line of there files consists of the following
 fields, separated by tabs; region type, address, and value.
 Region types are specified as follows;
-.TS H
-box;
-c | l.
-value	region type
-=
-0	SystemMemory
-1	SystemIO
-2	PCI_Concig
-3	EmbeddedControl
-4	SMBus
-.TE
+.Bl -tag -width "Value" -compact -offset indent
+.It Sy Value
+.Sy Region type
+.It 0
+SystemMemory
+.It 1
+SystemIO
+.It 2
+PCI_Config
+.It 3
+EmbeddedControl
+.It 4
+SMBus
+.El
 .Pp
 Interactive commands are described below:
 .Bl -tag -width indent
@@ -285,7 +288,7 @@ Method: Arg 1 From 0x2805f0a3 To 0x2805f0db
   Arg0 ? n 5
 ==== Running _PTS. ====
 AML\*[Gt]s
-[\_PTS. START]
+[\\_PTS. START]
 If(LNot(LEqual(Arg0, 0x5)))
 AML\*[Gt]
 If(LEqual(Arg0, 0x1))
@@ -317,7 +320,7 @@ Store(Local2, DBG1)
 DEBUG[read(1, 0x80)\*[Am]mask:0xf5](default: 0xf5 / 245) \*[Gt]\*[Gt]
 [read(1, 0x80)-\*[Gt]0xf5]
 AML\*[Gt]
-[\_PTS. END]
+[\\_PTS. END]
 _PTS  Method: Arg 1 From 0x2805f0a3 To 0x2805f0db
 NO object
 ==== _PTS finished. ====

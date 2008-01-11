@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_sem.c,v 1.79 2008/01/02 11:48:54 ad Exp $	*/
+/*	$NetBSD: sysv_sem.c,v 1.87 2011/05/13 22:16:44 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2007 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.79 2008/01/02 11:48:54 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.87 2011/05/13 22:16:44 rmind Exp $");
 
 #define SYSVSEM
 
@@ -66,18 +59,22 @@ __KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.79 2008/01/02 11:48:54 ad Exp $");
  *  3rd: Conditional variables
  *  4th: Undo structures
  */
-struct semid_ds		*sema;
-static struct __sem	*sem;
-static kcondvar_t	*semcv;
-static int		*semu;
+struct semid_ds *	sema			__read_mostly;
+static struct __sem *	sem			__read_mostly;
+static kcondvar_t *	semcv			__read_mostly;
+static int *		semu			__read_mostly;
 
-static kmutex_t	semlock;
-static struct	sem_undo *semu_list;	/* list of active undo structures */
-static u_int	semtot = 0;		/* total number of semaphores */
+static kmutex_t		semlock			__cacheline_aligned;
+static bool		sem_realloc_state	__read_mostly;
+static kcondvar_t	sem_realloc_cv;
 
-static u_int	sem_waiters = 0;	/* total number of semop waiters */
-static bool	sem_realloc_state;
-static kcondvar_t sem_realloc_cv;
+/*
+ * List of active undo structures, total number of semaphores,
+ * and total number of semop waiters.
+ */
+static struct sem_undo *semu_list		__read_mostly;
+static u_int		semtot			__cacheline_aligned;
+static u_int		sem_waiters		__cacheline_aligned;
 
 /* Macro to find a particular sem_undo vector */
 #define SEMU(s, ix)	((struct sem_undo *)(((long)s) + ix * seminfo.semusz))
@@ -101,6 +98,8 @@ seminit(void)
 	mutex_init(&semlock, MUTEX_DEFAULT, IPL_NONE);
 	cv_init(&sem_realloc_cv, "semrealc");
 	sem_realloc_state = false;
+	semtot = 0;
+	sem_waiters = 0;
 
 	/* Allocate the wired memory for our structures */
 	sz = ALIGN(seminfo.semmni * sizeof(struct semid_ds)) +
@@ -112,12 +111,12 @@ seminit(void)
 	if (v == 0)
 		panic("sysv_sem: cannot allocate memory");
 	sema = (void *)v;
-	sem = (void *)(ALIGN(sema) +
-	    seminfo.semmni * sizeof(struct semid_ds));
-	semcv = (void *)(ALIGN(sem) +
-	    seminfo.semmns * sizeof(struct __sem));
-	semu = (void *)(ALIGN(semcv) +
-	    seminfo.semmni * sizeof(kcondvar_t));
+	sem = (void *)((uintptr_t)sema +
+	    ALIGN(seminfo.semmni * sizeof(struct semid_ds)));
+	semcv = (void *)((uintptr_t)sem +
+	    ALIGN(seminfo.semmns * sizeof(struct __sem)));
+	semu = (void *)((uintptr_t)semcv +
+	    ALIGN(seminfo.semmni * sizeof(kcondvar_t)));
 
 	for (i = 0; i < seminfo.semmni; i++) {
 		sema[i]._sem_base = 0;
@@ -198,12 +197,12 @@ semrealloc(int newsemmni, int newsemmns, int newsemmnu)
 	}
 
 	new_sema = (void *)v;
-	new_sem = (void *)(ALIGN(new_sema) +
-	    newsemmni * sizeof(struct semid_ds));
-	new_semcv = (void *)(ALIGN(new_sem) +
-	    newsemmns * sizeof(struct __sem));
-	new_semu = (void *)(ALIGN(new_semcv) +
-	    newsemmni * sizeof(kcondvar_t));
+	new_sem = (void *)((uintptr_t)new_sema +
+	    ALIGN(newsemmni * sizeof(struct semid_ds)));
+	new_semcv = (void *)((uintptr_t)new_sem +
+	    ALIGN(newsemmns * sizeof(struct __sem)));
+	new_semu = (void *)((uintptr_t)new_semcv +
+	    ALIGN(newsemmni * sizeof(kcondvar_t)));
 
 	/* Initialize all semaphore identifiers and condvars */
 	for (i = 0; i < newsemmni; i++) {
@@ -286,72 +285,48 @@ sys_semconfig(struct lwp *l, const struct sys_semconfig_args *uap, register_t *r
 }
 
 /*
- * Allocate a new sem_undo structure for a process
- * (returns ptr to structure or NULL if no more room)
+ * Allocate a new sem_undo structure for a process.
+ * => Returns NULL on failure.
  */
-
 struct sem_undo *
 semu_alloc(struct proc *p)
 {
+	struct sem_undo *suptr, **supptr;
+	bool attempted = false;
 	int i;
-	struct sem_undo *suptr;
-	struct sem_undo **supptr;
-	int attempt;
 
 	KASSERT(mutex_owned(&semlock));
+again:
+	/* Look for a free structure. */
+	for (i = 0; i < seminfo.semmnu; i++) {
+		suptr = SEMU(semu, i);
+		if (suptr->un_proc == NULL) {
+			/* Found.  Fill it in and return. */
+			suptr->un_next = semu_list;
+			semu_list = suptr;
+			suptr->un_cnt = 0;
+			suptr->un_proc = p;
+			return suptr;
+		}
+	}
 
-	/*
-	 * Try twice to allocate something.
-	 * (we'll purge any empty structures after the first pass so
-	 * two passes are always enough)
-	 */
+	/* Not found.  Attempt to free some structures. */
+	if (!attempted) {
+		bool freed = false;
 
-	for (attempt = 0; attempt < 2; attempt++) {
-		/*
-		 * Look for a free structure.
-		 * Fill it in and return it if we find one.
-		 */
-
-		for (i = 0; i < seminfo.semmnu; i++) {
-			suptr = SEMU(semu, i);
-			if (suptr->un_proc == NULL) {
-				suptr->un_next = semu_list;
-				semu_list = suptr;
-				suptr->un_cnt = 0;
-				suptr->un_proc = p;
-				return (suptr);
+		attempted = true;
+		supptr = &semu_list;
+		while ((suptr = *supptr) != NULL) {
+			if (suptr->un_cnt == 0)  {
+				suptr->un_proc = NULL;
+				*supptr = suptr->un_next;
+				freed = true;
+			} else {
+				supptr = &suptr->un_next;
 			}
 		}
-
-		/*
-		 * We didn't find a free one, if this is the first attempt
-		 * then try to free some structures.
-		 */
-
-		if (attempt == 0) {
-			/* All the structures are in use - try to free some */
-			int did_something = 0;
-
-			supptr = &semu_list;
-			while ((suptr = *supptr) != NULL) {
-				if (suptr->un_cnt == 0)  {
-					suptr->un_proc = NULL;
-					*supptr = suptr->un_next;
-					did_something = 1;
-				} else
-					supptr = &suptr->un_next;
-			}
-
-			/* If we didn't free anything then just give-up */
-			if (!did_something)
-				return (NULL);
-		} else {
-			/*
-			 * The second pass failed even though we freed
-			 * something after the first pass!
-			 * This is IMPOSSIBLE!
-			 */
-			panic("semu_alloc - second attempt failed");
+		if (freed) {
+			goto again;
 		}
 	}
 	return NULL;
@@ -448,7 +423,8 @@ semundo_clear(int semid, int semnum)
 }
 
 int
-sys_____semctl13(struct lwp *l, const struct sys_____semctl13_args *uap, register_t *retval)
+sys_____semctl50(struct lwp *l, const struct sys_____semctl50_args *uap,
+    register_t *retval)
 {
 	/* {
 		syscallarg(int) semid;
@@ -547,6 +523,7 @@ semctl1(struct lwp *l, int semid, int semnum, int cmd, void *v,
 			break;
 		KASSERT(sembuf != NULL);
 		memcpy(sembuf, semaptr, sizeof(struct semid_ds));
+		sembuf->sem_perm.mode &= 0777;
 		break;
 
 	case GETNCNT:
@@ -609,6 +586,10 @@ semctl1(struct lwp *l, int semid, int semnum, int cmd, void *v,
 			break;
 		}
 		KASSERT(arg != NULL);
+		if ((unsigned int)arg->val > seminfo.semvmx) {
+			error = ERANGE;
+			break;
+		}
 		semaptr->_sem_base[semnum].semval = arg->val;
 		semundo_clear(ix, semnum);
 		cv_broadcast(&semcv[ix]);
@@ -619,11 +600,16 @@ semctl1(struct lwp *l, int semid, int semnum, int cmd, void *v,
 			break;
 		KASSERT(arg != NULL);
 		for (i = 0; i < semaptr->sem_nsems; i++) {
-			error = copyin(&arg->array[i],
-			    &semaptr->_sem_base[i].semval,
+			unsigned short semval;
+			error = copyin(&arg->array[i], &semval,
 			    sizeof(arg->array[i]));
 			if (error != 0)
 				break;
+			if ((unsigned int)semval > seminfo.semvmx) {
+				error = ERANGE;
+				break;
+			}
+			semaptr->_sem_base[i].semval = semval;
 		}
 		semundo_clear(ix, -1);
 		cv_broadcast(&semcv[ix]);
@@ -760,6 +746,13 @@ sys_semop(struct lwp *l, const struct sys_semop_args *uap, register_t *retval)
 	int do_wakeup, do_undos;
 
 	SEM_PRINTF(("call to semop(%d, %p, %zd)\n", semid, SCARG(uap,sops), nsops));
+
+	if (__predict_false((p->p_flag & PK_SYSVSEM) == 0)) {
+		mutex_enter(p->p_lock);
+		p->p_flag |= PK_SYSVSEM;
+		mutex_exit(p->p_lock);
+	}
+
 restart:
 	if (nsops <= SMALL_SOPS) {
 		sops = small_sops;
@@ -1020,6 +1013,9 @@ semexit(struct proc *p, void *v)
 {
 	struct sem_undo *suptr;
 	struct sem_undo **supptr;
+
+	if ((p->p_flag & PK_SYSVSEM) == 0)
+		return;
 
 	mutex_enter(&semlock);
 

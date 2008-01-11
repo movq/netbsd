@@ -1,4 +1,4 @@
-/*	$NetBSD: rtquery.c,v 1.20 2007/12/15 19:44:47 perry Exp $	*/
+/*	$NetBSD: rtquery.c,v 1.22 2009/10/26 02:53:15 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -60,11 +60,10 @@
 #ifndef __COPYRIGHT
 #define __COPYRIGHT(_s) static const char copyright[] UNUSED = _s
 #endif
-__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n"
-	    "The Regents of the University of California."
-	    "  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #ifdef __NetBSD__
-__RCSID("$NetBSD: rtquery.c,v 1.20 2007/12/15 19:44:47 perry Exp $");
+__RCSID("$NetBSD: rtquery.c,v 1.22 2009/10/26 02:53:15 christos Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else
@@ -355,7 +354,8 @@ trace_loop(char *argv[])
 			perror("bind");
 			exit(2);
 		}
-		myaddr.sin_port = htons(ntohs(myaddr.sin_port)-1);
+		myaddr.sin_port = ntohs(myaddr.sin_port)-1;
+		myaddr.sin_port = htons(myaddr.sin_port);
 	}
 
 	res = 1;
@@ -797,7 +797,7 @@ rip_input(struct sockaddr_in *from,
 static u_int
 std_mask(u_int addr)			/* in network order */
 {
-	NTOHL(addr);			/* was a host, not a network */
+	addr = ntohl(addr);			/* was a host, not a network */
 
 	if (addr == 0)			/* default route has mask 0 */
 		return 0;
@@ -840,7 +840,7 @@ getnet(char *name,
 	if (nentp != 0) {
 		in.s_addr = nentp->n_net;
 	} else if (inet_aton(name, &in) == 1) {
-		NTOHL(in.s_addr);
+		in.s_addr = ntohl(in.s_addr);
 	} else {
 		return 0;
 	}

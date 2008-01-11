@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc_vfsops.c,v 1.72 2008/01/02 11:48:58 ad Exp $	*/
+/*	$NetBSD: fdesc_vfsops.c,v 1.85 2010/06/24 13:03:12 hannken Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.72 2008/01/02 11:48:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.85 2010/06/24 13:03:12 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -60,10 +60,16 @@ __KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.72 2008/01/02 11:48:58 ad Exp $")
 #include <sys/namei.h>
 #include <sys/malloc.h>
 #include <sys/kauth.h>
+#include <sys/module.h>
 
+#include <miscfs/genfs/genfs.h>
 #include <miscfs/fdesc/fdesc.h>
 
+MODULE(MODULE_CLASS_VFS, fdesc, NULL);
+
 VFS_PROTOS(fdesc);
+
+static struct sysctllog *fdesc_sysctl_log;
 
 /*
  * Mount the per-process file descriptors (/dev/fd)
@@ -73,7 +79,6 @@ fdesc_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 {
 	struct lwp *l = curlwp;
 	int error = 0;
-	struct fdescmount *fmp;
 	struct vnode *rvp;
 
 	if (mp->mnt_flag & MNT_GETARGS) {
@@ -90,19 +95,16 @@ fdesc_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	if (error)
 		return (error);
 
-	MALLOC(fmp, struct fdescmount *, sizeof(struct fdescmount),
-				M_UFSMNT, M_WAITOK);	/* XXX */
 	rvp->v_type = VDIR;
 	rvp->v_vflag |= VV_ROOT;
-	fmp->f_root = rvp;
 	mp->mnt_stat.f_namemax = MAXNAMLEN;
 	mp->mnt_flag |= MNT_LOCAL;
-	mp->mnt_data = fmp;
+	mp->mnt_data = rvp;
 	vfs_getnewfsid(mp);
 
 	error = set_statvfs_info(path, UIO_USERSPACE, "fdesc", UIO_SYSSPACE,
 	    mp->mnt_op->vfs_name, mp, l);
-	VOP_UNLOCK(rvp, 0);
+	VOP_UNLOCK(rvp);
 	return error;
 }
 
@@ -117,7 +119,7 @@ fdesc_unmount(struct mount *mp, int mntflags)
 {
 	int error;
 	int flags = 0;
-	struct vnode *rtvp = VFSTOFDESC(mp)->f_root;
+	struct vnode *rtvp = mp->mnt_data;
 
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
@@ -131,79 +133,23 @@ fdesc_unmount(struct mount *mp, int mntflags)
 	 * Blow it away for future re-use
 	 */
 	vgone(rtvp);
-	/*
-	 * Finally, throw away the fdescmount structure
-	 */
-	free(mp->mnt_data, M_UFSMNT);	/* XXX */
-	mp->mnt_data = 0;
+	mp->mnt_data = NULL;
 
 	return (0);
 }
 
 int
-fdesc_root(mp, vpp)
-	struct mount *mp;
-	struct vnode **vpp;
+fdesc_root(struct mount *mp, struct vnode **vpp)
 {
 	struct vnode *vp;
 
 	/*
 	 * Return locked reference to root.
 	 */
-	vp = VFSTOFDESC(mp)->f_root;
-	VREF(vp);
+	vp = mp->mnt_data;
+	vref(vp);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	*vpp = vp;
-	return (0);
-}
-
-int
-fdesc_statvfs(mp, sbp)
-	struct mount *mp;
-	struct statvfs *sbp;
-{
-	struct lwp *l = curlwp;
-	struct filedesc *fdp;
-	struct proc *p;
-	int lim;
-	int i;
-	int last;
-	int freefd;
-
-	/*
-	 * Compute number of free file descriptors.
-	 * [ Strange results will ensue if the open file
-	 * limit is ever reduced below the current number
-	 * of open files... ]
-	 */
-	p = l->l_proc;
-	lim = p->p_rlimit[RLIMIT_NOFILE].rlim_cur;
-	fdp = p->p_fd;
-	last = min(fdp->fd_nfiles, lim);
-	freefd = 0;
-	for (i = fdp->fd_freefile; i < last; i++)
-		if (fdp->fd_ofiles[i] == NULL)
-			freefd++;
-
-	/*
-	 * Adjust for the fact that the fdesc array may not
-	 * have been fully allocated yet.
-	 */
-	if (fdp->fd_nfiles < lim)
-		freefd += (lim - fdp->fd_nfiles);
-
-	sbp->f_bsize = DEV_BSIZE;
-	sbp->f_frsize = DEV_BSIZE;
-	sbp->f_iosize = DEV_BSIZE;
-	sbp->f_blocks = 2;		/* 1K to keep df happy */
-	sbp->f_bfree = 0;
-	sbp->f_bavail = 0;
-	sbp->f_bresvd = 0;
-	sbp->f_files = lim + 1;		/* Allow for "." */
-	sbp->f_ffree = freefd;		/* See comments above */
-	sbp->f_favail = freefd;		/* See comments above */
-	sbp->f_fresvd = 0;
-	copy_statvfs_info(sbp, mp);
 	return (0);
 }
 
@@ -228,28 +174,6 @@ fdesc_vget(struct mount *mp, ino_t ino,
 	return (EOPNOTSUPP);
 }
 
-
-SYSCTL_SETUP(sysctl_vfs_fdesc_setup, "sysctl vfs.fdesc subtree setup")
-{
-
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "vfs", NULL,
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "fdesc",
-		       SYSCTL_DESCR("File-descriptor file system"),
-		       NULL, 0, NULL, 0,
-		       CTL_VFS, 7, CTL_EOL);
-	/*
-	 * XXX the "7" above could be dynamic, thereby eliminating one
-	 * more instance of the "number to vfs" mapping problem, but
-	 * "7" is the order as taken from sys/mount.h
-	 */
-}
-
 extern const struct vnodeopv_desc fdesc_vnodeop_opv_desc;
 
 const struct vnodeopv_desc * const fdesc_vnodeopv_descs[] = {
@@ -265,7 +189,7 @@ struct vfsops fdesc_vfsops = {
 	fdesc_unmount,
 	fdesc_root,
 	(void *)eopnotsupp,		/* vfs_quotactl */
-	fdesc_statvfs,
+	genfs_statvfs,
 	fdesc_sync,
 	fdesc_vget,
 	(void *)eopnotsupp,		/* vfs_fhtovp */
@@ -277,8 +201,51 @@ struct vfsops fdesc_vfsops = {
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
 	(void *)eopnotsupp,		/* vfs_suspendctl */
+	genfs_renamelock_enter,
+	genfs_renamelock_exit,
+	(void *)eopnotsupp,
 	fdesc_vnodeopv_descs,
 	0,
 	{ NULL, NULL},
 };
-VFS_ATTACH(fdesc_vfsops);
+
+static int
+fdesc_modcmd(modcmd_t cmd, void *arg)
+{
+	int error;
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+		error = vfs_attach(&fdesc_vfsops);
+		if (error != 0)
+			break;
+		sysctl_createv(&fdesc_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "vfs", NULL,
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, CTL_EOL);
+		sysctl_createv(&fdesc_sysctl_log, 0, NULL, NULL,
+			       CTLFLAG_PERMANENT,
+			       CTLTYPE_NODE, "fdesc",
+			       SYSCTL_DESCR("File-descriptor file system"),
+			       NULL, 0, NULL, 0,
+			       CTL_VFS, 7, CTL_EOL);
+		/*
+		 * XXX the "7" above could be dynamic, thereby eliminating one
+		 * more instance of the "number to vfs" mapping problem, but
+		 * "7" is the order as taken from sys/mount.h
+		 */
+		break;
+	case MODULE_CMD_FINI:
+		error = vfs_detach(&fdesc_vfsops);
+		if (error != 0)
+			break;
+		sysctl_teardown(&fdesc_sysctl_log);
+		break;
+	default:
+		error = ENOTTY;
+		break;
+	}
+
+	return (error);
+}

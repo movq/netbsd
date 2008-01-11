@@ -1,4 +1,4 @@
-/*	$NetBSD: iwm.s,v 1.4 2002/08/29 09:26:23 hannken Exp $	*/
+/*	$NetBSD: iwm.s,v 1.6 2010/11/30 16:05:55 hauke Exp $	*/
 
 /*
  * Copyright (c) 1996-99 Hauke Fath.  All rights reserved.
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -516,7 +514,7 @@ ssSide0:
 /*
  * iwmTrack00 -- move head to track 00 for drive calibration.
  *
- * XXX Drive makes funny noises during resore. Tune delay/retry count?
+ * XXX Drive makes funny noises during restore. Tune delay/retry count?
  *
  * Parameters:	-
  * Returns:	%d0		result code

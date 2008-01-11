@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_input.c,v 1.29 2007/11/09 21:00:06 plunky Exp $	*/
+/*	$NetBSD: tp_input.c,v 1.34 2009/04/18 14:58:06 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -79,7 +79,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_input.c,v 1.29 2007/11/09 21:00:06 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_input.c,v 1.34 2009/04/18 14:58:06 tsutsui Exp $");
 
 #include "opt_iso.h"
 
@@ -149,7 +149,7 @@ tp_inputprep(struct mbuf *m)
 		void *        ocp = m->m_data;
 
 		m->m_data = (void *) (((long) m->m_data) & ~0x3);
-		bcopy(ocp, m->m_data, (unsigned) m->m_len);
+		memcpy(m->m_data, ocp, (unsigned) m->m_len);
 	}
 	CHANGE_MTYPE(m, TPMT_DATA);
 
@@ -315,7 +315,7 @@ tp_newsocket(
 	newtpcb->tp_lcredit = tpcb->tp_lcredit;
 	newtpcb->tp_l_tpdusize = tpcb->tp_l_tpdusize;
 	newtpcb->tp_lsuffixlen = tpcb->tp_lsuffixlen;
-	bcopy(tpcb->tp_lsuffix, newtpcb->tp_lsuffix, newtpcb->tp_lsuffixlen);
+	memcpy(newtpcb->tp_lsuffix, tpcb->tp_lsuffix, newtpcb->tp_lsuffixlen);
 
 	if ( /* old */ tpcb->tp_ucddata) {
 		/*
@@ -355,7 +355,7 @@ tp_newsocket(
 			 * pcb_connect, which expects the name/addr in an mbuf as well.
 			 * sigh.
 			 */
-			bcopy((void *) fname, mtod(m, void *), fname->sa_len);
+			memcpy(mtod(m, void *), (void *) fname, fname->sa_len);
 			m->m_len = fname->sa_len;
 
 			/*
@@ -911,7 +911,7 @@ again:
 
 			/* stash the f suffix in the new tpcb */
 			if ((tpcb->tp_fsuffixlen = fsufxlen) != 0) {
-				bcopy(fsufxloc, tpcb->tp_fsuffix, fsufxlen);
+				memcpy(tpcb->tp_fsuffix, fsufxloc, fsufxlen);
 				(tpcb->tp_nlproto->nlp_putsufx)
 					(tpcb->tp_npcb, fsufxloc, fsufxlen, TP_FOREIGN);
 			}
@@ -994,27 +994,6 @@ again:
 		 * get the dref bits of the fixed part (can't take the
 		 * address of a bit field)
 		 */
-#ifdef TPCONS
-		if (cons_channel && dutype == DT_TPDU_type) {
-			struct isopcb  *isop = ((struct isopcb *)
-			       ((struct pklcd *) cons_channel)->lcd_upnext);
-			if (isop && isop->isop_refcnt == 1 && isop->isop_socket &&
-			    (tpcb = sototpcb(isop->isop_socket)) &&
-			    (tpcb->tp_class == TP_CLASS_0 /* || == CLASS_1 */ )) {
-#ifdef ARGO_DEBUG
-				if (argo_debug[D_TPINPUT]) {
-					printf("tpinput_dt: class 0 short circuit\n");
-				}
-#endif
-				dref = tpcb->tp_lref;
-				sref = tpcb->tp_fref;
-				CHECK((tpcb->tp_refstate == REF_FREE),
-				      E_TP_MISM_REFS, ts_inv_dref, nonx_dref,
-				      (1 + 2 + (void *) & hdr->_tpduf - (void *) hdr))
-					goto tp0_data;
-			}
-		}
-#endif
 		{
 
 			CHECK(((int) dref <= 0 || dref >= tp_refinfo.tpr_size),
@@ -1265,14 +1244,6 @@ again:
 					      (1 + 2 + (char *)&hdr->_tpdufr.CRCC - (char *)hdr)
 				/* ^ more or less the location of class */
 					)
-#ifdef TPCONS
-					if (tpcb->tp_netservice == ISO_CONS &&
-					    class_to_use == TP_CLASS_0) {
-					struct isopcb  *isop = (struct isopcb *) tpcb->tp_npcb;
-					struct pklcd   *lcp = (struct pklcd *) isop->isop_chan;
-					lcp->lcd_flags &= ~X25_DG_CIRCUIT;
-				}
-#endif
 			}
 			if (!tpcb->tp_use_checksum)
 				IncStat(ts_csum_off);
@@ -1295,13 +1266,13 @@ again:
 			 */
 				if (fsufxlen) {
 				CHECK(((tpcb->tp_fsuffixlen != fsufxlen) ||
-				bcmp(fsufxloc, tpcb->tp_fsuffix, fsufxlen)),
+				memcmp(fsufxloc, tpcb->tp_fsuffix, fsufxlen)),
 				      E_TP_INV_PVAL, ts_inv_sufx, respond,
 				      (1 + (char *)fsufxloc - (char *)hdr))
 			}
 			if (lsufxlen) {
 				CHECK(((tpcb->tp_lsuffixlen != lsufxlen) ||
-				bcmp(lsufxloc, tpcb->tp_lsuffix, lsufxlen)),
+				memcmp(lsufxloc, tpcb->tp_lsuffix, lsufxlen)),
 				      E_TP_INV_PVAL, ts_inv_sufx, respond,
 				      (1 + (char *)lsufxloc - (char *)hdr))
 			}
@@ -1443,9 +1414,6 @@ again:
 			}
 #endif
 			if (tpcb->tp_class == TP_CLASS_0) {
-#ifdef TPCONS
-		tp0_data:
-#endif
 				e.TPDU_ATTR(DT).e_seq = 0;	/* actually don't care */
 				e.TPDU_ATTR(DT).e_eot = (((struct tp0du *) hdr)->tp0du_eot);
 			} else if (tpcb->tp_xtd_format) {
@@ -1541,9 +1509,9 @@ again:
 			}
 			if (hdr->tpdu_type == DR_TPDU_type) {
 				datalen += sizeof(x) - sizeof(c_hdr);
-				bcopy((void *) & x, mtod(n, void *), n->m_len = sizeof(x));
+				memcpy(mtod(n, void *), (void *) &x, n->m_len = sizeof(x));
 			} else
-				bcopy((void *) & c_hdr, mtod(n, void *),
+				memcpy(mtod(n, void *), (void *) &c_hdr,
 				      n->m_len = sizeof(c_hdr));
 			n->m_next = m;
 			m = n;

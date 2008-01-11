@@ -1,4 +1,4 @@
-/*	$NetBSD: macppc.c,v 1.8 2006/02/18 10:08:07 dsl Exp $ */
+/*	$NetBSD: macppc.c,v 1.11 2008/05/24 19:15:21 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,10 +35,15 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: macppc.c,v 1.8 2006/02/18 10:08:07 dsl Exp $");
+__RCSID("$NetBSD: macppc.c,v 1.11 2008/05/24 19:15:21 tsutsui Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
+#ifndef HAVE_NBTOOL_CONFIG_H
+#include <sys/ioctl.h>
+#include <sys/dkio.h>
+#include <errno.h>
+#endif
 
 #include <assert.h>
 #include <err.h>
@@ -99,6 +97,7 @@ writeapplepartmap(ib_params *params, struct bbinfo_params *bb_params,
 {
 	struct apple_drvr_map dm;
 	struct apple_part_map_entry pme;
+	int rv;
 
 	assert (params != NULL);
 	assert (bb_params != NULL);
@@ -116,8 +115,31 @@ writeapplepartmap(ib_params *params, struct bbinfo_params *bb_params,
 	dm.sbSig =		htobe16(APPLE_DRVR_MAP_MAGIC);
 	dm.sbBlockSize =	htobe16(512);
 	dm.sbBlkCount =		htobe32(0);
-	if (pwrite(params->fsfd, &dm, MACPPC_BOOT_BLOCK_BLOCKSIZE, 0) !=
-	    MACPPC_BOOT_BLOCK_BLOCKSIZE) {
+
+	rv = pwrite(params->fsfd, &dm, MACPPC_BOOT_BLOCK_BLOCKSIZE, 0);
+#ifdef DIOCWLABEL
+	if (rv == -1 && errno == EROFS) {
+		/*
+		 * block 0 is LABELSECTOR which might be protected by
+		 * bounds_check_with_label(9).
+		 */
+		int enable;
+
+		enable = 1;
+		rv = ioctl(params->fsfd, DIOCWLABEL, &enable);
+		if (rv != 0) {
+			warn("Cannot enable writes to the label sector");
+			return 0;
+		}
+
+		rv = pwrite(params->fsfd, &dm, MACPPC_BOOT_BLOCK_BLOCKSIZE, 0);
+
+		/* Reset write-protect. */
+		enable = 0;
+		(void)ioctl(params->fsfd, DIOCWLABEL, &enable);
+	}
+#endif
+	if (rv != MACPPC_BOOT_BLOCK_BLOCKSIZE) {
 		warn("Can't write sector 0 of `%s'", params->filesystem);
 		return (0);
 	}

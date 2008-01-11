@@ -1,4 +1,4 @@
-/*	$NetBSD: denode.h,v 1.16 2007/11/26 19:01:46 pooka Exp $	*/
+/*	$NetBSD: denode.h,v 1.19 2011/04/04 19:16:58 hannken Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -249,9 +249,7 @@ struct defid {
 
 	u_int32_t defid_dirclust; /* cluster this dir entry came from */
 	u_int32_t defid_dirofs;	/* offset of entry within the cluster */
-#if 0
 	u_int32_t defid_gen;	/* generation number */
-#endif
 };
 
 /*
@@ -259,8 +257,6 @@ struct defid {
  */
 int	msdosfs_lookup		(void *);
 int	msdosfs_create		(void *);
-int	msdosfs_mknod		(void *);
-int	msdosfs_open		(void *);
 int	msdosfs_close		(void *);
 int	msdosfs_access		(void *);
 int	msdosfs_getattr		(void *);
@@ -275,13 +271,10 @@ int	msdosfs_write		(void *);
 int	msdosfs_fsync		(void *);
 #define	msdosfs_seek		genfs_seek
 int	msdosfs_remove		(void *);
-int	msdosfs_link		(void *);
 int	msdosfs_rename		(void *);
 int	msdosfs_mkdir		(void *);
 int	msdosfs_rmdir		(void *);
-int	msdosfs_symlink		(void *);
 int	msdosfs_readdir		(void *);
-int	msdosfs_readlink	(void *);
 #define	msdosfs_abortop		genfs_abortop
 int	msdosfs_inactive	(void *);
 int	msdosfs_reclaim		(void *);
@@ -315,5 +308,9 @@ int msdosfs_gop_alloc(struct vnode *, off_t, off_t, int, kauth_cred_t);
 void msdosfs_gop_markupdate(struct vnode *, int);
 void msdosfs_detimes(struct denode *, const struct timespec *,
     const struct timespec *, const struct timespec *, int);
+int msdosfs_fh_enter(struct msdosfsmount *, uint32_t, uint32_t, uint32_t *);
+int msdosfs_fh_remove(struct msdosfsmount *, uint32_t, uint32_t);
+int msdosfs_fh_lookup(struct msdosfsmount *, uint32_t, uint32_t, uint32_t *);
+void msdosfs_fh_destroy(struct msdosfsmount *);
 #endif	/* _KERNEL */
 #endif /* _MSDOSFS_DENODE_H_ */

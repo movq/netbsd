@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.15 2007/10/17 19:54:05 garbled Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.18 2010/11/03 05:23:11 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.15 2007/10/17 19:54:05 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.18 2010/11/03 05:23:11 kiyohara Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -67,8 +67,6 @@ extern struct genppc_pci_chipset *genppc_pct;
 
 #define	PCI_MODE1_ADDRESS_REG	(PREP_BUS_SPACE_IO + 0xcf8)
 #define	PCI_MODE1_DATA_REG	(PREP_BUS_SPACE_IO + 0xcfc)
-
-void pci_intr_fixup(int, int, int *);
 
 void
 bebox_pci_get_chipset_tag(pci_chipset_tag_t pc)
@@ -105,7 +103,17 @@ void
 bebox_pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin,
     int swiz, int *iline)
 {
-#if 0
-	(*platform->pci_intr_fixup)(bus, dev, iline);
-#endif
+
+	if (bus == 0) {
+		switch (dev) {
+		case 12: /*       SCSI is bit 10, mapped to IRQ 26 */
+		case 13: /* PCI slot 1 is bit 11, mapped to IRQ 27 */
+		case 14: /* PCI slot 2 is bit 12, mapped to IRQ 28 */
+		case 15: /* PCI slot 3 is bit 13, mapped to IRQ 29 */
+#define  BEBOX_PCIBUS0_DEV2LINE(d)	((d) + 14)
+			*iline = BEBOX_PCIBUS0_DEV2LINE(dev);
+		}
+	} else
+#define  BEBOX_PCIBUS_SWIZ2LINE(s)	((s) + 14)
+		*iline = BEBOX_PCIBUS_SWIZ2LINE(swiz);
 }

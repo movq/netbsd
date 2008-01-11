@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_subr.c,v 1.40 2007/12/31 18:54:34 garbled Exp $	*/
+/*	$NetBSD: cpu_subr.c,v 1.62 2011/02/12 01:02:12 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 Matt Thomas.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.40 2007/12/31 18:54:34 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.62 2011/02/12 01:02:12 matt Exp $");
 
 #include "opt_ppcparam.h"
 #include "opt_multiprocessor.h"
@@ -46,14 +46,17 @@ __KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.40 2007/12/31 18:54:34 garbled Exp $"
 #include <sys/device.h>
 #include <sys/types.h>
 #include <sys/lwp.h>
-#include <sys/user.h>
 #include <sys/malloc.h>
+#include <sys/xcall.h>
 
-#include <uvm/uvm_extern.h>
+#include <uvm/uvm.h>
 
+#include <powerpc/pcb.h>
+#include <powerpc/spr.h>
 #include <powerpc/oea/hid.h>
 #include <powerpc/oea/hid_601.h>
-#include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
+#include <powerpc/oea/cpufeat.h>
 
 #include <dev/sysmon/sysmonvar.h>
 
@@ -63,6 +66,7 @@ static void cpu_config_l2cr(int);
 static void cpu_config_l3cr(int);
 static void cpu_probe_speed(struct cpu_info *);
 static void cpu_idlespin(void);
+static void cpu_set_dfs_xcall(void *, void *);
 #if NSYSMON_ENVSYS > 0
 static void cpu_tau_setup(struct cpu_info *);
 static void cpu_tau_refresh(struct sysmon_envsys *, envsys_data_t *);
@@ -76,6 +80,12 @@ struct fmttab {
 	register_t fmt_value;
 	const char *fmt_string;
 };
+
+/*
+ * This should be one per CPU but since we only support it on 750 variants it
+ * doesn't realy matter since none of them supports SMP
+ */
+envsys_data_t sensor;
 
 static const struct fmttab cpu_7450_l2cr_formats[] = {
 	{ L2CR_L2E, 0, " disabled" },
@@ -201,6 +211,7 @@ static const struct cputab models[] = {
 	{ "620",	MPC620,  	REVFMT_HEX },
 	{ "750",	MPC750,		REVFMT_MAJMIN },
 	{ "750FX",	IBM750FX,	REVFMT_MAJMIN },
+	{ "750GX",	IBM750GX,	REVFMT_MAJMIN },
 	{ "7400",	MPC7400,	REVFMT_MAJMIN },
 	{ "7410",	MPC7410,	REVFMT_MAJMIN },
 	{ "7450",	MPC7450,	REVFMT_MAJMIN },
@@ -212,11 +223,19 @@ static const struct cputab models[] = {
 	{ "8245",	MPC8245,	REVFMT_MAJMIN },
 	{ "970",	IBM970,		REVFMT_MAJMIN },
 	{ "970FX",	IBM970FX,	REVFMT_MAJMIN },
+	{ "970MP",	IBM970MP,	REVFMT_MAJMIN },
+	{ "POWER3II",   IBMPOWER3II,    REVFMT_MAJMIN },
 	{ "",		0,		REVFMT_HEX }
 };
 
 #ifdef MULTIPROCESSOR
-struct cpu_info cpu_info[CPU_MAXNUM] = { { .ci_curlwp = &lwp0, }, }; 
+struct cpu_info cpu_info[CPU_MAXNUM] = {
+    [0] = {
+	.ci_curlwp = &lwp0,
+	.ci_fpulwp = &lwp0,
+	.ci_veclwp = &lwp0,
+    },
+};
 volatile struct cpu_hatch_data *cpu_hatch_data;
 volatile int cpu_hatch_stack;
 extern int ticks_per_intr;
@@ -225,12 +244,44 @@ extern int ticks_per_intr;
 #include <arch/powerpc/pic/ipivar.h>
 extern struct bat battable[];
 #else
-struct cpu_info cpu_info[1] = { { .ci_curlwp = &lwp0, }, }; 
+struct cpu_info cpu_info[1] = {
+    [0] = {
+	.ci_curlwp = &lwp0,
+	.ci_fpulwp = &lwp0,
+	.ci_veclwp = &lwp0,
+    },
+};
 #endif /*MULTIPROCESSOR*/
 
 int cpu_altivec;
 int cpu_psluserset, cpu_pslusermod;
 char cpu_model[80];
+
+/* This is to be called from locore.S, and nowhere else. */
+
+void
+cpu_model_init(void)
+{
+	u_int pvr, vers;
+
+	pvr = mfpvr();
+	vers = pvr >> 16;
+
+	oeacpufeat = 0;
+	
+	if ((vers >= IBMRS64II && vers <= IBM970GX) || vers == MPC620 ||
+		vers == IBMCELL || vers == IBMPOWER6P5)
+		oeacpufeat |= OEACPU_64 | OEACPU_64_BRIDGE | OEACPU_NOBAT;
+	
+	else if (vers == MPC601)
+		oeacpufeat |= OEACPU_601;
+
+	else if (MPC745X_P(vers) && vers != MPC7450)
+		oeacpufeat |= OEACPU_XBSEN | OEACPU_HIGHBAT | OEACPU_HIGHSPRG;
+
+	else if (vers == IBM750FX || vers == IBM750GX)
+		oeacpufeat |= OEACPU_HIGHBAT;
+}
 
 void
 cpu_fmttab_print(const struct fmttab *fmt, register_t data)
@@ -270,15 +321,17 @@ cpu_probe_cache(void)
 
 
 	/* Presently common across almost all implementations. */
-	curcpu()->ci_ci.dcache_line_size = CACHELINESIZE;
-	curcpu()->ci_ci.icache_line_size = CACHELINESIZE;
+	curcpu()->ci_ci.dcache_line_size = 32;
+	curcpu()->ci_ci.icache_line_size = 32;
 
 
 	switch (vers) {
 #define	K	*1024
 	case IBM750FX:
+	case IBM750GX:
 	case MPC601:
 	case MPC750:
+	case MPC7400:
 	case MPC7447A:
 	case MPC7448:
 	case MPC7450:
@@ -309,8 +362,16 @@ cpu_probe_cache(void)
 		curcpu()->ci_ci.icache_size = 32 K;
 		assoc = 4;
 		break;
+	case IBMPOWER3II:
+		curcpu()->ci_ci.dcache_size = 64 K;
+		curcpu()->ci_ci.icache_size = 32 K;
+		curcpu()->ci_ci.dcache_line_size = 128;
+		curcpu()->ci_ci.icache_line_size = 128;
+		assoc = 128; /* not a typo */
+		break;
 	case IBM970:
 	case IBM970FX:
+	case IBM970MP:
 		curcpu()->ci_ci.dcache_size = 32 K;
 		curcpu()->ci_ci.icache_size = 64 K;
 		curcpu()->ci_ci.dcache_line_size = 128;
@@ -332,7 +393,7 @@ cpu_probe_cache(void)
 }
 
 struct cpu_info *
-cpu_attach_common(struct device *self, int id)
+cpu_attach_common(device_t self, int id)
 {
 	struct cpu_info *ci;
 	u_int pvr, vers;
@@ -352,7 +413,7 @@ cpu_attach_common(struct device *self, int id)
 #endif
 
 	ci->ci_cpuid = id;
-	ci->ci_intrdepth = -1;
+	ci->ci_idepth = -1;
 	ci->ci_dev = self;
 	ci->ci_idlespin = cpu_idlespin;
 
@@ -395,11 +456,9 @@ cpu_attach_common(struct device *self, int id)
 }
 
 void
-cpu_setup(self, ci)
-	struct device *self;
-	struct cpu_info *ci;
+cpu_setup(device_t self, struct cpu_info *ci)
 {
-	u_int hid0, pvr, vers;
+	u_int hid0, hid0_save, pvr, vers;
 	const char *bitmask;
 	char hidbuf[128];
 	char model[80];
@@ -411,11 +470,9 @@ cpu_setup(self, ci)
 	aprint_normal(": %s, ID %d%s\n", model,  cpu_number(),
 	    cpu_number() == 0 ? " (primary)" : "");
 
-#if defined (PPC_OEA) || defined (PPC_OEA64)
-	hid0 = mfspr(SPR_HID0);
-#elif defined (PPC_OEA64_BRIDGE)
-	hid0 = mfspr(SPR_HID0);
-#endif
+	/* set the cpu number */
+	ci->ci_cpuid = cpu_number();
+	hid0_save = hid0 = mfspr(SPR_HID0);
 
 	cpu_probe_cache();
 
@@ -436,8 +493,6 @@ cpu_setup(self, ci)
 	case MPC603:
 	case MPC603e:
 	case MPC603ev:
-	case MPC750:
-	case IBM750FX:
 	case MPC7400:
 	case MPC7410:
 	case MPC8240:
@@ -449,6 +504,15 @@ cpu_setup(self, ci)
 		powersave = 1;
 		break;
 
+	case MPC750:
+	case IBM750FX:
+	case IBM750GX:
+		/* Select NAP mode. */
+		hid0 &= ~(HID0_DOZE | HID0_NAP | HID0_SLEEP);
+		hid0 |= HID0_NAP | HID0_DPM;
+		powersave = 1;
+		break;
+
 	case MPC7447A:
 	case MPC7448:
 	case MPC7457:
@@ -457,17 +521,24 @@ cpu_setup(self, ci)
 		/* Enable the 7450 branch caches */
 		hid0 |= HID0_SGE | HID0_BTIC;
 		hid0 |= HID0_LRSTK | HID0_FOLD | HID0_BHT;
+		/* Enable more and larger BAT registers */
+		if (oeacpufeat & OEACPU_XBSEN)
+			hid0 |= HID0_XBSEN;
+		if (oeacpufeat & OEACPU_HIGHBAT)
+			hid0 |= HID0_HIGH_BAT_EN;
 		/* Disable BTIC on 7450 Rev 2.0 or earlier */
 		if (vers == MPC7450 && (pvr & 0xFFFF) <= 0x0200)
 			hid0 &= ~HID0_BTIC;
 		/* Select NAP mode. */
-		hid0 &= ~(HID0_HIGH_BAT_EN | HID0_SLEEP);
-		hid0 |= HID0_NAP | HID0_DPM /* | HID0_XBSEN */;
+		hid0 &= ~HID0_SLEEP;
+		hid0 |= HID0_NAP | HID0_DPM;
 		powersave = 1;
 		break;
 
 	case IBM970:
 	case IBM970FX:
+	case IBM970MP:
+	case IBMPOWER3II:
 	default:
 		/* No power-saving mode is available. */ ;
 	}
@@ -475,6 +546,7 @@ cpu_setup(self, ci)
 #ifdef NAPMODE
 	switch (vers) {
 	case IBM750FX:
+	case IBM750GX:
 	case MPC750:
 	case MPC7400:
 		/* Select NAP mode. */
@@ -486,6 +558,7 @@ cpu_setup(self, ci)
 
 	switch (vers) {
 	case IBM750FX:
+	case IBM750GX:
 	case MPC750:
 		hid0 &= ~HID0_DBP;		/* XXX correct? */
 		hid0 |= HID0_EMCP | HID0_BTIC | HID0_SGE | HID0_BHT;
@@ -499,10 +572,11 @@ cpu_setup(self, ci)
 		break;
 	}
 
-#if defined (PPC_OEA)
-	mtspr(SPR_HID0, hid0);
-	__asm volatile("sync;isync");
-#endif
+	if (hid0 != hid0_save) {
+		mtspr(SPR_HID0, hid0);
+		__asm volatile("sync;isync");
+	}
+
 
 	switch (vers) {
 	case MPC601:
@@ -515,14 +589,16 @@ cpu_setup(self, ci)
 		break;
 	case IBM970:
 	case IBM970FX:
+	case IBM970MP:
 		bitmask = 0;
 		break;
 	default:
 		bitmask = HID0_BITMASK;
 		break;
 	}
-	bitmask_snprintf(hid0, bitmask, hidbuf, sizeof hidbuf);
-	aprint_normal("%s: HID0 %s, powersave: %d\n", self->dv_xname, hidbuf, powersave);
+	snprintb(hidbuf, sizeof hidbuf, bitmask, hid0);
+	aprint_normal("%s: HID0 %s, powersave: %d\n", self->dv_xname, hidbuf,
+	    powersave);
 
 	ci->ci_khz = 0;
 
@@ -535,6 +611,7 @@ cpu_setup(self, ci)
 	case MPC604ev:
 	case MPC750:
 	case IBM750FX:
+	case IBM750GX:
 	case MPC7400:
 	case MPC7410:
 	case MPC7447A:
@@ -553,6 +630,7 @@ cpu_setup(self, ci)
 			cpu_config_l3cr(vers);
 			break;
 		case IBM750FX:
+		case IBM750GX:
 		case MPC750:
 		case MPC7400:
 		case MPC7410:
@@ -574,7 +652,7 @@ cpu_setup(self, ci)
 	 * XXX supported by Motorola and may return values that are off by 
 	 * XXX 35-55 degrees C.
 	 */
-	if (vers == MPC750 || vers == IBM750FX)
+	if (vers == MPC750 || vers == IBM750FX || vers == IBM750GX)
 		cpu_tau_setup(ci);
 #endif
 
@@ -834,6 +912,7 @@ cpu_config_l2cr(int pvr)
 
 	switch (vers) {
 	case IBM750FX:
+	case IBM750GX:
 		cpu_fmttab_print(cpu_ibm750_l2cr_formats, l2cr);
 		break;
 	case MPC750:
@@ -937,7 +1016,94 @@ cpu_probe_speed(struct cpu_info *ci)
 
 	mtspr(SPR_MMCR0, MMCR0_FC);
 
-	ci->ci_khz = cps / 1000;
+	ci->ci_khz = (cps * cpu_get_dfs()) / 1000;
+}
+
+/*
+ * Read the Dynamic Frequency Switching state and return a divisor for
+ * the maximum frequency.
+ */
+int
+cpu_get_dfs(void)
+{
+	u_int pvr, vers;
+
+	pvr = mfpvr();
+	vers = pvr >> 16;
+
+	switch (vers) {
+	case MPC7448:
+		if (mfspr(SPR_HID1) & HID1_DFS4)
+			return 4;
+	case MPC7447A:
+		if (mfspr(SPR_HID1) & HID1_DFS2)
+			return 2;
+	}
+	return 1;
+}
+
+/*
+ * Set the Dynamic Frequency Switching divisor the same for all cpus.
+ */
+void
+cpu_set_dfs(int div)
+{
+	uint64_t where;
+	u_int dfs_mask, pvr, vers;
+
+	pvr = mfpvr();
+	vers = pvr >> 16;
+	dfs_mask = 0;
+
+	switch (vers) {
+	case MPC7448:
+		dfs_mask |= HID1_DFS4;
+	case MPC7447A:
+		dfs_mask |= HID1_DFS2;
+		break;
+	default:
+		printf("cpu_set_dfs: DFS not supported\n");
+		return;
+
+	}
+
+	where = xc_broadcast(0, (xcfunc_t)cpu_set_dfs_xcall, &div, &dfs_mask);
+	xc_wait(where);
+}
+
+static void
+cpu_set_dfs_xcall(void *arg1, void *arg2)
+{
+	u_int dfs_mask, hid1, old_hid1;
+	int *divisor, s;
+
+	divisor = arg1;
+	dfs_mask = *(u_int *)arg2;
+
+	s = splhigh();
+	hid1 = old_hid1 = mfspr(SPR_HID1);
+
+	switch (*divisor) {
+	case 1:
+		hid1 &= ~dfs_mask;
+		break;
+	case 2:
+		hid1 &= ~(dfs_mask & HID1_DFS4);
+		hid1 |= dfs_mask & HID1_DFS2;
+		break;
+	case 4:
+		hid1 &= ~(dfs_mask & HID1_DFS2);
+		hid1 |= dfs_mask & HID1_DFS4;
+		break;
+	}
+
+	if (hid1 != old_hid1) {
+		__asm volatile("sync");
+		mtspr(SPR_HID1, hid1);
+		__asm volatile("sync;isync");
+	}
+
+	splx(s);
 }
 
 #if NSYSMON_ENVSYS > 0
@@ -945,12 +1111,22 @@ void
 cpu_tau_setup(struct cpu_info *ci)
 {
 	struct sysmon_envsys *sme;
-	envsys_data_t sensor;
-	int error;
+	int error, therm_delay;
+
+	mtspr(SPR_THRM1, SPR_THRM_VALID);
+	mtspr(SPR_THRM2, 0);
+
+	/*
+	 * we need to figure out how much 20+us in units of CPU clock cycles
+	 * are
+	 */
+
+	therm_delay = ci->ci_khz / 40;		/* 25us just to be safe */
+	
+        mtspr(SPR_THRM3, SPR_THRM_TIMER(therm_delay) | SPR_THRM_ENABLE); 
 
 	sme = sysmon_envsys_create();
 
-	sensor.state = ENVSYS_SVALID;
 	sensor.units = ENVSYS_STEMP;
 	(void)strlcpy(sensor.desc, "CPU Temp", sizeof(sensor.desc));
 	if (sysmon_envsys_sensor_attach(sme, &sensor)) {
@@ -977,26 +1153,16 @@ cpu_tau_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 	int i, threshold, count;
 
 	threshold = 64; /* Half of the 7-bit sensor range */
-	mtspr(SPR_THRM1, 0);
-	mtspr(SPR_THRM2, 0);
-	/* XXX This counter is supposed to be "at least 20 microseonds, in
-	 * XXX units of clock cycles". Since we don't have convenient
-	 * XXX access to the CPU speed, set it to a conservative value,
-	 * XXX that is, assuming a fast (1GHz) G3 CPU (As of February 2002,
-	 * XXX the fastest G3 processor is 700MHz) . The cost is that
-	 * XXX measuring the temperature takes a bit longer.
-	 */
-        mtspr(SPR_THRM3, SPR_THRM_TIMER(20000) | SPR_THRM_ENABLE); 
 
 	/* Successive-approximation code adapted from Motorola
 	 * application note AN1800/D, "Programming the Thermal Assist
 	 * Unit in the MPC750 Microprocessor".
 	 */
-	for (i = 4; i >= 0 ; i--) {
+	for (i = 5; i >= 0 ; i--) {
 		mtspr(SPR_THRM1, 
 		    SPR_THRM_THRESHOLD(threshold) | SPR_THRM_VALID);
 		count = 0;
-		while ((count < 100) && 
+		while ((count < 100000) && 
 		    ((mfspr(SPR_THRM1) & SPR_THRM_TIV) == 0)) {
 			count++;
 			delay(1);
@@ -1005,52 +1171,50 @@ cpu_tau_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 			/* The interrupt bit was set, meaning the 
 			 * temperature was above the threshold 
 			 */
-			threshold += 2 << i;
+			threshold += 1 << i;
 		} else {
 			/* Temperature was below the threshold */
-			threshold -= 2 << i;
+			threshold -= 1 << i;
 		}
+		
 	}
 	threshold += 2;
 
 	/* Convert the temperature in degrees C to microkelvin */
 	edata->value_cur = (threshold * 1000000) + 273150000;
+	edata->state = ENVSYS_SVALID;
 }
 #endif /* NSYSMON_ENVSYS > 0 */
 
 #ifdef MULTIPROCESSOR
+extern volatile u_int cpu_spinstart_ack;
+
 int
-cpu_spinup(struct device *self, struct cpu_info *ci)
+cpu_spinup(device_t self, struct cpu_info *ci)
 {
 	volatile struct cpu_hatch_data hatch_data, *h = &hatch_data;
 	struct pglist mlist;
 	int i, error, pvr, vers;
-	char *cp;
+	char *hp;
 
 	pvr = mfpvr();
 	vers = pvr >> 16;
 	KASSERT(ci != curcpu());
 
-	/*
-	 * Allocate some contiguous pages for the intteup PCB and stack
-	 * from the lowest 256MB (because bat0 always maps it va == pa).
-	 */
-	error = uvm_pglistalloc(INTSTK, 0x0, 0x10000000, 0, 0, &mlist, 1, 1);
+	/* Now allocate a hatch stack */
+	error = uvm_pglistalloc(0x1000, 0x10000, 0x10000000, 16, 0,
+	    &mlist, 1, 1);
 	if (error) {
-		aprint_error(": unable to allocate idle stack\n");
+		aprint_error(": unable to allocate hatch stack\n");
 		return -1;
 	}
 
-	KASSERT(ci != &cpu_info[0]);
-
-	cp = (void *)VM_PAGE_TO_PHYS(TAILQ_FIRST(&mlist));
-	memset(cp, 0, INTSTK);
-
-	ci->ci_intstk = cp;
+	hp = (void *)VM_PAGE_TO_PHYS(TAILQ_FIRST(&mlist));
+	memset(hp, 0, 0x1000);
 
 	/* Initialize secondary cpu's initial lwp to its idlelwp. */
 	ci->ci_curlwp = ci->ci_data.cpu_idlelwp;
-	ci->ci_curpcb = &ci->ci_curlwp->l_addr->u_pcb;
+	ci->ci_curpcb = lwp_getpcb(ci->ci_curlwp);
 	ci->ci_curpm = ci->ci_curpcb->pcb_pm;
 
 	cpu_hatch_data = h;
@@ -1058,15 +1222,24 @@ cpu_spinup(struct device *self, struct cpu_info *ci)
 	h->self = self;
 	h->ci = ci;
 	h->pir = ci->ci_cpuid;
-	cpu_hatch_stack = (uint32_t)cp + INTSTK - sizeof(struct trapframe);
+
+	cpu_hatch_stack = (uint32_t)hp;
 	ci->ci_lasttb = cpu_info[0].ci_lasttb;
 
 	/* copy special registers */
+
 	h->hid0 = mfspr(SPR_HID0);
+	
 	__asm volatile ("mfsdr1 %0" : "=r"(h->sdr1));
-	for (i = 0; i < 16; i++)
+	for (i = 0; i < 16; i++) {
 		__asm ("mfsrin %0,%1" : "=r"(h->sr[i]) :
 		       "r"(i << ADDR_SR_SHFT));
+	}
+	if (oeacpufeat & OEACPU_64)
+		h->asr = mfspr(SPR_ASR);
+	else
+		h->asr = 0;
+
 	/* copy the bat regs */
 	__asm volatile ("mfibatu %0,0" : "=r"(h->batu[0]));
 	__asm volatile ("mfibatl %0,0" : "=r"(h->batl[0]));
@@ -1084,35 +1257,50 @@ cpu_spinup(struct device *self, struct cpu_info *ci)
 	md_start_timebase(h);
 
 	/* wait for secondary printf */
+
 	delay(200000);
 
-	if (h->running == 0) {
-		aprint_error(":CPU %d didn't start\n", ci->ci_cpuid);
+	if (h->running < 1) {
+		aprint_error("%d:CPU %d didn't start %d\n", cpu_spinstart_ack,
+		    ci->ci_cpuid, cpu_spinstart_ack);
+		Debugger();
 		return -1;
 	}
 
 	/* Register IPI Interrupt */
-	ipiops.ppc_establish_ipi(IST_LEVEL, IPL_HIGH, NULL);
+	if (ipiops.ppc_establish_ipi)
+		ipiops.ppc_establish_ipi(IST_LEVEL, IPL_HIGH, NULL);
 
 	return 0;
 }
 
 static volatile int start_secondary_cpu;
+extern void tlbia(void);
 
-void
-cpu_hatch()
+register_t
+cpu_hatch(void)
 {
 	volatile struct cpu_hatch_data *h = cpu_hatch_data;
 	struct cpu_info * const ci = h->ci;
+	struct pcb *pcb;
 	u_int msr;
 	int i;
 
 	/* Initialize timebase. */
 	__asm ("mttbl %0; mttbu %0; mttbl %0" :: "r"(0));
 
-	/* Set PIR (Processor Identification Register).  i.e. whoami */
-	mtspr(SPR_PIR, h->pir);
+	/*
+	 * Set PIR (Processor Identification Register).  i.e. whoami
+	 * Note that PIR is read-only on some CPU versions, so we write to it
+	 * only if it has a different value than we need.
+	 */
+
+	msr = mfspr(SPR_PIR);
+	if (msr != h->pir)
+		mtspr(SPR_PIR, h->pir);
+	
 	__asm volatile ("mtsprg 0,%0" :: "r"(ci));
+	cpu_spinstart_ack = 0;
 
 	/* Initialize MMU. */
 	__asm ("mtibatu 0,%0" :: "r"(h->batu[0]));
@@ -1129,17 +1317,30 @@ cpu_hatch()
 	__asm ("mtibatl 0,%0; mtibatu 0,%1; mtdbatl 0,%0; mtdbatu 0,%1;"
 	    :: "r"(battable[0].batl), "r"(battable[0].batu));
 
+	__asm volatile ("sync");
 	for (i = 0; i < 16; i++)
 		__asm ("mtsrin %0,%1" :: "r"(h->sr[i]), "r"(i << ADDR_SR_SHFT));
+	__asm volatile ("sync; isync");
 
+	if (oeacpufeat & OEACPU_64)
+		mtspr(SPR_ASR, h->asr);
+
+	cpu_spinstart_ack = 1;
+	__asm ("ptesync");
 	__asm ("mtsdr1 %0" :: "r"(h->sdr1));
-	__asm volatile ("isync");
+	__asm volatile ("sync; isync");
+
+	cpu_spinstart_ack = 5;
+	for (i = 0; i < 16; i++)
+		__asm ("mfsrin %0,%1" : "=r"(h->sr[i]) :
+		       "r"(i << ADDR_SR_SHFT));
 
 	/* Enable I/D address translations. */
-	__asm volatile ("mfmsr %0" : "=r"(msr));
+	msr = mfmsr();
 	msr |= PSL_IR|PSL_DR|PSL_ME|PSL_RI;
-	__asm volatile ("mtmsr %0" :: "r"(msr));
+	mtmsr(msr);
 	__asm volatile ("sync; isync");
+	cpu_spinstart_ack = 2;
 
 	md_sync_timebase(h);
 
@@ -1153,7 +1354,7 @@ cpu_hatch()
 
 	__asm volatile ("sync; isync");
 
-	aprint_normal("cpu%d: started\n", cpu_number());
+	aprint_normal("cpu%d started\n", curcpu()->ci_index);
 	__asm volatile ("mtdec %0" :: "r"(ticks_per_intr));
 
 	md_setup_interrupts();
@@ -1162,10 +1363,12 @@ cpu_hatch()
 	ci->ci_cpl = 0;
 
 	mtmsr(mfmsr() | PSL_EE);
+	pcb = lwp_getpcb(ci->ci_data.cpu_idlelwp);
+	return pcb->pcb_sp;
 }
 
 void
-cpu_boot_secondary_processors()
+cpu_boot_secondary_processors(void)
 {
 	start_secondary_cpu = 1;
 	__asm volatile ("sync");

@@ -1,6 +1,6 @@
 /* $SourceForge: bktr_os.c,v 1.5 2003/03/11 23:11:25 thomasklausner Exp $ */
 
-/*	$NetBSD: bktr_os.c,v 1.48 2007/10/19 12:01:02 ad Exp $	*/
+/*	$NetBSD: bktr_os.c,v 1.59 2010/04/23 19:27:35 macallan Exp $	*/
 /* $FreeBSD: src/sys/dev/bktr/bktr_os.c,v 1.20 2000/10/20 08:16:53 roger Exp$ */
 
 /*
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bktr_os.c,v 1.48 2007/10/19 12:01:02 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bktr_os.c,v 1.59 2010/04/23 19:27:35 macallan Exp $");
 
 #ifdef __FreeBSD__
 #include "bktr.h"
@@ -165,7 +165,7 @@ SYSCTL_INT(_hw_bt848, OID_AUTO, slow_msp_audio, CTLFLAG_RW, &bt848_slow_msp_audi
 #define BKTR_DEBUG
 #ifdef BKTR_DEBUG
 int bktr_debug = 0;
-#define DPR(x)	(bktr_debug ? printf x : 0)
+#define DPR(x)	if (bktr_debug) printf x
 #else
 #define DPR(x)
 #endif
@@ -320,14 +320,14 @@ bktr_probe(device_t dev)
 static int
 bktr_attach(device_t dev)
 {
-	u_long		latency;
-	u_long		fun;
-	u_long		val;
+	u_int		latency;
+	u_int		fun;
+	u_int		val;
 	unsigned int	rev;
 	unsigned int	unit;
 	int		error = 0;
 #ifdef BROOKTREE_IRQ
-	u_long		old_irq, new_irq;
+	u_int		old_irq, new_irq;
 #endif
 
 	struct bktr_softc *bktr = device_get_softc(dev);
@@ -517,6 +517,7 @@ bktr_detach(device_t dev)
 	    destroy_dev(bktr->bktrdev_alias);
 	}
 #endif
+	seldestroy(&bktr->vbi_select);
 
 	/*
 	 * Deallocate resources.
@@ -849,7 +850,7 @@ static const char*	bktr_probe(pcici_t tag, pcidi_t type);
 static void		bktr_attach(pcici_t tag, int unit);
 static void		bktr_intr(void *arg) { common_bktr_intr(arg); }
 
-static u_long	bktr_count;
+static u_int	bktr_count;
 
 static struct	pci_device bktr_device = {
 	"bktr",
@@ -926,12 +927,12 @@ static	void
 bktr_attach(pcici_t tag, int unit)
 {
 	bktr_ptr_t	bktr;
-	u_long		latency;
-	u_long		fun;
+	u_int		latency;
+	u_int		fun;
 	unsigned int	rev;
 	unsigned long	base;
 #ifdef BROOKTREE_IRQ
-	u_long		old_irq, new_irq;
+	u_int		old_irq, new_irq;
 #endif
 
 	bktr = &brooktree[unit];
@@ -1328,9 +1329,9 @@ static	int		bktr_intr(void *arg) { return common_bktr_intr(arg); }
 
 static int      bktr_probe(struct device *, void *, void *);
 #else
-static int      bktr_probe(struct device *, struct cfdata *, void *);
+static int      bktr_probe(device_t, cfdata_t, void *);
 #endif
-static void     bktr_attach(struct device *, struct device *, void *);
+static void     bktr_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(bktr, sizeof(struct bktr_softc),
     bktr_probe, bktr_attach, NULL, NULL);
@@ -1359,8 +1360,7 @@ static struct radio_hw_if bktr_hw_if = {
 #endif
 
 int
-bktr_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+bktr_probe(device_t parent, cfdata_t match, void *aux)
 {
         struct pci_attach_args *pa = aux;
 
@@ -1379,13 +1379,13 @@ bktr_probe(struct device *parent, struct cfdata *match,
  * the attach routine.
  */
 static void
-bktr_attach(struct device *parent, struct device *self, void *aux)
+bktr_attach(device_t parent, device_t self, void *aux)
 {
 	bktr_ptr_t	bktr;
-	u_long		latency;
+	u_int		latency;
 
 #if defined(__OpenBSD__)
-	u_long		fun;
+	u_int		fun;
 	unsigned int	rev;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
@@ -1428,7 +1428,7 @@ bktr_attach(struct device *parent, struct device *self, void *aux)
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 
 	bktr->ih = pci_intr_establish(pa->pa_pc, ih, IPL_VIDEO,
-				      bktr_intr, bktr, bktr->bktr_dev.dv_xname);
+				      bktr_intr, bktr, device_xname(&bktr->bktr_dev));
 	if (bktr->ih == NULL) {
 		printf(": couldn't establish interrupt");
 		if (intrstr != NULL)
@@ -1470,9 +1470,8 @@ bktr_attach(struct device *parent, struct device *self, void *aux)
 				| PCI_MAPREG_MEM_TYPE_32BIT, 0,
 				&bktr->memt, &bktr->memh, NULL,
 				&bktr->obmemsz);
-	DPR(("pci_mapreg_map: memt %lx, memh %x, size %x\n",
-	     (unsigned long)bktr->memt, (u_int)bktr->memh,
-	     (u_int)bktr->obmemsz));
+	DPR(("pci_mapreg_map: size %lx\n",
+	     (unsigned long)bktr->obmemsz));
 	if (retval) {
 		printf("%s: couldn't map memory\n", bktr_name(bktr));
 		return;
@@ -1549,10 +1548,7 @@ vaddr_t
 #else
 vm_offset_t
 #endif
-get_bktr_mem(bktr, dmapp, size)
-        bktr_ptr_t bktr;
-        bus_dmamap_t *dmapp;
-        unsigned int size;
+get_bktr_mem(bktr_ptr_t bktr, bus_dmamap_t *dmapp, unsigned int size)
 {
         bus_dma_tag_t dmat = bktr->dmat;
         bus_dma_segment_t seg;
@@ -1610,14 +1606,7 @@ get_bktr_mem(bktr, dmapp, size)
 }
 
 void
-free_bktr_mem(bktr, dmap, kva)
-        bktr_ptr_t bktr;
-        bus_dmamap_t dmap;
-#if defined(__NetBSD__)
-        vaddr_t kva;
-#else
-        vm_offset_t kva;
-#endif
+free_bktr_mem(bktr_ptr_t bktr, bus_dmamap_t dmap, vaddr_t kva)
 {
         bus_dma_tag_t dmat = bktr->dmat;
 
@@ -1659,10 +1648,9 @@ bktr_open(dev_t dev, int flags, int fmt,
 	unit = UNIT(dev);
 
 	/* unit out of range */
-	if ((unit >= bktr_cd.cd_ndevs) || (bktr_cd.cd_devs[unit] == NULL))
+	bktr = device_lookup_private(&bktr_cd, unit);
+	if (bktr == NULL)
 		return(ENXIO);
-
-	bktr = bktr_cd.cd_devs[unit];
 
 	if (!(bktr->flags & METEOR_INITIALIZED)) /* device not found */
 		return(ENXIO);
@@ -1692,7 +1680,7 @@ bktr_close(dev_t dev, int flags, int fmt,
 
 	unit = UNIT(dev);
 
-	bktr = bktr_cd.cd_devs[unit];
+	bktr = device_lookup_private(&bktr_cd, unit);
 
 	switch (FUNCTION(dev)) {
 	case VIDEO_DEV:
@@ -1717,7 +1705,7 @@ bktr_read(dev_t dev, struct uio *uio, int ioflag)
 
 	unit = UNIT(dev);
 
-	bktr = bktr_cd.cd_devs[unit];
+	bktr = device_lookup_private(&bktr_cd, unit);
 
 	switch (FUNCTION(dev)) {
 	case VIDEO_DEV:
@@ -1752,7 +1740,7 @@ bktr_ioctl(dev_t dev, ioctl_cmd_t cmd, void *arg, int flag,
 
 	unit = UNIT(dev);
 
-	bktr = bktr_cd.cd_devs[unit];
+	bktr = device_lookup_private(&bktr_cd, unit);
 
 	if (bktr->bigbuf == 0)	/* no frame buffer allocated (ioctl failed) */
 		return(ENOMEM);
@@ -1781,7 +1769,7 @@ bktr_mmap(dev_t dev, off_t offset, int nprot)
 	if (FUNCTION(dev) > 0)	/* only allow mmap on /dev/bktr[n] */
 		return(-1);
 
-	bktr = bktr_cd.cd_devs[unit];
+	bktr = device_lookup_private(&bktr_cd, unit);
 
 	if ((vaddr_t)offset >= bktr->alloc_pages * PAGE_SIZE)
 		return(-1);

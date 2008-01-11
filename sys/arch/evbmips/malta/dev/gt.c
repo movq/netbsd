@@ -1,4 +1,4 @@
-/*	$NetBSD: gt.c,v 1.10 2006/04/06 06:20:37 simonb Exp $	*/
+/*	$NetBSD: gt.c,v 1.12 2011/05/17 17:34:49 dyoung Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.10 2006/04/06 06:20:37 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.12 2011/05/17 17:34:49 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,19 +95,13 @@ CFATTACH_DECL(gt, sizeof(struct device),
     gt_match, gt_attach, NULL, NULL);
 
 static int
-gt_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+gt_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return 1;
 }
 
 static void
-gt_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+gt_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct malta_config *mcp = &malta_configuration;
 	struct pcibus_attach_args pba;
@@ -115,7 +109,7 @@ gt_attach(parent, self, aux)
 	printf("\n");
 
 #if NPCI > 0
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
 	pba.pba_iot = &mcp->mc_iot;
@@ -129,9 +123,7 @@ gt_attach(parent, self, aux)
 }
 
 static int
-gt_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+gt_print(void *aux, const char *pnp)
 {
 	/* XXX */
 	return 0;

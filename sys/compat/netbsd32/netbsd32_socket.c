@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_socket.c,v 1.30 2007/12/20 23:03:02 dsl Exp $	*/
+/*	$NetBSD: netbsd32_socket.c,v 1.37 2010/04/23 15:19:20 rmind Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,12 +27,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_socket.c,v 1.30 2007/12/20 23:03:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_socket.c,v 1.37 2010/04/23 15:19:20 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #define msg __msg /* Don't ask me! */
-#include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/socket.h>
 #include <sys/sockio.h>
@@ -51,9 +48,12 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_socket.c,v 1.30 2007/12/20 23:03:02 dsl Exp
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 #include <compat/netbsd32/netbsd32_conv.h>
 
-/* note that the netbsd32_msghdr's iov really points to a struct iovec, not a netbsd32_iovec. */
-static int recvit32(struct lwp *, int, struct netbsd32_msghdr *, struct iovec *, void *,
-			 register_t *);
+/*
+ * Note that the netbsd32_msghdr's iov really points to a struct iovec,
+ * not a netbsd32_iovec.
+ */
+static int recvit32(struct lwp *, int, struct netbsd32_msghdr *,
+    struct iovec *, void *, register_t *);
 
 int
 netbsd32_recvmsg(struct lwp *l, const struct netbsd32_recvmsg_args *uap, register_t *retval)
@@ -64,25 +64,25 @@ netbsd32_recvmsg(struct lwp *l, const struct netbsd32_recvmsg_args *uap, registe
 		syscallarg(int) flags;
 	} */
 	struct netbsd32_msghdr msg;
-	struct iovec aiov[UIO_SMALLIOV], *uiov, *iov;
+	struct iovec aiov[UIO_SMALLIOV], *iov;
+	struct netbsd32_iovec *iov32;
+	size_t iovsz;
 	int error;
 
 	error = copyin(SCARG_P32(uap, msg), &msg, sizeof(msg));
 		/* netbsd32_msghdr needs the iov pre-allocated */
 	if (error)
 		return (error);
+	iovsz = msg.msg_iovlen * sizeof(struct iovec);
 	if ((u_int)msg.msg_iovlen > UIO_SMALLIOV) {
 		if ((u_int)msg.msg_iovlen > IOV_MAX)
 			return (EMSGSIZE);
-		iov = (struct iovec *)malloc(
-		       sizeof(struct iovec) * (u_int)msg.msg_iovlen, M_IOV,
-		       M_WAITOK);
+		iov = kmem_alloc(iovsz, KM_SLEEP);
 	} else 
 		iov = aiov;
 	msg.msg_flags = SCARG(uap, flags);
-	uiov = (struct iovec *)NETBSD32PTR64(msg.msg_iov);
-	error = netbsd32_to_iovecin((struct netbsd32_iovec *)uiov,
-				   iov, msg.msg_iovlen);
+	iov32 = NETBSD32PTR64(msg.msg_iov);
+	error = netbsd32_to_iovecin(iov32, iov, msg.msg_iovlen);
 	if (error)
 		goto done;
 	if ((error = recvit32(l, SCARG(uap, s), &msg, iov, (void *)0,
@@ -91,24 +91,22 @@ netbsd32_recvmsg(struct lwp *l, const struct netbsd32_recvmsg_args *uap, registe
 	}
 done:
 	if (iov != aiov)
-		FREE(iov, M_IOV);
+		kmem_free(iov, iovsz);
 	return (error);
 }
 
 int
 recvit32(struct lwp *l, int s, struct netbsd32_msghdr *mp, struct iovec *iov, void *namelenp, register_t *retsize)
 {
-	struct file *fp;
 	struct uio auio;
-	int i, len, error, iovlen;
 	struct mbuf *from = 0, *control = 0;
 	struct socket *so;
-	struct proc *p;
 	struct iovec *ktriov = NULL;
-	p = l->l_proc;
+	size_t len, iovsz;
+	int i, error;
 
-	/* getsock() will use the descriptor for us */
-	if ((error = getsock(p->p_fd, s, &fp)) != 0)
+	/* fd_getsock() will use the descriptor for us */
+	if ((error = fd_getsock(s, &so)) != 0)
 		return (error);
 	auio.uio_iov = iov;
 	auio.uio_iovcnt = mp->msg_iovlen;
@@ -117,13 +115,6 @@ recvit32(struct lwp *l, int s, struct netbsd32_msghdr *mp, struct iovec *iov, vo
 	auio.uio_offset = 0;			/* XXX */
 	auio.uio_resid = 0;
 	for (i = 0; i < mp->msg_iovlen; i++, iov++) {
-#if 0
-		/* cannot happen iov_len is unsigned */
-		if (iov->iov_len < 0) {
-			error = EINVAL;
-			goto out1;
-		}
-#endif
 		/*
 		 * Reads return ssize_t because -1 is returned on error.
 		 * Therefore we must restrict the length to SSIZE_MAX to
@@ -136,14 +127,13 @@ recvit32(struct lwp *l, int s, struct netbsd32_msghdr *mp, struct iovec *iov, vo
 		}
 	}
 
+	iovsz = mp->msg_iovlen * sizeof(struct iovec);
 	if (ktrpoint(KTR_GENIO)) {
-		iovlen = auio.uio_iovcnt * sizeof(struct iovec);
-		ktriov = (struct iovec *)malloc(iovlen, M_TEMP, M_WAITOK);
-		memcpy((void *)ktriov, (void *)auio.uio_iov, iovlen);
+		ktriov = kmem_alloc(iovsz, KM_SLEEP);
+		memcpy(ktriov, auio.uio_iov, iovsz);
 	}
 
 	len = auio.uio_resid;
-	so = (struct socket *)fp->f_data;
 	error = (*so->so_receive)(so, &from, &auio, NULL,
 			  NETBSD32PTR64(mp->msg_control) ? &control : NULL,
 			  &mp->msg_flags);
@@ -155,7 +145,7 @@ recvit32(struct lwp *l, int s, struct netbsd32_msghdr *mp, struct iovec *iov, vo
 
 	if (ktriov != NULL) {
 		ktrgeniov(s, UIO_READ, ktriov, len - auio.uio_resid, error);
-		FREE(ktriov, M_TEMP);
+		kmem_free(ktriov, iovsz);
 	}
 
 	if (error)
@@ -213,7 +203,7 @@ recvit32(struct lwp *l, int s, struct netbsd32_msghdr *mp, struct iovec *iov, vo
 	if (control)
 		m_freem(control);
  out1:
-	FILE_UNUSE(fp, l);
+	fd_putfile(s);
 	return (error);
 }
 
@@ -228,6 +218,8 @@ netbsd32_sendmsg(struct lwp *l, const struct netbsd32_sendmsg_args *uap, registe
 	struct msghdr msg;
 	struct netbsd32_msghdr msg32;
 	struct iovec aiov[UIO_SMALLIOV], *iov;
+	struct netbsd32_iovec *iov32;
+	size_t iovsz;
 	int error;
 
 	error = copyin(SCARG_P32(uap, msg), &msg32, sizeof(msg32));
@@ -235,19 +227,16 @@ netbsd32_sendmsg(struct lwp *l, const struct netbsd32_sendmsg_args *uap, registe
 		return (error);
 	netbsd32_to_msghdr(&msg32, &msg);
 
+	iovsz = msg.msg_iovlen * sizeof(struct iovec);
 	if ((u_int)msg.msg_iovlen > UIO_SMALLIOV) {
 		if ((u_int)msg.msg_iovlen > IOV_MAX)
 			return (EMSGSIZE);
-		iov = (struct iovec *)malloc(
-		       sizeof(struct iovec) * (u_int)msg.msg_iovlen, M_IOV,
-		       M_WAITOK);
-	} else if ((u_int)msg.msg_iovlen > 0)
+		iov = kmem_alloc(iovsz, KM_SLEEP);
+	} else
 		iov = aiov;
-	else
-		return (EMSGSIZE);
 
-	error = netbsd32_to_iovecin((struct netbsd32_iovec *)msg.msg_iov,
-				   iov, msg.msg_iovlen);
+	iov32 = NETBSD32PTR64(msg32.msg_iov);
+	error = netbsd32_to_iovecin(iov32, iov, msg.msg_iovlen);
 	if (error)
 		goto done;
 	msg.msg_iov = iov;
@@ -258,7 +247,7 @@ netbsd32_sendmsg(struct lwp *l, const struct netbsd32_sendmsg_args *uap, registe
 	error = do_sys_sendmsg(l, SCARG(uap, s), &msg, SCARG(uap, flags), retval);
 done:
 	if (iov != aiov)
-		FREE(iov, M_IOV);
+		kmem_free(iov, iovsz);
 	return (error);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: smc83c170.c,v 1.70 2007/12/30 00:04:47 dyoung Exp $	*/
+/*	$NetBSD: smc83c170.c,v 1.80 2010/11/13 13:52:02 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,9 +36,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smc83c170.c,v 1.70 2007/12/30 00:04:47 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smc83c170.c,v 1.80 2010/11/13 13:52:02 uebayasi Exp $");
 
-#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,16 +50,12 @@ __KERNEL_RCSID(0, "$NetBSD: smc83c170.c,v 1.70 2007/12/30 00:04:47 dyoung Exp $"
 #include <sys/errno.h>
 #include <sys/device.h>
 
-#include <uvm/uvm_extern.h>
-
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -84,7 +72,7 @@ int	epic_ioctl(struct ifnet *, u_long, void *);
 int	epic_init(struct ifnet *);
 void	epic_stop(struct ifnet *, int);
 
-void	epic_shutdown(void *);
+bool	epic_shutdown(device_t, int);
 
 void	epic_reset(struct epic_softc *);
 void	epic_rxdrain(struct epic_softc *);
@@ -92,14 +80,13 @@ int	epic_add_rxbuf(struct epic_softc *, int);
 void	epic_read_eeprom(struct epic_softc *, int, int, uint16_t *);
 void	epic_set_mchash(struct epic_softc *);
 void	epic_fixup_clock_source(struct epic_softc *);
-int	epic_mii_read(struct device *, int, int);
-void	epic_mii_write(struct device *, int, int, int);
+int	epic_mii_read(device_t, int, int);
+void	epic_mii_write(device_t, int, int, int);
 int	epic_mii_wait(struct epic_softc *, uint32_t);
 void	epic_tick(void *);
 
-void	epic_statchg(struct device *);
+void	epic_statchg(device_t);
 int	epic_mediachange(struct ifnet *);
-void	epic_mediastatus(struct ifnet *, struct ifmediareq *);
 
 #define	INTMASK	(INTSTAT_FATAL_INT | INTSTAT_TXU | \
 	    INTSTAT_TXC | INTSTAT_RXE | INTSTAT_RQE | INTSTAT_RCC)
@@ -112,8 +99,7 @@ int	epic_copy_small = 0;
  * Attach an EPIC interface to the system.
  */
 void
-epic_attach(sc)
-	struct epic_softc *sc;
+epic_attach(struct epic_softc *sc)
 {
 	bus_space_tag_t st = sc->sc_st;
 	bus_space_handle_t sh = sc->sc_sh;
@@ -134,9 +120,8 @@ epic_attach(sc)
 	if ((error = bus_dmamem_alloc(sc->sc_dmat,
 	    sizeof(struct epic_control_data) + ETHER_PAD_LEN, PAGE_SIZE, 0,
 	    &seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
-		aprint_error(
-		    "%s: unable to allocate control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev, 
+		    "unable to allocate control data, error = %d\n", error);
 		goto fail_0;
 	}
 
@@ -144,8 +129,8 @@ epic_attach(sc)
 	    sizeof(struct epic_control_data) + ETHER_PAD_LEN,
 	    (void **)&sc->sc_control_data,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		aprint_error("%s: unable to map control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "unable to map control data, error = %d\n", error);
 		goto fail_1;
 	}
 	nullbuf =
@@ -156,17 +141,18 @@ epic_attach(sc)
 	    sizeof(struct epic_control_data), 1,
 	    sizeof(struct epic_control_data), 0, BUS_DMA_NOWAIT,
 	    &sc->sc_cddmamap)) != 0) {
-		aprint_error("%s: unable to create control data DMA map, "
-		    "error = %d\n", sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "unable to create control data DMA map, error = %d\n",
+		    error);
 		goto fail_2;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_cddmamap,
 	    sc->sc_control_data, sizeof(struct epic_control_data), NULL,
 	    BUS_DMA_NOWAIT)) != 0) {
-		aprint_error(
-		    "%s: unable to load control data DMA map, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev, 
+		    "unable to load control data DMA map, error = %d\n",
+		    error);
 		goto fail_3;
 	}
 
@@ -177,8 +163,9 @@ epic_attach(sc)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES,
 		    EPIC_NFRAGS, MCLBYTES, 0, BUS_DMA_NOWAIT,
 		    &EPIC_DSTX(sc, i)->ds_dmamap)) != 0) {
-			aprint_error("%s: unable to create tx DMA map %d, "
-			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
+			aprint_error_dev(sc->sc_dev,
+			    "unable to create tx DMA map %d, error = %d\n",
+			    i, error);
 			goto fail_4;
 		}
 	}
@@ -190,8 +177,9 @@ epic_attach(sc)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
 		    MCLBYTES, 0, BUS_DMA_NOWAIT,
 		    &EPIC_DSRX(sc, i)->ds_dmamap)) != 0) {
-			aprint_error("%s: unable to create rx DMA map %d, "
-			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
+			aprint_error_dev(sc->sc_dev,
+			    "unable to create rx DMA map %d, error = %d\n",
+			    i, error);
 			goto fail_5;
 		}
 		EPIC_DSRX(sc, i)->ds_mbuf = NULL;
@@ -202,15 +190,15 @@ epic_attach(sc)
 	 */
 	if ((error = bus_dmamap_create(sc->sc_dmat, ETHER_PAD_LEN, 1,
 	    ETHER_PAD_LEN, 0, BUS_DMA_NOWAIT,&sc->sc_nulldmamap)) != 0) {
-		printf("%s: unable to create pad buffer DMA map, "
-		    "error = %d\n", sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "unable to create pad buffer DMA map, error = %d\n", error);
 		goto fail_5;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_nulldmamap,
 	    nullbuf, ETHER_PAD_LEN, NULL, BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: unable to load pad buffer DMA map, "
-		    "error = %d\n", sc->sc_dev.dv_xname, error);
+		aprint_error_dev(sc->sc_dev,
+		    "unable to load pad buffer DMA map, error = %d\n", error);
 		goto fail_6;
 	}
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_nulldmamap, 0, ETHER_PAD_LEN,
@@ -248,7 +236,7 @@ epic_attach(sc)
 			break;
 	}
 
-	aprint_normal("%s: %s, Ethernet address %s\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(sc->sc_dev, "%s, Ethernet address %s\n",
 	    devname, ether_sprintf(enaddr));
 
 	miiflags = 0;
@@ -262,9 +250,11 @@ epic_attach(sc)
 	sc->sc_mii.mii_readreg = epic_mii_read;
 	sc->sc_mii.mii_writereg = epic_mii_write;
 	sc->sc_mii.mii_statchg = epic_statchg;
+
+	sc->sc_ethercom.ec_mii = &sc->sc_mii;
 	ifmedia_init(&sc->sc_mii.mii_media, IFM_IMASK, epic_mediachange,
-	    epic_mediastatus);
-	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	    ether_mediastatus);
+	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, miiflags);
 	if (LIST_EMPTY(&sc->sc_mii.mii_phys)) {
 		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|IFM_NONE, 0, NULL);
@@ -276,14 +266,13 @@ epic_attach(sc)
 		/* use the next free media instance */
 		sc->sc_serinst = sc->sc_mii.mii_instance++;
 		ifmedia_add(&sc->sc_mii.mii_media,
-			    IFM_MAKEWORD(IFM_ETHER, IFM_10_2, 0,
-					 sc->sc_serinst),
-			    0, NULL);
-		aprint_normal("%s: 10base2/BNC\n", sc->sc_dev.dv_xname);
+		    IFM_MAKEWORD(IFM_ETHER, IFM_10_2, 0, sc->sc_serinst),
+		    0, NULL);
+		aprint_normal_dev(sc->sc_dev, "10base2/BNC\n");
 	} else
 		sc->sc_serinst = -1;
 
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = epic_ioctl;
@@ -307,10 +296,12 @@ epic_attach(sc)
 	/*
 	 * Make sure the interface is shutdown during reboot.
 	 */
-	sc->sc_sdhook = shutdownhook_establish(epic_shutdown, sc);
-	if (sc->sc_sdhook == NULL)
-		aprint_error("%s: WARNING: unable to establish shutdown hook\n",
-		    sc->sc_dev.dv_xname);
+	if (pmf_device_register1(sc->sc_dev, NULL, NULL, epic_shutdown))
+		pmf_class_network_register(sc->sc_dev, ifp);
+	else
+		aprint_error_dev(sc->sc_dev,
+		    "couldn't establish power handler\n");
+
 	return;
 
 	/*
@@ -346,13 +337,14 @@ epic_attach(sc)
 /*
  * Shutdown hook.  Make sure the interface is stopped at reboot.
  */
-void
-epic_shutdown(arg)
-	void *arg;
+bool
+epic_shutdown(device_t self, int howto)
 {
-	struct epic_softc *sc = arg;
+	struct epic_softc *sc = device_private(self);
 
 	epic_stop(&sc->sc_ethercom.ec_if, 1);
+
+	return true;
 }
 
 /*
@@ -360,8 +352,7 @@ epic_shutdown(arg)
  * [ifnet interface function]
  */
 void
-epic_start(ifp)
-	struct ifnet *ifp;
+epic_start(struct ifnet *ifp)
 {
 	struct epic_softc *sc = ifp->if_softc;
 	struct mbuf *m0, *m;
@@ -418,14 +409,15 @@ epic_start(ifp)
 			MGETHDR(m, M_DONTWAIT, MT_DATA);
 			if (m == NULL) {
 				printf("%s: unable to allocate Tx mbuf\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 				break;
 			}
 			if (m0->m_pkthdr.len > MHLEN) {
 				MCLGET(m, M_DONTWAIT);
 				if ((m->m_flags & M_EXT) == 0) {
 					printf("%s: unable to allocate Tx "
-					    "cluster\n", sc->sc_dev.dv_xname);
+					    "cluster\n",
+					    device_xname(sc->sc_dev));
 					m_freem(m);
 					break;
 				}
@@ -436,7 +428,8 @@ epic_start(ifp)
 			    m, BUS_DMA_WRITE|BUS_DMA_NOWAIT);
 			if (error) {
 				printf("%s: unable to load Tx buffer, "
-				    "error = %d\n", sc->sc_dev.dv_xname, error);
+				    "error = %d\n", device_xname(sc->sc_dev),
+				    error);
 				break;
 			}
 		}
@@ -496,13 +489,10 @@ epic_start(ifp)
 		sc->sc_txpending++;
 		sc->sc_txlast = nexttx;
 
-#if NBPFILTER > 0
 		/*
 		 * Pass the packet to any BPF listeners.
 		 */
-		if (ifp->if_bpf)
-			bpf_mtap(ifp->if_bpf, m0);
-#endif
+		bpf_mtap(ifp, m0);
 	}
 
 	if (sc->sc_txpending == EPIC_NTXDESC) {
@@ -548,15 +538,14 @@ epic_start(ifp)
  * [ifnet interface function]
  */
 void
-epic_watchdog(ifp)
-	struct ifnet *ifp;
+epic_watchdog(struct ifnet *ifp)
 {
 	struct epic_softc *sc = ifp->if_softc;
 
-	printf("%s: device timeout\n", sc->sc_dev.dv_xname);
+	printf("%s: device timeout\n", device_xname(sc->sc_dev));
 	ifp->if_oerrors++;
 
-	(void) epic_init(ifp);
+	(void)epic_init(ifp);
 }
 
 /*
@@ -564,50 +553,36 @@ epic_watchdog(ifp)
  * [ifnet interface function]
  */
 int
-epic_ioctl(ifp, cmd, data)
-	struct ifnet *ifp;
-	u_long cmd;
-	void *data;
+epic_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct epic_softc *sc = ifp->if_softc;
-	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error;
 
 	s = splnet();
 
-	switch (cmd) {
-	case SIOCSIFMEDIA:
-	case SIOCGIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, cmd);
-		break;
-
-	default:
-		error = ether_ioctl(ifp, cmd, data);
-		if (error == ENETRESET) {
-			/*
-			 * Multicast list has changed; set the hardware filter
-			 * accordingly.  Update our idea of the current media;
-			 * epic_set_mchash() needs to know what it is.
-			 */
-			if (ifp->if_flags & IFF_RUNNING) {
-				mii_pollstat(&sc->sc_mii);
-				epic_set_mchash(sc);
-			}
-			error = 0;
+	error = ether_ioctl(ifp, cmd, data);
+	if (error == ENETRESET) {
+		/*
+		 * Multicast list has changed; set the hardware filter
+		 * accordingly.  Update our idea of the current media;
+		 * epic_set_mchash() needs to know what it is.
+		 */
+		if (ifp->if_flags & IFF_RUNNING) {
+			mii_pollstat(&sc->sc_mii);
+			epic_set_mchash(sc);
 		}
-		break;
+		error = 0;
 	}
 
 	splx(s);
-	return (error);
+	return error;
 }
 
 /*
  * Interrupt handler.
  */
 int
-epic_intr(arg)
-	void *arg;
+epic_intr(void *arg)
 {
 	struct epic_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -625,7 +600,7 @@ epic_intr(arg)
 	 */
 	intstat = bus_space_read_4(sc->sc_st, sc->sc_sh, EPIC_INTSTAT);
 	if ((intstat & INTSTAT_INT_ACTV) == 0)
-		return (claimed);
+		return claimed;
 
 	claimed = 1;
 
@@ -664,10 +639,10 @@ epic_intr(arg)
 			if ((rxstatus & ER_RXSTAT_PKTINTACT) == 0) {
 				if (rxstatus & ER_RXSTAT_CRCERROR)
 					printf("%s: CRC error\n",
-					    sc->sc_dev.dv_xname);
+					    device_xname(sc->sc_dev));
 				if (rxstatus & ER_RXSTAT_ALIGNERROR)
 					printf("%s: alignment error\n",
-					    sc->sc_dev.dv_xname);
+					    device_xname(sc->sc_dev));
 				ifp->if_ierrors++;
 				EPIC_INIT_RXDESC(sc, i);
 				continue;
@@ -732,14 +707,11 @@ epic_intr(arg)
 			m->m_pkthdr.rcvif = ifp;
 			m->m_pkthdr.len = m->m_len = len;
 
-#if NBPFILTER > 0
 			/*
 			 * Pass this up to any BPF listeners, but only
 			 * pass it up the stack if it's for us.
 			 */
-			if (ifp->if_bpf)
-				bpf_mtap(ifp->if_bpf, m);
-#endif
+			bpf_mtap(ifp, m);
 
 			/* Pass it on. */
 			(*ifp->if_input)(ifp, m);
@@ -754,7 +726,7 @@ epic_intr(arg)
 		 */
 		if (intstat & INTSTAT_RQE) {
 			printf("%s: receiver queue empty\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			/*
 			 * Ring is already built; just restart the
 			 * receiver.
@@ -803,7 +775,7 @@ epic_intr(arg)
 			    TXSTAT_COLLISIONS(txstatus);
 			if (txstatus & ET_TXSTAT_CARSENSELOST)
 				printf("%s: lost carrier\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 		}
 
 		/* Update the dirty transmit buffer pointer. */
@@ -820,7 +792,8 @@ epic_intr(arg)
 		 * Kick the transmitter after a DMA underrun.
 		 */
 		if (intstat & INTSTAT_TXU) {
-			printf("%s: transmit underrun\n", sc->sc_dev.dv_xname);
+			printf("%s: transmit underrun\n",
+			    device_xname(sc->sc_dev));
 			bus_space_write_4(sc->sc_st, sc->sc_sh,
 			    EPIC_COMMAND, COMMAND_TXUGO);
 			if (sc->sc_txpending)
@@ -840,20 +813,20 @@ epic_intr(arg)
 	if (intstat & INTSTAT_FATAL_INT) {
 		if (intstat & INTSTAT_PTA)
 			printf("%s: PCI target abort error\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 		else if (intstat & INTSTAT_PMA)
 			printf("%s: PCI master abort error\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 		else if (intstat & INTSTAT_APE)
 			printf("%s: PCI address parity error\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 		else if (intstat & INTSTAT_DPE)
 			printf("%s: PCI data parity error\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 		else
 			printf("%s: unknown fatal error\n",
-			    sc->sc_dev.dv_xname);
-		(void) epic_init(ifp);
+			    device_xname(sc->sc_dev));
+		(void)epic_init(ifp);
 	}
 
 	/*
@@ -866,8 +839,7 @@ epic_intr(arg)
  * One second timer, used to tick the MII.
  */
 void
-epic_tick(arg)
-	void *arg;
+epic_tick(void *arg)
 {
 	struct epic_softc *sc = arg;
 	int s;
@@ -883,8 +855,7 @@ epic_tick(arg)
  * Fixup the clock source on the EPIC.
  */
 void
-epic_fixup_clock_source(sc)
-	struct epic_softc *sc;
+epic_fixup_clock_source(struct epic_softc *sc)
 {
 	int i;
 
@@ -905,8 +876,7 @@ epic_fixup_clock_source(sc)
  * Perform a soft reset on the EPIC.
  */
 void
-epic_reset(sc)
-	struct epic_softc *sc;
+epic_reset(struct epic_softc *sc)
 {
 
 	epic_fixup_clock_source(sc);
@@ -923,8 +893,7 @@ epic_reset(sc)
  * Initialize the interface.  Must be called at splnet().
  */
 int
-epic_init(ifp)
-	struct ifnet *ifp;
+epic_init(struct ifnet *ifp)
 {
 	struct epic_softc *sc = ifp->if_softc;
 	bus_space_tag_t st = sc->sc_st;
@@ -996,7 +965,8 @@ epic_init(ifp)
 	bus_space_write_4(st, sh, EPIC_RXCON, reg0);
 
 	/* Set the current media. */
-	epic_mediachange(ifp);
+	if ((error = epic_mediachange(ifp)) != 0)
+		goto out;
 
 	/* Set up the multicast hash table. */
 	epic_set_mchash(sc);
@@ -1026,7 +996,7 @@ epic_init(ifp)
 			if ((error = epic_add_rxbuf(sc, i)) != 0) {
 				printf("%s: unable to allocate or map rx "
 				    "buffer %d error = %d\n",
-				    sc->sc_dev.dv_xname, i, error);
+				    device_xname(sc->sc_dev), i, error);
 				/*
 				 * XXX Should attempt to run with fewer receive
 				 * XXX buffers instead of just failing.
@@ -1077,16 +1047,15 @@ epic_init(ifp)
 
  out:
 	if (error)
-		printf("%s: interface not running\n", sc->sc_dev.dv_xname);
-	return (error);
+		printf("%s: interface not running\n", device_xname(sc->sc_dev));
+	return error;
 }
 
 /*
  * Drain the receive queue.
  */
 void
-epic_rxdrain(sc)
-	struct epic_softc *sc;
+epic_rxdrain(struct epic_softc *sc)
 {
 	struct epic_descsoft *ds;
 	int i;
@@ -1105,9 +1074,7 @@ epic_rxdrain(sc)
  * Stop transmission on the interface.
  */
 void
-epic_stop(ifp, disable)
-	struct ifnet *ifp;
-	int disable;
+epic_stop(struct ifnet *ifp, int disable)
 {
 	struct epic_softc *sc = ifp->if_softc;
 	bus_space_tag_t st = sc->sc_st;
@@ -1152,24 +1119,21 @@ epic_stop(ifp, disable)
 		}
 	}
 
-	if (disable)
-		epic_rxdrain(sc);
-
 	/*
 	 * Mark the interface down and cancel the watchdog timer.
 	 */
 	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 	ifp->if_timer = 0;
+
+	if (disable)
+		epic_rxdrain(sc);
 }
 
 /*
  * Read the EPIC Serial EEPROM.
  */
 void
-epic_read_eeprom(sc, word, wordcnt, data)
-	struct epic_softc *sc;
-	int word, wordcnt;
-	uint16_t *data;
+epic_read_eeprom(struct epic_softc *sc, int word, int wordcnt, uint16_t *data)
 {
 	bus_space_tag_t st = sc->sc_st;
 	bus_space_handle_t sh = sc->sc_sh;
@@ -1246,9 +1210,7 @@ epic_read_eeprom(sc, word, wordcnt, data)
  * Add a receive buffer to the indicated descriptor.
  */
 int
-epic_add_rxbuf(sc, idx)
-	struct epic_softc *sc;
-	int idx;
+epic_add_rxbuf(struct epic_softc *sc, int idx)
 {
 	struct epic_descsoft *ds = EPIC_DSRX(sc, idx);
 	struct mbuf *m;
@@ -1256,12 +1218,12 @@ epic_add_rxbuf(sc, idx)
 
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
-		return (ENOBUFS);
+		return ENOBUFS;
 
 	MCLGET(m, M_DONTWAIT);
 	if ((m->m_flags & M_EXT) == 0) {
 		m_freem(m);
-		return (ENOBUFS);
+		return ENOBUFS;
 	}
 
 	if (ds->ds_mbuf != NULL)
@@ -1274,8 +1236,8 @@ epic_add_rxbuf(sc, idx)
 	    BUS_DMA_READ|BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: can't load rx DMA map %d, error = %d\n",
-		    sc->sc_dev.dv_xname, idx, error);
-		panic("epic_add_rxbuf");	/* XXX */
+		    device_xname(sc->sc_dev), idx, error);
+		panic("%s", __func__);	/* XXX */
 	}
 
 	bus_dmamap_sync(sc->sc_dmat, ds->ds_dmamap, 0,
@@ -1283,7 +1245,7 @@ epic_add_rxbuf(sc, idx)
 
 	EPIC_INIT_RXDESC(sc, idx);
 
-	return (0);
+	return 0;
 }
 
 /*
@@ -1292,8 +1254,7 @@ epic_add_rxbuf(sc, idx)
  * NOTE: We rely on a recently-updated mii_media_active here!
  */
 void
-epic_set_mchash(sc)
-	struct epic_softc *sc;
+epic_set_mchash(struct epic_softc *sc)
 {
 	struct ethercom *ec = &sc->sc_ethercom;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -1361,9 +1322,7 @@ epic_set_mchash(sc)
  * Wait for the MII to become ready.
  */
 int
-epic_mii_wait(sc, rw)
-	struct epic_softc *sc;
-	uint32_t rw;
+epic_mii_wait(struct epic_softc *sc, uint32_t rw)
 {
 	int i;
 
@@ -1374,45 +1333,41 @@ epic_mii_wait(sc, rw)
 		delay(2);
 	}
 	if (i == 50) {
-		printf("%s: MII timed out\n", sc->sc_dev.dv_xname);
-		return (1);
+		printf("%s: MII timed out\n", device_xname(sc->sc_dev));
+		return 1;
 	}
 
-	return (0);
+	return 0;
 }
 
 /*
  * Read from the MII.
  */
 int
-epic_mii_read(self, phy, reg)
-	struct device *self;
-	int phy, reg;
+epic_mii_read(device_t self, int phy, int reg)
 {
-	struct epic_softc *sc = (struct epic_softc *)self;
+	struct epic_softc *sc = device_private(self);
 
 	if (epic_mii_wait(sc, MMCTL_WRITE))
-		return (0);
+		return 0;
 
 	bus_space_write_4(sc->sc_st, sc->sc_sh, EPIC_MMCTL,
 	    MMCTL_ARG(phy, reg, MMCTL_READ));
 
 	if (epic_mii_wait(sc, MMCTL_READ))
-		return (0);
+		return 0;
 
-	return (bus_space_read_4(sc->sc_st, sc->sc_sh, EPIC_MMDATA) &
-	    MMDATA_MASK);
+	return bus_space_read_4(sc->sc_st, sc->sc_sh, EPIC_MMDATA) &
+	    MMDATA_MASK;
 }
 
 /*
  * Write to the MII.
  */
 void
-epic_mii_write(self, phy, reg, val)
-	struct device *self;
-	int phy, reg, val;
+epic_mii_write(device_t self, int phy, int reg, int val)
 {
-	struct epic_softc *sc = (struct epic_softc *)self;
+	struct epic_softc *sc = device_private(self);
 
 	if (epic_mii_wait(sc, MMCTL_WRITE))
 		return;
@@ -1426,10 +1381,9 @@ epic_mii_write(self, phy, reg, val)
  * Callback from PHY when media changes.
  */
 void
-epic_statchg(self)
-	struct device *self;
+epic_statchg(device_t self)
 {
-	struct epic_softc *sc = (struct epic_softc *)self;
+	struct epic_softc *sc = device_private(self);
 	uint32_t txcon, miicfg;
 
 	/*
@@ -1460,29 +1414,13 @@ epic_statchg(self)
 }
 
 /*
- * Callback from ifmedia to request current media status.
- */
-void
-epic_mediastatus(ifp, ifmr)
-	struct ifnet *ifp;
-	struct ifmediareq *ifmr;
-{
-	struct epic_softc *sc = ifp->if_softc;
-
-	mii_pollstat(&sc->sc_mii);
-	ifmr->ifm_status = sc->sc_mii.mii_media_status;
-	ifmr->ifm_active = sc->sc_mii.mii_media_active;
-}
-
-/*
  * Callback from ifmedia to request new media setting.
  *
  * XXX Looks to me like some of this complexity should move into
  * XXX one or two custom PHY drivers. --dyoung
  */
 int
-epic_mediachange(ifp)
-	struct ifnet *ifp;
+epic_mediachange(struct ifnet *ifp)
 {
 	struct epic_softc *sc = ifp->if_softc;
 	struct mii_data *mii = &sc->sc_mii;
@@ -1490,10 +1428,10 @@ epic_mediachange(ifp)
 	int media = ifm->ifm_cur->ifm_media;
 	uint32_t miicfg;
 	struct mii_softc *miisc;
-	int cfg;
+	int cfg, rc;
 
 	if ((ifp->if_flags & IFF_UP) == 0)
-		return (0);
+		return 0;
 
 	if (IFM_INST(media) != sc->sc_serinst) {
 		/* If we're not selecting serial interface, select MII mode */
@@ -1505,7 +1443,8 @@ epic_mediachange(ifp)
 		bus_space_write_4(sc->sc_st, sc->sc_sh, EPIC_MIICFG, miicfg);
 	}
 
-	mii_mediachg(mii);
+	if ((rc = mii_mediachg(mii)) == ENXIO)
+		rc = 0;
 
 	if (IFM_INST(media) == sc->sc_serinst) {
 		/* select serial interface */
@@ -1520,8 +1459,8 @@ epic_mediachange(ifp)
 		mii->mii_media_active = media;
 		mii->mii_media_status = 0;
 
-		epic_statchg(&sc->sc_dev);
-		return (0);
+		epic_statchg(sc->sc_dev);
+		return 0;
 	}
 
 	/* Lookup selected PHY */
@@ -1530,12 +1469,12 @@ epic_mediachange(ifp)
 			break;
 	}
 	if (!miisc) {
-		printf("epic_mediachange: can't happen\n"); /* ??? panic */
-		return (0);
+		printf("%s: can't happen\n", __func__); /* ??? panic */
+		return 0;
 	}
 #ifdef EPICMEDIADEBUG
 	printf("%s: using phy %s\n", ifp->if_xname,
-	       miisc->mii_dev.dv_xname);
+	       device_xname(miisc->mii_dev));
 #endif
 
 	if (miisc->mii_flags & MIIF_HAVEFIBER) {
@@ -1557,5 +1496,5 @@ epic_mediachange(ifp)
 		PHY_WRITE(miisc, MII_LXTPHY_CONFIG, cfg);
 	}
 
-	return (0);
+	return rc;
 }

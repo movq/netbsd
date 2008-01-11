@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stf.c,v 1.63 2007/12/20 19:53:30 dyoung Exp $	*/
+/*	$NetBSD: if_stf.c,v 1.75 2010/04/05 07:22:24 joerg Exp $	*/
 /*	$KAME: if_stf.c,v 1.62 2001/06/07 22:32:16 itojun Exp $ */
 
 /*
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.63 2007/12/20 19:53:30 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.75 2010/04/05 07:22:24 joerg Exp $");
 
 #include "opt_inet.h"
 
@@ -118,13 +118,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.63 2007/12/20 19:53:30 dyoung Exp $");
 
 #include <net/net_osdep.h>
 
-#include "bpfilter.h"
 #include "stf.h"
 #include "gif.h"	/*XXX*/
 
-#if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
 
 #if NGIF > 0
 #include <net/if_gif.h>
@@ -173,7 +170,7 @@ static int stf_checkaddr4(struct stf_softc *, const struct in_addr *,
 	struct ifnet *);
 static int stf_checkaddr6(struct stf_softc *, const struct in6_addr *,
 	struct ifnet *);
-static void stf_rtrequest(int, struct rtentry *, struct rt_addrinfo *);
+static void stf_rtrequest(int, struct rtentry *, const struct rt_addrinfo *);
 static int stf_ioctl(struct ifnet *, u_long, void *);
 
 /* ARGSUSED */
@@ -195,11 +192,9 @@ stf_clone_create(struct if_clone *ifc, int unit)
 		return (EEXIST);
 	}
 
-	sc = malloc(sizeof(struct stf_softc), M_DEVBUF, M_WAIT);
-	memset(sc, 0, sizeof(struct stf_softc));
+	sc = malloc(sizeof(struct stf_softc), M_DEVBUF, M_WAIT|M_ZERO);
 
-	snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname), "%s%d",
-	    ifc->ifc_name, unit);
+	if_initname(&sc->sc_if, ifc->ifc_name, unit);
 
 	sc->encap_cookie = encap_attach_func(AF_INET, IPPROTO_IPV6,
 	    stf_encapcheck, &in_stf_protosw, sc);
@@ -217,9 +212,7 @@ stf_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_if.if_dlt    = DLT_NULL;
 	if_attach(&sc->sc_if);
 	if_alloc_sadl(&sc->sc_if);
-#if NBPFILTER > 0
-	bpfattach(&sc->sc_if, DLT_NULL, sizeof(u_int));
-#endif
+	bpf_attach(&sc->sc_if, DLT_NULL, sizeof(u_int));
 	LIST_INSERT_HEAD(&stf_softc_list, sc, sc_list);
 	return (0);
 }
@@ -231,9 +224,7 @@ stf_clone_destroy(struct ifnet *ifp)
 
 	LIST_REMOVE(sc, sc_list);
 	encap_detach(sc->encap_cookie);
-#if NBPFILTER > 0
-	bpfdetach(ifp);
-#endif
+	bpf_detach(ifp);
 	if_detach(ifp);
 	rtcache_free(&sc->sc_ro);
 	free(sc, M_DEVBUF);
@@ -277,7 +268,7 @@ stf_encapcheck(struct mbuf *m, int off, int proto, void *arg)
 	 * local 6to4 address.
 	 * success on: dst = 10.1.1.1, ia6->ia_addr = 2002:0a01:0101:...
 	 */
-	if (bcmp(GET_V4(&ia6->ia_addr.sin6_addr), &ip.ip_dst,
+	if (memcmp(GET_V4(&ia6->ia_addr.sin6_addr), &ip.ip_dst,
 	    sizeof(ip.ip_dst)) != 0)
 		return 0;
 
@@ -317,7 +308,7 @@ stf_getsrcifa6(struct ifnet *ifp)
 		if (!IN6_IS_ADDR_6TO4(&sin6->sin6_addr))
 			continue;
 
-		bcopy(GET_V4(&sin6->sin6_addr), &in, sizeof(in));
+		memcpy(&in, GET_V4(&sin6->sin6_addr), sizeof(in));
 		INADDR_TO_IA(in, ia4);
 		if (ia4 == NULL)
 			continue;
@@ -336,7 +327,7 @@ stf_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	struct stf_softc *sc;
 	const struct sockaddr_in6 *dst6;
 	const struct in_addr *in4;
-	u_int8_t tos;
+	uint8_t tos;
 	struct ip *ip;
 	struct ip6_hdr *ip6;
 	struct in6_ifaddr *ia6;
@@ -390,10 +381,7 @@ stf_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 		return ENETUNREACH;
 	}
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, AF_INET6, m);
-#endif /*NBPFILTER > 0*/
+	bpf_mtap_af(ifp, AF_INET6, m);
 
 	M_PREPEND(m, sizeof(struct ip), M_DONTWAIT);
 	if (m && m->m_len < sizeof(struct ip))
@@ -408,7 +396,7 @@ stf_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 
 	bcopy(GET_V4(&((struct sockaddr_in6 *)&ia6->ia_addr)->sin6_addr),
 	    &ip->ip_src, sizeof(ip->ip_src));
-	bcopy(in4, &ip->ip_dst, sizeof(ip->ip_dst));
+	memcpy(&ip->ip_dst, in4, sizeof(ip->ip_dst));
 	ip->ip_p = IPPROTO_IPV6;
 	ip->ip_ttl = ip_gif_ttl;	/*XXX*/
 	ip->ip_len = htons(m->m_pkthdr.len);
@@ -433,6 +421,7 @@ stf_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	}
 
 	ifp->if_opackets++;
+	ifp->if_obytes += m->m_pkthdr.len - sizeof(struct ip);
 	return ip_output(m, NULL, &sc->sc_ro, 0, NULL, NULL);
 }
 
@@ -510,7 +499,7 @@ stf_checkaddr4(struct stf_softc *sc, const struct in_addr *in,
 #if 0
 			log(LOG_WARNING, "%s: packet from 0x%x dropped "
 			    "due to ingress filter\n", if_name(&sc->sc_if),
-			    (u_int32_t)ntohl(sin.sin_addr.s_addr));
+			    (uint32_t)ntohl(sin.sin_addr.s_addr));
 #endif
 			if (rt)
 				rtfree(rt);
@@ -566,7 +555,7 @@ in_stf_input(struct mbuf *m, ...)
 	struct stf_softc *sc;
 	struct ip *ip;
 	struct ip6_hdr *ip6;
-	u_int8_t otos, itos;
+	uint8_t otos, itos;
 	int s, isr;
 	struct ifqueue *ifq = NULL;
 	struct ifnet *ifp;
@@ -629,14 +618,11 @@ in_stf_input(struct mbuf *m, ...)
 	else
 		ip_ecn_egress(ECN_NOCARE, &otos, &itos);
 	ip6->ip6_flow &= ~htonl(0xff << 20);
-	ip6->ip6_flow |= htonl((u_int32_t)itos << 20);
+	ip6->ip6_flow |= htonl((uint32_t)itos << 20);
 
 	m->m_pkthdr.rcvif = ifp;
 
-#if NBPFILTER > 0
-	if (ifp->if_bpf)
-		bpf_mtap_af(ifp->if_bpf, AF_INET6, m);
-#endif /*NBPFILTER > 0*/
+	bpf_mtap_af(ifp, AF_INET6, m);
 
 	/*
 	 * Put the packet to the network layer input queue according to the
@@ -664,7 +650,7 @@ in_stf_input(struct mbuf *m, ...)
 /* ARGSUSED */
 static void
 stf_rtrequest(int cmd, struct rtentry *rt,
-    struct rt_addrinfo *info)
+    const struct rt_addrinfo *info)
 {
 	if (rt != NULL) {
 		struct stf_softc *sc;
@@ -679,14 +665,13 @@ stf_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct lwp		*l = curlwp;	/* XXX */
 	struct ifaddr		*ifa;
-	struct ifreq		*ifr;
+	struct ifreq		*ifr = data;
 	struct sockaddr_in6	*sin6;
 	int			error;
-	u_long			mtu;
 
 	error = 0;
 	switch (cmd) {
-	case SIOCSIFADDR:
+	case SIOCINITIFADDR:
 		ifa = (struct ifaddr *)data;
 		if (ifa == NULL || ifa->ifa_addr->sa_family != AF_INET6) {
 			error = EAFNOSUPPORT;
@@ -703,7 +688,6 @@ stf_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		ifr = (struct ifreq *)data;
 		if (ifr != NULL &&
 		    ifreq_getaddr(cmd, ifr)->sa_family == AF_INET6)
 			;
@@ -712,18 +696,20 @@ stf_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 
 	case SIOCSIFMTU:
-		if ((error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+		error = kauth_authorize_network(l->l_cred,
+		    KAUTH_NETWORK_INTERFACE,
+		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, KAUTH_ARG(cmd),
+		    NULL);
+		if (error)
 			break;
-		ifr = (struct ifreq *)data;
-		mtu = ifr->ifr_mtu;
-		if (mtu < STF_MTU_MIN || mtu > STF_MTU_MAX)
+		if (ifr->ifr_mtu < STF_MTU_MIN || ifr->ifr_mtu > STF_MTU_MAX)
 			return EINVAL;
-		ifp->if_mtu = mtu;
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+			error = 0;
 		break;
 
 	default:
-		error = EINVAL;
+		error = ifioctl_common(ifp, cmd, data);
 		break;
 	}
 

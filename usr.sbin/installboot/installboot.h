@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.h,v 1.33 2007/02/15 22:23:11 dsl Exp $	*/
+/*	$NetBSD: installboot.h,v 1.37 2010/01/14 17:49:32 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,6 +65,8 @@ typedef enum {
 	IB_PASSWORD =	1<<18,		/* i386 boot password */
 	IB_KEYMAP = 	1<<19,		/* i386 console keymap */
 	IB_CONSADDR = 	1<<20,		/* i386 console io address */
+	IB_MODULES =	1<<21,		/* i386: load modules */
+	IB_BOOTCONF = 	1<<22,		/* i386: read boot.conf */
 } ib_flags;
 
 typedef struct {
@@ -87,6 +82,7 @@ typedef struct {
 	uint64_t	 s1start;	/*  start block of stage1 */
 	const char	*stage2;	/* name of stage2 bootstrap */
 	uint64_t	 s2start;	/*  start block of stage2 */
+	uint32_t	 sectorsize;	/* sector size of target fs */
 		/* parsed -o option=value data */
 	const char	*command;	/* name of command string */
 	const char	*console;	/* name of console */
@@ -162,6 +158,8 @@ int		ffs_findstage2(ib_params *, uint32_t *, ib_block *);
 int		raid_match(ib_params *);
 int		raw_match(ib_params *);
 int		raw_findstage2(ib_params *, uint32_t *, ib_block *);
+int		ext2fs_match(ib_params *);
+int		ext2fs_findstage2(ib_params *, uint32_t *, ib_block *);
 
 	/* machines.c */
 extern struct ib_mach ib_mach_alpha;

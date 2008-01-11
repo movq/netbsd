@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.19 2006/10/16 00:00:48 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.23 2011/05/23 23:13:10 joerg Exp $	*/
 
 /* main.c: This file contains the main control and user-interface routines
    for the ed line editor. */
@@ -31,15 +31,15 @@
 #include <sys/cdefs.h>
 #ifndef lint
 __COPYRIGHT(
-"@(#) Copyright (c) 1993 Andrew Moore, Talke Studio. \n\
- All rights reserved.\n");
+"@(#) Copyright (c) 1993 Andrew Moore, Talke Studio.\
+ All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char *rcsid = "@(#)main.c,v 1.1 1994/02/01 00:34:42 alm Exp";
 #else
-__RCSID("$NetBSD: main.c,v 1.19 2006/10/16 00:00:48 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.23 2011/05/23 23:13:10 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -200,9 +200,11 @@ top:
 				fputs("?\n", stderr);
 				sprintf(errmsg, "warning: file modified");
 				if (!isatty(0)) {
-					fprintf(stderr, garrulous ? 
-					    "script, line %d: %s\n" :
-					    "", lineno, errmsg);
+					if (garrulous) {
+						fprintf(stderr,
+						    "script, line %d: %s\n",
+						    lineno, errmsg);
+					}
 					quit(2);
 				}
 				clearerr(stdin);
@@ -233,27 +235,32 @@ top:
 			fputs("?\n", stderr);		/* give warning */
 			sprintf(errmsg, "warning: file modified");
 			if (!isatty(0)) {
-				fprintf(stderr, garrulous ? 
-				    "script, line %d: %s\n" : 
-				    "", lineno, errmsg);
+				if (garrulous) {
+					fprintf(stderr,
+					    "script, line %d: %s\n",
+					    lineno, errmsg);
+				}
 				quit(2);
 			}
 			break;
 		case FATAL:
-			if (!isatty(0))
-				fprintf(stderr, garrulous ? 
-				    "script, line %d: %s\n" : "", 
-				    lineno, errmsg);
-			else
-				fprintf(stderr, garrulous ? "%s\n" : "",
-				    errmsg);
+			if (garrulous) {
+				if (!isatty(0)) {
+					fprintf(stderr,
+					    "script, line %d: %s\n",
+					    lineno, errmsg);
+				} else {
+					fprintf(stderr, "%s\n", errmsg);
+				}
+			}
 			quit(3);
 		default:
 			fputs("?\n", stderr);
 			if (!isatty(0)) {
-				fprintf(stderr, garrulous ? 
-				    "script, line %d: %s\n" : "",
-				    lineno, errmsg);
+				if (garrulous) {
+					fprintf(stderr, "script, line %d: %s\n",
+					    lineno, errmsg);
+				}
 				quit(2);
 			}
 			break;
@@ -1326,9 +1333,10 @@ strip_escapes(const char *s)
 	int i = 0;
 
 	REALLOC(file, filesz, MAXPATHLEN + 1, NULL);
-	/* assert: no trailing escape */
-	while ((file[i++] = (*s == '\\') != '\0' ? *++s : *s))
+	while ((i < (filesz - 1)) &&
+	       (file[i++] = (*s == '\\') != '\0' ? *++s : *s))
 		s++;
+	file[filesz - 1] = '\0';
 	return file;
 }
 

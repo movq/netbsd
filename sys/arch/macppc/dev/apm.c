@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.18 2007/12/11 23:23:02 david Exp $	*/
+/*	$NetBSD: apm.c,v 1.23 2009/03/14 21:04:11 dsl Exp $	*/
 /*	$OpenBSD: apm.c,v 1.5 2002/06/07 07:13:59 miod Exp $	*/
 
 /*-
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.18 2007/12/11 23:23:02 david Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.23 2009/03/14 21:04:11 dsl Exp $");
 
 #include "apm.h"
 
@@ -107,7 +107,7 @@ void apmattach(struct device *, struct device *, void *);
 
 #ifdef __NetBSD__
 #if 0
-static int	apm_record_event __P((struct apm_softc *, u_int));
+static int	apm_record_event(struct apm_softc *, u_int);
 #endif
 #endif
 
@@ -160,10 +160,7 @@ int	apm_evindex;
 
 
 int
-apmmatch(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+apmmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct adb_attach_args *aa = (void *)aux;		
 	if (aa->origaddr != ADBADDR_APM ||
@@ -178,9 +175,7 @@ apmmatch(parent, match, aux)
 }
 
 void
-apmattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+apmattach(struct device *parent, struct device *self, void *aux)
 {
 	struct apm_softc *sc = (struct apm_softc *) self;
 	struct pmu_battery_info info;
@@ -194,20 +189,18 @@ apmattach(parent, self, aux)
 	sc->event_ptr = 0;
 	sc->event_count = 0;
 	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	selinit(&sc->sc_rsel);
 }
 
 int
-apmopen(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+apmopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct apm_softc *sc;
 	int error = 0;
 
 	/* apm0 only */
-	if (!apm_cd.cd_ndevs || APMUNIT(dev) != 0 ||
-	    !(sc = apm_cd.cd_devs[APMUNIT(dev)]))
+	sc = device_lookup_private(&apm_cd, APMUNIT(dev));
+	if (sc == NULL)
 		return ENXIO;
 
 	DPRINTF(("apmopen: dev %d pid %d flag %x mode %x\n",
@@ -242,16 +235,13 @@ apmopen(dev, flag, mode, l)
 }
 
 int
-apmclose(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+apmclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct apm_softc *sc;
 
 	/* apm0 only */
-	if (!apm_cd.cd_ndevs || APMUNIT(dev) != 0 ||
-	    !(sc = apm_cd.cd_devs[APMUNIT(dev)]))
+	sc = device_lookup_private(&apm_cd, APMUNIT(dev));
+	if (sc == NULL)
 		return ENXIO;
 
 	DPRINTF(("apmclose: pid %d flag %x mode %x\n", l->l_proc->p_pid, flag, mode));
@@ -270,12 +260,7 @@ apmclose(dev, flag, mode, l)
 }
 
 int
-apmioctl(dev, cmd, data, flag, l)
-	dev_t dev;
-	u_long cmd;
-	void *data;
-	int flag;
-	struct lwp *l;
+apmioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct apm_softc *sc;
 	struct pmu_battery_info batt;
@@ -283,8 +268,8 @@ apmioctl(dev, cmd, data, flag, l)
 	int error = 0;
 
 	/* apm0 only */
-	if (!apm_cd.cd_ndevs || APMUNIT(dev) != 0 ||
-	    !(sc = apm_cd.cd_devs[APMUNIT(dev)]))
+	sc = device_lookup_private(&apm_cd, APMUNIT(dev));
+	if (sc == NULL)
 		return ENXIO;
 
 	APM_LOCK(sc);
@@ -378,9 +363,7 @@ apmioctl(dev, cmd, data, flag, l)
  * return 1 if the kernel driver should do so.
  */
 static int
-apm_record_event(sc, event_type)
-	struct apm_softc *sc;
-	u_int event_type;
+apm_record_event(struct apm_softc *sc, u_int event_type)
 {
 	struct apm_event_info *evp;
 
@@ -396,18 +379,15 @@ apm_record_event(sc, event_type)
 	sc->event_ptr %= APM_NEVENTS;
 	evp->type = event_type;
 	evp->index = ++apm_evindex;
-	selwakeup(&sc->sc_rsel);
+	selnotify(&sc->sc_rsel, 0, 0);
 	return (sc->sc_flags & SCFLAG_OWRITE) ? 0 : 1; /* user may handle */
 }
 #endif
 
 int
-apmpoll(dev, events, l)
-	dev_t dev;
-	int events;
-	struct lwp *l;
+apmpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct apm_softc *sc = apm_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apm_cd,APMUNIT(dev));
 	int revents = 0;
 
 	APM_LOCK(sc);
@@ -446,11 +426,9 @@ static struct filterops apmread_filtops =
 	{ 1, NULL, filt_apmrdetach, filt_apmread};
 
 int
-apmkqfilter(dev, kn)
-	dev_t dev;
-	struct knote *kn;
+apmkqfilter(dev_t dev, struct knote *kn)
 {
-	struct apm_softc *sc = apm_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apm_cd,APMUNIT(dev));
 	struct klist *klist;
 
 	switch (kn->kn_filter) {

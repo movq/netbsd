@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_delete.c,v 1.13 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_delete.c,v 1.17 2009/01/29 02:02:36 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,14 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_delete.c	8.13 (Berkeley) 7/28/94";
-#else
-__RCSID("$NetBSD: bt_delete.c,v 1.13 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_delete.c,v 1.17 2009/01/29 02:02:36 lukem Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
@@ -379,7 +377,7 @@ __bt_pdelete(BTREE *t, PAGE *h)
 	PAGE *pg;
 	EPGNO *parent;
 	indx_t cnt, idx, *ip, offset;
-	u_int32_t nksize;
+	uint32_t nksize;
 	char *from;
 
 	/*
@@ -472,7 +470,7 @@ __bt_dleaf(BTREE *t, const DBT *key, PAGE *h, u_int idx)
 {
 	BLEAF *bl;
 	indx_t cnt, *ip, offset;
-	u_int32_t nbytes;
+	uint32_t nbytes;
 	void *to;
 	char *from;
 
@@ -569,7 +567,7 @@ __bt_curdel(BTREE *t, const DBT *key, PAGE *h, u_int idx)
 			}
 		}
 		/* Check next key, if not at the end of the page. */
-		if (idx < NEXTINDEX(h) - 1) {
+		if (idx < (unsigned)(NEXTINDEX(h) - 1)) {
 			e.page = h;
 			e.index = idx + 1;
 			if (__bt_cmp(t, key, &e) == 0) {
@@ -590,7 +588,7 @@ __bt_curdel(BTREE *t, const DBT *key, PAGE *h, u_int idx)
 			mpool_put(t->bt_mp, pg, 0);
 		}
 		/* Check next key if at the end of the page. */
-		if (idx == NEXTINDEX(h) - 1 && h->nextpg != P_INVALID) {
+		if (idx == (unsigned)(NEXTINDEX(h) - 1) && h->nextpg != P_INVALID) {
 			if ((pg = mpool_get(t->bt_mp, h->nextpg, 0)) == NULL)
 				return (RET_ERROR);
 			e.page = pg;

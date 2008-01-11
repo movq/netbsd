@@ -1,4 +1,4 @@
-/* $NetBSD: pci_550.c,v 1.27 2007/12/03 15:33:06 ad Exp $ */
+/* $NetBSD: pci_550.c,v 1.34 2011/04/04 20:37:44 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.27 2007/12/03 15:33:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.34 2011/04/04 20:37:44 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -76,8 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.27 2007/12/03 15:33:06 ad Exp $");
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/syslog.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
 #include <machine/rpb.h>
@@ -97,16 +88,16 @@ __KERNEL_RCSID(0, "$NetBSD: pci_550.c,v 1.27 2007/12/03 15:33:06 ad Exp $");
 #include <alpha/pci/siovar.h>
 #endif
 
-int	dec_550_intr_map __P((struct pci_attach_args *,
-	    pci_intr_handle_t *));
-const char *dec_550_intr_string __P((void *, pci_intr_handle_t));
-const struct evcnt *dec_550_intr_evcnt __P((void *, pci_intr_handle_t));
-void	*dec_550_intr_establish __P((void *, pci_intr_handle_t,
-	    int, int (*func)(void *), void *));
-void	dec_550_intr_disestablish __P((void *, void *));
+int	dec_550_intr_map(const struct pci_attach_args *,
+	    pci_intr_handle_t *);
+const char *dec_550_intr_string(void *, pci_intr_handle_t);
+const struct evcnt *dec_550_intr_evcnt(void *, pci_intr_handle_t);
+void	*dec_550_intr_establish(void *, pci_intr_handle_t,
+	    int, int (*func)(void *), void *);
+void	dec_550_intr_disestablish(void *, void *);
 
-void	*dec_550_pciide_compat_intr_establish __P((void *, struct device *,
-	    struct pci_attach_args *, int, int (*)(void *), void *));
+void	*dec_550_pciide_compat_intr_establish(void *, struct device *,
+	    const struct pci_attach_args *, int, int (*)(void *), void *);
 
 #define	DEC_550_PCI_IRQ_BEGIN	8
 #define	DEC_550_MAX_IRQ		(64 - DEC_550_PCI_IRQ_BEGIN)
@@ -128,13 +119,12 @@ void	*dec_550_pciide_compat_intr_establish __P((void *, struct device *,
 
 struct alpha_shared_intr *dec_550_pci_intr;
 
-void	dec_550_iointr __P((void *arg, unsigned long vec));
-void	dec_550_intr_enable __P((int irq));
-void	dec_550_intr_disable __P((int irq));
+void	dec_550_iointr(void *arg, unsigned long vec);
+void	dec_550_intr_enable(int irq);
+void	dec_550_intr_disable(int irq);
 
 void
-pci_550_pickintr(ccp)
-	struct cia_config *ccp;
+pci_550_pickintr(struct cia_config *ccp)
 {
 	bus_space_tag_t iot = &ccp->cc_iot;
 	pci_chipset_tag_t pc = &ccp->cc_pc;
@@ -178,9 +168,7 @@ pci_550_pickintr(ccp)
 }
 
 int     
-dec_550_intr_map(pa, ihp)
-	struct pci_attach_args *pa;
-        pci_intr_handle_t *ihp;
+dec_550_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	pcitag_t bustag = pa->pa_intrtag;
 	int buspin = pa->pa_intrpin, line = pa->pa_intrline;
@@ -259,9 +247,7 @@ dec_550_intr_map(pa, ihp)
 }
 
 const char *
-dec_550_intr_string(ccv, ih)
-	void *ccv;
-	pci_intr_handle_t ih;
+dec_550_intr_string(void *ccv, pci_intr_handle_t ih)
 {
 #if 0
 	struct cia_config *ccp = ccv;
@@ -281,9 +267,7 @@ dec_550_intr_string(ccv, ih)
 }
 
 const struct evcnt *
-dec_550_intr_evcnt(ccv, ih)
-	void *ccv;
-	pci_intr_handle_t ih;
+dec_550_intr_evcnt(void *ccv, pci_intr_handle_t ih)
 {
 #if 0
 	struct cia_config *ccp = ccv;
@@ -302,11 +286,7 @@ dec_550_intr_evcnt(ccv, ih)
 }
 
 void *
-dec_550_intr_establish(ccv, ih, level, func, arg)
-	void *ccv, *arg;
-	pci_intr_handle_t ih;
-	int level;
-	int (*func) __P((void *));
+dec_550_intr_establish(void *ccv, pci_intr_handle_t ih, int level, int (*func)(void *), void *arg)
 {
 #if 0
 	struct cia_config *ccp = ccv;
@@ -335,8 +315,7 @@ dec_550_intr_establish(ccv, ih, level, func, arg)
 }
 
 void
-dec_550_intr_disestablish(ccv, cookie)
-        void *ccv, *cookie;
+dec_550_intr_disestablish(void *ccv, void *cookie)
 {
 	struct cia_config *ccp = ccv;
 	struct alpha_shared_intrhand *ih = cookie;
@@ -371,13 +350,8 @@ dec_550_intr_disestablish(ccv, cookie)
 }
 
 void *
-dec_550_pciide_compat_intr_establish(v, dev, pa, chan, func, arg)
-	void *v;
-	struct device *dev;
-	struct pci_attach_args *pa;
-	int chan;
-	int (*func) __P((void *));
-	void *arg;
+dec_550_pciide_compat_intr_establish(void *v, struct device *dev,
+    const struct pci_attach_args *pa, int chan, int (*func)(void *), void *arg)
 {
 	pci_chipset_tag_t pc = pa->pa_pc;
 	void *cookie = NULL;
@@ -404,9 +378,7 @@ dec_550_pciide_compat_intr_establish(v, dev, pa, chan, func, arg)
 }
 
 void
-dec_550_iointr(arg, vec)
-	void *arg;
-	unsigned long vec;
+dec_550_iointr(void *arg, unsigned long vec)
 {
 	int irq; 
 
@@ -425,16 +397,14 @@ dec_550_iointr(arg, vec)
 }
 
 void
-dec_550_intr_enable(irq)
-	int irq;
+dec_550_intr_enable(int irq)
 {
 
 	cia_pyxis_intr_enable(irq + DEC_550_PCI_IRQ_BEGIN, 1);
 }
 
 void
-dec_550_intr_disable(irq)
-	int irq;
+dec_550_intr_disable(int irq)
 {
 
 	cia_pyxis_intr_enable(irq + DEC_550_PCI_IRQ_BEGIN, 0);

@@ -1,4 +1,4 @@
-/*	$NetBSD: mime_codecs.c,v 1.6 2007/10/23 14:58:44 christos Exp $	*/
+/*	$NetBSD: mime_codecs.c,v 1.9 2009/04/10 13:08:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -59,7 +52,7 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: mime_codecs.c,v 1.6 2007/10/23 14:58:44 christos Exp $");
+__RCSID("$NetBSD: mime_codecs.c,v 1.9 2009/04/10 13:08:25 christos Exp $");
 #endif /* not __lint__ */
 
 #include <assert.h>
@@ -234,7 +227,7 @@ mime_b64tobin(char *bin, const char *b64, size_t cnt)
 
 #define EQU	(unsigned)-2
 #define BAD	(unsigned)-1
-#define uchar64(c)  (unsigned)((c) >= sizeof(b64index) ? BAD : b64index[(c)])
+#define uchar64(c)  ((c) >= sizeof(b64index) ? BAD : (unsigned)b64index[(c)])
 
 	p = (unsigned char *)bin;
 	q = (const unsigned char *)b64;
@@ -283,7 +276,7 @@ mime_bintob64(char *b64, const char *bin, size_t cnt)
 	static const char b64table[] =
 	    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 	const unsigned char *p = (const unsigned char*)bin;
-	int i;
+	ssize_t i;
 
 	for (i = cnt; i > 0; i -= 3) {
 		unsigned a = p[0];
@@ -321,7 +314,7 @@ mime_fB64_encode(FILE *fi, FILE *fo, void *cookie __unused)
 {
 	static char b64[MIME_BASE64_LINE_MAX];
 	static char mem[3 * (MIME_BASE64_LINE_MAX / 4)];
-	int cnt;
+	size_t cnt;
 	char *cp;
 	size_t limit;
 #ifdef __lint__
@@ -537,9 +530,9 @@ mime_fQP_decode(FILE *fi, FILE *fo, void *cookie __unused)
 	cookie = cookie;
 #endif
 	while ((line = fgetln(fi, &len)) != NULL) {
-		int c;
 		char *p;
 		char *end;
+
 		end = line + len;
 		for (p = line; p < end; p++) {
 			if (*p == '=') {
@@ -547,11 +540,13 @@ mime_fQP_decode(FILE *fi, FILE *fo, void *cookie __unused)
 				while (p < end && is_WSP(*p))
 					p++;
 				if (*p != '\n' && p + 1 < end) {
+					int c;
 					char buf[3];
+
 					buf[0] = *p++;
 					buf[1] = *p;
 					buf[2] = '\0';
-					c = strtol(buf, NULL, 16);
+					c = (int)strtol(buf, NULL, 16);
 					(void)fputc(c, fo);
 				}
 			}

@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.19 2008/01/11 10:21:26 tsutsui Exp $	*/
+/*	$NetBSD: isr.c,v 1.24 2010/12/20 00:25:45 matt Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.19 2008/01/11 10:21:26 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.24 2010/12/20 00:25:45 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -119,7 +112,7 @@ isr_autovec(struct clockframe cf)
 
 	n = intrcnt[ipl];
 	intrcnt[ipl] = n + 1;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 	isr = isr_autovec_list[ipl];
 	if (isr == NULL) {
@@ -140,7 +133,7 @@ isr_autovec(struct clockframe cf)
  out:
 	idepth--;
 
-	LOCK_CAS_CHECK(&cf);
+	ATOMIC_CAS_CHECK(&cf);
 }
 
 /*
@@ -188,7 +181,7 @@ isr_vectored(struct clockframe cf)
 	ipl = (ipl >> 8) & 7;
 
 	intrcnt[ipl]++;
-	uvmexp.intrs++;
+	curcpu()->ci_data.cpu_nintr++;
 
 #ifdef DIAGNOSTIC
 	if (vec < 64 || vec >= 256) {
@@ -209,7 +202,7 @@ isr_vectored(struct clockframe cf)
 
  out:
 	idepth--;
-	LOCK_CAS_CHECK(&cf);
+	ATOMIC_CAS_CHECK(&cf);
 }
 
 /*
@@ -237,13 +230,6 @@ isr_add_vectored(isr_func_t func, void *arg, int level, int vec)
 	set_vector_entry(vec, (void *)_isr_vectored);
 }
 
-bool
-cpu_intr_p(void)
-{
-
-	return idepth != 0;
-}
-
 /*
  * XXX - could just kill these...
  */
@@ -265,20 +251,13 @@ get_vector_entry(int entry)
 	return (void *)vector_table[entry];
 }
 
-static const int ipl2psl_table[] = {
-	[IPL_NONE] = PSL_IPL0,
-	[IPL_SOFTBIO] = PSL_IPL1,
-	[IPL_SOFTCLOCK] = PSL_IPL1,
-	[IPL_SOFTNET] = PSL_IPL1,
-	[IPL_SOFTSERIAL] = PSL_IPL3,
-	[IPL_VM] = PSL_IPL4,
-	[IPL_SCHED] = PSL_IPL6,
-	[IPL_HIGH] = PSL_IPL7,
+const uint16_t ipl2psl_table[NIPL] = {
+	[IPL_NONE]       = PSL_S | PSL_IPL0,
+	[IPL_SOFTBIO]    = PSL_S | PSL_IPL1,
+	[IPL_SOFTCLOCK]  = PSL_S | PSL_IPL1,
+	[IPL_SOFTNET]    = PSL_S | PSL_IPL1,
+	[IPL_SOFTSERIAL] = PSL_S | PSL_IPL3,
+	[IPL_VM]         = PSL_S | PSL_IPL4,
+	[IPL_SCHED]      = PSL_S | PSL_IPL6,
+	[IPL_HIGH]       = PSL_S | PSL_IPL7,
 };
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._psl = ipl2psl_table[ipl] | PSL_S};
-}

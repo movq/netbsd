@@ -1,4 +1,4 @@
-.\"	$NetBSD: tree.3,v 1.3 2004/04/14 11:05:19 pooka Exp $
+.\"	$NetBSD: tree.3,v 1.7 2010/12/21 18:05:05 njoly Exp $
 .\"	$OpenBSD: tree.3,v 1.9 2003/05/20 09:13:38 jmc Exp $
 .\"/*
 .\" * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -29,7 +29,7 @@
 .\" * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\" */
-.Dd February 24, 2002
+.Dd May 5, 2010
 .Dt TREE 3
 .Os
 .Sh NAME
@@ -131,6 +131,12 @@
 .Ft "struct TYPE *"
 .Fn RB_REMOVE "NAME" "RB_HEAD *head" "struct TYPE *elm"
 .Sh DESCRIPTION
+.Bf -symbolic
+This is a legacy interface; for new code,
+.Xr rbtree 3
+is preferred.
+.Ef
+.Pp
 These macros define data structures for different types of trees:
 splay trees and red-black trees.
 .Pp
@@ -382,8 +388,9 @@ The
 .Fn RB_REMOVE
 macro removes the element
 .Fa elm
-from the tree pointed by
+from the tree pointed to by
 .Fa head .
+The element must be present in that tree.
 .Pp
 The
 .Fn RB_FIND
@@ -416,6 +423,12 @@ The
 .Fn RB_EMPTY
 macro should be used to check whether a red-black tree is empty.
 .Sh NOTES
+Some of these macros or functions perform no error checking,
+and invalid usage leads to undefined behaviour.
+In the case of macros or functions that expect their arguments
+to be elements that are present in the tree, passing an element
+that is not present in the tree is invalid.
+.Pp
 Trying to free a tree in the following way is a common error:
 .Bd -literal -offset indent
 SPLAY_FOREACH(var, NAME, head) {

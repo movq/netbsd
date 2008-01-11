@@ -1,4 +1,4 @@
-/*	$NetBSD: anvar.h,v 1.16 2007/12/25 18:33:38 perry Exp $	*/
+/*	$NetBSD: anvar.h,v 1.20 2010/01/17 19:45:06 pooka Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -103,7 +103,7 @@ struct an_tx_radiotap_header {
 #define	AN_GAPLEN_MAX	8
 
 struct an_softc	{
-	struct device		sc_dev;
+	device_t		sc_dev;
 	struct ethercom		sc_ec;
 	struct ieee80211com	sc_ic;
 	bus_space_tag_t		sc_iot;
@@ -114,7 +114,6 @@ struct an_softc	{
 				    enum ieee80211_state, int);
 
 	int			sc_enabled;
-	int			sc_invalid;
 	int			sc_attached;
 
 	int			sc_bap_id;
@@ -147,7 +146,7 @@ struct an_softc	{
 	}			sc_buf;
 
 	/* radiotap header */
-	void *			sc_drvbpf;
+	struct bpf_if *			sc_drvbpf;
 	union {
 		struct an_rx_radiotap_header	tap;
 		u_int8_t			pad[64];
@@ -164,7 +163,7 @@ struct an_softc	{
 
 int	an_attach(struct an_softc *);
 int	an_detach(struct an_softc *);
-int	an_activate(struct device *, enum devact);
+int	an_activate(device_t, enum devact);
 int	an_intr(void *);
 
 #endif	/* _DEV_IC_ANVAR_H */

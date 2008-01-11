@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.2 2006/08/28 13:43:35 yamt Exp $	*/
+/*	$NetBSD: param.h,v 1.4 2010/02/08 19:02:29 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -112,18 +112,6 @@
 
 #define	MCLBYTES	(1 << MCLSHIFT)	/* size of a m_buf cluster */
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
-#endif
-
 /*
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
  * logical pages.
@@ -145,6 +133,8 @@
 #ifndef _LOCORE
 
 #include <machine/intr.h>
+
+static __inline void delay(unsigned int us) {}	/* XXXXX */
 
 #endif /* _LOCORE */
 #endif /* _KERNEL */

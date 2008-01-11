@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.20 2007/12/20 23:02:39 dsl Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.25 2009/11/21 03:11:00 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,16 +30,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.20 2007/12/20 23:02:39 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.25 2009/11/21 03:11:00 rmind Exp $");
 
+#ifdef _KERNEL_OPT
 #include "opt_vm86.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
@@ -106,7 +100,8 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 		tf->tf_fs = context.sc_fs;		
 		tf->tf_es = context.sc_es;
 		tf->tf_ds = context.sc_ds;
-		tf->tf_eflags = context.sc_eflags;
+		tf->tf_eflags &= ~PSL_USER;
+		tf->tf_eflags |= context.sc_eflags & PSL_USER;
 	}
 	tf->tf_edi = context.sc_edi;
 	tf->tf_esi = context.sc_esi;
@@ -120,7 +115,7 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	tf->tf_esp = context.sc_esp;
 	tf->tf_ss = context.sc_ss;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	/* Restore signal stack. */
 	if (context.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
@@ -129,7 +124,7 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 	/* Restore signal mask. */
 	native_sigset13_to_sigset(&context.sc_mask, &mask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

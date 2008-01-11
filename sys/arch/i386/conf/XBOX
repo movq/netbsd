@@ -1,4 +1,4 @@
-# $NetBSD: XBOX,v 1.12 2008/01/07 08:39:07 martti Exp $
+# $NetBSD: XBOX,v 1.26 2011/05/28 13:01:50 ryo Exp $
 #
 # XBOX -- A basic Microsoft XBox kernel config file.
 #
@@ -12,9 +12,7 @@ options 	REALEXTMEM=60416	# size of extended memory (in KB)
 
 options 	MSGBUFSIZE=65536	# for PCI_CONFIG_DUMP space
 
-#options 	NFS_BOOT_RWSIZE=1024	# kue0 USB ethernet has issues here
-
-makeoptions 	CPUFLAGS="-march=i686 -mtune=pentiumpro"
+#options 	NFS_BOOT_RWSIZE=1024	# kue0 USB Ethernet has issues here
 
 options 	TIMER_FREQ=1125000
 options 	XBOX		# kernel support for xbox
@@ -24,7 +22,6 @@ options 	INSECURE	# disable kernel security levels - X needs this
 options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 options 	NTP		# NTP phase/frequency locked loop
 options 	KTRACE		# system call tracing via ktrace(1)
-options 	LKM		# loadable kernel modules
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Diagnostic/debugging support options
@@ -36,7 +33,7 @@ options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	KGDB		# remote debugger
 #options 	KGDB_DEVNAME="\"com\"",KGDB_DEVADDR=0x3f8,KGDB_DEVRATE=9600
-#makeoptions 	DEBUG="-g"	# compile full symbol table
+#makeoptions	DEBUG="-g"	# compile full symbol table
 
 # Compatibility options
 options 	COMPAT_30	# NetBSD 3.0
@@ -55,15 +52,15 @@ file-system 	UDF		# OSTA UDF CD/DVD file-system
 
 # Networking options
 options 	INET		# IP + ICMP + TCP + UDP
-#options 	INET6		# IPV6
+#options 	INET6		# IPv6
 
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
-options 	MIIVERBOSE	# verbose PHY autoconfig messages
-options 	PCIVERBOSE	# verbose PCI device autoconfig messages
+#options 	MIIVERBOSE	# verbose PHY autoconfig messages
+#options 	PCIVERBOSE	# verbose PCI device autoconfig messages
 #options 	PCI_CONFIG_DUMP	# verbosely dump PCI config space
 options 	SCSIVERBOSE	# human readable SCSI error messages
-options 	USBVERBOSE	# verbose USB device autoconfig messages
+#options 	USBVERBOSE	# verbose USB device autoconfig messages
 
 options 	NFS_BOOT_DHCP
 
@@ -85,10 +82,6 @@ config		netbsd	root on ? type nfs
 # Device configuration
 #
 
-mainbus0 at root
-
-cpu* at mainbus?
-
 # Basic Bus Support
 
 # PCI bus support
@@ -101,7 +94,7 @@ pchb*	at pci? dev ? function ?	# PCI-Host bridges
 pcib*	at pci? dev ? function ?	# PCI-ISA bridges
 ppb*	at pci? dev ? function ?	# PCI-PCI bridges
 
-agp* 	at pchb?
+agp*	at pchb?
 
 # ISA bus support
 isa0	at pcib?
@@ -115,9 +108,9 @@ xboxfb0 	at pci? dev ? function ?
 wsdisplay*	at xboxfb? console ?
 
 # XBOX X3LCD console
-#x3lcd0 		at isa0
-#x3lcd0 		at mainbus?
-#wsdisplay* 	at x3lcd0 console ?
+#x3lcd0		at isa0
+#x3lcd0		at mainbus?
+#wsdisplay*	at x3lcd0 console ?
 
 # I2C/SMBus support
 amdpm*	at pci? dev ? function ?	# RNG and SMBus 1.0 interface
@@ -157,6 +150,7 @@ glxtphy* at mii? phy ?			# Level One LXT-1000 PHYs
 gphyter* at mii? phy ?			# NS83861 Gig-E PHY
 #icsphy* at mii? phy ?			# Integrated Circuit Systems ICS189x
 igphy*	at mii? phy ?			# Intel IGP01E1000
+ihphy*	at mii? phy ?			# Intel 82577 PHYs
 ikphy*	at mii? phy ?			# Intel 82563 PHYs
 inphy*	at mii? phy ?			# Intel 82555 PHYs
 iophy*	at mii? phy ?			# Intel 82553 PHYs
@@ -187,7 +181,7 @@ uhub*	at usb?
 uhub*	at uhub? port ?
 
 # USB HID device
-uhidev*	at uhub? port ? configuration ? interface ?
+uhidev* at uhub? port ? configuration ? interface ?
 
 # USB Mice
 ums*	at uhidev? reportid ?
@@ -198,7 +192,7 @@ ukbd*	at uhidev? reportid ?
 wskbd*	at ukbd? console ? mux 1
 
 # USB serial adapter
-ucycom*	at uhidev? reportid ?
+ucycom* at uhidev? reportid ?
 
 # USB Generic HID devices
 uhid*	at uhidev? reportid ?
@@ -207,15 +201,18 @@ uhid*	at uhidev? reportid ?
 ulpt*	at uhub? port ? configuration ? interface ?
 
 # USB Modem
-umodem*	at uhub? port ? configuration ?
+umodem* at uhub? port ? configuration ?
 ucom*	at umodem?
+
+# Option N.V. Wireless WAN modems
+uhso*	at uhub? port ? configuration ?
 
 # USB Mass Storage
 umass*	at uhub? port ? configuration ? interface ?
 wd*	at umass?
 
 # USB audio
-uaudio*	at uhub? port ? configuration ?
+uaudio* at uhub? port ? configuration ?
 
 # USB MIDI
 umidi* at uhub? port ? configuration ?
@@ -242,13 +239,11 @@ uvscom* at uhub? port ? 	# SUNTAC Slipper U VS-10U serial adapter
 ucom*	at uvscom? portno ?
 
 # Xbox Controller
-xboxcontroller*	at uhub? port ? configuration ?
+xboxcontroller* at uhub? port ? configuration ?
 wsmouse* at xboxcontroller? mux 0
 
 # USB Generic driver
 ugen*	at uhub? port ?
-# On ugen bulk endpoints, perform read-ahead and write-behind.
-options UGEN_BULK_RA_WB
 
 
 # Audio Devices
@@ -267,9 +262,9 @@ pseudo-device	swcrypto	# software crypto implementation
 
 # disk/mass storage pseudo-devices
 #pseudo-device	cgd		4	# cryptographic disk devices
-#pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	fss			# file system snapshot device
 
-pseudo-device	md		1	# memory disk device (ramdisk)
+pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
 options 	VND_COMPRESSION		# compressed vnd(4)
 

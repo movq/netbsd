@@ -1,6 +1,6 @@
-# $NetBSD: t_mount.sh,v 1.1 2007/11/12 15:18:24 jmmv Exp $
+# $NetBSD: t_mount.sh,v 1.6 2010/11/07 17:51:18 jmmv Exp $
 #
-# Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
+# Copyright (c) 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -11,13 +11,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -111,11 +104,27 @@ large_body() {
 	test_unmount
 
 	mkdir tmp
-	atf_check "mount -t tmpfs -o -s9223372036854775808 tmpfs \
-	    tmp" 1 null ignore
-	atf_check "mount -t tmpfs -o -s9223372036854775808g tmpfs \
-	    tmp" 1 null ignore
+	atf_check -s eq:1 -o empty -e ignore \
+	    mount -t tmpfs -o -s9223372036854775808 tmpfs tmp
+	atf_check -s eq:1 -o empty -e ignore \
+	    mount -t tmpfs -o -s9223372036854775808g tmpfs tmp
 	rmdir tmp
+}
+
+atf_test_case mntpt
+mntpt_head() {
+	atf_set "descr" "Tests that the error messages printed when the" \
+	                "mount point is invalid do not show the source" \
+	                "unused parameter"
+}
+mntpt_body() {
+	mount_tmpfs unused $(pwd)/mnt >out 2>&1
+	atf_check -s eq:1 -o empty -e empty grep unused out
+	atf_check -s eq:0 -o ignore -e empty grep "$(pwd)/mnt" out
+
+	mount_tmpfs unused mnt >out 2>&1
+	atf_check -s eq:1 -o empty -e empty grep unused out
+	atf_check -s eq:0 -o ignore -e empty grep mnt out
 }
 
 atf_init_test_cases() {
@@ -127,4 +136,5 @@ atf_init_test_cases() {
 	atf_add_test_case attrs
 	atf_add_test_case negative
 	atf_add_test_case large
+	atf_add_test_case mntpt
 }

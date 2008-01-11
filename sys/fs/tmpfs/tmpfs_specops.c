@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpfs_specops.c,v 1.6 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: tmpfs_specops.c,v 1.10 2011/05/24 20:17:49 rmind Exp $	*/
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tmpfs_specops.c,v 1.6 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tmpfs_specops.c,v 1.10 2011/05/24 20:17:49 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/vnode.h>
@@ -50,13 +43,13 @@ __KERNEL_RCSID(0, "$NetBSD: tmpfs_specops.c,v 1.6 2005/12/11 12:24:29 christos E
 #include <fs/tmpfs/tmpfs.h>
 #include <fs/tmpfs/tmpfs_specops.h>
 
-/* --------------------------------------------------------------------- */
-
 /*
  * vnode operations vector used for special devices stored in a tmpfs
  * file system.
  */
+
 int (**tmpfs_specop_p)(void *);
+
 const struct vnodeopv_entry_desc tmpfs_specop_entries[] = {
 	{ &vop_default_desc,		vn_default_error },
 	{ &vop_lookup_desc,		tmpfs_spec_lookup },
@@ -96,47 +89,55 @@ const struct vnodeopv_entry_desc tmpfs_specop_entries[] = {
 	{ &vop_pathconf_desc,		tmpfs_spec_pathconf },
 	{ &vop_islocked_desc,		tmpfs_spec_islocked },
 	{ &vop_advlock_desc,		tmpfs_spec_advlock },
-	{ &vop_lease_desc,		tmpfs_spec_lease },
 	{ &vop_bwrite_desc,		tmpfs_spec_bwrite },
 	{ &vop_getpages_desc,		tmpfs_spec_getpages },
 	{ &vop_putpages_desc,		tmpfs_spec_putpages },
 	{ NULL, NULL }
 };
-const struct vnodeopv_desc tmpfs_specop_opv_desc =
-	{ &tmpfs_specop_p, tmpfs_specop_entries };
 
-/* --------------------------------------------------------------------- */
+const struct vnodeopv_desc tmpfs_specop_opv_desc = {
+	&tmpfs_specop_p, tmpfs_specop_entries
+};
 
 int
 tmpfs_spec_close(void *v)
 {
-	struct vnode *vp = ((struct vop_close_args *)v)->a_vp;
+	struct vop_close_args /* {
+		struct vnode	*a_vp;
+		int		a_fflag;
+		kauth_cred_t	a_cred;
+	} */ *ap = v;
+	vnode_t *vp = ap->a_vp;
 
-	int error;
-
-	tmpfs_update(vp, NULL, NULL, UPDATE_CLOSE);
-	error = VOCALL(spec_vnodeop_p, VOFFSET(vop_close), v);
-
-	return error;
+	tmpfs_update(vp, NULL, NULL, NULL, UPDATE_CLOSE);
+	return VOCALL(spec_vnodeop_p, VOFFSET(vop_close), v);
 }
-
-/* --------------------------------------------------------------------- */
 
 int
 tmpfs_spec_read(void *v)
 {
-	struct vnode *vp = ((struct vop_read_args *)v)->a_vp;
+	struct vop_read_args /* {
+		struct vnode *a_vp;
+		struct uio *a_uio;
+		int a_ioflag;
+		kauth_cred_t a_cred;
+	} */ *ap = v;
+	vnode_t *vp = ap->a_vp;
 
 	VP_TO_TMPFS_NODE(vp)->tn_status |= TMPFS_NODE_ACCESSED;
 	return VOCALL(spec_vnodeop_p, VOFFSET(vop_read), v);
 }
 
-/* --------------------------------------------------------------------- */
-
 int
 tmpfs_spec_write(void *v)
 {
-	struct vnode *vp = ((struct vop_write_args *)v)->a_vp;
+	struct vop_write_args /* {
+		struct vnode *a_vp;
+		struct uio *a_uio;
+		int a_ioflag;
+		kauth_cred_t a_cred;
+	} */ *ap = v;
+	vnode_t *vp = ap->a_vp;
 
 	VP_TO_TMPFS_NODE(vp)->tn_status |= TMPFS_NODE_MODIFIED;
 	return VOCALL(spec_vnodeop_p, VOFFSET(vop_write), v);

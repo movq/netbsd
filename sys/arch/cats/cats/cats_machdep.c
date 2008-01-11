@@ -1,4 +1,4 @@
-/*	$NetBSD: cats_machdep.c,v 1.58 2006/11/24 22:04:21 wiz Exp $	*/
+/*	$NetBSD: cats_machdep.c,v 1.69 2009/12/28 03:22:19 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -40,9 +40,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.58 2006/11/24 22:04:21 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.69 2009/12/28 03:22:19 uebayasi Exp $");
 
 #include "opt_ddb.h"
+#include "opt_modular.h"
 #include "opt_pmap_debug.h"
 
 #include "isadma.h"
@@ -52,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.58 2006/11/24 22:04:21 wiz Exp $"
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/exec.h>
+#include <sys/exec_aout.h>
 #include <sys/proc.h>
 #include <sys/msgbuf.h>
 #include <sys/reboot.h>
@@ -78,7 +80,6 @@ __KERNEL_RCSID(0, "$NetBSD: cats_machdep.c,v 1.58 2006/11/24 22:04:21 wiz Exp $"
 #include <arm/footbridge/dc21285reg.h>
 
 #include "ksyms.h"
-#include "opt_ipkdb.h"
 #include "opt_ableelf.h"
 
 #include "isa.h"
@@ -114,11 +115,7 @@ u_int dc21285_fclk = FCLK;
 /* Define various stack sizes in pages */
 #define IRQ_STACK_SIZE	1
 #define ABT_STACK_SIZE	1
-#ifdef IPKDB
-#define UND_STACK_SIZE	2
-#else
 #define UND_STACK_SIZE	1
-#endif
 
 struct ebsaboot ebsabootinfo;
 BootConfig bootconfig;		/* Boot config storage */
@@ -132,7 +129,6 @@ vm_offset_t physical_freeend;
 vm_offset_t physical_end;
 u_int free_pages;
 vm_offset_t pagetables_start;
-int physmem = 0;
 
 /* Physical and virtual addresses for some global pages */
 pv_addr_t systempage;
@@ -162,8 +158,6 @@ extern int pmap_debug_level;
 #define NUM_KERNEL_PTS		(KERNEL_PT_VMDATA + KERNEL_PT_VMDATA_NUM)
 
 pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
-
-struct user *proc0paddr;
 
 /* Prototypes */
 
@@ -238,6 +232,7 @@ cpu_reboot(int howto, char *bootstr)
 	 */
 	if (cold) {
 		doshutdownhooks();
+		pmf_system_shutdown(boothowto);
 		printf("The operating system has halted.\n");
 		printf("Please press any key to reboot.\n\n");
 		cngetc();
@@ -267,6 +262,8 @@ cpu_reboot(int howto, char *bootstr)
 	
 	/* Run any shutdown hooks */
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	/* Make sure IRQ's are disabled */
 	IRQdisable;
@@ -352,7 +349,6 @@ initarm(void *arm_bootargs)
 	int loop;
 	int loop1;
 	u_int l1pagetable;
-	pv_addr_t kernel_l1pt;
 	extern u_int cpu_get_control(void);
 
 	/*
@@ -508,7 +504,6 @@ initarm(void *arm_bootargs)
 	memset((char *)(var), 0, ((np) * PAGE_SIZE));
 
 	loop1 = 0;
-	kernel_l1pt.pv_pa = kernel_l1pt.pv_va = 0;
 	for (loop = 0; loop <= NUM_KERNEL_PTS; ++loop) {
 		/* Are we 16KB aligned for an L1 ? */
 		if ((physical_freestart & (L1_TABLE_SIZE - 1)) == 0
@@ -700,7 +695,7 @@ initarm(void *arm_bootargs)
 	 */
 #ifdef VERBOSE_INIT_ARM
 	/* checking sttb address */
-	printf("setttb address = %p\n", cpufuncs.cf_setttb);
+	printf("cpu_setttb address = %p\n", cpu_setttb);
 
 	printf("kernel_l1pt=0x%08x old = 0x%08x, phys = 0x%08x\n",
 			((uint*)kernel_l1pt.pv_va)[0xf00],
@@ -737,15 +732,15 @@ initarm(void *arm_bootargs)
 	fcomcndetach();
 #endif
 	
-	setttb(kernel_l1pt.pv_pa);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 	/*
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init
 	 */
-	proc0paddr = (struct user *)kernelstack.pv_va;
-	lwp0.l_addr = proc0paddr;
+	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+
 	/*
 	 * XXX this should only be done in main() but it useful to
 	 * have output earlier ...
@@ -879,33 +874,20 @@ initarm(void *arm_bootargs)
 
 	/* Boot strap pmap telling it where the kernel page table is */
 	printf("pmap ");
-	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 
 	/* Setup the IRQ system */
 	printf("irq ");
 	footbridge_intr_init();
 	printf("done.\n");
 
-#ifdef IPKDB
-	/* Initialise ipkdb */
-	ipkdb_init();
-	if (boothowto & RB_KDB)
-		ipkdb_connect(0);
-#endif
-
-#if NKSYMS || defined(DDB) || defined(LKM)
-#ifdef __ELF__
-	/* ok this is really rather sick, in ELF what happens is that the
-	 * ELF symbol table is added after the text section.
-	 */
-	ksyms_init(0, NULL, NULL);	/* XXX */
-#else
+#if NKSYMS || defined(DDB) || defined(MODULAR)
+#ifndef __ELF__		/* XXX */
 	{
 		extern int end;
 		extern int *esym;
 
-		ksyms_init(*(int *)&end, ((int *)&end) + 1, esym);
+		ksyms_addsyms_elf(*(int *)&end, ((int *)&end) + 1, esym);
 	}
 #endif /* __ELF__ */
 #endif

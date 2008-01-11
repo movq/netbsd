@@ -1,5 +1,5 @@
 /*	
- * $NetBSD: dev_net.c,v 1.2 2006/04/22 07:58:53 cherry Exp $
+ * $NetBSD: dev_net.c,v 1.7 2009/10/26 19:16:56 cegger Exp $
  */
 
 /*-
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -152,8 +145,7 @@ net_open(struct open_file *f, ...)
 }
 
 int
-net_close(f)
-    struct open_file *f;
+net_close(struct open_file *f)
 {
 
 #ifdef	NETIF_DEBUG
@@ -181,7 +173,7 @@ net_close(f)
 }
 
 int
-net_strategy()
+net_strategy(void)
 {
     return EIO;
 }
@@ -206,8 +198,7 @@ int try_bootp = 1;
 extern n_long ip_convertaddr(char *p);
 
 static int
-net_getparams(sock)
-    int sock;
+net_getparams(int sock)
 {
     char buf[MAXHOSTNAMELEN];
     char temp[FNAME_SIZE];
@@ -282,8 +273,8 @@ net_getparams(sock)
 	    rootpath[i++] = '\0';
 	    if (inet_addr(&rootpath[0]) != INADDR_NONE)
 		    rootip.s_addr = inet_addr(&rootpath[0]);
-	    bcopy(&rootpath[i], &temp[0], strlen(&rootpath[i])+1);
-	    bcopy(&temp[0], &rootpath[0], strlen(&rootpath[i])+1);	    
+	    memcpy(&temp[0], &rootpath[i], strlen(&rootpath[i])+1);
+	    memcpy(&rootpath[0], &temp[0], strlen(&rootpath[i])+1);	    
     }
     printf("net_open: server addr: %s\n", inet_ntoa(rootip));
     printf("net_open: server path: %s\n", rootpath);	    

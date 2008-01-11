@@ -1,12 +1,12 @@
-# $NetBSD: Makefile,v 1.3 2007/05/28 12:06:31 tls Exp $
+# $NetBSD: Makefile,v 1.6 2009/05/12 18:37:50 plunky Exp $
 
 USE_FORT?= yes	# network client
 
 PROG=		sdpquery
 MAN=		sdpquery.1
-SRCS=		sdpquery.c search.c
+SRCS=		sdpquery.c command.c print.c
 
-DPADD+=		${LIBBLUETOOTH} ${LIBSDP}
-LDADD+=		-lbluetooth -lsdp
+DPADD+=		${LIBBLUETOOTH}
+LDADD+=		-lbluetooth
 
 .include <bsd.prog.mk>

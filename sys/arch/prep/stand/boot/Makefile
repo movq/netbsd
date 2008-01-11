@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.22 2007/12/19 18:28:50 garbled Exp $
+#	$NetBSD: Makefile,v 1.25 2011/01/22 19:19:22 joerg Exp $
 
 NOMAN= # defined
 
@@ -24,10 +24,10 @@ SRCS+= filesystem.c inkernel.c io.c tgets.c prf.c monitor.c
 SRCS+= kbd.c ns16550.c vers.c vreset.c vga.c 
 
 CFLAGS= -Os -mmultiple -ffreestanding
-AFLAGS= -x assembler-with-cpp -traditional-cpp
+CFLAGS+= -Werror -Wall -Wstrict-prototypes -Wmissing-prototypes
+AFLAGS= -x assembler-with-cpp
 
 CPPFLAGS= -nostdinc -I${.OBJDIR} -I${MKBOOTIMAGE} -I${S}
-CPPFLAGS+= -Werror -Wall -Wstrict-prototypes -Wmissing-prototypes
 CPPFLAGS+= -D_STANDALONE -DRELOC=${RELOC} -DUSE_SCAN
 CPPFLAGS+= -D__daddr_t=int32_t
 #CPPFLAGS+= -DDBMONITOR
@@ -69,7 +69,8 @@ powerpc::
 .endif
 
 vers.c: ${.CURDIR}/../boot/version
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${.CURDIR}/../boot/version "prep" ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${.CURDIR}/../boot/version "prep" ${NEWVERSWHAT}
 
 ${PROG}: ${OBJS} ${LIBS}
 	${LD} -o ${PROG}.elf -N -T ${.CURDIR}/../boot/ld.script \

@@ -1,4 +1,4 @@
-#	$NetBSD: files.arc,v 1.60 2007/10/17 19:53:28 garbled Exp $
+#	$NetBSD: files.arc,v 1.64 2011/02/20 07:52:42 matt Exp $
 #	$OpenBSD: files.arc,v 1.21 1999/09/11 10:20:20 niklas Exp $
 #
 # maxpartitions must be first item in files.${ARCH}
@@ -79,22 +79,11 @@ file	arch/arc/arc/wired_map_machdep.c
 file	arch/arc/arc/arcbios.c
 
 file	arch/mips/mips/mips3_clock.c
-file	arch/mips/mips/softintr.c
 
 ##
 ##	Machine-independent ATAPI drivers
 ##
 include "dev/ata/files.ata"
-
-# Raster operations
-include "dev/rasops/files.rasops"
-include "dev/wsfont/files.wsfont"
-include "dev/wsfb/files.wsfb"
-
-#
-# "Workstation Console" glue.
-#
-include "dev/wscons/files.wscons"
 
 include "dev/pckbport/files.pckbport"
 
@@ -277,12 +266,14 @@ file dev/md_root.c			memory_disk_hooks
 # USB
 include "dev/usb/files.usb"
 
+# IEEE1394
+include "dev/ieee1394/files.ieee1394"
+
 #
 #	Common files
 #
 
 file	dev/cons.c
 #file	dev/cninit.c
-#file	netinet/in_cksum.c
 
 include "arch/arc/conf/majors.arc"

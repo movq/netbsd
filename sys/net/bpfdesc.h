@@ -1,4 +1,4 @@
-/*	$NetBSD: bpfdesc.h,v 1.26 2007/07/09 21:10:59 ad Exp $	*/
+/*	$NetBSD: bpfdesc.h,v 1.32 2010/03/13 20:38:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -79,6 +79,7 @@ struct bpf_d {
 	u_char		bd_immediate;	/* true to return on packet arrival */
 	int		bd_hdrcmplt;	/* false to fill in src lladdr */
 	int		bd_seesent;	/* true if bpf should see sent packets */
+	int 		bd_feedback;	/* true to feed back sent packets */
 	int		bd_async;	/* non-zero if packet reception should generate signal */
 	pid_t		bd_pgid;	/* process or group id for signal */
 #if BSD < 199103
@@ -92,6 +93,10 @@ struct bpf_d {
 	callout_t	bd_callout;	/* for BPF timeouts with select */
 	pid_t		bd_pid;		/* corresponding PID */
 	LIST_ENTRY(bpf_d) bd_list;	/* list of all BPF's */
+	void		*bd_sih;	/* soft interrupt handle */
+	struct timespec bd_atime;	/* access time */
+	struct timespec bd_mtime;	/* modification time */
+	struct timespec bd_btime;	/* birth time */
 };
 
 
@@ -106,15 +111,15 @@ struct bpf_d {
  */
 struct bpf_d_ext {
 	int32_t		bde_bufsize;
-	u_int8_t	bde_promisc;
-	u_int8_t	bde_state;
-	u_int8_t	bde_immediate;
+	uint8_t		bde_promisc;
+	uint8_t		bde_state;
+	uint8_t		bde_immediate;
 	int32_t		bde_hdrcmplt;
 	int32_t		bde_seesent;
 	pid_t		bde_pid;
-	u_int64_t	bde_rcount;		/* number of packets received */
-	u_int64_t	bde_dcount;		/* number of packets dropped */
-	u_int64_t	bde_ccount;		/* number of packets captured */
+	uint64_t	bde_rcount;		/* number of packets received */
+	uint64_t	bde_dcount;		/* number of packets dropped */
+	uint64_t	bde_ccount;		/* number of packets captured */
 	char		bde_ifname[IFNAMSIZ];
 };
 
@@ -128,11 +133,11 @@ struct bpf_if {
 	struct bpf_if **bif_driverp;	/* pointer into softc */
 	u_int bif_dlt;			/* link layer type */
 	u_int bif_hdrlen;		/* length of header (with padding) */
-	struct ifnet *bif_ifp;		/* correspoding interface */
+	struct ifnet *bif_ifp;		/* corresponding interface */
 };
 
 #ifdef _KERNEL
-int	 bpf_setf __P((struct bpf_d *, struct bpf_program *));
+int	 bpf_setf(struct bpf_d *, struct bpf_program *);
 #endif
 
 #endif /* !_NET_BPFDESC_H_ */

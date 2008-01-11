@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.61 2007/12/08 16:00:25 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.72 2011/05/11 16:23:40 zoltan Exp $
 
 LIB=	sa
 NOPIC=	# defined
@@ -8,19 +8,33 @@ SA_USE_CREAD?= no		# Read compressed kernels
 SA_INCLUDE_NET?= yes		# Netboot via TFTP, NFS
 SA_USE_LOADFILE?= no		# Generic executable loading support
 
-#DEBUGCPPFLAGS= -DBOOTP_DEBUG -DNETIF_DEBUG -DETHER_DEBUG -DNFS_DEBUG -DRPC_DEBUG -DRARP_DEBUG -DNET_DEBUG -DDEBUG -DPARANOID
+#DEBUGCPPFLAGS= -DBOOTP_DEBUG -DNETIF_DEBUG -DETHER_DEBUG -DNFS_DEBUG -DRPC_DEBUG -DRARP_DEBUG -DARP_DEBUG -DNET_DEBUG -DDEBUG -DPARANOID
 CPPFLAGS=	-I${SADIR} ${SACPPFLAGS} ${SAMISCCPPFLAGS} \
 		-DCOMPAT_UFS ${DEBUGCPPFLAGS}
 
 #COPTS+= -ansi -pedantic -Wall
 
-.PATH.c: ${SADIR}
+.if defined(SA_EXTRADIR)
+.-include "${SA_EXTRADIR}/Makefile.inc"
+.endif
+
+.include <bsd.own.mk>
+
+.PATH.c: ${SADIR} ${.PARSEDIR}/../../../common/lib/libc/string
 
 # stand routines
-SRCS+=	alloc.c bcopy.c bzero.c errno.c exit.c exec.c files.c \
-	getfile.c gets.c globals.c memcmp.c memcpy.c memmove.c memset.c \
-	panic.c printf.c qsort.c snprintf.c sprintf.c strerror.c subr_prf.c \
-	twiddle.c vsprintf.c checkpasswd.c
+SRCS+=	alloc.c errno.c exit.c files.c \
+	getfile.c gets.c globals.c \
+	panic.c printf.c qsort.c snprintf.c sprintf.c strerror.c \
+	subr_prf.c twiddle.c vsprintf.c checkpasswd.c
+
+.if (${MACHINE_CPU} != "mips")
+SRCS+=	exec.c
+.endif
+
+# string routines
+SRCS+=	memcmp.c memcpy.c memmove.c memset.c strchr.c
+SRCS+=	bcopy.c bzero.c	# Remove me eventually.
 
 # io routines
 SRCS+=	closeall.c dev.c disklabel.c dkcksum.c ioctl.c nullfs.c stat.c fstat.c
@@ -31,13 +45,16 @@ SRCS+=	cread.c
 .endif
 
 .if (${SA_USE_LOADFILE} == "yes")
-SRCS+=	loadfile.c loadfile_aout.c loadfile_ecoff.c loadfile_elf32.c \
-	loadfile_elf64.c
+SRCS+=	loadfile.c loadfile_ecoff.c loadfile_elf32.c lookup_elf32.c \
+	loadfile_elf64.c lookup_elf64.c
+.if (${MACHINE_CPU} != "mips")
+SRCS+=	loadfile_aout.c
+.endif
 .endif
 
 .if (${SA_INCLUDE_NET} == "yes")
 # network routines
-SRCS+=	arp.c ether.c ether_sprintf.c ip_cksum.c net.c netif.c rpc.c udp.c
+SRCS+=	arp.c ether.c ether_sprintf.c ip_cksum.c net.c netif.c rpc.c udp.c ip.c
 
 # network info services:
 SRCS+=	bootp.c rarp.c bootparam.c
@@ -52,7 +69,7 @@ SRCS+=	cd9660.c
 SRCS+=	ustarfs.c
 SRCS+=	dosfs.c
 SRCS+=	ext2fs.c
-# for historic comparibility ufs == ffsv1
+# for historic compatibility ufs == ffsv1
 SRCS+=	ufs.c
 
 # only needed during build
@@ -66,6 +83,6 @@ lib${LIB}.o:: ${OBJS}
 	@rm -f lib${LIB}.o
 	@${LD} -r -o lib${LIB}.o `lorder ${OBJS} | tsort`
 
-.if ${HAVE_GCC} == 4
+.if (defined(HAVE_GCC) && ${HAVE_GCC} == 4) || defined(HAVE_PCC)
 CPPFLAGS+=	-Wno-pointer-sign
 .endif

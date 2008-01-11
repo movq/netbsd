@@ -1,4 +1,4 @@
-.\"	$NetBSD: traceroute6.8,v 1.11 2005/09/17 15:16:11 ginsbach Exp $
+.\"	$NetBSD: traceroute6.8,v 1.13 2011/05/12 08:42:24 wiz Exp $
 .\"	$KAME: traceroute6.8,v 1.8 2000/06/12 16:29:18 itojun Exp $
 .\"
 .\" Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -34,41 +34,28 @@
 .\"
 .Sh NAME
 .Nm traceroute6
-.Nd "print the route IPv6 packets will take to the destination"
+.Nd print the route IPv6 packets will take to the destination
 .\"
 .Sh SYNOPSIS
 .Nm traceroute6
-.Bk -words
-.Op Fl dIlnrv
-.Ek
-.Bk -words
+.Op Fl adIlnrv
+.Op Fl A Ar as_server
 .Op Fl f Ar firsthop
-.Ek
-.Bk -words
 .Op Fl g Ar gateway
-.Ek
-.Bk -words
 .Op Fl m Ar hoplimit
-.Ek
-.Bk -words
 .Op Fl p Ar port
-.Ek
-.Bk -words
 .Op Fl q Ar probes
-.Ek
-.Bk -words
 .Op Fl s Ar src
-.Ek
-.Bk -words
 .Op Fl w Ar waittime
-.Ek
-.Bk -words
 .Ar target
 .Op Ar datalen
-.Ek
 .\"
 .Sh DESCRIPTION
 .Bl -tag -width Ds
+.It Fl A
+Turn on AS# lookups and use the given server instead of the default.
+.It Fl a
+Turn on AS# lookups for each hop encountered.
 .It Fl d
 Debug mode.
 .It Fl f Ar firsthop

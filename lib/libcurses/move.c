@@ -1,4 +1,4 @@
-/*	$NetBSD: move.c,v 1.15 2007/01/21 13:25:36 jdc Exp $	*/
+/*	$NetBSD: move.c,v 1.17 2010/02/23 19:48:26 drochner Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)move.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: move.c,v 1.15 2007/01/21 13:25:36 jdc Exp $");
+__RCSID("$NetBSD: move.c,v 1.17 2010/02/23 19:48:26 drochner Exp $");
 #endif
 #endif				/* not lint */
 
@@ -70,8 +70,19 @@ wmove(WINDOW *win, int y, int x)
 	if (x >= win->maxx || y >= win->maxy)
 		return (ERR);
 	win->curx = x;
-	win->lines[win->cury]->flags &= ~__ISPASTEOL;
+	win->alines[win->cury]->flags &= ~__ISPASTEOL;
 	win->cury = y;
-	win->lines[y]->flags &= ~__ISPASTEOL;
+	win->alines[y]->flags &= ~__ISPASTEOL;
 	return (OK);
+}
+
+void
+wcursyncup(WINDOW *win)
+{
+
+	while (win->orig) {
+		wmove(win->orig, win->cury + win->begy - win->orig->begy,
+			win->curx + win->begx - win->orig->begx);
+		win = win->orig;
+	}
 }

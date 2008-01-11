@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_bcast.c,v 1.18 2006/11/03 20:24:41 christos Exp $	*/
+/*	$NetBSD: clnt_bcast.c,v 1.22 2010/03/07 23:49:14 dholland Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_bcast.c 1.15 89/04/21 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_bcast.c,v 1.18 2006/11/03 20:24:41 christos Exp $");
+__RCSID("$NetBSD: clnt_bcast.c,v 1.22 2010/03/07 23:49:14 dholland Exp $");
 #endif
 #endif
 
@@ -160,7 +160,7 @@ __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
 		if (ifap->ifa_addr->sa_family != af ||
 		    !(ifap->ifa_flags & IFF_UP))
 			continue;
-		bip = (struct broadif *)malloc(sizeof *bip);
+		bip = malloc(sizeof(*bip));
 		if (bip == NULL)
 			break;
 		bip->index = if_nametoindex(ifap->ifa_name);
@@ -262,10 +262,10 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 	struct rpc_msg	msg;	/* RPC message */
 	char 		*outbuf = NULL;	/* Broadcast msg buffer */
 	char		*inbuf = NULL; /* Reply buf */
-	int		inlen;
+	ssize_t		inlen;
 	u_int 		maxbufsize = 0;
 	AUTH 		*sys_auth = authunix_create_default();
-	int		i;
+	size_t		i;
 	void		*handle;
 	char		uaddress[1024];	/* A self imposed limit */
 	char		*uaddrp = uaddress;
@@ -467,7 +467,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 				 */
 
 				if (!__rpc_lowvers)
-					if (sendto(fdlist[i].fd, outbuf,
+					if ((size_t)sendto(fdlist[i].fd, outbuf,
 					    outlen, 0, (struct sockaddr*)addr,
 					    (size_t)fdlist[i].asize) !=
 					    outlen) {
@@ -475,7 +475,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 						      " broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
-					};
+					}
 #ifdef RPC_DEBUG
 				if (!__rpc_lowvers)
 					fprintf(stderr, "Broadcast packet sent "
@@ -487,13 +487,15 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 				 * Send the version 2 packet also
 				 * for UDP/IP
 				 */
-				if (pmap_flag && fdlist[i].proto == IPPROTO_UDP) {
-					if (sendto(fdlist[i].fd, outbuf_pmap,
-					    outlen_pmap, 0, addr,
+				if (pmap_flag &&
+				    fdlist[i].proto == IPPROTO_UDP) {
+					if ((size_t)sendto(fdlist[i].fd,
+					    outbuf_pmap, outlen_pmap, 0, addr,
 					    (size_t)fdlist[i].asize) !=
 						outlen_pmap) {
 						warnx("clnt_bcast: "
-				"Cannot send broadcast packet");
+						    "Cannot send "
+						    "broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;
 					}
@@ -563,7 +565,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 				stat = RPC_CANTRECV;
 				continue;
 			}
-			if (inlen < sizeof (u_int32_t))
+			if (inlen < (ssize_t)sizeof(u_int32_t))
 				continue; /* Drop that and go ahead */
 			/*
 			 * see if reply transaction id matches sent id.

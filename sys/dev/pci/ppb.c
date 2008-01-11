@@ -1,4 +1,4 @@
-/*	$NetBSD: ppb.c,v 1.36 2007/12/09 20:28:13 jmcneill Exp $	*/
+/*	$NetBSD: ppb.c,v 1.45 2011/01/10 14:19:36 cegger Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppb.c,v 1.36 2007/12/09 20:28:13 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppb.c,v 1.45 2011/01/10 14:19:36 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,20 +43,23 @@ __KERNEL_RCSID(0, "$NetBSD: ppb.c,v 1.36 2007/12/09 20:28:13 jmcneill Exp $");
 #include <dev/pci/ppbreg.h>
 #include <dev/pci/pcidevs.h>
 
+#define	PCI_PCIE_SLCSR_NOTIFY_MASK					\
+	(PCI_PCIE_SLCSR_ABE | PCI_PCIE_SLCSR_PFE | PCI_PCIE_SLCSR_MSE |	\
+	 PCI_PCIE_SLCSR_PDE | PCI_PCIE_SLCSR_CCE | PCI_PCIE_SLCSR_HPE)
+
 struct ppb_softc {
-	struct device sc_dev;		/* generic device glue */
+	device_t sc_dev;		/* generic device glue */
 	pci_chipset_tag_t sc_pc;	/* our PCI chipset... */
 	pcitag_t sc_tag;		/* ...and tag. */
 
 	pcireg_t sc_pciconfext[48];
 };
 
-static bool		ppb_resume(device_t);
-static bool		ppb_suspend(device_t);
+static bool		ppb_resume(device_t, const pmf_qual_t *);
+static bool		ppb_suspend(device_t, const pmf_qual_t *);
 
 static int
-ppbmatch(struct device *parent, struct cfdata *match,
-    void *aux)
+ppbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -67,13 +70,24 @@ ppbmatch(struct device *parent, struct cfdata *match,
 	 */
 	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_BRIDGE &&
 	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_BRIDGE_PCI)
-		return (1);
+		return 1;
 
-	return (0);
+#ifdef __powerpc__
+	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_PROCESSOR &&
+	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_PROCESSOR_POWERPC) {
+		pcireg_t bhlc = pci_conf_read(pa->pa_pc, pa->pa_tag,
+		    PCI_BHLC_REG);
+		if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_FREESCALE
+		    && PCI_HDRTYPE(bhlc) == PCI_HDRTYPE_RC)
+		return 1;
+	}
+#endif
+
+	return 0;
 }
 
 static void
-ppb_fix_pcix(device_t self)
+ppb_fix_pcie(device_t self)
 {
 	struct ppb_softc *sc = device_private(self);
 	pcireg_t reg;
@@ -83,22 +97,62 @@ ppb_fix_pcix(device_t self)
 				&off, &reg))
 		return; /* Not a PCIe device */
 
-	if ((reg & 0x000f0000) != 0x00010000) {
-		aprint_normal_dev(self, "unuspported PCI Express version\n");
+	aprint_normal_dev(self, "PCI Express ");
+	switch (reg & PCI_PCIE_XCAP_VER_MASK) {
+	case PCI_PCIE_XCAP_VER_1_0:
+		aprint_normal("1.0");
+		break;
+	case PCI_PCIE_XCAP_VER_2_0:
+		aprint_normal("2.0");
+		break;
+	default:
+		aprint_normal_dev(self, "version unsupported (0x%x)\n",
+		    (reg & PCI_PCIE_XCAP_VER_MASK) >> 16);
 		return;
 	}
-	reg = pci_conf_read(sc->sc_pc, sc->sc_tag, off + 0x18);
-	if (reg & 0x003f) {
-		aprint_normal_dev(self, "disabling notification events\n");
-		reg &= ~0x003f;
-		pci_conf_write(sc->sc_pc, sc->sc_tag, off + 0x18, reg);
+	aprint_normal(" <");
+	switch (reg & PCI_PCIE_XCAP_TYPE_MASK) {
+	case PCI_PCIE_XCAP_TYPE_PCIE_DEV:
+		aprint_normal("PCI-E Endpoint device");
+		break;
+	case PCI_PCIE_XCAP_TYPE_PCI_DEV:
+		aprint_normal("Legacy PCI-E Endpoint device");
+		break;
+	case PCI_PCIE_XCAP_TYPE_ROOT:
+		aprint_normal("Root Port of PCI-E Root Complex");
+		break;
+	case PCI_PCIE_XCAP_TYPE_UP:
+		aprint_normal("Upstream Port of PCI-E Switch");
+		break;
+	case PCI_PCIE_XCAP_TYPE_DOWN:
+		aprint_normal("Downstream Port of PCI-E Switch");
+		break;
+	case PCI_PCIE_XCAP_TYPE_PCIE2PCI:
+		aprint_normal("PCI-E to PCI/PCI-X Bridge");
+		break;
+	case PCI_PCIE_XCAP_TYPE_PCI2PCIE:
+		aprint_normal("PCI/PCI-X to PCI-E Bridge");
+		break;
+	default:
+		aprint_normal("Device/Port Type 0x%x",
+		    (reg & PCI_PCIE_XCAP_TYPE_MASK) >> 20);
+		break;
+	}
+	aprint_normal(">\n");
+
+	reg = pci_conf_read(sc->sc_pc, sc->sc_tag, off + PCI_PCIE_SLCSR);
+	if (reg & PCI_PCIE_SLCSR_NOTIFY_MASK) {
+		aprint_debug_dev(self, "disabling notification events\n");
+		reg &= ~PCI_PCIE_SLCSR_NOTIFY_MASK;
+		pci_conf_write(sc->sc_pc, sc->sc_tag,
+		    off + PCI_PCIE_SLCSR, reg);
 	}
 }
 
 static void
-ppbattach(struct device *parent, struct device *self, void *aux)
+ppbattach(device_t parent, device_t self, void *aux)
 {
-	struct ppb_softc *sc = (void *) self;
+	struct ppb_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	struct pcibus_attach_args pba;
@@ -112,16 +166,16 @@ ppbattach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_pc = pc;
 	sc->sc_tag = pa->pa_tag;
+	sc->sc_dev = self;
 
 	busdata = pci_conf_read(pc, pa->pa_tag, PPB_REG_BUSINFO);
 
 	if (PPB_BUSINFO_SECONDARY(busdata) == 0) {
-		aprint_normal("%s: not configured by system firmware\n",
-		    self->dv_xname);
+		aprint_normal_dev(self, "not configured by system firmware\n");
 		return;
 	}
 
-	ppb_fix_pcix(self);
+	ppb_fix_pcie(self);
 
 #if 0
 	/*
@@ -158,8 +212,19 @@ ppbattach(struct device *parent, struct device *self, void *aux)
 	config_found_ia(self, "pcibus", &pba, pcibusprint);
 }
 
+static int
+ppbdetach(device_t self, int flags)
+{
+	int rc;
+
+	if ((rc = config_detach_children(self, flags)) != 0)
+		return rc;
+	pmf_device_deregister(self);
+	return 0;
+}
+
 static bool
-ppb_resume(device_t dv)
+ppb_resume(device_t dv, const pmf_qual_t *qual)
 {
 	struct ppb_softc *sc = device_private(dv);
 	int off;
@@ -172,13 +237,13 @@ ppb_resume(device_t dv)
 			    sc->sc_pciconfext[(off - 0x40)/4]);
 	}
 
-	ppb_fix_pcix(dv);
+	ppb_fix_pcie(dv);
 
 	return true;
 }
 
 static bool
-ppb_suspend(device_t dv)
+ppb_suspend(device_t dv, const pmf_qual_t *qual)
 {
 	struct ppb_softc *sc = device_private(dv);
 	int off;
@@ -190,5 +255,12 @@ ppb_suspend(device_t dv)
 	return true;
 }
 
-CFATTACH_DECL(ppb, sizeof(struct ppb_softc),
-    ppbmatch, ppbattach, NULL, NULL);
+static void
+ppbchilddet(device_t self, device_t child)
+{
+	/* we keep no references to child devices, so do nothing */
+}
+
+CFATTACH_DECL3_NEW(ppb, sizeof(struct ppb_softc),
+    ppbmatch, ppbattach, ppbdetach, NULL, NULL, ppbchilddet,
+    DVF_DETACH_SHUTDOWN);

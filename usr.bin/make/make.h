@@ -1,4 +1,4 @@
-/*	$NetBSD: make.h,v 1.71 2007/12/21 20:32:24 dsl Exp $	*/
+/*	$NetBSD: make.h,v 1.86 2011/05/04 20:38:32 sjg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -116,6 +116,7 @@
 #include "hash.h"
 #include "config.h"
 #include "buf.h"
+#include "make_malloc.h"
 
 /*-
  * The structure for an individual graph node. Each node has several
@@ -163,6 +164,7 @@ typedef struct GNode {
 #define DONE_WAIT	0x8	/* Set by Make_ProcessWait() */
 #define DONE_ORDER	0x10	/* Build requested by .ORDER processing */
 #define FROM_DEPEND	0x20	/* Node created from .depend */
+#define DONE_ALLSRC	0x40	/* We do it once only */
 #define CYCLE		0x1000  /* Used by MakePrintStatus */
 #define DONECYCLE	0x2000  /* Used by MakePrintStatus */
     enum enum_made {
@@ -185,8 +187,7 @@ typedef struct GNode {
     int             unmade;    	/* The number of unmade children */
 
     time_t          mtime;     	/* Its modification time */
-    time_t     	    cmtime;    	/* The modification time of its youngest
-				 * child */
+    struct GNode    *cmgn;    	/* The youngest child */
 
     Lst     	    iParents;  	/* Links to parents for which this is an
 				 * implied source, if any */
@@ -212,11 +213,6 @@ typedef struct GNode {
     const char	    *fname;	/* filename where the GNode got defined */
     int		     lineno;	/* line number where the GNode got defined */
 } GNode;
-
-/*
- * Manifest constants
- */
-#define NILGNODE	((GNode *) NIL)
 
 /*
  * The OP_ constants are used when parsing a dependency line as a way of
@@ -263,6 +259,9 @@ typedef struct GNode {
 #define OP_PHONY	0x00010000  /* Not a file target; run always */
 #define OP_NOPATH	0x00020000  /* Don't search for file in the path */
 #define OP_WAIT 	0x00040000  /* .WAIT phony node */
+#define OP_NOMETA	0x00080000  /* .NOMETA do not create a .meta file */
+#define OP_META		0x00100000  /* .META we _do_ want a .meta file */
+#define OP_NOMETA_CMP	0x00200000  /* Do not compare commands in .meta file */
 /* Attributes applied by PMake */
 #define OP_TRANSFORM	0x80000000  /* The node is a transformation rule */
 #define OP_MEMBER 	0x40000000  /* Target is a member of an archive */
@@ -290,7 +289,7 @@ typedef struct GNode {
  * do if the desired node(s) is (are) not found. If the TARG_CREATE constant
  * is given, a new, empty node will be created for the target, placed in the
  * table of all targets and its address returned. If TARG_NOCREATE is given,
- * a NIL pointer will be returned.
+ * a NULL pointer will be returned.
  */
 #define TARG_NOCREATE	0x00	  /* don't create it */
 #define TARG_CREATE	0x01	  /* create node if not found */
@@ -395,13 +394,26 @@ extern Boolean	oldVars;    	/* Do old-style variable substitution */
 extern Lst	sysIncPath;	/* The system include path. */
 extern Lst	defIncPath;	/* The default include path. */
 
+extern char	curdir[];	/* Startup directory */
 extern char	*progname;	/* The program name */
+extern char	*makeDependfile; /* .depend */
+
+/*
+ * We cannot vfork() in a child of vfork().
+ * Most systems do not enforce this but some do.
+ */
+#define vFork() ((getpid() == myPid) ? vfork() : fork())
+extern pid_t	myPid;
 
 #define	MAKEFLAGS	".MAKEFLAGS"
 #define	MAKEOVERRIDES	".MAKEOVERRIDES"
 #define	MAKE_JOB_PREFIX	".MAKE.JOB.PREFIX" /* prefix for job target output */
 #define	MAKE_EXPORTED	".MAKE.EXPORTED"   /* variables we export */
 #define	MAKE_MAKEFILES	".MAKE.MAKEFILES"  /* all the makefiles we read */
+#define	MAKE_LEVEL	".MAKE.LEVEL"	   /* recursion level */
+#define MAKEFILE_PREFERENCE ".MAKE.MAKEFILE_PREFERENCE"
+#define MAKE_DEPENDFILE	".MAKE.DEPENDFILE" /* .depend */
+#define MAKE_MODE	".MAKE.MODE"
 
 /*
  * debug control:
@@ -410,31 +422,31 @@ extern char	*progname;	/* The program name */
  */
 FILE *debug_file;		/* Output written here - default stdout */
 extern int debug;
-#define	DEBUG_ARCH	0x0001
-#define	DEBUG_COND	0x0002
-#define	DEBUG_DIR	0x0004
-#define	DEBUG_GRAPH1	0x0008
-#define	DEBUG_GRAPH2	0x0010
-#define	DEBUG_JOB	0x0020
-#define	DEBUG_MAKE	0x0040
-#define	DEBUG_SUFF	0x0080
-#define	DEBUG_TARG	0x0100
-#define	DEBUG_VAR	0x0200
-#define DEBUG_FOR	0x0400
-#define DEBUG_SHELL	0x0800
-#define DEBUG_ERROR	0x1000
-#define	DEBUG_GRAPH3	0x10000
+#define	DEBUG_ARCH	0x00001
+#define	DEBUG_COND	0x00002
+#define	DEBUG_DIR	0x00004
+#define	DEBUG_GRAPH1	0x00008
+#define	DEBUG_GRAPH2	0x00010
+#define	DEBUG_JOB	0x00020
+#define	DEBUG_MAKE	0x00040
+#define	DEBUG_SUFF	0x00080
+#define	DEBUG_TARG	0x00100
+#define	DEBUG_VAR	0x00200
+#define DEBUG_FOR	0x00400
+#define DEBUG_SHELL	0x00800
+#define DEBUG_ERROR	0x01000
+#define DEBUG_LOUD	0x02000
+#define DEBUG_META	0x04000
+
+#define DEBUG_GRAPH3	0x10000
 #define DEBUG_SCRIPT	0x20000
 #define DEBUG_PARSE	0x40000
+#define DEBUG_CWD	0x80000
 
 #define CONCAT(a,b)	a##b
 
 #define	DEBUG(module)	(debug & CONCAT(DEBUG_,module))
 
-/*
- * Since there are so many, all functions that return non-integer values are
- * extracted by means of a sed script or two and stuck in the file "nonints.h"
- */
 #include "nonints.h"
 
 int Make_TimeStamp(GNode *, GNode *);
@@ -447,9 +459,11 @@ void Make_DoAllVar(GNode *);
 Boolean Make_Run(Lst);
 char * Check_Cwd_Cmd(const char *);
 void Check_Cwd(const char **);
-void PrintOnError(const char *);
+void PrintOnError(GNode *, const char *);
 void Main_ExportMAKEFLAGS(Boolean);
 Boolean Main_SetObjdir(const char *);
+int mkTempFile(const char *, char **);
+int str2Lst_Append(Lst, char *, const char *);
 
 #ifdef __GNUC__
 #define UNCONST(ptr)	({ 		\

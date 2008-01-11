@@ -1,4 +1,4 @@
-/*	$NetBSD: x86emu.c,v 1.3 2007/12/13 16:41:59 joerg Exp $	*/
+/*	$NetBSD: x86emu.c,v 1.7 2009/02/03 19:26:29 joerg Exp $	*/
 
 /****************************************************************************
 *
@@ -243,6 +243,8 @@ X86EMU_exec(struct X86EMU *emu)
 				x86emu_intr_handle(emu);
 			}
 		}
+		if (emu->x86.R_CS == 0 && emu->x86.R_IP == 0)
+			return;
 		X86EMU_exec_one_byte(emu);
 		++emu->cur_cycles;
 	}
@@ -809,7 +811,7 @@ decode_sib_address(struct X86EMU *emu, int sib, int mod)
 		if (mod == 0) {
 			base = fetch_long_imm(emu);
 		} else {
-			base = emu->x86.R_ESP;
+			base = emu->x86.R_EBP;
 			emu->x86.mode |= SYSMODE_SEG_DS_SS;
 		}
 		break;
@@ -884,10 +886,12 @@ decode_rl_address(struct X86EMU *emu)
 			offset = decode_sib_address(emu, sib, 0);
 			break;
 		case 5:
-			if (emu->cur_mod == 0)
+			if (emu->cur_mod == 0) {
 				offset = fetch_long_imm(emu);
-			else
+			} else {
+				emu->x86.mode |= SYSMODE_SEG_DS_SS;
 				offset = emu->x86.R_EBP;
+			}
 			break;
 		case 6:
 			offset = emu->x86.R_ESI;
@@ -929,10 +933,12 @@ decode_rl_address(struct X86EMU *emu)
 			offset = emu->x86.R_DI;
 			break;
 		case 6:
-			if (emu->cur_mod == 0)
+			if (emu->cur_mod == 0) {
 				offset = fetch_word_imm(emu);
-			else
+			} else {
+				emu->x86.mode |= SYSMODE_SEG_DS_SS;
 				offset = emu->x86.R_BP;
+			}
 			break;
 		case 7:
 			offset = emu->x86.R_BX;
@@ -5057,6 +5063,53 @@ x86emuOp2_pop_FS(struct X86EMU *emu)
 }
 /****************************************************************************
 REMARKS:
+Handles opcode 0x0f,0xa1
+****************************************************************************/
+#if defined(__i386__) || defined(__amd64__)
+static void
+hw_cpuid(uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d)
+{
+	__asm__ __volatile__("cpuid"
+			     : "=a" (*a), "=b" (*b),
+			       "=c" (*c), "=d" (*d)
+			     : "a" (*a), "c" (*c)
+			     : "cc");
+}
+#endif
+static void
+x86emuOp2_cpuid(struct X86EMU *emu)
+{
+#if defined(__i386__) || defined(__amd64__)
+	hw_cpuid(&emu->x86.R_EAX, &emu->x86.R_EBX, &emu->x86.R_ECX,
+	    &emu->x86.R_EDX);
+#endif
+	switch (emu->x86.R_EAX) {
+	case 0:
+		emu->x86.R_EAX = 1;
+#if !defined(__i386__) && !defined(__amd64__)
+		/* "GenuineIntel" */
+		emu->x86.R_EBX = 0x756e6547;
+		emu->x86.R_EDX = 0x49656e69;
+		emu->x86.R_ECX = 0x6c65746e;
+#endif
+		break;
+	case 1:
+#if !defined(__i386__) && !defined(__amd64__)
+		emu->x86.R_EAX = 0x00000480;
+		emu->x86.R_EBX = emu->x86.R_ECX = 0;
+		emu->x86.R_EDX = 0x00000002;
+#else
+		emu->x86.R_EDX &= 0x00000012;
+#endif
+		break;
+	default:
+		emu->x86.R_EAX = emu->x86.R_EBX = emu->x86.R_ECX =
+		    emu->x86.R_EDX = 0;
+		break;
+	}
+}
+/****************************************************************************
+REMARKS:
 Handles opcode 0x0f,0xa3
 ****************************************************************************/
 static void
@@ -5540,6 +5593,9 @@ X86EMU_exec_two_byte(struct X86EMU * emu)
 		break;
 	case 0xa1:
 		x86emuOp2_pop_FS(emu);
+		break;
+	case 0xa2:
+		x86emuOp2_cpuid(emu);
 		break;
 	case 0xa3:
 		x86emuOp2_bt_R(emu);
@@ -7713,13 +7769,13 @@ idiv_byte(struct X86EMU *emu, uint8_t s)
 
 	dvd = (int16_t) emu->x86.R_AX;
 	if (s == 0) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	div = dvd / (int8_t) s;
 	mod = dvd % (int8_t) s;
 	if (div > 0x7f || div < -0x7f) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	emu->x86.R_AL = (int8_t) div;
@@ -7736,13 +7792,13 @@ idiv_word(struct X86EMU *emu, uint16_t s)
 
 	dvd = (((int32_t) emu->x86.R_DX) << 16) | emu->x86.R_AX;
 	if (s == 0) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	div = dvd / (int16_t) s;
 	mod = dvd % (int16_t) s;
 	if (div > 0x7fff || div < -0x7fff) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	CLEAR_FLAG(F_CF);
@@ -7764,13 +7820,13 @@ idiv_long(struct X86EMU *emu, uint32_t s)
 
 	dvd = (((int64_t) emu->x86.R_EDX) << 32) | emu->x86.R_EAX;
 	if (s == 0) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	div = dvd / (int32_t) s;
 	mod = dvd % (int32_t) s;
 	if (div > 0x7fffffff || div < -0x7fffffff) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	CLEAR_FLAG(F_CF);
@@ -7793,13 +7849,13 @@ div_byte(struct X86EMU *emu, uint8_t s)
 
 	dvd = emu->x86.R_AX;
 	if (s == 0) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	div = dvd / (uint8_t) s;
 	mod = dvd % (uint8_t) s;
 	if (div > 0xff) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	emu->x86.R_AL = (uint8_t) div;
@@ -7816,13 +7872,13 @@ div_word(struct X86EMU *emu, uint16_t s)
 
 	dvd = (((uint32_t) emu->x86.R_DX) << 16) | emu->x86.R_AX;
 	if (s == 0) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	div = dvd / (uint16_t) s;
 	mod = dvd % (uint16_t) s;
 	if (div > 0xffff) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	CLEAR_FLAG(F_CF);
@@ -7844,13 +7900,13 @@ div_long(struct X86EMU *emu, uint32_t s)
 
 	dvd = (((uint64_t) emu->x86.R_EDX) << 32) | emu->x86.R_EAX;
 	if (s == 0) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	div = dvd / (uint32_t) s;
 	mod = dvd % (uint32_t) s;
 	if (div > 0xffffffff) {
-		x86emu_intr_raise(emu, 0);
+		x86emu_intr_raise(emu, 8);
 		return;
 	}
 	CLEAR_FLAG(F_CF);

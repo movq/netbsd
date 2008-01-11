@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_sockio.c,v 1.33 2007/12/08 18:36:26 dsl Exp $	 */
+/*	$NetBSD: svr4_sockio.c,v 1.35 2008/04/28 20:23:45 martin Exp $	 */
 
 /*-
- * Copyright (c) 1995 The NetBSD Foundation, Inc.
+ * Copyright (c) 1995, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.33 2007/12/08 18:36:26 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.35 2008/04/28 20:23:45 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -103,12 +96,11 @@ svr4_count_ifnum(struct ifnet *ifp)
 }
 
 int
-svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
+svr4_sock_ioctl(file_t *fp, struct lwp *l, register_t *retval,
     int fd, u_long cmd, void *data)
 {
 	int error;
-	int (*ctl)(struct file *, u_long,  void *, struct lwp *) =
-			fp->f_ops->fo_ioctl;
+	int (*ctl)(file_t *, u_long,  void *) = fp->f_ops->fo_ioctl;
 
 	*retval = 0;
 
@@ -168,8 +160,7 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 			(void) strncpy(br.ifr_name, sr.svr4_ifr_name,
 			    sizeof(br.ifr_name));
 
-			if ((error = (*ctl)(fp, SIOCGIFFLAGS,
-					    (void *) &br, l)) != 0) {
+			if ((error = (*ctl)(fp, SIOCGIFFLAGS, &br)) != 0) {
 				DPRINTF(("SIOCGIFFLAGS %s: error %d\n",
 					 sr.svr4_ifr_name, error));
 				return error;
@@ -193,8 +184,7 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 				(unsigned long)sizeof(struct svr4_ifreq),
 				sc.svr4_ifc_len));
 
-			if ((error = (*ctl)(fp, OOSIOCGIFCONF,
-					    (void *) &sc, l)) != 0)
+			if ((error = (*ctl)(fp, OOSIOCGIFCONF, &sc)) != 0)
 				return error;
 
 			DPRINTF(("SIOCGIFCONF\n"));

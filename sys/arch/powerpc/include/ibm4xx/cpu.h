@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.13 2006/08/31 21:32:27 freza Exp $	*/
+/*	$NetBSD: cpu.h,v 1.16 2011/01/18 01:02:54 matt Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -38,6 +38,10 @@
 #ifndef	_IBM4XX_CPU_H_
 #define	_IBM4XX_CPU_H_
 
+#include <powerpc/spr.h>
+#include <powerpc/ibm4xx/spr.h>
+#include <powerpc/ibm4xx/dcr4xx.h>
+
 /* PVRs for different IBM CPUs */
 #define	PVR_401A1		0x00210000
 #define	PVR_401B2		0x00220000
@@ -49,16 +53,18 @@
 
 #define	PVR_403			0x00200000
 
-#define PVR_405GP      		0x40110000 
-#define PVR_405GP_PASS1 	0x40110000	/* RevA */ 
-#define PVR_405GP_PASS2 	0x40110040	/* RevB */ 
-#define PVR_405GP_PASS2_1 	0x40110082	/* RevC */ 
-#define PVR_405GP_PASS3 	0x401100c4	/* RevD */ 
-#define PVR_405GPR     		0x50910000
+#define PVR_405GP		0x40110000
+#define PVR_405GP_PASS1 	0x40110000	/* RevA */
+#define PVR_405GP_PASS2 	0x40110040	/* RevB */
+#define PVR_405GP_PASS2_1 	0x40110082	/* RevC */
+#define PVR_405GP_PASS3 	0x401100c4	/* RevD */
+#define PVR_405GPR		0x50910000
 #define PVR_405GPR_REVB		0x50910951
 
 #define	PVR_405D5X1 		0x20010000 	/* Virtex II Pro */
 #define	PVR_405D5X2 		0x20011000 	/* Virtex 4 FX */
+
+#define PVR_405EX		0x12910000
 
 #if defined(_KERNEL)
 extern char bootpath[];
@@ -68,11 +74,11 @@ extern char bootpath[];
 #include <prop/proplib.h>
 
 /* export from ibm4xx/autoconf.c */
-extern void (*md_device_register) __P((struct device *dev, void *aux));
+extern void (*md_device_register)(struct device *dev, void *aux);
 
 /* export from ibm4xx/machdep.c */
-extern void (*md_consinit) __P((void));
-extern void (*md_cpu_startup) __P((void));
+extern void (*md_consinit)(void);
+extern void (*md_cpu_startup)(void);
 
 /* export from ibm4xx/ibm40x_machdep.c */
 extern void ibm40x_memsize_init(u_int, u_int);
@@ -90,8 +96,55 @@ extern void ibm4xx_device_register(struct device *dev, void *aux);
 extern void calc_delayconst(void);
 
 /* export from ibm4xx/4xx_locore.S */
-extern void ppc4xx_reset(void) __attribute__((__noreturn__));
+extern void ppc4xx_reset(void) __dead;
 
+/*
+ * DCR (Device Control Register) access. These have to be
+ * macros because register address is encoded as immediate
+ * operand.
+ */
+static inline void
+mtdcr(int reg, uint32_t val)
+{
+	__asm volatile("mtdcr %0,%1" : : "K"(reg), "r"(val));
+}
+
+static inline uint32_t
+mfdcr(int reg)
+{
+	uint32_t val;	
+	
+	__asm volatile("mfdcr %0,%1" : "=r"(val) : "K"(reg));
+	return val;
+}
+
+static inline void
+mtcpr(int reg, uint32_t val)
+{
+	mtdcr(DCR_CPR0_CFGADDR, reg);
+	mtdcr(DCR_CPR0_CFGDATA, val);
+}
+
+static inline uint32_t
+mfcpr(int reg)
+{
+	mtdcr(DCR_CPR0_CFGADDR, reg);
+	return mfdcr(DCR_CPR0_CFGDATA);
+}
+
+static void inline
+mtsdr(int reg, uint32_t val)
+{
+	mtdcr(DCR_SDR0_CFGADDR, reg);
+	mtdcr(DCR_SDR0_CFGDATA, val);
+}
+
+static inline uint32_t
+mfsdr(int reg)
+{
+	mtdcr(DCR_SDR0_CFGADDR, reg);
+	return mfdcr(DCR_SDR0_CFGDATA);
+}
 #endif /* _KERNEL */
 
 #include <powerpc/cpu.h>

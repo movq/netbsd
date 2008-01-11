@@ -1,9 +1,9 @@
 %{
-/*	$NetBSD: veriexecctl_conf.l,v 1.11 2007/05/15 19:47:47 elad Exp $	*/
+/*	$NetBSD: veriexecctl_conf.l,v 1.15 2011/05/24 12:06:25 joerg Exp $	*/
 
 /*-
  * Copyright 2005 Elad Efrat <elad@NetBSD.org>
- * Copyright 2005 Brett Lymn <blymn@netbsd.org> 
+ * Copyright 2005 Brett Lymn <blymn@netbsd.org>
  *
  * All rights reserved.
  *
@@ -80,6 +80,9 @@ dequote(const char *s)
 
 STRING		[0-9a-zA-Z]+
 PCHAR           (\\.|[^ \t])
+
+%option nounput
+%option noinput
 
 %%
 

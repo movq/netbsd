@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.5 2007/12/15 16:03:30 perry Exp $	*/
+/*	$NetBSD: util.c,v 1.7 2009/04/17 04:03:39 lukem Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,7 +57,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: util.c,v 1.5 2007/12/15 16:03:30 perry Exp $");
+__RCSID("$NetBSD: util.c,v 1.7 2009/04/17 04:03:39 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -212,7 +205,8 @@ void
 mlx_print_phys_drv(struct mlx_phys_drv *pd, int chn, int targ,
 		   const char *prefix)
 {
-	char *type, *device, *vendor, *revision;
+	const char *type;
+	char *device, *vendor, *revision;
 
 	switch (pd->pd_flags2 & 0x03) {
 		case MLX_PHYS_DRV_DISK:

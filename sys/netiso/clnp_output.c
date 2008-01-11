@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_output.c,v 1.21 2007/12/20 19:53:34 dyoung Exp $	*/
+/*	$NetBSD: clnp_output.c,v 1.25 2009/04/18 14:58:06 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clnp_output.c,v 1.21 2007/12/20 19:53:34 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clnp_output.c,v 1.25 2009/04/18 14:58:06 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -243,7 +243,7 @@ clnp_output(struct mbuf *m0, ...)
 			printf("\tclc_dst %s\n", clnp_iso_addrp(&clcp->clc_dst));
 			printf("\tisop_opts %p, clc_opts %p\n",
 			    isop->isop_options, clcp->clc_options);
-			if ((rt = rtcache_getrt(&isop->isop_route)) != NULL)
+			if ((rt = rtcache_validate(&isop->isop_route)) != NULL)
 				printf("\trt %p, rt_flags x%x\n",
 				    rt, rt->rt_flags);
 			printf("\tflags x%x, clc_flags x%x\n", flags,
@@ -255,7 +255,7 @@ clnp_output(struct mbuf *m0, ...)
 	if ((clcp != NULL) &&	/* cache exists */
 	    (isop->isop_options == clcp->clc_options) &&	/* same options */
 	    (iso_addrmatch1(dst, &clcp->clc_dst)) &&	/* dst still same */
-	    (rt = rtcache_getrt(&isop->isop_route)) != NULL &&	/* route exists */
+	    (rt = rtcache_validate(&isop->isop_route)) != NULL &&	/* route exists */
 	    rt == clcp->clc_rt &&	/* and is cached */
 	    (rt->rt_flags & RTF_UP) &&	/* route still up */
 	    (flags == clcp->clc_flags) &&	/* same flags */
@@ -352,7 +352,7 @@ clnp_output(struct mbuf *m0, ...)
 			printf("clnp_output: NEW clcp %p\n", clcp);
 		}
 #endif
-		bzero((void *) clcp, sizeof(struct clnp_cache));
+		memset((void *) clcp, 0, sizeof(struct clnp_cache));
 
 		if (isop->isop_optindex)
 			oidx = mtod(isop->isop_optindex, struct clnp_optidx *);
@@ -459,7 +459,7 @@ clnp_output(struct mbuf *m0, ...)
 #endif
 			goto bad;
 		}
-		clcp->clc_rt = rtcache_getrt(&isop->isop_route);/* XXX */
+		clcp->clc_rt = rtcache_validate(&isop->isop_route);/* XXX */
 		clcp->clc_ifp = clcp->clc_ifa->ia_ifp;	/* XXX */
 
 #ifdef ARGO_DEBUG
@@ -508,7 +508,7 @@ clnp_output(struct mbuf *m0, ...)
 		 * the option was not specified previously
 		 */
 		if ((m->m_len + sizeof(qos_option)) < MLEN) {
-			bcopy((void *) qos_option, hoff, sizeof(qos_option));
+			memcpy(hoff, (void *) qos_option, sizeof(qos_option));
 			clnp->cnf_hdr_len += sizeof(qos_option);
 			hdrlen += sizeof(qos_option);
 			m->m_len += sizeof(qos_option);

@@ -1,4 +1,4 @@
-/*	$NetBSD: cir.c,v 1.17 2007/03/04 06:02:09 christos Exp $	*/
+/*	$NetBSD: cir.c,v 1.28 2010/12/29 13:43:16 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cir.c,v 1.17 2007/03/04 06:02:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cir.c,v 1.28 2010/12/29 13:43:16 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: cir.c,v 1.17 2007/03/04 06:02:09 christos Exp $");
 #include <sys/poll.h>
 #include <sys/select.h>
 #include <sys/vnode.h>
+#include <sys/module.h>
 
 #include <dev/ir/ir.h>
 #include <dev/ir/cirio.h>
@@ -59,28 +53,26 @@ dev_type_read(cirread);
 dev_type_write(cirwrite);
 dev_type_ioctl(cirioctl);
 dev_type_poll(cirpoll);
-dev_type_kqfilter(cirkqfilter);
 
 const struct cdevsw cir_cdevsw = {
 	ciropen, circlose, cirread, cirwrite, cirioctl,
-	nostop, notty, cirpoll, nommap, cirkqfilter,
+	nostop, notty, cirpoll, nommap, nokqfilter,
 	D_OTHER
 };
 
-int cir_match(struct device *parent, struct cfdata *match, void *aux);
-void cir_attach(struct device *parent, struct device *self, void *aux);
-int cir_activate(struct device *self, enum devact act);
-int cir_detach(struct device *self, int flags);
+int cir_match(device_t parent, cfdata_t match, void *aux);
+void cir_attach(device_t parent, device_t self, void *aux);
+int cir_detach(device_t self, int flags);
 
 CFATTACH_DECL(cir, sizeof(struct cir_softc),
-    cir_match, cir_attach, cir_detach, cir_activate);
+    cir_match, cir_attach, cir_detach, NULL);
 
 extern struct cfdriver cir_cd;
 
 #define CIRUNIT(dev) (minor(dev))
 
 int
-cir_match(struct device *parent, struct cfdata *match, void *aux)
+cir_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct ir_attach_args *ia = aux;
 
@@ -88,11 +80,12 @@ cir_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-cir_attach(struct device *parent, struct device *self, void *aux)
+cir_attach(device_t parent, device_t self, void *aux)
 {
 	struct cir_softc *sc = device_private(self);
 	struct ir_attach_args *ia = aux;
 
+	selinit(&sc->sc_rdsel);
 	sc->sc_methods = ia->ia_methods;
 	sc->sc_handle = ia->ia_handle;
 
@@ -100,31 +93,15 @@ cir_attach(struct device *parent, struct device *self, void *aux)
 	if (sc->sc_methods->im_read == NULL ||
 	    sc->sc_methods->im_write == NULL ||
 	    sc->sc_methods->im_setparams == NULL)
-		panic("%s: missing methods", sc->sc_dev.dv_xname);
+		panic("%s: missing methods", device_xname(&sc->sc_dev));
 #endif
 	printf("\n");
 }
 
 int
-cir_activate(struct device *self, enum devact act)
+cir_detach(device_t self, int flags)
 {
-	/*struct cir_softc *sc = device_private(self);*/
-
-	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-		break;
-
-	case DVACT_DEACTIVATE:
-		break;
-	}
-	return (0);
-}
-
-int
-cir_detach(struct device *self, int flags)
-{
-	/*struct cir_softc *sc = device_private(self);*/
+	struct cir_softc *sc = device_private(self);
 	int maj, mn;
 
 	/* locate the major number */
@@ -133,6 +110,8 @@ cir_detach(struct device *self, int flags)
 	/* Nuke the vnodes for any open instances (calls close). */
 	mn = device_unit(self);
 	vdevgone(maj, mn, mn, VCHR);
+
+	seldestroy(&sc->sc_rdsel);
 
 	return (0);
 }
@@ -143,13 +122,15 @@ ciropen(dev_t dev, int flag, int mode, struct lwp *l)
 	struct cir_softc *sc;
 	int error;
 
-	sc = device_lookup(&cir_cd, CIRUNIT(dev));
+	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	if (!device_is_active(&sc->sc_dev))
 		return (EIO);
 	if (sc->sc_open)
 		return (EBUSY);
+
+	sc->sc_rdframes = 0;
 	if (sc->sc_methods->im_open != NULL) {
 		error = sc->sc_methods->im_open(sc->sc_handle, flag, mode,
 		    l->l_proc);
@@ -166,7 +147,7 @@ circlose(dev_t dev, int flag, int mode, struct lwp *l)
 	struct cir_softc *sc;
 	int error;
 
-	sc = device_lookup(&cir_cd, CIRUNIT(dev));
+	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	if (sc->sc_methods->im_close != NULL)
@@ -183,7 +164,7 @@ cirread(dev_t dev, struct uio *uio, int flag)
 {
 	struct cir_softc *sc;
 
-	sc = device_lookup(&cir_cd, CIRUNIT(dev));
+	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	if (!device_is_active(&sc->sc_dev))
@@ -196,7 +177,7 @@ cirwrite(dev_t dev, struct uio *uio, int flag)
 {
 	struct cir_softc *sc;
 
-	sc = device_lookup(&cir_cd, CIRUNIT(dev));
+	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	if (!device_is_active(&sc->sc_dev))
@@ -210,7 +191,7 @@ cirioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 	struct cir_softc *sc;
 	int error;
 
-	sc = device_lookup(&cir_cd, CIRUNIT(dev));
+	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (ENXIO);
 	if (!device_is_active(&sc->sc_dev))
@@ -245,7 +226,7 @@ cirpoll(dev_t dev, int events, struct lwp *l)
 	int revents;
 	int s;
 
-	sc = device_lookup(&cir_cd, CIRUNIT(dev));
+	sc = device_lookup_private(&cir_cd, CIRUNIT(dev));
 	if (sc == NULL)
 		return (POLLERR);
 	if (!device_is_active(&sc->sc_dev))
@@ -253,11 +234,9 @@ cirpoll(dev_t dev, int events, struct lwp *l)
 
 	revents = 0;
 	s = splir();
-#if 0
 	if (events & (POLLIN | POLLRDNORM))
 		if (sc->sc_rdframes > 0)
 			revents |= events & (POLLIN | POLLRDNORM);
-#endif
 
 #if 0
 	/* How about write? */
@@ -278,4 +257,43 @@ cirpoll(dev_t dev, int events, struct lwp *l)
 
 	splx(s);
 	return (revents);
+}
+
+MODULE(MODULE_CLASS_DRIVER, cir, "ir");
+
+#ifdef _MODULE
+#include "ioconf.c"
+#endif
+
+static int
+cir_modcmd(modcmd_t cmd, void *opaque)
+{
+	int error = 0;
+#ifdef _MODULE
+	int bmaj = -1, cmaj = -1;
+#endif
+
+	switch (cmd) {
+	case MODULE_CMD_INIT:
+#ifdef _MODULE
+		error = config_init_component(cfdriver_ioconf_cir,
+		    cfattach_ioconf_cir, cfdata_ioconf_cir);
+		if (error)
+			return error;
+		error = devsw_attach("cir", NULL, &bmaj, &cir_cdevsw, &cmaj);
+		if (error)
+			config_fini_component(cfdriver_ioconf_cir,
+			    cfattach_ioconf_cir, cfdata_ioconf_cir);
+#endif
+		return error;
+	case MODULE_CMD_FINI:
+#ifdef _MODULE
+		devsw_detach(NULL, &cir_cdevsw);
+		return config_fini_component(cfdriver_ioconf_cir,
+		    cfattach_ioconf_cir, cfdata_ioconf_cir);
+#endif
+		return error;
+	default:
+		return ENOTTY;
+	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_or.S,v 1.2 2007/11/28 21:47:01 ad Exp $	*/
+/*	$NetBSD: atomic_or.S,v 1.5 2009/03/08 12:08:19 he Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,22 +35,22 @@
 
 	.text
 
-ENTRY_NOPROFILE(_atomic_or_64)
-1:	ldarx	r10,0,r3
-	or	r10,r10,r4
-	stdcx.	r10,0,r3
+ENTRY(_atomic_or_64)
+1:	ldarx	%r10,0,%r3
+	or	%r10,%r10,%r4
+	stdcx.	%r10,0,%r3
 	bne-	1b
 	blr
 ATOMIC_OP_ALIAS(atomic_or_64,_atomic_or_64)
 ATOMIC_OP_ALIAS(atomic_or_ulong,_atomic_or_64)
 STRONG_ALIAS(_atomic_or_ulong,_atomic_or_64)
 
-ENTRY_NOPROFILE(_atomic_or_64_nv)
-1:	ldarx	r10,0,r3
-	or	r10,r10,r4
-	stdcx.	r10,0,r3
+ENTRY(_atomic_or_64_nv)
+1:	ldarx	%r10,0,%r3
+	or	%r10,%r10,%r4
+	stdcx.	%r10,0,%r3
 	bne-	1b
-	mr	r3,r10
+	mr	%r3,%r10
 	blr
 ATOMIC_OP_ALIAS(atomic_or_64_nv,_atomic_or_64_nv)
 ATOMIC_OP_ALIAS(atomic_or_ulong_nv,_atomic_or_64_nv)

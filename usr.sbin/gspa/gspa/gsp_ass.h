@@ -1,4 +1,4 @@
-/*	$NetBSD: gsp_ass.h,v 1.10 2006/08/26 18:15:37 christos Exp $	*/
+/*	$NetBSD: gsp_ass.h,v 1.12 2009/04/15 08:26:34 lukem Exp $	*/
 /*
  * GSP assembler - definitions
  *
@@ -144,9 +144,9 @@ void list_error(char *);
 void listing(void);
 symbol lookup(char *id, bool makeit);
 expr num_expr(int);
-void p1err(char *fmt, ...)
+void p1err(const char *fmt, ...)
 	__attribute__((__format__(__printf__, 1, 2)));
-void perr(char *fmt, ...)
+void perr(const char *fmt, ...)
 	__attribute__((__format__(__printf__, 1, 2)));
 void pseudo(int code, operand operands);
 void push_input(char *fn);
@@ -162,14 +162,14 @@ void start_at(u_int32_t);
 void statement(char *opcode, operand operands);
 operand string_op(char *);
 void ucasify(char *);
-void yyerror(char *err);
+void yyerror(const char *err);
 int yylex(void);
 
 
 extern unsigned pc;
 extern short pass2;
 
-extern int lineno;
+extern unsigned lineno;
 extern int err_count;
 extern char line[], *lineptr;
 
@@ -178,12 +178,6 @@ extern char line[], *lineptr;
 #else
 #ifdef __GNUC__
 #define alloca __builtin_alloca
-#endif
-#endif
-
-#ifndef BSD
-#ifndef amiga
-#define bcopy(s, d, l) memcpy(d, s, l)
 #endif
 #endif
 

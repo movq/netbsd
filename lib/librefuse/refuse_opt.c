@@ -1,4 +1,4 @@
-/* 	$NetBSD: refuse_opt.c,v 1.13 2007/11/05 13:41:52 pooka Exp $	*/
+/* 	$NetBSD: refuse_opt.c,v 1.15 2011/03/01 11:23:42 soda Exp $	*/
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -115,7 +115,7 @@ struct fuse_args *
 fuse_opt_deep_copy_args(int argc, char **argv)
 {
 	struct fuse_args	*ap;
-	size_t			 i;
+	int			 i;
 
 	if ((ap = malloc(sizeof(*ap))) == NULL)
 		err(1, "_fuse_deep_copy_args");
@@ -282,6 +282,7 @@ fuse_opt_parse(struct fuse_args *args, void *data,
 	if (!args || !args->argv || !args->argc || !proc)
 		return 0;
 
+	foo.data = data;
 	if (args->argc == 1)
 		return proc(foo.data, *args->argv, FUSE_OPT_KEY_OPT, args);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_vfsops.c,v 1.36 2008/01/03 19:28:51 ad Exp $	*/
+/*	$NetBSD: ufs_vfsops.c,v 1.42 2011/03/24 17:05:46 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993, 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.36 2008/01/03 19:28:51 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.42 2011/03/24 17:05:46 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -62,6 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.36 2008/01/03 19:28:51 ad Exp $");
 #ifdef UFS_DIRHASH
 #include <ufs/ufs/dirhash.h>
 #endif
+#include <quota/quotaprop.h>
 
 /* how many times ufs_init() was called */
 static int ufs_initcount = 0;
@@ -99,43 +100,99 @@ ufs_root(struct mount *mp, struct vnode **vpp)
  * Do operations associated with quotas
  */
 int
-ufs_quotactl(struct mount *mp, int cmds, uid_t uid, void *arg)
+ufs_quotactl(struct mount *mp, prop_dictionary_t dict)
 {
 	struct lwp *l = curlwp;
 
-#ifndef QUOTA
+#if !defined(QUOTA) && !defined(QUOTA2)
 	(void) mp;
-	(void) cmds;
-	(void) uid;
-	(void) arg;
+	(void) dict;
 	(void) l;
 	return (EOPNOTSUPP);
 #else
-	int cmd, type, error;
+	int  error;
+	prop_dictionary_t cmddict;
+	prop_array_t commands;
+	prop_object_iterator_t iter;
 
-	if (uid == -1)
-		uid = kauth_cred_getuid(l->l_cred);
-	cmd = cmds >> SUBCMDSHIFT;
+	/* Mark the mount busy, as we're passing it to kauth(9). */
+	error = vfs_busy(mp, NULL);
+	if (error)
+		return (error);
 
+	error = quota_get_cmds(dict, &commands);
+	if (error)
+		goto out_vfs;
+	iter = prop_array_iterator(commands);
+	if (iter == NULL) {
+		error = ENOMEM;
+		goto out_vfs;
+	}
+		
+		
+	mutex_enter(&mp->mnt_updating);
+	while ((cmddict = prop_object_iterator_next(iter)) != NULL) {
+		if (prop_object_type(cmddict) != PROP_TYPE_DICTIONARY)
+			continue;
+		error = quota_handle_cmd(mp, l, cmddict);
+		if (error)
+			break;
+	}
+	prop_object_iterator_release(iter);
+	mutex_exit(&mp->mnt_updating);
+out_vfs:
+	vfs_unbusy(mp, false, NULL);
+	return (error);
+#endif
+}
+	
+#if 0
 	switch (cmd) {
 	case Q_SYNC:
 		break;
+
 	case Q_GETQUOTA:
+		/* The user can always query about his own quota. */
 		if (uid == kauth_cred_getuid(l->l_cred))
 			break;
-		/* fall through */
+
+		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_QUOTA,
+		    KAUTH_REQ_SYSTEM_FS_QUOTA_GET, mp, KAUTH_ARG(uid), NULL);
+
+		break;
+
+	case Q_QUOTAON:
+	case Q_QUOTAOFF:
+		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_QUOTA,
+		    KAUTH_REQ_SYSTEM_FS_QUOTA_ONOFF, mp, NULL, NULL);
+
+		break;
+
+	case Q_SETQUOTA:
+	case Q_SETUSE:
+		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_QUOTA,
+		    KAUTH_REQ_SYSTEM_FS_QUOTA_MANAGE, mp, KAUTH_ARG(uid), NULL);
+
+		break;
+
 	default:
-		if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
-		    NULL)) != 0)
-			return (error);
+		error = EINVAL;
+		break;
 	}
 
 	type = cmds & SUBCMDMASK;
-	if ((u_int)type >= MAXQUOTAS)
-		return (EINVAL);
-	if (vfs_busy(mp, LK_NOWAIT, 0))
-		return (0);
+	if (!error) {
+		/* Only check if there was no error above. */
+		if ((u_int)type >= MAXQUOTAS)
+			error = EINVAL;
+	}
 
+	if (error) {
+		vfs_unbusy(mp, false, NULL);
+		return (error);
+	}
+
+	mutex_enter(&mp->mnt_updating);
 	switch (cmd) {
 
 	case Q_QUOTAON:
@@ -165,10 +222,10 @@ ufs_quotactl(struct mount *mp, int cmds, uid_t uid, void *arg)
 	default:
 		error = EINVAL;
 	}
-	vfs_unbusy(mp);
+	mutex_exit(&mp->mnt_updating);
+	vfs_unbusy(mp, false, NULL);
 	return (error);
 #endif
-}
 
 /*
  * This is the generic part of fhtovp called after the underlying
@@ -208,7 +265,7 @@ ufs_init(void)
 	    "ufsdir", NULL, IPL_NONE, NULL, NULL, NULL);
 
 	ufs_ihashinit();
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	dqinit();
 #endif
 #ifdef UFS_DIRHASH
@@ -223,7 +280,7 @@ void
 ufs_reinit(void)
 {
 	ufs_ihashreinit();
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	dqreinit();
 #endif
 }
@@ -238,7 +295,7 @@ ufs_done(void)
 		return;
 
 	ufs_ihashdone();
-#ifdef QUOTA
+#if defined(QUOTA) || defined(QUOTA2)
 	dqdone();
 #endif
 	pool_cache_destroy(ufs_direct_cache);

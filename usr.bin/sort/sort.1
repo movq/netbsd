@@ -1,4 +1,4 @@
-.\"	$NetBSD: sort.1,v 1.25 2004/07/23 13:20:36 wiz Exp $
+.\"	$NetBSD: sort.1,v 1.32 2010/12/18 23:36:23 wiz Exp $
 .\"
 .\" Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 .\"
 .\"     @(#)sort.1	8.1 (Berkeley) 6/6/93
 .\"
-.Dd January 13, 2001
+.Dd December 18, 2010
 .Dt SORT 1
 .Os
 .Sh NAME
@@ -74,7 +67,7 @@
 .Nd sort or merge text files
 .Sh SYNOPSIS
 .Nm sort
-.Op Fl bcdfHimnrSsu
+.Op Fl bcdfHilmnrSsu
 .Oo
 .Fl k
 .Ar field1 Ns Op Li \&, Ns Ar field2
@@ -106,6 +99,9 @@ returns 0.
 .Nm
 .Fl c
 produces no output.
+.It Fl H
+Ignored for compatibility with earlier versions of
+.Nm .
 .It Fl m
 Merge only; the input files are assumed to be pre-sorted.
 .It Fl o Ar output
@@ -113,6 +109,15 @@ The argument given is the name of an
 .Ar output
 file to be used instead of the standard output.
 This file can be the same as one of the input files.
+.It Fl S
+Don't use stable sort.
+Default is to use stable sort.
+.It Fl s
+Use stable sort, keeps records with equal keys in their original order.
+This is the default.
+Provided for compatibility with other
+.Nm
+implementations only.
 .It Fl T Ar dir
 Use
 .Ar dir
@@ -150,6 +155,8 @@ Considers all lowercase characters that have uppercase
 equivalents to be the same for purposes of comparison.
 .It Fl i
 Ignore all non-printable characters.
+.It Fl l
+Sort by the string length of the field, not by the field itself.
 .It Fl n
 An initial numeric string, consisting of optional blank space, optional
 minus sign, and zero or more digits (including decimal point)
@@ -165,18 +172,6 @@ option no longer implies the
 option.)
 .It Fl r
 Reverse the sense of comparisons.
-.It Fl S
-Don't use stable sort.
-Default is to use stable sort.
-.It Fl s
-Use stable sort.
-This is the default.
-Provided for compatibility with other
-.Nm
-implementations only.
-.It Fl H
-Use a merge sort instead of a radix sort.
-This option should be used for files larger than 60Mb.
 .El
 .Pp
 The treatment of field separators can be altered using these options:
@@ -228,10 +223,7 @@ This should be used with discretion;
 .Fl R Ar \*[Lt]alphanumeric\*[Gt]
 usually produces undesirable results.
 The default record separator is newline.
-.It Xo
-.Fl k
-.Ar field1 Ns Op Li \&, Ns Ar field2
-.Xc
+.It Fl k Ar field1 Ns Op Li \&, Ns Ar field2
 Designates the starting position,
 .Ar field1 ,
 and optional ending position,
@@ -285,7 +277,7 @@ have the form
 .Ar m Ns Li \&. Ns Ar n
 and can be followed by one or more of the letters
 .Cm b , d , f , i ,
-.Cm n ,
+.Cm l , n ,
 and
 .Cm r ,
 which correspond to the options discussed above.
@@ -370,18 +362,6 @@ option is still supported, except for
 which has no
 .Fl k
 equivalent.
-.Sh RETURN VALUES
-Sort exits with one of the following values:
-.Bl -tag -width flag -compact
-.It 0
-Normal behavior.
-.It 1
-On disorder (or non-uniqueness) with the
-.Fl c
-option
-.It 2
-An error occurred.
-.El
 .Sh ENVIRONMENT
 If the following environment variable exists, it is used by
 .Nm .
@@ -408,6 +388,18 @@ Once sorting is finished, this file replaces
 and
 .Xr unlink 2 ) .
 .El
+.Sh EXIT STATUS
+Sort exits with one of the following values:
+.Bl -tag -width flag -compact
+.It 0
+Normal behavior.
+.It 1
+On disorder (or non-uniqueness) with the
+.Fl c
+option
+.It 2
+An error occurred.
+.El
 .Sh SEE ALSO
 .Xr comm 1 ,
 .Xr join 1 ,
@@ -426,10 +418,9 @@ implementation appeared in
 and is used since
 .Nx 1.6 .
 .Sh BUGS
-To sort files larger than 60Mb, use
-.Nm
-.Fl H ;
-files larger than 704Mb must be sorted in smaller pieces, then merged.
+Posix requires the locale's thousands separator be ignored in numbers.
+It may be faster to sort very large files in pieces and then explicitly
+merge them.
 .Sh NOTES
 This
 .Nm

@@ -1,4 +1,4 @@
-/*	$NetBSD: asprintf.c,v 1.15 2007/01/26 00:27:54 cbiere Exp $	*/
+/*	$NetBSD: asprintf.c,v 1.18 2009/10/25 20:44:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Todd C. Miller <Todd.Miller@courtesan.com>
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: asprintf.c,v 1.15 2007/01/26 00:27:54 cbiere Exp $");
+__RCSID("$NetBSD: asprintf.c,v 1.18 2009/10/25 20:44:13 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

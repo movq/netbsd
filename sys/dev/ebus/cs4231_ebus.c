@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4231_ebus.c,v 1.24 2007/12/03 15:34:32 ad Exp $ */
+/*	$NetBSD: cs4231_ebus.c,v 1.33 2009/05/12 14:20:45 cegger Exp $ */
 
 /*
  * Copyright (c) 2002 Valeriy E. Ushakov
@@ -28,7 +28,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4231_ebus.c,v 1.24 2007/12/03 15:34:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4231_ebus.c,v 1.33 2009/05/12 14:20:45 cegger Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_sparc_arch.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,11 +73,11 @@ struct cs4231_ebus_softc {
 };
 
 
-void	cs4231_ebus_attach(struct device *, struct device *, void *);
-int	cs4231_ebus_match(struct device *, struct cfdata *, void *);
+void	cs4231_ebus_attach(device_t, device_t, void *);
+int	cs4231_ebus_match(device_t, cfdata_t, void *);
 
-static void	cs4231_ebus_pint(void *);
-static void	cs4231_ebus_rint(void *);
+static int	cs4231_ebus_pint(void *);
+static int	cs4231_ebus_rint(void *);
 
 CFATTACH_DECL(audiocs_ebus, sizeof(struct cs4231_ebus_softc),
     cs4231_ebus_match, cs4231_ebus_attach, NULL, NULL);
@@ -140,24 +144,39 @@ static int	cs4231_ebus_intr(void *);
 
 
 int
-cs4231_ebus_match(struct device *parent, struct cfdata *cf, void *aux)
+cs4231_ebus_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ebus_attach_args *ea;
+	char *compat;
+	int len, total_size;
 
 	ea = aux;
 	if (strcmp(ea->ea_name, AUDIOCS_PROM_NAME) == 0)
 		return 1;
-#ifdef __sparc__		/* XXX: Krups */
-	if (strcmp(ea->ea_name, "sound") == 0)
-		return 1;
+
+	compat = NULL;
+	if (prom_getprop(ea->ea_node, "compatible", 1, &total_size, &compat) == 0) {
+		do {
+			if (strcmp(compat, AUDIOCS_PROM_NAME) == 0)
+				return 1;
+#ifdef __sparc__
+			/* on KRUPS compatible lists: "cs4231", "ad1848",
+			 * "mwave", and "pnpPNP,b007" */
+			if (strcmp(compat, "cs4231") == 0)
+				return 1;
 #endif
+			len = strlen(compat) + 1;
+			total_size -= len;
+			compat += len;
+		} while (total_size > 0);
+	}
 
 	return 0;
 }
 
 
 void
-cs4231_ebus_attach(struct device *parent, struct device *self, void *aux)
+cs4231_ebus_attach(device_t parent, device_t self, void *aux)
 {
 	struct cs4231_ebus_softc *ebsc;
 	struct cs4231_softc *sc;
@@ -171,10 +190,10 @@ cs4231_ebus_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_bustag = ebsc->sc_bt = ea->ea_bustag;
 	sc->sc_dmatag = ea->ea_dmatag;
 
-	ebsc->sc_pint = softint_establish(SOFTINT_SERIAL,
-	    cs4231_ebus_pint, ebsc);
-	ebsc->sc_rint = softint_establish(SOFTINT_SERIAL,
-	    cs4231_ebus_rint, ebsc);
+	ebsc->sc_pint = sparc_softintr_establish(IPL_VM,
+	    (void *)cs4231_ebus_pint, sc);
+	ebsc->sc_rint = sparc_softintr_establish(IPL_VM,
+	    (void *)cs4231_ebus_rint, sc);
 
 	/*
 	 * These are the register we get from the prom:
@@ -192,20 +211,36 @@ cs4231_ebus_attach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
-	/* XXX: map playback DMA registers (we just know where they are) */
 	if (bus_space_map(ea->ea_bustag,
+#ifdef MSIIEP		/* XXX: Krups */
+			  /*
+			   * XXX: map playback DMA registers
+			   * (we just know where they are)
+			   */
 			  BUS_ADDR(0x14, 0x702000), /* XXX: magic num */
 			  EBUS_DMAC_SIZE,
+#else
+			  EBUS_ADDR_FROM_REG(&ea->ea_reg[1]),
+			  ea->ea_reg[1].size,
+#endif
 			  0, &ebsc->sc_pdmareg) != 0)
 	{
 		printf(": unable to map playback DMA registers\n");
 		return;
 	}
 
-	/* XXX: map capture DMA registers (we just know where they are) */
 	if (bus_space_map(ea->ea_bustag,
+#ifdef MSIIEP		/* XXX: Krups */
+			  /*
+			   * XXX: map capture DMA registers
+			   * (we just know where they are)
+			   */
 			  BUS_ADDR(0x14, 0x704000), /* XXX: magic num */
 			  EBUS_DMAC_SIZE,
+#else
+			  EBUS_ADDR_FROM_REG(&ea->ea_reg[2]),
+			  ea->ea_reg[2].size,
+#endif
 			  0, &ebsc->sc_cdmareg) != 0)
 	{
 		printf(": unable to map capture DMA registers\n");
@@ -267,10 +302,8 @@ cs4231_ebus_dma_reset(bus_space_tag_t dt, bus_space_handle_t dh)
 
 	if (timo == 0) {
 		char bits[128];
-
-		printf("cs4231_ebus_dma_reset: timed out: csr=%s\n",
-		       bitmask_snprintf(csr, EBUS_DCSR_BITS,
-					bits, sizeof(bits)));
+		snprintb(bits, sizeof(bits), EBUS_DCSR_BITS, csr);
+		printf("cs4231_ebus_dma_reset: timed out: csr=%s\n", bits);
 		return ETIMEDOUT;
 	}
 
@@ -459,8 +492,10 @@ cs4231_ebus_dma_intr(struct cs_transfer *t, bus_space_tag_t dt,
 	/* read DMA status, clear TC bit by writing it back */
 	csr = bus_space_read_4(dt, dh, EBUS_DMAC_DCSR);
 	bus_space_write_4(dt, dh, EBUS_DMAC_DCSR, csr);
-	DPRINTF(("audiocs: %s dcsr=%s\n", t->t_name,
-		 bitmask_snprintf(csr, EBUS_DCSR_BITS, bits, sizeof(bits))));
+#ifdef AUDIO_DEBUG
+	snprintb(bits, sizeof(bits), EBUS_DCSR_BITS, csr);
+	DPRINTF(("audiocs: %s dcsr=%s\n", t->t_name, bits));
+#endif
 
 	if (csr & EBDMA_ERR_PEND) {
 		++t->t_ierrcnt.ev_count;
@@ -487,7 +522,7 @@ cs4231_ebus_dma_intr(struct cs_transfer *t, bus_space_tag_t dt,
 
 	/* call audio(9) framework while DMA is chugging along */
 	if (t->t_intr != NULL)
-		softint_schedule(sih);
+		sparc_softintr_schedule(sih);
 	return 1;
 }
 
@@ -511,8 +546,9 @@ cs4231_ebus_intr(void *arg)
 	if (cs4231_ebus_debug > 1)
 		cs4231_ebus_regdump("audiointr", ebsc);
 
-	DPRINTF(("%s: status: %s\n", sc->sc_ad1848.sc_dev.dv_xname,
-		 bitmask_snprintf(status, AD_R2_BITS, bits, sizeof(bits))));
+	snprintb(bits, sizeof(bits), AD_R2_BITS, status);
+	DPRINTF(("%s: status: %s\n", device_xname(&sc->sc_ad1848.sc_dev),
+	    bits));
 #endif
 
 	if (status & INTERRUPT_STATUS) {
@@ -520,8 +556,9 @@ cs4231_ebus_intr(void *arg)
 		int reason;
 
 		reason = ad_read(&sc->sc_ad1848, CS_IRQ_STATUS);
-		DPRINTF(("%s: i24: %s\n", sc->sc_ad1848.sc_dev.dv_xname,
-		  bitmask_snprintf(reason, CS_I24_BITS, bits, sizeof(bits))));
+	        snprintb(bits, sizeof(bits), CS_I24_BITS, reason);
+		DPRINTF(("%s: i24: %s\n", device_xname(&sc->sc_ad1848.sc_dev),
+		    bits));
 #endif
 		/* clear interrupt from ad1848 */
 		ADWRITE(&sc->sc_ad1848, AD1848_STATUS, 0);
@@ -543,25 +580,32 @@ cs4231_ebus_intr(void *arg)
 		ret = 1;
 	}
 
+
 	return ret;
 }
 
-static void
+static int
 cs4231_ebus_pint(void *cookie)
 {
 	struct cs4231_softc *sc = cookie;
 	struct cs_transfer *t = &sc->sc_playback;
 
+	KERNEL_LOCK(1, NULL);
 	if (t->t_intr != NULL)
 		(*t->t_intr)(t->t_arg);
+	KERNEL_UNLOCK_ONE(NULL);
+	return 0;
 }
 
-static void
+static int
 cs4231_ebus_rint(void *cookie)
 {
 	struct cs4231_softc *sc = cookie;
 	struct cs_transfer *t = &sc->sc_capture;
 
+	KERNEL_LOCK(1, NULL);
 	if (t->t_intr != NULL)
 		(*t->t_intr)(t->t_arg);
+	KERNEL_UNLOCK_ONE(NULL);
+	return 0;
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.amd64,v 1.20 2007/12/30 16:07:02 joerg Exp $
+#	$NetBSD: Makefile.amd64,v 1.35 2011/05/30 15:06:32 joerg Exp $
 
 # Makefile for NetBSD
 #
@@ -22,6 +22,8 @@ USETOOLS?=	no
 NEED_OWN_INSTALL_TARGET?=no
 .include <bsd.own.mk>
 
+USE_SSP?=	yes
+
 ##
 ## (1) port identification
 ##
@@ -35,7 +37,6 @@ DEFCOPTS=	-O2
 CPPFLAGS+=	-Damd64 -Dx86_64
 CFLAGS+=	-mcmodel=kernel
 CFLAGS+=	-mno-red-zone
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
 
 ##
 ## (3) libkern and compat
@@ -62,10 +63,17 @@ copy.o: ${AMD64}/amd64/copy.S assym.h
 spl.o: ${AMD64}/amd64/spl.S assym.h
 	${NORMAL_S}
 
+AFLAGS.locore.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+AFLAGS.mptramp.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+AFLAGS.linux32_sigcode.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+AFLAGS.netbsd32_sigcode.S= ${${ACTIVE_CC} == "clang":?-no-integrated-as:}
+CWARNFLAGS.ah_regdomain.c= ${${ACTIVE_CC} == "clang":?-Wno-error:}
+
 ##
 ## (5) link settings
 ##
 TEXTADDR?=	0xffffffff80100000
+EXTRA_LINKFLAGS=	-z max-page-size=0x100000
 LINKFLAGS_NORMAL=	-X
 KERN_LDSCRIPT?= kern.ldscript
 LINKFORMAT=	-T ${AMD64}/conf/${KERN_LDSCRIPT}
@@ -77,9 +85,9 @@ LINKFORMAT=	-T ${AMD64}/conf/${KERN_LDSCRIPT}
 # depend on CPU configuration
 locore.o machdep.o: Makefile
 
-acpi_wakeup_low.o busfunc.o cpufunc.o lock_stubs.o: assym.h
-linux32_sigcode.o mptramp.o netbsd32_sigcode.o: assym.h
-clock.o: config_time.h
+acpi_wakeup_low.o amd64func.o busfunc.o cpufunc.o cpu_in_cksum.o: assym.h
+linux_support.o linux32_sigcode.o lock_stubs.o mptramp.o: assym.h
+netbsd32_sigcode.o: assym.h
 
 ##
 ## (7) misc settings
@@ -99,31 +107,9 @@ clock.o: config_time.h
 %LOAD
 
 %RULES
-## Include rules for Atheros WLAN
-.include "$S/contrib/dev/ath/netbsd/Makefile.ath.inc"
+
+## Include rules for ACPI wakecode
 .include "$S/arch/x86/acpi/Makefile.wakecode.inc"
-
-# XXX -	Ugly, but make doesn't easily handle .o.uu (assumes it's a suffix)
-# XXX -	Also, config has no simple was to just add foo.o to the Makefile.
-#	It needs a pathname of some sort for "object"
-.if !empty(OBJS:M\/athhal.o)
-OBJS:=${OBJS:C/\/athhal.o/athhal.o/}
-
-.PATH: $S/contrib/dev/ath/public
-ATH_UUDEC?=	@${_MKSHMSG} "uudecode ${.CURDIR:T}/${.TARGET}"; \
-		${_MKSHECHO}\
-		${UUDECODE} -p $> \> ${.TARGET}; \
-		rm -f ${.TARGET}; \
-		${UUDECODE} -p $> > ${.TARGET}
-
-athhal.o: x86_64-elf.hal.o.uu
-	${ATH_UUDEC}
-.if defined(COPTS) && !empty(COPTS:M-fno-asynchronous-unwind-tables)
-	${_MKSHECHO}\
-	${OBJCOPY} -R .eh_frame $@
-	${OBJCOPY} -R .eh_frame $@
-.endif
-.endif
 
 ##
 ## (9) port independent kernel machinery

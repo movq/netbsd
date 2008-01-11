@@ -1,4 +1,4 @@
-/*	$NetBSD: swapcontext.S,v 1.3 2003/05/23 18:20:14 petrov Exp $	*/
+/*	$NetBSD: swapcontext.S,v 1.5 2011/03/28 11:19:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,10 +32,9 @@
 #include "SYS.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: swapcontext.S,v 1.3 2003/05/23 18:20:14 petrov Exp $")
+	RCSID("$NetBSD: swapcontext.S,v 1.5 2011/03/28 11:19:13 martin Exp $")
 #endif /* LIBC_SCCS && !lint */
 
-	.register	%g2,#scratch
 
 ENTRY(swapcontext)
 	mov	%o0, %o2			/* must save pointer */
@@ -59,7 +51,7 @@ ENTRY(swapcontext)
 	stx	%o1, [%o2 + 64 + 1 * 8]		/* gr[_REG_PC] = retaddr */
 
 	mov	%o3, %o0
-	mov	%o1, %g2			/* optimize `return' */
-	mov	SYS_setcontext|SYSCALL_G2RFLAG, %g1
+	mov	%o1, %g5			/* optimize `return' */
+	mov	SYS_setcontext|SYSCALL_G5RFLAG, %g1
 	t	ST_SYSCALL
 	ERROR()

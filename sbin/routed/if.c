@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.26 2007/08/14 03:39:19 dyoung Exp $	*/
+/*	$NetBSD: if.c,v 1.29 2010/10/13 09:19:40 martin Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -37,7 +37,7 @@
 #include "pathnames.h"
 
 #ifdef __NetBSD__
-__RCSID("$NetBSD: if.c,v 1.26 2007/08/14 03:39:19 dyoung Exp $");
+__RCSID("$NetBSD: if.c,v 1.29 2010/10/13 09:19:40 martin Exp $");
 #elif defined(__FreeBSD__)
 __RCSID("$FreeBSD$");
 #else
@@ -286,7 +286,7 @@ iflookup(naddr addr)
 naddr					/* host byte order */
 std_mask(naddr addr)			/* network byte order */
 {
-	NTOHL(addr);			/* was a host, not a network */
+	addr = ntohl(addr);		/* was a host, not a network */
 
 	if (addr == 0)			/* default route has mask 0 */
 		return 0;
@@ -374,7 +374,7 @@ ripv1_mask_host(naddr addr,		/* in network byte order */
 int					/* 0=bad */
 check_dst(naddr addr)
 {
-	NTOHL(addr);
+	addr = ntohl(addr);
 
 	if (IN_CLASSA(addr)) {
 		if (addr == 0)
@@ -693,7 +693,7 @@ ifinit(void)
 	struct rt_entry *rt;
 	size_t needed;
 	int mib[6];
-	struct if_msghdr *ifm;
+	struct if_msghdr ifm;
 	struct ifa_msghdr *ifam, *ifam_lim, *ifam2;
 	int in, ierr, out, oerr;
 	struct intnet *intnetp;
@@ -751,25 +751,26 @@ ifinit(void)
 		if (ifam->ifam_type == RTM_IFINFO) {
 			const struct sockaddr_dl *sdl;
 
-			ifm = (struct if_msghdr *)ifam;
+			memcpy(&ifm, ifam, sizeof ifm);
 			/* make prototype structure for the IP aliases
 			 */
 			memset(&ifs0, 0, sizeof(ifs0));
 			ifs0.int_rip_sock = -1;
-			ifs0.int_index = ifm->ifm_index;
-			ifs0.int_if_flags = ifm->ifm_flags;
+			ifs0.int_index = ifm.ifm_index;
+			ifs0.int_if_flags = ifm.ifm_flags;
 			ifs0.int_state = IS_CHECKED;
 			ifs0.int_query_time = NEVER;
 			ifs0.int_act_time = now.tv_sec;
 			ifs0.int_data.ts = now.tv_sec;
-			ifs0.int_data.ipackets = ifm->ifm_data.ifi_ipackets;
-			ifs0.int_data.ierrors = ifm->ifm_data.ifi_ierrors;
-			ifs0.int_data.opackets = ifm->ifm_data.ifi_opackets;
-			ifs0.int_data.oerrors = ifm->ifm_data.ifi_oerrors;
+			ifs0.int_data.ipackets = ifm.ifm_data.ifi_ipackets;
+			ifs0.int_data.ierrors = ifm.ifm_data.ifi_ierrors;
+			ifs0.int_data.opackets = ifm.ifm_data.ifi_opackets;
+			ifs0.int_data.oerrors = ifm.ifm_data.ifi_oerrors;
 #ifdef sgi
-			ifs0.int_data.odrops = ifm->ifm_data.ifi_odrops;
+			ifs0.int_data.odrops = ifm.ifm_data.ifi_odrops;
 #endif
-			sdl = (const struct sockaddr_dl *)(ifm + 1);
+			sdl = (const struct sockaddr_dl *)
+				((struct if_msghdr *)ifam + 1);
 			/* NUL-termination by memset, above. */
 			memcpy(ifs0.int_name, sdl->sdl_data,
 				MIN(sizeof(ifs0.int_name) - 1, sdl->sdl_nlen));
@@ -981,9 +982,10 @@ ifinit(void)
 				} else if (now.tv_sec>(ifp->int_data.ts
 						       + CHECK_BAD_INTERVAL)) {
 					trace_act("interface %s has been off"
-						  " %ld seconds; forget it",
+						  " %lld seconds; forget it",
 						  ifp->int_name,
-						  now.tv_sec-ifp->int_data.ts);
+						  (long long)now.tv_sec -
+						  ifp->int_data.ts);
 					ifdel(ifp);
 					ifp = 0;
 				}

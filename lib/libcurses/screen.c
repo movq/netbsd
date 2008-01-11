@@ -1,4 +1,4 @@
-/*	$NetBSD: screen.c,v 1.21 2007/12/08 18:38:11 jdc Exp $	*/
+/*	$NetBSD: screen.c,v 1.23 2010/06/10 05:24:55 dholland Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)screen.c	8.2 (blymn) 11/27/2001";
 #else
-__RCSID("$NetBSD: screen.c,v 1.21 2007/12/08 18:38:11 jdc Exp $");
+__RCSID("$NetBSD: screen.c,v 1.23 2010/06/10 05:24:55 dholland Exp $");
 #endif
 #endif					/* not lint */
 
@@ -117,7 +117,7 @@ newterm(char *type, FILE *outfd, FILE *infd)
 	if ((type == NULL) && (sp = getenv("TERM")) == NULL)
 		return NULL;
 
-	if ((new_screen = (SCREEN *) malloc(sizeof(SCREEN))) == NULL)
+	if ((new_screen = calloc(1, sizeof(SCREEN))) == NULL)
 		return NULL;
 
 #ifdef DEBUG
@@ -155,7 +155,8 @@ newterm(char *type, FILE *outfd, FILE *infd)
 		goto error_exit;
 
 	/* Need either homing or cursor motion for refreshes */
-	if (!new_screen->tc_ho && !new_screen->tc_cm)
+	if (!t_cursor_home(new_screen->term) &&
+	    !t_cursor_address(new_screen->term))
 		goto error_exit;
 
 	new_screen->winlistp = NULL;
@@ -223,8 +224,8 @@ delscreen(SCREEN *screen)
 #ifdef DEBUG
 	__CTRACE(__CTRACE_SCREEN, "delscreen(%p)\n", screen);
 #endif
-	  /* free up the termcap entry stuff */
-	t_freent(screen->cursesi_genbuf);
+	  /* free up the terminfo stuff */
+	del_curterm(screen->term);
 
 	  /* walk the window list and kill all the parent windows */
 	while ((list = screen->winlistp) != NULL) {

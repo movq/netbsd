@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_softint.c,v 1.9 2007/12/22 01:14:54 yamt Exp $	*/
+/*	$NetBSD: kern_softint.c,v 1.35 2011/04/24 18:46:22 rmind Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -93,9 +86,8 @@
  *	The kernel does not allow software interrupts to use facilities
  *	or perform actions that may block for a significant amount of
  *	time.  This means that it's not valid for a software interrupt
- *	to: sleep on condition variables, use the lockmgr() facility,
- *	or wait for resources to become available (for example,
- *	memory).
+ *	to sleep on condition variables	or wait for resources to become
+ *	available (for example,	memory).
  *
  * Per-CPU operation
  *
@@ -184,16 +176,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_softint.c,v 1.9 2007/12/22 01:14:54 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_softint.c,v 1.35 2011/04/24 18:46:22 rmind Exp $");
 
 #include <sys/param.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/intr.h>
 #include <sys/mutex.h>
 #include <sys/kthread.h>
 #include <sys/evcnt.h>
 #include <sys/cpu.h>
+#include <sys/xcall.h>
 
 #include <net/netisr.h>
 
@@ -217,7 +209,6 @@ typedef struct softhand {
 	void			(*sh_func)(void *);
 	void			*sh_arg;
 	softint_t		*sh_isr;
-	u_int			sh_pending;
 	u_int			sh_flags;
 } softhand_t;
 
@@ -233,7 +224,7 @@ u_int		softint_bytes = 8192;
 u_int		softint_timing;
 static u_int	softint_max;
 static kmutex_t	softint_lock;
-static void	*softint_netisrs[32];
+static void	*softint_netisrs[NETISR_MAX];
 
 /*
  * softint_init_isr:
@@ -255,17 +246,17 @@ softint_init_isr(softcpu_t *sc, const char *desc, pri_t pri, u_int level)
 
 	error = kthread_create(pri, KTHREAD_MPSAFE | KTHREAD_INTR |
 	    KTHREAD_IDLE, ci, softint_thread, si, &si->si_lwp,
-	    "soft%s/%d", desc, (int)ci->ci_cpuid);
+	    "soft%s/%u", desc, ci->ci_index);
 	if (error != 0)
 		panic("softint_init_isr: error %d", error);
 
-	snprintf(si->si_name, sizeof(si->si_name), "%s/%d", desc,
-	    (int)ci->ci_cpuid);
-	evcnt_attach_dynamic(&si->si_evcnt, EVCNT_TYPE_INTR, NULL,
+	snprintf(si->si_name, sizeof(si->si_name), "%s/%u", desc,
+	    ci->ci_index);
+	evcnt_attach_dynamic(&si->si_evcnt, EVCNT_TYPE_MISC, NULL,
 	   "softint", si->si_name);
-	snprintf(si->si_name_block, sizeof(si->si_name_block), "%s block/%d",
-	    desc, (int)ci->ci_cpuid);
-	evcnt_attach_dynamic(&si->si_evcnt_block, EVCNT_TYPE_INTR, NULL,
+	snprintf(si->si_name_block, sizeof(si->si_name_block), "%s block/%u",
+	    desc, ci->ci_index);
+	evcnt_attach_dynamic(&si->si_evcnt_block, EVCNT_TYPE_MISC, NULL,
 	   "softint", si->si_name_block);
 
 	si->si_lwp->l_private = si;
@@ -325,8 +316,8 @@ softint_init(struct cpu_info *ci)
 		 * XXX Needs to go away.
 		 */
 #define DONETISR(n, f)							\
-    softint_netisrs[(n)] = 						\
-        softint_establish(SOFTINT_NET, (void (*)(void *))(f), NULL)
+    softint_netisrs[(n)] = softint_establish(SOFTINT_NET|SOFTINT_MPSAFE,\
+        (void (*)(void *))(f), NULL)
 #include <net/netisr_dispatch.h>
 	}
 }
@@ -347,14 +338,16 @@ softint_establish(u_int flags, void (*func)(void *), void *arg)
 
 	level = (flags & SOFTINT_LVLMASK);
 	KASSERT(level < SOFTINT_COUNT);
+	KASSERT((flags & SOFTINT_IMPMASK) == 0);
 
 	mutex_enter(&softint_lock);
 
 	/* Find a free slot. */
 	sc = curcpu()->ci_data.cpu_softcpu;
-	for (index = 1; index < softint_max; index++)
+	for (index = 1; index < softint_max; index++) {
 		if (sc->sc_hand[index].sh_func == NULL)
 			break;
+	}
 	if (index == softint_max) {
 		mutex_exit(&softint_lock);
 		printf("WARNING: softint_establish: table full, "
@@ -371,7 +364,6 @@ softint_establish(u_int flags, void (*func)(void *), void *arg)
 		sh->sh_func = func;
 		sh->sh_arg = arg;
 		sh->sh_flags = flags;
-		sh->sh_pending = 0;
 	} else for (CPU_INFO_FOREACH(cii, ci)) {
 		sc = ci->ci_data.cpu_softcpu;
 		sh = &sc->sc_hand[index];
@@ -379,7 +371,6 @@ softint_establish(u_int flags, void (*func)(void *), void *arg)
 		sh->sh_func = func;
 		sh->sh_arg = arg;
 		sh->sh_flags = flags;
-		sh->sh_pending = 0;
 	}
 
 	mutex_exit(&softint_lock);
@@ -390,7 +381,12 @@ softint_establish(u_int flags, void (*func)(void *), void *arg)
 /*
  * softint_disestablish:
  *
- *	Unregister a software interrupt handler.
+ *	Unregister a software interrupt handler.  The soft interrupt could
+ *	still be active at this point, but the caller commits not to try
+ *	and trigger it again once this call is made.  The caller must not
+ *	hold any locks that could be taken from soft interrupt context,
+ *	because we will wait for the softint to complete if it's still
+ *	running.
  */
 void
 softint_disestablish(void *arg)
@@ -400,21 +396,47 @@ softint_disestablish(void *arg)
 	softcpu_t *sc;
 	softhand_t *sh;
 	uintptr_t offset;
+	uint64_t where;
+	u_int flags;
 
 	offset = (uintptr_t)arg;
 	KASSERT(offset != 0 && offset < softint_bytes);
 
-	mutex_enter(&softint_lock);
+	/*
+	 * Run a cross call so we see up to date values of sh_flags from
+	 * all CPUs.  Once softint_disestablish() is called, the caller
+	 * commits to not trigger the interrupt and set SOFTINT_ACTIVE on
+	 * it again.  So, we are only looking for handler records with
+	 * SOFTINT_ACTIVE already set.
+	 */
+	where = xc_broadcast(0, (xcfunc_t)nullop, NULL, NULL);
+	xc_wait(where);
+
+	for (;;) {
+		/* Collect flag values from each CPU. */
+		flags = 0;
+		for (CPU_INFO_FOREACH(cii, ci)) {
+			sc = ci->ci_data.cpu_softcpu;
+			sh = (softhand_t *)((uint8_t *)sc + offset);
+			KASSERT(sh->sh_func != NULL);
+			flags |= sh->sh_flags;
+		}
+		/* Inactive on all CPUs? */
+		if ((flags & SOFTINT_ACTIVE) == 0) {
+			break;
+		}
+		/* Oops, still active.  Wait for it to clear. */
+		(void)kpause("softdis", false, 1, NULL);
+	}
 
 	/* Clear the handler on each CPU. */
+	mutex_enter(&softint_lock);
 	for (CPU_INFO_FOREACH(cii, ci)) {
 		sc = ci->ci_data.cpu_softcpu;
 		sh = (softhand_t *)((uint8_t *)sc + offset);
 		KASSERT(sh->sh_func != NULL);
-		KASSERT(sh->sh_pending == 0);
 		sh->sh_func = NULL;
 	}
-
 	mutex_exit(&softint_lock);
 }
 
@@ -433,23 +455,26 @@ softint_schedule(void *arg)
 	uintptr_t offset;
 	int s;
 
+	KASSERT(kpreempt_disabled());
+
 	/* Find the handler record for this CPU. */
 	offset = (uintptr_t)arg;
 	KASSERT(offset != 0 && offset < softint_bytes);
 	sh = (softhand_t *)((uint8_t *)curcpu()->ci_data.cpu_softcpu + offset);
 
 	/* If it's already pending there's nothing to do. */
-	if (sh->sh_pending)
+	if ((sh->sh_flags & SOFTINT_PENDING) != 0) {
 		return;
+	}
 
 	/*
 	 * Enqueue the handler into the LWP's pending list.
 	 * If the LWP is completely idle, then make it run.
 	 */
 	s = splhigh();
-	if (!sh->sh_pending) {
+	if ((sh->sh_flags & SOFTINT_PENDING) == 0) {
 		si = sh->sh_isr;
-		sh->sh_pending = 1;
+		sh->sh_flags |= SOFTINT_PENDING;
 		SIMPLEQ_INSERT_TAIL(&si->si_q, sh, sh_q);
 		if (si->si_active == 0) {
 			si->si_active = 1;
@@ -497,17 +522,31 @@ softint_execute(softint_t *si, lwp_t *l, int s)
 		 */
 		sh = SIMPLEQ_FIRST(&si->si_q);
 		SIMPLEQ_REMOVE_HEAD(&si->si_q, sh_q);
-		sh->sh_pending = 0;
+		KASSERT((sh->sh_flags & SOFTINT_PENDING) != 0);
+		KASSERT((sh->sh_flags & SOFTINT_ACTIVE) == 0);
+		sh->sh_flags ^= (SOFTINT_PENDING | SOFTINT_ACTIVE);
 		splx(s);
 
 		/* Run the handler. */
-		if ((sh->sh_flags & SOFTINT_MPSAFE) == 0 && !havelock) {
+		if (sh->sh_flags & SOFTINT_MPSAFE) {
+			if (havelock) {
+				KERNEL_UNLOCK_ONE(l);
+				havelock = false;
+			}
+		} else if (!havelock) {
 			KERNEL_LOCK(1, l);
 			havelock = true;
 		}
 		(*sh->sh_func)(sh->sh_arg);
+
+		/* Diagnostic: check that spin-locks have not leaked. */
+		KASSERTMSG(curcpu()->ci_mtx_count == 0,
+		    ("%s: ci_mtx_count (%d) != 0, sh_func %p\n",
+		    __func__, curcpu()->ci_mtx_count, sh->sh_func));
 	
 		(void)splhigh();
+		KASSERT((sh->sh_flags & SOFTINT_ACTIVE) != 0);
+		sh->sh_flags ^= SOFTINT_ACTIVE;
 	}
 
 	if (havelock) {
@@ -518,8 +557,11 @@ softint_execute(softint_t *si, lwp_t *l, int s)
 	 * Unlocked, but only for statistics.
 	 * Should be per-CPU to prevent cache ping-pong.
 	 */
-	uvmexp.softs++;
+	curcpu()->ci_data.cpu_nsoft++;
 
+	KASSERT(si->si_cpu == curcpu());
+	KASSERT(si->si_lwp->l_wchan == NULL);
+	KASSERT(si->si_active);
 	si->si_evcnt.ev_count++;
 	si->si_active = 0;
 }
@@ -551,6 +593,10 @@ schednetisr(int isr)
 }
 
 #ifndef __HAVE_FAST_SOFTINTS
+
+#ifdef __HAVE_PREEMPTION
+#error __HAVE_PREEMPTION requires __HAVE_FAST_SOFTINTS
+#endif
 
 /*
  * softint_init_md:
@@ -674,23 +720,28 @@ void
 softint_overlay(void)
 {
 	struct cpu_info *ci;
-	u_int softints;
+	u_int softints, oflag;
 	softint_t *si;
 	pri_t obase;
 	lwp_t *l;
 	int s;
 
 	l = curlwp;
+	KASSERT((l->l_pflag & LP_INTR) == 0);
+
+	/*
+	 * Arrange to elevate priority if the LWP blocks.  Also, bind LWP
+	 * to the CPU.  Note: disable kernel preemption before doing that.
+	 */
+	s = splhigh();
 	ci = l->l_cpu;
 	si = ((softcpu_t *)ci->ci_data.cpu_softcpu)->sc_int;
 
-	KASSERT((l->l_pflag & LP_INTR) == 0);
-
-	/* Arrange to elevate priority if the LWP blocks. */
 	obase = l->l_kpribase;
 	l->l_kpribase = PRI_KERNEL_RT;
-	l->l_pflag |= LP_INTR;
-	s = splhigh();
+	oflag = l->l_pflag;
+	l->l_pflag = oflag | LP_INTR | LP_BOUND;
+
 	while ((softints = ci->ci_data.cpu_softints) != 0) {
 		if ((softints & (1 << SOFTINT_SERIAL)) != 0) {
 			ci->ci_data.cpu_softints &= ~(1 << SOFTINT_SERIAL);
@@ -713,9 +764,9 @@ softint_overlay(void)
 			continue;
 		}
 	}
-	splx(s);
-	l->l_pflag &= ~LP_INTR;
+	l->l_pflag = oflag;
 	l->l_kpribase = obase;
+	splx(s);
 }
 
 #else	/*  !__HAVE_FAST_SOFTINTS */
@@ -747,6 +798,7 @@ softint_dispatch(lwp_t *pinned, int s)
 	u_int timing;
 	lwp_t *l;
 
+	KASSERT((pinned->l_pflag & LP_RUNNING) != 0);
 	l = curlwp;
 	si = l->l_private;
 
@@ -756,22 +808,22 @@ softint_dispatch(lwp_t *pinned, int s)
 	 * the LWP locked, at this point no external agents will want to
 	 * modify the interrupt LWP's state.
 	 */
-	timing = (softint_timing ? LW_TIMEINTR : 0);
+	timing = (softint_timing ? LP_TIMEINTR : 0);
 	l->l_switchto = pinned;
 	l->l_stat = LSONPROC;
-	l->l_flag |= (LW_RUNNING | timing);
+	l->l_pflag |= (LP_RUNNING | timing);
 
 	/*
 	 * Dispatch the interrupt.  If softints are being timed, charge
 	 * for it.
 	 */
 	if (timing)
-		bintime(&l->l_stime);
+		binuptime(&l->l_stime);
 	softint_execute(si, l, s);
 	if (timing) {
-		bintime(&now);
+		binuptime(&now);
 		updatertime(l, &now);
-		l->l_flag &= ~LW_TIMEINTR;
+		l->l_pflag &= ~LP_TIMEINTR;
 	}
 
 	/*
@@ -785,7 +837,7 @@ softint_dispatch(lwp_t *pinned, int s)
 	 * That's not be a problem: we are lowering to level 's' which will
 	 * prevent softint_dispatch() from being reentered at level 's',
 	 * until the priority is finally dropped to IPL_NONE on entry to
-	 * the idle loop.
+	 * the LWP chosen by lwp_exit_switchaway().
 	 */
 	l->l_stat = LSIDL;
 	if (l->l_switchto == NULL) {
@@ -795,7 +847,7 @@ softint_dispatch(lwp_t *pinned, int s)
 		/* NOTREACHED */
 	}
 	l->l_switchto = NULL;
-	l->l_flag &= ~LW_RUNNING;
+	l->l_pflag &= ~LP_RUNNING;
 }
 
 #endif	/* !__HAVE_FAST_SOFTINTS */

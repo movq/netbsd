@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.boot,v 1.1 2006/09/01 21:26:18 uwe Exp $
+# $NetBSD: Makefile.boot,v 1.4 2011/01/22 19:19:19 joerg Exp $
 
 PROG?=		boot
 
@@ -17,8 +17,10 @@ SRCS+=	vers.c
 LDFLAGS+=	-e boot_start
 
 CFLAGS=
-CPPFLAGS=	-DSUPPORT_UFS
+CPPFLAGS=	-DSUPPORT_FFSv1
+CPPFLAGS+=	-DSUPPORT_FFSv2
 CPPFLAGS+=	-DSUPPORT_DOSFS
+CPPFLAGS+=	-DSUPPORT_USTARFS
 CPPFLAGS+=	-DDBMONITOR
 #CPPFLAGS+=	-DDEBUG
 
@@ -32,7 +34,8 @@ LIBLIST=	${LIBSA} ${LIBZ} ${LIBKERN}
 CLEANFILES+=	${PROG}.sym ${PROG}.map vers.c
 
 vers.c: ${VERSIONFILE} ${SOURCES} ${.CURDIR}/../Makefile.boot
-	${HOST_SH} ${S}/conf/newvers_stand.sh ${VERSIONFILE} ${MACHINE} ${NEWVERSWHAT}
+	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
+	    ${VERSIONFILE} ${MACHINE} ${NEWVERSWHAT}
 
 ${PROG}: ${OBJS} ${LIBLIST}
 	${LD} -o ${PROG}.sym ${LDFLAGS} -Ttext ${SECONDARY_LOAD_ADDRESS} \

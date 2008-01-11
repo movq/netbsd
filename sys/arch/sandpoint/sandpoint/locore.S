@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.11 2007/10/17 19:57:00 garbled Exp $	*/
+/*	$NetBSD: locore.S,v 1.21 2011/03/12 16:46:31 phx Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -33,8 +33,8 @@
  */
 
 #include "opt_ddb.h"
-#include "fs_kernfs.h"
 #include "opt_ipkdb.h"
+#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_openpic.h"
 #include "opt_ppcparam.h"
@@ -47,10 +47,10 @@
 #include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
-#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 #include <powerpc/oea/hid.h>
 
 #include "ksyms.h"
@@ -67,9 +67,8 @@ GLOBAL(startsym)
 	.long	0			/* start symbol table */
 GLOBAL(endsym)
 	.long	0			/* end symbol table */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
-
+GLOBAL(oeacpufeat)
+	.long	0			/* cpu features */
 /*
  * This symbol is here for the benefit of kvm_mkdb, and is supposed to
  * mark the start of kernel text.
@@ -95,7 +94,7 @@ __start:
 	mtspr	1008,8
 
 /* compute end of kernel memory */
-#if NKSYMS || defined(DDB) || defined(LKM) || defined(KERNFS)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	lis	7,_C_LABEL(startsym)@ha
 	addi	7,7,_C_LABEL(startsym)@l
 	stw	3,0(7)
@@ -146,12 +145,13 @@ _C_LABEL(disable_intr):
 	mtmsr	3
 	blr
 
-	.globl	_C_LABEL(sandpoint_reboot)
-_C_LABEL(sandpoint_reboot):
+	.globl	_C_LABEL(jump_to_ppc_reset_entry)
+_C_LABEL(jump_to_ppc_reset_entry):
 	mfmsr	3
 	ori	3,3,PSL_IP@l
 	mtmsr	3
-	b	0xFFF00100
+	isync
+	ba	0xFFF00100
 
 /*
  * Include common switch / setfault code
@@ -159,7 +159,7 @@ _C_LABEL(sandpoint_reboot):
 #include <powerpc/powerpc/locore_subr.S>
 
 /*
- * Include common trap / execption code
+ * Include common trap / exception code
  */
 #include <powerpc/powerpc/trap_subr.S>
 

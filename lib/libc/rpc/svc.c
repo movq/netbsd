@@ -1,4 +1,4 @@
-/*	$NetBSD: svc.c,v 1.27 2005/12/03 15:16:19 yamt Exp $	*/
+/*	$NetBSD: svc.c,v 1.30 2010/07/08 20:12:37 tron Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char *sccsid = "@(#)svc.c 1.44 88/02/08 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc.c	2.4 88/08/11 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc.c,v 1.27 2005/12/03 15:16:19 yamt Exp $");
+__RCSID("$NetBSD: svc.c,v 1.30 2010/07/08 20:12:37 tron Exp $");
 #endif
 #endif
 
@@ -57,6 +57,7 @@ __RCSID("$NetBSD: svc.c,v 1.27 2005/12/03 15:16:19 yamt Exp $");
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <err.h>
 
 #include <rpc/rpc.h>
 #ifdef PORTMAP
@@ -136,10 +137,11 @@ xprt_register(xprt)
 
 	rwlock_wrlock(&svc_fd_lock);
 	if (__svc_xports == NULL) {
-		__svc_xports = (SVCXPRT **)
-			mem_alloc(FD_SETSIZE * sizeof(SVCXPRT *));
-		if (__svc_xports == NULL)
-			return;
+		__svc_xports = mem_alloc(FD_SETSIZE * sizeof(SVCXPRT *));
+		if (__svc_xports == NULL) {
+			warn("xprt_register");
+			goto out;
+		}
 		memset(__svc_xports, '\0', FD_SETSIZE * sizeof(SVCXPRT *));
 	}
 	if (sock < FD_SETSIZE) {
@@ -147,6 +149,7 @@ xprt_register(xprt)
 		FD_SET(sock, &svc_fdset);
 		svc_maxfd = max(svc_maxfd, sock);
 	}
+out:
 	rwlock_unlock(&svc_fd_lock);
 }
 
@@ -248,15 +251,20 @@ svc_reg(xprt, prog, vers, dispatch, nconf)
 		return (FALSE);
 	}
 
+	if ((xprt->xp_netid == NULL) && (flag == 1) && netid)
+		if ((((SVCXPRT *) xprt)->xp_netid = strdup(netid)) == NULL) {
+			warn("svc_reg");
+			mem_free(s, sizeof(struct svc_callout));
+			rwlock_unlock(&svc_lock);
+			return FALSE;
+		}
+
 	s->sc_prog = prog;
 	s->sc_vers = vers;
 	s->sc_dispatch = dispatch;
 	s->sc_netid = netid;
 	s->sc_next = svc_head;
 	svc_head = s;
-
-	if ((xprt->xp_netid == NULL) && (flag == 1) && netid)
-		((SVCXPRT *) xprt)->xp_netid = strdup(netid);
 
 rpcb_it:
 	rwlock_unlock(&svc_lock);
@@ -620,7 +628,7 @@ svc_getreq(rdfds)
 	fd_set readfds;
 
 	FD_ZERO(&readfds);
-	readfds.fds_bits[0] = rdfds;
+	readfds.fds_bits[0] = (unsigned int)rdfds;
 	svc_getreqset(&readfds);
 }
 
@@ -628,15 +636,14 @@ void
 svc_getreqset(readfds)
 	fd_set *readfds;
 {
-	int bit, fd;
-	int32_t mask, *maskp;
-	int sock;
+	uint32_t mask, *maskp;
+	int sock, bit, fd;
 
 	_DIAGASSERT(readfds != NULL);
 
 	maskp = readfds->fds_bits;
 	for (sock = 0; sock < FD_SETSIZE; sock += NFDBITS) {
-	    for (mask = *maskp++; (bit = ffs(mask)) != 0;
+	    for (mask = *maskp++; (bit = ffs((int)mask)) != 0;
 		mask ^= (1 << (bit - 1))) {
 		/* sock has input waiting */
 		fd = sock + bit - 1;

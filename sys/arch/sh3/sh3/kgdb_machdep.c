@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.13 2006/03/04 01:13:35 uwe Exp $	*/
+/*	$NetBSD: kgdb_machdep.c,v 1.17 2009/11/21 17:40:28 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2002 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,11 +42,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Matthias Pfaller.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -68,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.13 2006/03/04 01:13:35 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.17 2009/11/21 17:40:28 rmind Exp $");
 
 #include "opt_ddb.h"
 
@@ -87,7 +75,6 @@ __KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.13 2006/03/04 01:13:35 uwe Exp $"
 #include <sys/systm.h>
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/reboot.h>
 #include <sys/kgdb.h>
 
@@ -266,8 +253,8 @@ void
 kgdb_connect(int verbose)
 {
 
-	if (kgdb_dev < 0) {
-		printf("kgdb_dev=%d\n", kgdb_dev);
+	if (kgdb_dev == NODEV) {
+		printf("kgdb_dev=%"PRId64"\n", kgdb_dev);
 		return;
 	}
 
@@ -287,10 +274,10 @@ kgdb_connect(int verbose)
  * (This is called by panic, like Debugger())
  */
 void
-kgdb_panic()
+kgdb_panic(void)
 {
 
-	if (kgdb_dev >= 0 && kgdb_debug_panic) {
+	if (kgdb_dev != NODEV && kgdb_debug_panic) {
 		printf("entering kgdb\n");
 		kgdb_connect(kgdb_active == 0);
 	}

@@ -1,7 +1,7 @@
-/*	$NetBSD: subr_disk.c,v 1.90 2008/01/02 11:48:52 ad Exp $	*/
+/*	$NetBSD: subr_disk.c,v 1.100 2010/10/14 00:47:16 mrg Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1999, 2000 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1999, 2000, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,11 +67,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.90 2008/01/02 11:48:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.100 2010/10/14 00:47:16 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/buf.h>
 #include <sys/syslog.h>
 #include <sys/disklabel.h>
@@ -92,20 +85,21 @@ __KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.90 2008/01/02 11:48:52 ad Exp $");
 u_int
 dkcksum(struct disklabel *lp)
 {
+
 	return dkcksum_sized(lp, lp->d_npartitions);
 }
 
 u_int
 dkcksum_sized(struct disklabel *lp, size_t npartitions)
 {
-	u_short *start, *end;
-	u_short sum = 0;
+	uint16_t *start, *end;
+	uint16_t sum = 0;
 
-	start = (u_short *)lp;
-	end = (u_short *)&lp->d_partitions[npartitions];
+	start = (uint16_t *)lp;
+	end = (uint16_t *)&lp->d_partitions[npartitions];
 	while (start < end)
 		sum ^= *start++;
-	return (sum);
+	return sum;
 }
 
 /*
@@ -185,7 +179,7 @@ disk_find(const char *name)
 }
 
 void
-disk_init(struct disk *diskp, char *name, struct dkdriver *driver)
+disk_init(struct disk *diskp, const char *name, const struct dkdriver *driver)
 {
 
 	/*
@@ -209,23 +203,37 @@ disk_attach(struct disk *diskp)
 {
 
 	/*
-	 * Allocate and initialize the disklabel structures.  Note that
-	 * it's not safe to sleep here, since we're probably going to be
-	 * called during autoconfiguration.
+	 * Allocate and initialize the disklabel structures.
 	 */
-	diskp->dk_label = malloc(sizeof(struct disklabel), M_DEVBUF, M_NOWAIT);
-	diskp->dk_cpulabel = malloc(sizeof(struct cpu_disklabel), M_DEVBUF,
-	    M_NOWAIT);
+	diskp->dk_label = kmem_zalloc(sizeof(struct disklabel), KM_SLEEP);
+	diskp->dk_cpulabel = kmem_zalloc(sizeof(struct cpu_disklabel),
+	    KM_SLEEP);
 	if ((diskp->dk_label == NULL) || (diskp->dk_cpulabel == NULL))
 		panic("disk_attach: can't allocate storage for disklabel");
-
-	memset(diskp->dk_label, 0, sizeof(struct disklabel));
-	memset(diskp->dk_cpulabel, 0, sizeof(struct cpu_disklabel));
 
 	/*
 	 * Set up the stats collection.
 	 */
 	diskp->dk_stats = iostat_alloc(IOSTAT_DISK, diskp, diskp->dk_name);
+}
+
+int
+disk_begindetach(struct disk *dk, int (*lastclose)(device_t),
+    device_t self, int flags)
+{
+	int rc;
+
+	rc = 0;
+	mutex_enter(&dk->dk_openlock);
+	if (dk->dk_openmask == 0)
+		;	/* nothing to do */
+	else if ((flags & DETACH_FORCE) == 0)
+		rc = EBUSY;
+	else if (lastclose != NULL)
+		rc = (*lastclose)(self);
+	mutex_exit(&dk->dk_openlock);
+
+	return rc;
 }
 
 /*
@@ -251,8 +259,8 @@ disk_detach(struct disk *diskp)
 	/*
 	 * Free the space used by the disklabel structures.
 	 */
-	free(diskp->dk_label, M_DEVBUF);
-	free(diskp->dk_cpulabel, M_DEVBUF);
+	kmem_free(diskp->dk_label, sizeof(*diskp->dk_label));
+	kmem_free(diskp->dk_cpulabel, sizeof(*diskp->dk_cpulabel));
 }
 
 void
@@ -284,6 +292,16 @@ disk_unbusy(struct disk *diskp, long bcount, int read)
 }
 
 /*
+ * Return true if disk has an I/O operation in flight.
+ */
+bool
+disk_isbusy(struct disk *diskp)
+{
+
+	return iostat_isbusy(diskp->dk_stats);
+}
+
+/*
  * Set the physical blocksize of a disk, in bytes.
  * Only necessary if blocksize != DEV_BSIZE.
  */
@@ -297,8 +315,8 @@ disk_blocksize(struct disk *diskp, int blocksize)
 
 /*
  * Bounds checking against the media size, used for the raw partition.
- * The sector size passed in should currently always be DEV_BSIZE,
- * and the media size the size of the device in DEV_BSIZE sectors.
+ * secsize, mediasize and b_blkno must all be the same units.
+ * Possibly this has to be DEV_BSIZE (512).
  */
 int
 bounds_check_with_mediasize(struct buf *bp, int secsize, uint64_t mediasize)
@@ -320,7 +338,7 @@ bounds_check_with_mediasize(struct buf *bp, int secsize, uint64_t mediasize)
 			return 0;
 		}
 		/* Otherwise, truncate request. */
-		bp->b_bcount = sz << DEV_BSHIFT;
+		bp->b_bcount = sz * secsize;
 	}
 
 	return 1;
@@ -345,8 +363,8 @@ bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
 		return -1;
 	}
 
-	p_size = p->p_size << dk->dk_blkshift;
-	p_offset = p->p_offset << dk->dk_blkshift;
+	p_size = (uint64_t)p->p_size << dk->dk_blkshift;
+	p_offset = (uint64_t)p->p_offset << dk->dk_blkshift;
 #if RAW_PART == 3
 	labelsector = lp->d_partitions[2].p_offset;
 #else

@@ -1,4 +1,4 @@
-/* $NetBSD: ixp12x0_pci.c,v 1.7 2005/12/11 12:16:50 christos Exp $ */
+/* $NetBSD: ixp12x0_pci.c,v 1.10 2009/03/14 21:04:05 dsl Exp $ */
 /*
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp12x0_pci.c,v 1.7 2005/12/11 12:16:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp12x0_pci.c,v 1.10 2009/03/14 21:04:05 dsl Exp $");
 
 /*
  * PCI configuration support for IXP12x0 Network Processor chip.
@@ -86,9 +79,7 @@ static vaddr_t ixp12x0_pci_conf_setup(void *, struct ixp12x0_softc *, pcitag_t, 
  */
 
 void
-ixp12x0_pci_init(pc, cookie)
-	pci_chipset_tag_t pc;
-	void *cookie;
+ixp12x0_pci_init(pci_chipset_tag_t pc, void *cookie)
 {
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	struct ixp12x0_softc *sc = cookie;
@@ -120,34 +111,25 @@ ixp12x0_pci_init(pc, cookie)
 }
 
 void
-pci_conf_interrupt(pc, a, b, c, d, p)
-	pci_chipset_tag_t pc;
-	int a, b, c, d, *p;
+pci_conf_interrupt(pci_chipset_tag_t pc, int a, int b, int c, int d, int *p)
 {
 	/* Nothing */
 }
 
 void
-ixp12x0_pci_attach_hook(parent, self, pba)
-	struct device *parent;
-	struct device *self;
-	struct pcibus_attach_args *pba;
+ixp12x0_pci_attach_hook(struct device *parent, struct device *self, struct pcibus_attach_args *pba)
 {
 	/* Nothing to do. */
 }
 
 int
-ixp12x0_pci_bus_maxdevs(v, busno)
-	void *v;
-	int busno;
+ixp12x0_pci_bus_maxdevs(void *v, int busno)
 {
 	return(MAX_PCI_DEVICES);
 }
 
 pcitag_t
-ixp12x0_pci_make_tag(v, bus, device, function)
-	void *v;
-	int bus, device, function;
+ixp12x0_pci_make_tag(void *v, int bus, int device, int function)
 {
 #ifdef PCI_DEBUG
 	printf("ixp12x0_pci_make_tag(v=%p, bus=%d, device=%d, function=%d)\n",
@@ -157,10 +139,7 @@ ixp12x0_pci_make_tag(v, bus, device, function)
 }
 
 void
-ixp12x0_pci_decompose_tag(v, tag, busp, devicep, functionp)
-	void *v;
-	pcitag_t tag;
-	int *busp, *devicep, *functionp;
+ixp12x0_pci_decompose_tag(void *v, pcitag_t tag, int *busp, int *devicep, int *functionp)
 {
 #ifdef PCI_DEBUG
 	printf("ixp12x0_pci_decompose_tag(v=%p, tag=0x%08lx, bp=%x, dp=%x, fp=%x)\n",
@@ -176,11 +155,7 @@ ixp12x0_pci_decompose_tag(v, tag, busp, devicep, functionp)
 }
 
 static vaddr_t
-ixp12x0_pci_conf_setup(v, sc, tag, offset)
-	void *v;
-	struct ixp12x0_softc *sc;
-	pcitag_t tag;
-	int offset;
+ixp12x0_pci_conf_setup(void *v, struct ixp12x0_softc *sc, pcitag_t tag, int offset)
 {
 	int bus, device, function;
 	vaddr_t addr;
@@ -201,10 +176,7 @@ ixp12x0_pci_conf_setup(v, sc, tag, offset)
 }
 
 pcireg_t
-ixp12x0_pci_conf_read(v, tag, offset)
-	void *v;
-	pcitag_t tag;
-	int offset;
+ixp12x0_pci_conf_read(void *v, pcitag_t tag, int offset)
 {
 	struct ixp12x0_softc *sc = v;
 	vaddr_t va = ixp12x0_pci_conf_setup(v, sc, tag, offset);
@@ -233,11 +205,7 @@ ixp12x0_pci_conf_read(v, tag, offset)
 }
 
 void
-ixp12x0_pci_conf_write(v, tag, offset, val)
-	void *v;
-	pcitag_t tag;
-	int offset;
-	pcireg_t val;
+ixp12x0_pci_conf_write(void *v, pcitag_t tag, int offset, pcireg_t val)
 {
 	struct ixp12x0_softc *sc = v;
 	vaddr_t va = ixp12x0_pci_conf_setup(v, sc, tag, offset);

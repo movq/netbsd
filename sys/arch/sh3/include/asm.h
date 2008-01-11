@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.25 2006/01/20 22:02:40 christos Exp $	*/
+/*	$NetBSD: asm.h,v 1.27 2010/12/20 21:11:25 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -203,7 +203,7 @@
 #define	ASMSTR		.asciz
 
 #ifdef __ELF__
-#define RCSID(x)	.section .ident; .asciz x; .previous
+#define RCSID(x)	.pushsection ".ident"; .asciz x; .popsection
 #else
 #define	RCSID(x)	.text; .asciz x
 #endif
@@ -227,7 +227,16 @@
 	.globl _C_LABEL(alias);						\
 	_C_LABEL(alias) = _C_LABEL(sym)
 
-#define	WARN_REFERENCES(_sym,_msg)				\
-	.section .gnu.warning._sym; .ascii _msg; .previous
+#ifdef __STDC__
+#define	WARN_REFERENCES(sym,msg)					\
+	.pushsection .gnu.warning. ## sym;				\
+	.ascii msg;							\
+	.popsection
+#else
+#define	WARN_REFERENCES(sym,msg)					\
+	.pushsection .gnu.warning./**/sym;				\
+	.ascii msg;							\
+	.popsection
+#endif /* __STDC__ */
 
 #endif /* !_SH3_ASM_H_ */

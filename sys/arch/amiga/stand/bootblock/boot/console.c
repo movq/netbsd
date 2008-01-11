@@ -1,4 +1,4 @@
-/* $NetBSD: console.c,v 1.7 2005/12/11 12:16:36 christos Exp $ */
+/* $NetBSD: console.c,v 1.13 2009/10/17 11:18:18 mlelstv Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -122,6 +115,10 @@ consinit(void *consptr) {
 	if (OpenDevice("timer.device", 0, (struct AmigaIO*)mc->tmior, 0))
 		goto err;
 
+#ifdef SERCONSOLE
+	RawIOInit();
+#endif
+
 	ConsoleBase = mc;
 	return 0;
 
@@ -150,7 +147,7 @@ err:
 
 #ifdef _PRIMARY_BOOT
 int
-consclose()
+consclose(void)
 {
 	struct Console *mc = ConsoleBase;
 
@@ -182,35 +179,49 @@ consclose()
 #endif
 
 void
-putchar(c)
-	char c;
+putchar(int c)
 {
 	struct Console *mc = ConsoleBase;
+	char buf = c;
 
 	mc->cnior->length = 1;
-	mc->cnior->buf = &c;
+	mc->cnior->buf = &buf;
 	mc->cnior->cmd = Cmd_Wr;
+
+#ifdef SERCONSOLE
+	RawPutChar((int32_t)c);
+#endif
+
 	(void)DoIO(mc->cnior);
 }
 
 void
-puts(s)
-	char *s;
+puts(char *s)
 {
 	struct Console *mc = ConsoleBase;
 
 	mc->cnior->length = -1;
 	mc->cnior->buf = s;
 	mc->cnior->cmd = Cmd_Wr;
+
+#ifdef SERCONSOLE
+	while (*s)
+		RawPutChar(*s++);
+#endif
+
 	(void)DoIO(mc->cnior);
 }
 
 int
-getchar()
+getchar(void)
 {
 	struct AmigaIO *ior;
-	char c = -1;
+	char c = '\n';
 	struct Console *mc = ConsoleBase;
+	unsigned long ticks;
+#ifdef SERCONSOLE
+	int32_t r;
+#endif
 
 	mc->cnior->length = 1;
 	mc->cnior->buf = &c;
@@ -218,22 +229,37 @@ getchar()
 
 	SendIO(mc->cnior);
 
-	if (timelimit) {
+	ticks = 10 * timelimit;
+	do {
+		if (timelimit == 0)
+			ticks = 2;
+
 		mc->tmior->cmd = Cmd_Addtimereq;
-		mc->tmior->secs = timelimit;
-		mc->tmior->usec = 2; /* Paranoid */
+		mc->tmior->secs = 0;
+		mc->tmior->usec = 100000;
 		SendIO((struct AmigaIO *)mc->tmior);
 
 		ior = WaitPort(mc->cnmp);
-		if (ior == mc->cnior)
+		if (ior == mc->cnior) {
 			AbortIO((struct AmigaIO *)mc->tmior);
-		else /* if (ior == mc->tmior) */ {
-			AbortIO(mc->cnior);
-			c = '\n';
+			ticks = 1;
+		} else /* if (ior == mc->tmior) */ {
+#ifdef SERCONSOLE
+			r = RawMayGetChar();
+			if (r != -1) {
+				c = r;
+				ticks = 1;
+			}
+#endif
+			if (ticks == 1)
+				AbortIO((struct AmigaIO *)mc->cnior);
 		}
 		WaitIO((struct AmigaIO *)mc->tmior);
-		timelimit = 0;
-	}
+
+		--ticks;
+	} while (ticks != 0);
+	timelimit = 0;
+
 	(void)WaitIO(mc->cnior);
 	return c;
 }

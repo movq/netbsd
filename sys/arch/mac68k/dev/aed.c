@@ -1,4 +1,4 @@
-/*	$NetBSD: aed.c,v 1.26 2007/12/03 15:33:52 ad Exp $	*/
+/*	$NetBSD: aed.c,v 1.29 2009/11/01 01:51:35 snj Exp $	*/
 
 /*
  * Copyright (C) 1994	Bradley A. Grantham
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Bradley A. Grantham.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.26 2007/12/03 15:33:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aed.c,v 1.29 2009/11/01 01:51:35 snj Exp $");
 
 #include "opt_adb.h"
 
@@ -110,6 +105,7 @@ aedattach(struct device *parent, struct device *self, void *aux)
 	struct aed_softc *sc = (struct aed_softc *)self;
 
 	callout_init(&sc->sc_repeat_ch, 0);
+	selinit(&sc->sc_selinfo);
 
 	sc->origaddr = aa_args->origaddr;
 	sc->adbaddr = aa_args->adbaddr;
@@ -401,7 +397,7 @@ aed_enqevent(adb_event_t *event)
 	    AED_MAX_EVENTS] = *event;
 	aed_sc->sc_evq_len++;
 
-	selnotify(&aed_sc->sc_selinfo, 0);
+	selnotify(&aed_sc->sc_selinfo, 0, 0);
 	if (aed_sc->sc_ioproc)
 		psignal(aed_sc->sc_ioproc, SIGIO);
 
@@ -414,7 +410,7 @@ aedopen(dev_t dev, int flag, int mode, struct lwp *l)
 	struct aed_softc *sc;
 	int s;
 
-	sc = device_lookup(&aed_cd, minor(dev));
+	sc = device_lookup_private(&aed_cd, minor(dev));
 	if (sc == NULL)
 		return (ENXIO);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_udavreg.h,v 1.4 2007/12/05 07:15:54 ad Exp $	*/
+/*	$NetBSD: if_udavreg.h,v 1.6 2010/11/03 22:30:50 dyoung Exp $	*/
 /*	$nabe: if_udavreg.h,v 1.2 2003/08/21 16:26:40 nabe Exp $	*/
 /*
  * Copyright (c) 2003
@@ -166,7 +166,7 @@ struct udav_cdata {
 };
 
 struct udav_softc {
-	USBBASEDEVICE		sc_dev;	/* base device */
+	device_t		sc_dev;	/* base device */
 	usbd_device_handle	sc_udev;
 
 	/* USB */
@@ -178,7 +178,7 @@ struct udav_softc {
 	usbd_pipe_handle	sc_pipe_rx;
 	usbd_pipe_handle	sc_pipe_tx;
 	usbd_pipe_handle	sc_pipe_intr;
-	usb_callout_t		sc_stat_ch;
+	struct callout		sc_stat_ch;
 	u_int			sc_rx_errs;
 	/* u_int		sc_intr_errs; */
 	struct timeval		sc_rx_notice;
@@ -196,7 +196,7 @@ struct udav_softc {
 
 	int                     sc_attached;
 	int			sc_dying;
-        int                     sc_refcnt;
+	int                     sc_refcnt;
 
 	struct usb_task		sc_tick_task;
 	struct usb_task		sc_stop_task;

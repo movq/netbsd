@@ -1,4 +1,4 @@
-/*	$NetBSD: _setjmp.S,v 1.7 2004/03/23 16:13:27 pk Exp $	*/
+/*	$NetBSD: _setjmp.S,v 1.9 2011/04/30 23:41:12 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
 #include <machine/trap.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-RCSID("$NetBSD: _setjmp.S,v 1.7 2004/03/23 16:13:27 pk Exp $")
+RCSID("$NetBSD: _setjmp.S,v 1.9 2011/04/30 23:41:12 martin Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 /*
@@ -54,6 +47,12 @@ RCSID("$NetBSD: _setjmp.S,v 1.7 2004/03/23 16:13:27 pk Exp $")
  */
 
 ENTRY(_setjmp)
+	/* store important globals, sigsetjmp compatible */
+	st	%g3, [%o0 + 16]
+	st	%g2, [%o0 + 24]
+	st	%g4, [%o0 + 48]
+	st	%g7, [%o0 + 52]
+
 	st	%sp, [%o0+0]	/* store caller's stack pointer */
 	st	%o7, [%o0+4]	/* and the return pc */
 	retl
@@ -66,6 +65,12 @@ ENTRY(_longjmp)
 	 mov	1, %o1
 0:
 	t	ST_FLUSHWIN	! flush register windows out to the stack
+
+	/* restore globals */
+	ld	[%o0 + 16], %g3
+	ld	[%o0 + 24], %g2
+	ld	[%o0 + 48], %g4
+	ld	[%o0 + 52], %g7
 
 	/*
 	 * We restore the saved stack pointer to %fp, then issue

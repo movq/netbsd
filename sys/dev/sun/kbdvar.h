@@ -1,4 +1,4 @@
-/*	$NetBSD: kbdvar.h,v 1.18 2005/12/11 12:23:56 christos Exp $	*/
+/*	$NetBSD: kbdvar.h,v 1.20 2009/05/12 14:46:39 cegger Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -49,7 +49,7 @@
 #endif
 
 struct kbd_softc {
-	struct device k_dev;	/* required first: base device */
+	device_t k_dev;		/* required first: base device */
 
 	/* middle layer methods */
 	const struct kbd_ops *k_ops;
@@ -59,7 +59,7 @@ struct kbd_softc {
 	struct evvar k_events;	/* event queue state */
 
 #if NWSKBD > 0
-	struct device * k_wskbd;/* handle for wskbd, if it is attached */
+	device_t  k_wskbd;/* handle for wskbd, if it is attached */
 	int k_wsenabled;	/* set if we are using wskbd */
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int k_wsraw;		/* send raw events to wscons */
@@ -104,7 +104,7 @@ struct cons_channel {
 	 * Callbacks provided by underlying device (e.g. keyboard driver).
 	 * Console driver will call these before console is opened/closed.
 	 */
-	void *cc_dev;		/* underlying device private data */
+	void *cc_private;	/* underlying device private data */
 	int (*cc_iopen)(struct cons_channel *);  /* open underlying device */
 	int (*cc_iclose)(struct cons_channel *); /* close underlying device */
 

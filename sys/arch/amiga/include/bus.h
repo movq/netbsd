@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.20 2005/12/11 12:16:36 christos Exp $	*/
+/*	$NetBSD: bus.h,v 1.23 2010/02/03 13:56:53 phx Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.  All rights reserved.
@@ -11,12 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman for the
- *	NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -237,9 +231,9 @@ struct amiga_bus_space_methods {
 /* 
  * Bus read/write barrier methods.
  * 
- *      void bus_space_barrier __P((bus_space_tag_t tag,
+ *      void bus_space_barrier(bus_space_tag_t tag,
  *          bus_space_handle_t bsh, bus_size_t offset,
- *          bus_size_t len, int flags));
+ *          bus_size_t len, int flags);
  *    
  * Note: the 680x0 does not currently require barriers, but we must
  * provide the flags to MI code.
@@ -252,6 +246,9 @@ struct amiga_bus_space_methods {
 #define BUS_SPACE_ALIGNED_POINTER(p, t) ALIGNED_POINTER(p, t)
 
 #define __BUS_SPACE_HAS_STREAM_METHODS
+
+/* Instruction for enforcing reorder protection. Nothing for 68k. */
+#define amiga_bus_reorder_protect()
 
 extern const struct amiga_bus_space_methods amiga_bus_stride_1;
 extern const struct amiga_bus_space_methods amiga_bus_stride_2;

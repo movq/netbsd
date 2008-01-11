@@ -1,4 +1,4 @@
-/*	$NetBSD: ka860.c,v 1.30 2007/03/04 06:01:01 christos Exp $	*/
+/*	$NetBSD: ka860.c,v 1.34 2010/12/14 23:44:49 matt Exp $	*/
 /*
  * Copyright (c) 1986, 1988 Regents of the University of California.
  * All rights reserved.
@@ -36,44 +36,52 @@
  *
  * Todo: Set up all four console lines in a VAX8600.
  * This is: local, remote, EMM and logical.
+ *
+ * ABus code added by Johnny Billquist 2010
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka860.c,v 1.30 2007/03/04 06:01:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka860.c,v 1.34 2010/12/14 23:44:49 matt Exp $");
 
 #include <sys/param.h>
-#include <sys/device.h>
 #include <sys/systm.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 
-#include <machine/cpu.h>
 #include <machine/clock.h>
-#include <machine/mtpr.h>
 #include <machine/nexus.h>
 #include <machine/ioa.h>
 #include <machine/sid.h>
+#include <machine/mainbus.h>
 
 #include <vax/vax/gencons.h>
+
+void	crlattach(void);
 
 static	void	ka86_memerr(void);
 static	int	ka86_mchk(void *);
 static	void	ka86_reboot(int);
 static	void	ka86_clrf(void);
-static	void	ka860_init(void);
+static	void	ka860_conf(void);
+static	void	ka86_attach_cpu(device_t);
+static int abus_mainbus_match(device_t, cfdata_t, void *);
+static void abus_mainbus_attach(device_t, device_t, void*);
+static int abus_print(void *, const char *);
 
-void	crlattach(void);
+static const char * const ka86_devs[] = { "cpu", "abus", NULL };
 
-struct	cpu_dep	ka860_calls = {
-	0,
-	ka86_mchk,
-	ka86_memerr,
-	ka860_init,
-	generic_gettime,
-	generic_settime,
-	6,      /* ~VUPS */
-	10,	/* SCB pages */
-	0,	/* Halt call, nothing special */
-	ka86_reboot,
-	ka86_clrf,
+const struct cpu_dep ka860_calls = {
+	.cpu_mchk	= ka86_mchk,
+	.cpu_memerr	= ka86_memerr,
+	.cpu_conf	= ka860_conf,
+	.cpu_gettime	= generic_gettime,
+	.cpu_settime	= generic_settime,
+	.cpu_vups	= 6,	/* ~VUPS */
+	.cpu_scbsz	= 10,	/* SCB pages */
+	.cpu_reboot	= ka86_reboot,
+	.cpu_clrf	= ka86_clrf,
+	.cpu_devs	= ka86_devs,
+	.cpu_attach_cpu	= ka86_attach_cpu,
 };
 
 /*
@@ -127,9 +135,8 @@ struct	cpu_dep	ka860_calls = {
 
 /* log CRD errors */
 void
-ka86_memerr()
+ka86_memerr(void)
 {
-	register int reg11 = 0; /* known to be r11 below */
 	int mdecc, mear, mstat1, mstat2, array;
 
 	/*
@@ -141,19 +148,12 @@ ka86_memerr()
 	 * The asm's below have a number of constants which
 	 * are defined correctly above and in mtpr.h.
 	 */
-#ifdef lint
-	reg11 = 0;
-#else
-	__asm("mtpr $0x27,$0x4e; mfpr $0x4f,%0":: "r" (reg11));
-#endif
-	mdecc = reg11;	/* must acknowledge interrupt? */
+	__asm("mtpr $0x27,$0x4e; mfpr $0x4f,%0" : "=g" (mdecc));
+			/* must acknowledge interrupt? */
 	if (M8600_MEMERR(mdecc)) {
-		__asm("mtpr $0x2a,$0x4e; mfpr $0x4f,%0":: "r" (reg11));
-		mear = reg11;
-		__asm("mtpr $0x25,$0x4e; mfpr $0x4f,%0":: "r" (reg11));
-		mstat1 = reg11;
-		__asm("mtpr $0x26,$0x4e; mfpr $0x4f,%0":: "r" (reg11));
-		mstat2 = reg11;
+		__asm("mtpr $0x2a,$0x4e; mfpr $0x4f,%0" : "=g" (mear));
+		__asm("mtpr $0x25,$0x4e; mfpr $0x4f,%0" : "=g" (mstat1));
+		__asm("mtpr $0x26,$0x4e; mfpr $0x4f,%0" : "=g" (mstat2));
 		array = M8600_ARRAY(mear);
 
 		{
@@ -162,8 +162,8 @@ ka86_memerr()
 			printf("mcr0: ecc error, addr %x (array %d) syn %x\n",
 				M8600_ADDR(mear), array, M8600_SYN(mdecc));
 
-			bitmask_snprintf(mstat1, M8600_MSTAT1_BITS, sbuf, sizeof(sbuf));
-			bitmask_snprintf(mstat2, M8600_MSTAT2_BITS, sbuf2, sizeof(sbuf2));
+			snprintb(sbuf, sizeof(sbuf), M8600_MSTAT1_BITS, mstat1);
+			snprintb(sbuf2, sizeof(sbuf2), M8600_MSTAT2_BITS, mstat2);
 			printf("\tMSTAT1 = %s\n\tMSTAT2 = %s\n", sbuf, sbuf2);
 		}
 
@@ -173,7 +173,7 @@ ka86_memerr()
 }
 
 #define NMC8600 7
-const char *mc8600[] = {
+const char * const mc8600[] = {
 	"unkn type",	"fbox error",	"ebox error",	"ibox error",
 	"mbox error",	"tbuf error",	"mbox 1D error"
 };
@@ -225,8 +225,8 @@ struct mc8600frame {
 int
 ka86_mchk(void *cmcf)
 {
-	register struct mc8600frame *mcf = (struct mc8600frame *)cmcf;
-	register int type;
+	struct mc8600frame *mcf = (struct mc8600frame *)cmcf;
+	int type;
 
 	if (mcf->mc86_ebcs & MBOX_FE)
 		mcf->mc86_ehmsts |= MC_MBOX;
@@ -277,46 +277,63 @@ struct ka86 {
  * /bqt
  */
 
-static const char *manuf[] = {"Unknown",
+static const char * const manuf[] = {"Unknown",
 			      "Galway, Ireland",
 			      "Franklin, MA",
 			      "Burlington, VT",
 			      "Marlboro, MA"};
 
-int mindex[] = {0,1,1,1,
-		0,2,2,2,
-		0,0,3,3,
-		3,4,4,4};
+const int mindex[] = {0,1,1,1, 0,2,2,2, 0,0,3,3, 3,4,4,4};
 
 void
-ka860_init(void)
+ka860_conf(void)
 {
-	struct	ka86 *ka86 = (void *)&vax_cpudata;
-	int fpa;
-
 	/* Enable cache */
 	mtpr(3, PR_CSWP);
 
-	printf("cpu0: ka86%d, serial number %d, rev. %c\n",
-	       ka86->v8650 ? 5 : 0, ka86->snr, ka86->eco+64);
-	printf("cpu0: manufactured in %s.\n", manuf[mindex[ka86->plant]]);
-	printf("cpu0: ");
-	fpa = mfpr(PR_ACCS);
-	if (fpa & 255) {
-		printf("FPA present, type %d, serial number %d, enabling.\n", 
-		    fpa & 255, fpa >> 16);
-		mtpr(0x8000, PR_ACCS);
-	} else
-		printf("no FPA\n");
 	/* enable CRD reports */
 	mtpr(mfpr(PR_MERG) & ~M8600_ICRD, PR_MERG);
+}
+
+void
+ka86_attach_cpu(device_t self)
+{
+	struct ka86 * const ka86 = (void *)&vax_cpudata;
+	int fpa;
+
+	aprint_naive(": KA86%d, S/N %d, Rev. %c, manufactured in %s.\n",
+	    ka86->v8650 ? 5 : 0, ka86->snr, ka86->eco+64,
+	    manuf[mindex[ka86->plant]]);
+	aprint_normal(": KA86%d, S/N %d, Rev. %c, manufactured in %s.\n",
+	    ka86->v8650 ? 5 : 0, ka86->snr, ka86->eco+64,
+	    manuf[mindex[ka86->plant]]);
+	fpa = mfpr(PR_ACCS);
+	if (fpa & 255) {
+		aprint_naive_dev(self,
+		    "FPA present: type %d, serial number %d\n", 
+		    fpa & 255, fpa >> 16);
+		aprint_normal_dev(self,
+		    "FPA present: type %d, serial number %d\n", 
+		    fpa & 255, fpa >> 16);
+		mtpr(0x8000, PR_ACCS);
+	} else {
+		aprint_naive_dev(self, "no FPA\n");
+		aprint_normal_dev(self, "no FPA\n");
+        }
+
+	/*
+	 * Init CPU.
+	 * Attach crl first.
+	 */
+
+	crlattach();
 }
 
 /*
  * Clear restart flag.
  */
 void
-ka86_clrf()
+ka86_clrf(void)
 {
 	/*
 	 * We block all interrupts here so that there won't be any
@@ -338,7 +355,7 @@ ka86_clrf()
 
 	/* clear cold start flag */
 	mtpr(GC_CCFL, PR_TXDB);
-	WAIT;        
+	WAIT;	
 
 	/* restore old state */
 	mtpr(old|GC_WRT, PR_TXCS);
@@ -360,75 +377,74 @@ ka86_reboot(int howto)
 	__asm("halt");
 }
 
-static	int abus_print __P((void *, const char *));
-static  int abus_match __P((struct device *, struct cfdata *, void *));
-static  void abus_attach __P((struct device *, struct device *, void*));
 
-CFATTACH_DECL(abus, sizeof(struct device),
-    abus_match, abus_attach, NULL, NULL);
+CFATTACH_DECL_NEW(abus_mainbus, 0,
+                  abus_mainbus_match, abus_mainbus_attach, NULL, NULL);
 
-/*
- * Abus is the master bus on VAX 8600.
- */
-int
-abus_match(struct device *parent, struct cfdata *cf, void *aux)
+int abus_mainbus_match(device_t parent, cfdata_t self, void *aux)
 {
-        if (vax_bustype == VAX_ABUS)
-                return 1;
-        return 0;
+  return (vax_bustype == VAX_ABUS);
 }
 
-void
-abus_attach(struct device *parent, struct device *self, void *aux)
+void abus_mainbus_attach(device_t parent, device_t self, void *aux)
 {
-        volatile int tmp;
-        volatile struct sbia_regs *sbiar;
-        int     type, i;
-	struct bp_conf bp;
+        struct mainbus_attach_args * const ma = aux;
+        struct abus_attach_args aa;
 
-	/*
-	 * Init CPU.
-	 * Attach crl first.
-	 */
-	printf("\n");
-	crlattach();
+        unsigned int tmp;
+	volatile struct sbia_regs *sbiar;
+
+        int     type, i;
+
+        aprint_naive("\n");
+        aprint_normal("\n");
 
 	for (i = 0; i < NIOA8600; i++) {
 		sbiar = (struct sbia_regs *)vax_map_physmem((paddr_t)IOA8600(i),
-                    (IOAMAPSIZ / VAX_NBPG));
-                if (badaddr(__UNVOLATILE(sbiar), 4)) {
-                        vax_unmap_physmem((vaddr_t)sbiar, (IOAMAPSIZ / VAX_NBPG));
-                        continue;
-                }
-                tmp = sbiar->sbi_cfg;
-                type = tmp & IOA_TYPMSK;
+		    (IOAMAPSIZ / VAX_NBPG));
+		if (badaddr(sbiar, 4)) {
+			vax_unmap_physmem((vaddr_t)sbiar,
+			    (IOAMAPSIZ / VAX_NBPG));
+			continue;
+		}
+
+		tmp = sbiar->sbi_cfg;
+		type = tmp & IOA_TYPMSK;
 
                 switch (type) {
-        
+
                 case IOA_SBIA:
-                        bp.type = "sbi";
-                        bp.num = i;
-			bp.bp_addr = tmp;
-                        config_found(self, &bp, abus_print);
-                        sbiar->sbi_errsum = -1;
-                        sbiar->sbi_error = 0x1000;
-                        sbiar->sbi_fltsts = 0xc0000;
+
+                        aa.aa_base = (bus_addr_t)(SBIA8600(i));
+                        aa.aa_num = i;
+                        aa.aa_name = "sbi";
+                        aa.aa_type = tmp;
+                        aa.aa_iot = ma->ma_iot;
+                        aa.aa_dmat = ma->ma_dmat;
+
+			sbiar->sbi_errsum = -1;
+			sbiar->sbi_error = 0x1000;
+			sbiar->sbi_fltsts = 0xc0000;
+
+                        config_found(self, &aa, abus_print);
                         break;
 
                 default:
-                        printf("IOAdapter %x unsupported\n", type);
-                        break;
-                }
-                vax_unmap_physmem((vaddr_t)sbiar, (IOAMAPSIZ / VAX_NBPG));
-        }
+                  aprint_naive("IOAdapter %#x unsupported\n", type);
+                  aprint_normal("IOAdapter %#x unsupported\n", type);
+		}
+
+		vax_unmap_physmem((vaddr_t)sbiar, (IOAMAPSIZ / VAX_NBPG));
+	}
 }
 
-int
-abus_print(void *aux, const char *name)
+int abus_print(void *aux, const char *name)
 {
-        struct bp_conf *bp = aux;
-        if (name)
-                aprint_normal("%s at %s", bp->type, name);
-	printf(": rev %d", bp->bp_addr & 0xf);
-        return (UNCONF);
+  struct abus_attach_args *aa = aux;
+
+  if (name) {
+    aprint_naive("%s%d at %s\n", aa->aa_name, aa->aa_num, name);
+    aprint_normal("%s%d at %s\n", aa->aa_name, aa->aa_num, name);
+  }
+  return UNSUPP;
 }

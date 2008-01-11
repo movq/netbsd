@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_map.h,v 1.60 2008/01/08 13:10:01 yamt Exp $	*/
+/*	$NetBSD: uvm_map.h,v 1.66 2011/02/02 15:25:27 chuck Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -17,12 +17,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Charles D. Cranor,
- *      Washington University, the University of California, Berkeley and
- *      its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -110,7 +105,7 @@
 
 #endif /* _KERNEL */
 
-#include <sys/tree.h>
+#include <sys/rbtree.h>
 #include <sys/pool.h>
 #include <sys/rwlock.h>
 #include <sys/mutex.h>
@@ -125,9 +120,9 @@
  * Also included is control information for virtual copy operations.
  */
 struct vm_map_entry {
-	RB_ENTRY(vm_map_entry)	rb_entry;	/* tree information */
-	vaddr_t			ownspace;	/* free space after */
-	vaddr_t			space;		/* space in subtree */
+	struct rb_node		rb_node;	/* tree information */
+	vsize_t			gap;		/* free space after */
+	vsize_t			maxgap;		/* space in subtree */
 	struct vm_map_entry	*prev;		/* previous entry */
 	struct vm_map_entry	*next;		/* next entry */
 	vaddr_t			start;		/* start address */
@@ -216,7 +211,7 @@ struct vm_map {
 	kmutex_t		misc_lock;	/* Lock for ref_count, cv */
 	kcondvar_t		cv;		/* For signalling */
 	int			flags;		/* flags */
-	RB_HEAD(uvm_tree, vm_map_entry) rbhead;	/* Tree for entries */
+	struct rb_tree		rb_tree;	/* Tree for entries */
 	struct vm_map_entry	header;		/* List of entries */
 	int			nentries;	/* Number of entries */
 	vsize_t			size;		/* virtual size */
@@ -297,6 +292,7 @@ extern vaddr_t	uvm_maxkaddr;
 
 void		uvm_map_deallocate(struct vm_map *);
 
+int		uvm_map_willneed(struct vm_map *, vaddr_t, vaddr_t);
 int		uvm_map_clean(struct vm_map *, vaddr_t, vaddr_t, int);
 void		uvm_map_clip_start(struct vm_map *, struct vm_map_entry *,
 		    vaddr_t, struct uvm_mapent_reservation *);
@@ -315,8 +311,6 @@ void		uvm_map_init(void);
 bool		uvm_map_lookup_entry(struct vm_map *, vaddr_t,
 		    struct vm_map_entry **);
 void		uvm_map_reference(struct vm_map *);
-int		uvm_map_replace(struct vm_map *, vaddr_t, vaddr_t,
-		    struct vm_map_entry *, int);
 int		uvm_map_reserve(struct vm_map *, vsize_t, vaddr_t, vsize_t,
 		    vaddr_t *, uvm_flag_t);
 void		uvm_map_setup(struct vm_map *, vaddr_t, vaddr_t, int);

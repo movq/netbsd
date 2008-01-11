@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_malloc_debug.c,v 1.18 2007/11/11 23:22:23 matt Exp $	*/
+/*	$NetBSD: kern_malloc_debug.c,v 1.25 2011/01/19 09:02:52 cegger Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Artur Grabowski <art@openbsd.org>
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_malloc_debug.c,v 1.18 2007/11/11 23:22:23 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_malloc_debug.c,v 1.25 2011/01/19 09:02:52 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -111,8 +111,15 @@ int debug_malloc_frees;
 int debug_malloc_pages;
 int debug_malloc_chunks_on_freelist;
 
-POOL_INIT(debug_malloc_pool, sizeof(struct debug_malloc_entry), 0, 0, 0,
-    "mdbepl", NULL, IPL_VM);
+static struct pool debug_malloc_pool;
+
+void
+debug_malloc_init(void)
+{
+
+	pool_init(&debug_malloc_pool, sizeof(struct debug_malloc_entry),
+	    0, 0, 0, "mdbepl", NULL, IPL_VM);
+}
 
 int
 debug_malloc(unsigned long size, struct malloc_type *type, int flags,
@@ -148,7 +155,9 @@ debug_malloc(unsigned long size, struct malloc_type *type, int flags,
 	debug_malloc_allocs++;
 	splx(s);
 
-	pmap_kenter_pa(md->md_va, md->md_pa, VM_PROT_READ|VM_PROT_WRITE);
+	pmap_kenter_pa(md->md_va, md->md_pa,
+	    VM_PROT_READ|VM_PROT_WRITE, PMAP_KMPAGE);
+	pmap_update(pmap_kernel());
 
 	md->md_size = size;
 	md->md_type = type;
@@ -207,6 +216,7 @@ debug_free(void *addr, struct malloc_type *type)
 	 * unmap the page.
 	 */
 	pmap_kremove(md->md_va, PAGE_SIZE);
+	pmap_update(pmap_kernel());
 	splx(s);
 
 	return (1);

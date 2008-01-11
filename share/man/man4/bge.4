@@ -1,4 +1,4 @@
-.\"	$NetBSD: bge.4,v 1.8 2005/06/23 12:47:38 peter Exp $
+.\"	$NetBSD: bge.4,v 1.12 2009/09/26 06:47:55 wiz Exp $
 .\"
 .\" Copyright (c) 2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 31, 2003
+.Dd September 26, 2009
 .Dt BGE 4
 .Os
 .Sh NAME
@@ -43,13 +36,14 @@
 .Sh SYNOPSIS
 .Cd "bge* at pci? dev ? function ?"
 .Pp
-Configuration of PHYs may also be necessary.  See
+Configuration of PHYs may also be necessary.
+See
 .Xr mii 4 .
 .Sh DESCRIPTION
 The
 .Nm
 device driver supports Gigabit Ethernet interfaces based on the Broadcom
-BCM570x family of Gigabit Ethernet chips.
+BCM570x family of Gigabit Ethernet chips and the BCM5906 chip.
 The interfaces supported by the
 .Nm
 driver include:
@@ -75,6 +69,18 @@ driver supports this feature of the chip.
 See
 .Xr ifconfig 8
 for information on how to enable this feature.
+.Pp
+The level of interrupt mitigation for received packets can be adjusted
+with the
+.Li hw.bge.rx_lvl
+.Xr sysctl 8
+control.
+A value of 1 yields a
+.Nm
+interrrupt for every two full-sized Ethernet frames.
+Each increment of the value will, roughly, halve receive interrupt rate,
+up to a maximum of 5, which interrupts about every 30 to 40 full-sized
+TCP segments.
 .Sh SEE ALSO
 .Xr arp 4 ,
 .Xr bce 4 ,

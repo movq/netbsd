@@ -1,10 +1,10 @@
-#	$NetBSD: Makefile,v 1.7 2007/01/12 13:24:30 skrll Exp $
+#	$NetBSD: Makefile,v 1.11 2011/04/10 16:47:04 joerg Exp $
 
 .include <bsd.own.mk>
 
 .include "../Makefile.inc"
 
-MKPRIVATELIB=	yes
+LIBISPRIVATE=	yes
 LIB=		gdb
 
 .include "${.CURDIR}/../arch/${MACHINE_ARCH}/defs.mk"
@@ -13,7 +13,8 @@ DIST=		${NETBSDSRCDIR}/gnu/dist/gdb6
 
 SRCS=		${G_LIBGDB_OBS:.o=.c}
 GCPPFLAGS=	${G_INTERNAL_CFLAGS}
-CPPFLAGS=	-I${.CURDIR} \
+CPPFLAGS.bsd-kvm.c=	-D_KMEMUSER
+CPPFLAGS+=	-I${.CURDIR} \
 		-I${.CURDIR}/../arch/${MACHINE_ARCH} \
 		-I${DIST}/gdb \
 		-I${DIST}/gdb/config \
@@ -39,3 +40,7 @@ COPTS+=	-Wno-stack-protector
 
 # Don't run yacc/bison or lex
 .y.c .y.h .l.c:
+
+.if ${MACHINE} == "amiga"
+COPTS.dwarf2-frame.c+=-O1
+.endif

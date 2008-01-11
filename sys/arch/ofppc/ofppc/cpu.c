@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.8 2007/10/17 19:56:10 garbled Exp $	*/
+/*	$NetBSD: cpu.c,v 1.13 2010/12/20 00:25:41 matt Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,16 +30,49 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.8 2007/10/17 19:56:10 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.13 2010/12/20 00:25:41 matt Exp $");
+
+#include "opt_ppcparam.h"
+#include "opt_multiprocessor.h"
+#include "opt_interrupt.h"
+#include "opt_altivec.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
 #include <dev/ofw/openfirm.h>
+
+#include <powerpc/openpic.h>
+#include <powerpc/atomic.h>
+#include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
+#include <powerpc/oea/hid.h>
+#include <powerpc/oea/bat.h>
+#ifdef ALTIVEC
+#include <powerpc/altivec.h>
+#endif
+
+#ifdef MULTIPROCESSOR
+#include <arch/powerpc/pic/picvar.h>
+#include <arch/powerpc/pic/ipivar.h>
+#include <powerpc/rtas.h>
+#endif
+
 #include <machine/autoconf.h>
 #include <machine/cpu.h>
+#include <machine/fpu.h>
+#include <machine/pcb.h>
 #include <machine/pio.h>
+#include <machine/trap.h>
+
+#include "pic_openpic.h"
+
+#ifndef OPENPIC
+#if NPIC_OPENPIC > 0
+#define OPENPIC
+#endif /* NOPENPIC > 0 */
+#endif /* OPENPIC */
 
 static int cpu_match(struct device *, struct cfdata *, void *);
 static void cpu_attach(struct device *, struct device *, void *);
@@ -56,8 +82,7 @@ CFATTACH_DECL(cpu, sizeof(struct device),
     cpu_match, cpu_attach, NULL, NULL);
 
 extern struct cfdriver cpu_cd;
-
-#define HH_ARBCONF	0xf8000090
+extern int machine_has_rtas;
 
 int
 cpu_match(struct device *parent, struct cfdata *cfdata, void *aux)
@@ -80,15 +105,8 @@ cpu_match(struct device *parent, struct cfdata *cfdata, void *aux)
 				return 1;
 		}
 	}
-	switch (reg[0]) {
-	case 0: /* primary CPU */
+	if (reg[0] == 0)
 		return 1;
-	case 1: /* secondary CPU */
-		if (OF_finddevice("/hammerhead") != -1)
-			if (in32rb(HH_ARBCONF) & 0x02)
-				return 1;
-		break;
-	}
 	return 0;
 }
 
@@ -103,21 +121,91 @@ cpu_OFgetspeed(struct device *self, struct cpu_info *ci)
 			int l;
 
 			l = OF_getprop(node, "reg", &cpunum, sizeof(cpunum));
-			if (l == 4 && ci->ci_cpuid == cpunum) {
+			if (l == sizeof(uint32_t) && ci->ci_cpuid == cpunum) {
 				uint32_t cf;
 
 				l = OF_getprop(node, "clock-frequency",
 				    &cf, sizeof(cf));
-				if (l == 4)
+				if (l == sizeof(uint32_t))
 					ci->ci_khz = cf / 1000;
 				break;
 			}
 		}
 	}
 	if (ci->ci_khz)
-		aprint_normal("%s: %u.%02u MHz\n", self->dv_xname,
+		aprint_normal_dev(self, "%u.%02u MHz\n",
 		    ci->ci_khz / 1000, (ci->ci_khz / 10) % 100);
 }
+
+static void
+cpu_print_cache_config(uint32_t size, uint32_t line)
+{
+	char cbuf[7];
+
+	format_bytes(cbuf, sizeof(cbuf), size);
+	aprint_normal("%s %dB/line", cbuf, line);
+}
+
+static void
+cpu_OFprintcacheinfo(int node)
+{
+	int l;
+	uint32_t dcache=0, icache=0, dline=0, iline=0;
+
+	OF_getprop(node, "i-cache-size", &icache, sizeof(icache));
+	OF_getprop(node, "d-cache-size", &dcache, sizeof(dcache));
+	OF_getprop(node, "i-cache-line-size", &iline, sizeof(iline));
+	OF_getprop(node, "d-cache-line-size", &dline, sizeof(dline));
+	if (OF_getprop(node, "cache-unified", &l, sizeof(l)) != -1) {
+		aprint_normal("cache ");
+		cpu_print_cache_config(icache, iline);
+	} else {
+		aprint_normal("I-cache ");
+		cpu_print_cache_config(icache, iline);
+		aprint_normal(", D-cache ");
+		cpu_print_cache_config(dcache, dline);
+	}
+	aprint_normal("\n");
+}
+
+static void
+cpu_OFgetcache(struct device *self, struct cpu_info *ci)
+{
+	int node, cpu=-1;
+	char name[32];
+
+	node = OF_finddevice("/cpus");
+	if (node == -1)
+		return;
+
+	for (node = OF_child(node); node; node = OF_peer(node)) {
+		uint32_t cpunum;
+		int l;
+
+		l = OF_getprop(node, "reg", &cpunum, sizeof(cpunum));
+		if (l == sizeof(uint32_t) && ci->ci_cpuid == cpunum) {
+			cpu = node;
+			break;
+		}
+	}
+	if (cpu == -1)
+		return;
+	/* now we have cpu */
+	aprint_normal_dev(self, "L1 ");
+	cpu_OFprintcacheinfo(cpu);
+	for (node = OF_child(cpu); node; node = OF_peer(node)) {
+		if (OF_getprop(node, "name", name, sizeof(name)) != -1) {
+			if (strcmp("l2-cache", name) == 0) {
+				aprint_normal_dev(self, "L2 ");
+				cpu_OFprintcacheinfo(node);
+			} else if (strcmp("l3-cache", name) == 0) {
+				aprint_normal_dev(self, "L3 ");
+				cpu_OFprintcacheinfo(node);
+			}
+		}
+	}
+}
+
 
 void
 cpu_attach(struct device *parent, struct device *self, void *aux)
@@ -130,9 +218,103 @@ cpu_attach(struct device *parent, struct device *self, void *aux)
 	if (ci == NULL)
 		return;
 
+	if (id > 0)
+#ifdef MULTIPROCESSOR
+		cpu_spinup(self, ci);
+#endif
+
 	if (ci->ci_khz == 0)
 		cpu_OFgetspeed(self, ci);
 
-	if (id > 0)
-		return;
+	cpu_OFgetcache(self, ci);
+	return;
 }
+
+#ifdef MULTIPROCESSOR
+
+extern volatile u_int cpu_spinstart_cpunum;
+extern volatile u_int cpu_spinstart_ack;
+
+int
+md_setup_trampoline(volatile struct cpu_hatch_data *h, struct cpu_info *ci)
+{
+	int i;
+	u_int msr;
+
+	msr = mfmsr();
+	h->running = -1;
+	cpu_spinstart_cpunum = ci->ci_cpuid;
+	__asm volatile("dcbf 0,%0"::"r"(&cpu_spinstart_cpunum):"memory");
+
+	for (i=0; i < 100000000; i++)
+		if (cpu_spinstart_ack == 0)
+			break;
+	return 1;
+}
+
+void
+md_presync_timebase(volatile struct cpu_hatch_data *h)
+{
+	uint64_t tb;
+	int junk;
+
+	if (machine_has_rtas && rtas_has_func(RTAS_FUNC_FREEZE_TIME_BASE)) {
+		rtas_call(RTAS_FUNC_FREEZE_TIME_BASE, 0, 1, &junk);
+		/* Sync timebase. */
+		tb = mftb();
+
+		h->tbu = tb >> 32;
+		h->tbl = tb & 0xffffffff;
+
+		h->running = 0;
+	}
+	/* otherwise, the machine has no rtas, or if it does, things
+	 * are pre-syncd, per PAPR v2.2.  I don't have anything without
+	 * rtas, so if such a machine exists, someone will have to write
+	 * code for it
+	 */
+}
+
+void
+md_start_timebase(volatile struct cpu_hatch_data *h)
+{
+	int i, junk;
+	/*
+	 * wait for secondary spin up (1.5ms @ 604/200MHz)
+	 * XXX we cannot use delay() here because timebase is not
+	 * running.
+	 */
+	for (i = 0; i < 100000; i++)
+		if (h->running)
+			break;
+
+	/* Start timebase. */
+	if (machine_has_rtas && rtas_has_func(RTAS_FUNC_THAW_TIME_BASE))
+		rtas_call(RTAS_FUNC_THAW_TIME_BASE, 0, 1, &junk);
+}
+
+/*
+ * We wait for h->running to become 0, and then we know that the time is
+ * frozen and h->tb is correct.
+ */
+
+void
+md_sync_timebase(volatile struct cpu_hatch_data *h)
+{
+	/* Sync timebase. */
+	u_int tbu = h->tbu;
+	u_int tbl = h->tbl;
+	while (h->running == -1)
+		;
+	__asm volatile ("sync; isync");
+	__asm volatile ("mttbl %0" :: "r"(0));
+	__asm volatile ("mttbu %0" :: "r"(tbu));
+	__asm volatile ("mttbl %0" :: "r"(tbl));
+}
+
+void
+md_setup_interrupts(void)
+{
+/* do nothing, this is handled in ofwpci */
+}
+#endif /* MULTIPROCESSOR */

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.12 2005/12/11 12:16:47 christos Exp $	*/
+/*	$NetBSD: param.h,v 1.16 2011/01/14 02:06:24 rmind Exp $	*/
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe.
@@ -60,18 +60,6 @@
 #define MSGBUFSIZE	NBPG		/* default message buffer size */
 #endif
 
-#ifndef NMBCLUSTERS
-#if defined(_KERNEL_OPT)
-#include "opt_gateway.h"
-#endif
-
-#ifdef GATEWAY
-#define	NMBCLUSTERS	2048		/* map size, max cluster allocation */
-#else
-#define	NMBCLUSTERS	1024		/* map size, max cluster allocation */
-#endif
-#endif
-
 /*
  * Minimum and maximum sizes of the kernel malloc arena in PAGE_SIZE-sized
  * logical pages.
@@ -83,21 +71,18 @@
 
 /*
  * The USPACE area contains :
- * 1. the user structure for the process
+ * 1. the pcb structure for the process
  * 2. the fp context for FP emulation
  * 3. the kernel (svc) stack
- * 4. the undefined instruction stack
  *
  * The layout of the area looks like this
  *
- * | user area | FP context | undefined stack | kernel stack |
+ * | uarea | FP context | kernel stack |
  *
- * The size of the user area is known.
+ * The size of the uarea is known.
  * The size of the FP context is variable depending of the FP emulator
  * in use and whether there is hardware FP support. However we can put
  * an upper limit on it.
- * The undefined stack needs to be at least 512 bytes. This is a requirement
- * if the FP emulators
  * The kernel stack should be at least 4K is size.
  *
  * The stack top addresses are used to set the stack pointers. The stack bottom
@@ -107,9 +92,7 @@
 
 #define FPCONTEXTSIZE			(0x100)
 #define USPACE_SVC_STACK_TOP		(USPACE)
-#define USPACE_SVC_STACK_BOTTOM		(USPACE_SVC_STACK_TOP - 0x1000)
-#define	USPACE_UNDEF_STACK_TOP		(USPACE_SVC_STACK_BOTTOM - 0x10)
-#define USPACE_UNDEF_STACK_BOTTOM	(sizeof(struct user) + FPCONTEXTSIZE + 10)
+#define USPACE_SVC_STACK_BOTTOM		(sizeof(struct pcb) + FPCONTEXTSIZE + 10)
 
 #define arm_btop(x)			((x) >> PGSHIFT)
 #define arm_ptob(x)			((x) << PGSHIFT)
@@ -117,7 +100,7 @@
     
 #ifdef _KERNEL
 #ifndef _LOCORE
-void	delay __P((unsigned));
+void	delay(unsigned);
 #define DELAY(x)	delay(x)
 #endif
 #endif

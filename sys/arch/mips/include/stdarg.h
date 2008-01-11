@@ -1,4 +1,4 @@
-/*	$NetBSD: stdarg.h,v 1.27 2006/08/27 19:02:38 matt Exp $	*/
+/*	$NetBSD: stdarg.h,v 1.29 2009/12/14 00:46:05 matt Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -53,12 +53,19 @@ typedef _BSD_VA_LIST_	va_list;
 #define va_end(ap)		__builtin_va_end((ap))
 #define __va_copy(dest, src)	__builtin_va_copy((dest), (src))
 
+#elif defined(__PCC__)
+
+#define va_start(ap, last)	__builtin_stdarg_start((ap), last)
+#define va_arg(ap, type)	__builtin_va_arg((ap), type)
+#define va_end(ap)		__builtin_va_end((ap))
+#define __va_copy(dest, src)	__builtin_va_copy((dest), (src))
+
 #else
 
-#if defined(_MIPS_BSD_API) && \
-    !((_MIPS_BSD_API == _MIPS_BSD_API_LP32) || \
-      (_MIPS_BSD_API == _MIPS_BSD_API_LP32_64CLEAN))
-#error stdargs.h does not work with 64 bit ABIs
+#if defined(__mips_n32)
+#error stdarg.h does not work with the N32 ABI with this compiler
+#elif defined(__mips_n64)
+#error stdarg.h does not work with the N64 ABI with this compiler
 #endif
 
 #define	va_start(ap, last) \

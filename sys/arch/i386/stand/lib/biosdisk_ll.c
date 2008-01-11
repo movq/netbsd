@@ -1,4 +1,4 @@
-/*	$NetBSD: biosdisk_ll.c,v 1.25 2006/11/18 19:58:56 erh Exp $	 */
+/*	$NetBSD: biosdisk_ll.c,v 1.31 2011/02/21 02:58:02 jakllsch Exp $	 */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,6 +69,7 @@
  * needs lowlevel parts from bios_disk.S
  */
 
+#include <lib/libkern/libkern.h>
 #include <lib/libsa/stand.h>
 
 #include "biosdisk_ll.h"
@@ -134,7 +128,8 @@ set_geometry(struct biosdisk_ll *d, struct biosdisk_extinfo *ed)
 		d->flags |= BIOSDISK_INT13EXT;
 		if (ed != NULL) {
 			ed->size = sizeof(*ed);
-			biosdisk_getextinfo(d->dev, ed);
+			if (biosdisk_getextinfo(d->dev, ed) != 0)
+				return -1;
 		}
 	}
 
@@ -160,8 +155,8 @@ set_geometry(struct biosdisk_ll *d, struct biosdisk_extinfo *ed)
  * this buffer doesn't cross a 64K DMA boundary.
  */
 static int      ra_dev;
-static int      ra_end;
-static int      ra_first;
+static daddr_t  ra_end;
+static daddr_t  ra_first;
 
 /*
  * Because some older BIOSes have bugs in their int13 extensions, we
@@ -271,8 +266,8 @@ readsects(struct biosdisk_ll *d, daddr_t dblk, int num, char *buf, int cold)
 			while ((nsec = do_read(d, dblk, maxsecs, trbuf)) < 0) {
 #ifdef DISK_DEBUG
 				if (!cold)
-					printf("read error dblk %d-%d\n", (int)dblk,
-					       (int)(dblk + maxsecs - 1));
+					printf("read error dblk %"PRId64"-%"PRId64"\n",
+					    dblk, (dblk + maxsecs - 1));
 #endif
 				if (--retries >= 0)
 					continue;

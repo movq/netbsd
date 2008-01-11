@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_search.c,v 1.14 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_search.c,v 1.17 2008/09/11 12:58:00 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,14 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_search.c	8.8 (Berkeley) 7/31/94";
-#else
-__RCSID("$NetBSD: bt_search.c,v 1.14 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_search.c,v 1.17 2008/09/11 12:58:00 joerg Exp $");
 
 #include "namespace.h"
 #include <sys/types.h>
@@ -83,7 +81,7 @@ __bt_search(BTREE *t, const DBT *key, int *exactp)
 		/* Do a binary search on the current page. */
 		t->bt_cur.page = h;
 		for (base = 0, lim = NEXTINDEX(h); lim; lim >>= 1) {
-			t->bt_cur.index = idx = base + ((u_int32_t)lim >> 1);
+			t->bt_cur.index = idx = base + ((uint32_t)lim >> 1);
 			if ((cmp = __bt_cmp(t, key, &t->bt_cur)) == 0) {
 				if (h->flags & P_BLEAF) {
 					*exactp = 1;

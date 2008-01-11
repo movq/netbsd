@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.pl,v 1.10 2006/02/24 22:13:16 dsl Exp $	*/
+/*	$NetBSD: msg.md.pl,v 1.13 2011/04/04 08:30:42 mbalmer Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.md.en,v 1.1 2001/10/24 19:43:40 briggs Exp */
 
@@ -16,11 +16,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed for the NetBSD Project by
- *      Piermont Information Systems Inc.
- * 4. The name of Piermont Information Systems Inc. may not be used to endorse
+ * 3. The name of Piermont Information Systems Inc. may not be used to endorse
  *    or promote products derived from this software without specific prior
  *    written permission.
  *
@@ -41,8 +37,11 @@
 /* MD Message catalog -- Polish, sandpoint version */
 
 message md_hello
-{Jesli uruchomiles komputer z dyskietki, mozesz ja teraz wyciagnac.
+{
+}
 
+message md_may_remove_boot_medium
+{Jesli uruchomiles komputer z dyskietki, mozesz ja teraz wyciagnac.
 }
 
 message dobad144
@@ -56,3 +55,5 @@ message dobootblks
 message set_kernel_1
 {Kernel (GENERIC)}
 
+message set_kernel_2
+{Kernel (KUROBOX)}

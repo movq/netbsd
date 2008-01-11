@@ -1,4 +1,4 @@
-/*	$NetBSD: mkheaders.c,v 1.13 2007/11/09 05:21:30 cube Exp $	*/
+/*	$NetBSD: mkheaders.c,v 1.18 2010/03/22 14:40:54 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,9 +58,7 @@
 #include <crc_extern.h>
 
 static int emitcnt(struct nvlist *);
-static int emitlocs(void);
 static int emitopts(void);
-static int emitioconfh(void);
 static int emittime(void);
 static int herr(const char *, const char *, FILE *);
 static int defopts_print(const char *, void *, void *);
@@ -72,9 +70,9 @@ static char *cntname(const char *);
  */
 
 /* Unlikely constant for undefined options */
-#define UNDEFINED ('n' << 24 | 0 << 20 | 't' << 12 | 0xdef)
+#define UNDEFINED ('n' << 24 | 0 << 20 | 't' << 12 | 0xdefU)
 /* Value for defined options with value UNDEFINED */
-#define	DEFINED (0xdef1 << 16 | 'n' << 8 | 0xed)
+#define	DEFINED (0xdef1U << 16 | 'n' << 8 | 0xed)
 
 /*
  * Make the various config-generated header files.
@@ -95,14 +93,21 @@ mkheaders(void)
 			return (1);
 	}
 
-	if (emitopts() || emitlocs() || emitioconfh() || emittime())
+	if (emitopts() || emitlocs() || emitioconfh())
+		return (1);
+
+	/*
+	 * If the minimum required version is ever bumped beyond 20090513,
+	 * emittime() can be removed.
+	 */
+	if (version <= 20090513 && emittime())
 		return (1);
 
 	return (0);
 }
 
 static void
-fprint_global(FILE *fp, const char *name, unsigned int value)
+fprint_global(FILE *fp, const char *name, long long value)
 {
 	/*
 	 * We have to doubt the founding fathers here.
@@ -116,12 +121,12 @@ fprint_global(FILE *fp, const char *name, unsigned int value)
 	fprintf(fp, "#ifdef _LOCORE\n"
 	    " .ifndef _KERNEL_OPT_%s\n"
 	    " .global _KERNEL_OPT_%s\n"
-	    " .equiv _KERNEL_OPT_%s,0x%x\n"
+	    " .equiv _KERNEL_OPT_%s,0x%llx\n"
 	    " .endif\n"
 	    "#else\n"
 	    "__asm(\" .ifndef _KERNEL_OPT_%s\\n"
 	    " .global _KERNEL_OPT_%s\\n"
-	    " .equiv _KERNEL_OPT_%s,0x%x\\n"
+	    " .equiv _KERNEL_OPT_%s,0x%llx\\n"
 	    " .endif\");\n"
 	    "#endif\n",
 	    name, name, name, value,
@@ -151,8 +156,8 @@ fprintcnt(FILE *fp, struct nvlist *nv)
 {
 	const char *name = cntname(nv->nv_name);
 
-	fprintf(fp, "#define\t%s\t%d\n", name, nv->nv_int);
-	fprint_global(fp, name, nv->nv_int);
+	fprintf(fp, "#define\t%s\t%lld\n", name, nv->nv_num);
+	fprint_global(fp, name, nv->nv_num);
 }
 
 static int
@@ -343,10 +348,10 @@ locators_print(const char *name, void *value, void *arg)
  * locators in the configuration.  Do this by enumerating the attribute
  * hash table and emitting all the locators for each attribute.
  */
-static int
+int
 emitlocs(void)
 {
-	char *tfname;
+	const char *tfname;
 	int rval;
 	FILE *tfp;
 	
@@ -370,7 +375,7 @@ emitlocs(void)
  * Build the "ioconf.h" file with extern declarations for all configured
  * cfdrivers.
  */
-static int
+int
 emitioconfh(void)
 {
 	const char *tfname;

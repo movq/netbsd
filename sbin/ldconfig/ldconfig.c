@@ -1,4 +1,4 @@
-/*	$NetBSD: ldconfig.c,v 1.43 2006/03/26 23:06:45 christos Exp $	*/
+/*	$NetBSD: ldconfig.c,v 1.48 2011/01/04 23:34:06 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: ldconfig.c,v 1.43 2006/03/26 23:06:45 christos Exp $");
+__RCSID("$NetBSD: ldconfig.c,v 1.48 2011/01/04 23:34:06 wiz Exp $");
 #endif
 
 
@@ -48,6 +41,7 @@ __RCSID("$NetBSD: ldconfig.c,v 1.43 2006/03/26 23:06:45 christos Exp $");
 #include <sys/file.h>
 #include <sys/time.h>
 #include <sys/mman.h>
+#include <sys/exec_aout.h>
 #include <a.out.h>
 #include <ctype.h>
 #include <dirent.h>
@@ -204,10 +198,10 @@ do_conf(void)
 			line[len] = '\0';
 		}
 
-		while (isblank(*line)) { line++; len--; }
+		while (isblank((unsigned char)*line)) { line++; len--; }
 		if ((c = strchr(line, '#')) == NULL)
 			c = line + len;
-		while (--c >= line && isblank(*c)) continue;
+		while (--c >= line && isblank((unsigned char)*c)) continue;
 		if (c >= line) {
 			*++c = '\0';
 			rval |= dodir(line, 0, 1);
@@ -473,20 +467,20 @@ buildhints(void)
 	if (write(fd, &hdr, sizeof(struct hints_header)) !=
 	    sizeof(struct hints_header)) {
 		warn("%s", _PATH_LD_HINTS);
-		goto out;
+		goto fdout;
 	}
-	if (write(fd, blist, hdr.hh_nbucket * sizeof(struct hints_bucket)) !=
+	if ((size_t)write(fd, blist, hdr.hh_nbucket * sizeof(struct hints_bucket)) !=
 		  hdr.hh_nbucket * sizeof(struct hints_bucket)) {
 		warn("%s", _PATH_LD_HINTS);
-		goto out;
+		goto fdout;
 	}
 	if (write(fd, strtab, strtab_sz) != strtab_sz) {
 		warn("%s", _PATH_LD_HINTS);
-		goto out;
+		goto fdout;
 	}
 	if (fchmod(fd, 0444) == -1) {
 		warn("%s", _PATH_LD_HINTS);
-		goto out;
+		goto fdout;
 	}
 	if (close(fd) != 0) {
 		warn("%s", _PATH_LD_HINTS);
@@ -507,6 +501,8 @@ buildhints(void)
 	free(blist);
 	free(strtab);
 	return 0;
+fdout:
+	(void)close(fd);
 out:
 	free(blist);
 	free(strtab);

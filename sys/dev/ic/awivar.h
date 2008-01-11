@@ -1,4 +1,4 @@
-/*	$NetBSD: awivar.h,v 1.22 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: awivar.h,v 1.26 2009/11/12 19:32:14 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,12 +66,7 @@ struct awi_chanset {
 };
 
 struct awi_softc {
-#ifdef __NetBSD__
 	struct device		sc_dev;
-#endif
-#ifdef __FreeBSD__
-	device_t		sc_dev;
-#endif
 	struct am79c930_softc 	sc_chip;
 	struct ethercom		sc_ec;
 	struct ieee80211com	sc_ic;
@@ -102,8 +90,7 @@ struct awi_softc {
 				sc_busy:1,
 				sc_cansleep:1,
 				sc_enab_intr:1,
-				sc_adhoc_ap:1,
-				sc_invalid:1;
+				sc_adhoc_ap:1;
 	enum ieee80211_state	sc_nstate;
 	enum awi_sub_state	sc_substate;
 	int			sc_sleep_cnt;
@@ -152,10 +139,8 @@ struct awi_softc {
 
 int	awi_attach(struct awi_softc *);
 int	awi_detach(struct awi_softc *);
-#ifdef __NetBSD__
-int	awi_activate(struct device *, enum devact);
+int	awi_activate(device_t, enum devact);
 void	awi_power(int, void *);
-#endif
 void	awi_shutdown(void *);
 int	awi_intr(void *);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.6 2005/12/11 12:18:20 christos Exp $	*/
+/*	$NetBSD: locore.S,v 1.13 2011/01/17 08:23:56 matt Exp $	*/
 /*	$OpenBSD: locore.S,v 1.4 1997/01/26 09:06:38 rahnds Exp $	*/
 
 /*
@@ -33,9 +33,9 @@
  */
 
 #include "opt_ddb.h"
-#include "fs_kernfs.h"
 #include "opt_ipkdb.h"
 #include "opt_lockdebug.h"
+#include "opt_modular.h"
 #include "opt_multiprocessor.h"
 #include "opt_ppcparam.h"
 #include "assym.h"
@@ -47,10 +47,10 @@
 #include <machine/pmap.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
-#define _NOREGNAMES
 #include <machine/asm.h>
 
 #include <powerpc/spr.h>
+#include <powerpc/oea/spr.h>
 
 #include "ksyms.h"
 
@@ -66,9 +66,10 @@ GLOBAL(startsym)
 	.long	0			/* start symbol table */
 GLOBAL(endsym)
 	.long	0			/* end symbol table */
-GLOBAL(proc0paddr)
-	.long	0			/* proc0 p_addr */
+GLOBAL(oeacpufeat)
+	.long	0			/* cpu features */
 
+/* XXX All of this should die */
 GLOBAL(intrnames)
 	.asciz	"clock", "irq1", "irq2", "irq3"
 	.asciz	"irq4", "irq5", "irq6", "irq7"
@@ -111,7 +112,7 @@ __start:
 	isync
 
 /* compute end of kernel memory */
-#if NKSYMS || defined(DDB) || defined(LKM) || defined(KERNFS)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	lis	%r7,_C_LABEL(startsym)@ha
 	addi	%r7,%r7,_C_LABEL(startsym)@l
 	stw	%r3,0(%r7)

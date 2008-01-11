@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.90 2008/01/04 21:17:40 ad Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.97 2011/02/22 06:37:24 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -46,23 +46,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.90 2008/01/04 21:17:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.97 2011/02/22 06:37:24 dholland Exp $");
 
 #include "opt_compat_oldboot.h"
+#include "opt_intrdebug.h"
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/proc.h>
-#include <sys/user.h>
+#include <sys/device.h>
 
 #include <machine/pte.h>
 #include <machine/cpu.h>
 #include <machine/gdt.h>
+#include <machine/intr.h>
 #include <machine/pcb.h>
 #include <machine/cpufunc.h>
-#include <x86/x86/tsc.h>
 
 #include "ioapic.h"
 #include "lapic.h"
@@ -94,14 +95,13 @@ extern void platform_init(void);
 #include <machine/kvm86.h>
 #endif
 
-#include "opt_viapadlock.h"
-
 /*
  * Determine i/o configuration for a machine.
  */
 void
 cpu_configure(void)
 {
+	struct pcb *pcb;
 
 	startrtclock();
 
@@ -125,24 +125,18 @@ cpu_configure(void)
 #endif
 
 #if NIOAPIC > 0
-	lapic_set_lvt();
 	ioapic_enable();
 #endif
 	/* resync cr0 after FPU configuration */
-	lwp0.l_addr->u_pcb.pcb_cr0 = rcr0();
+	pcb = lwp_getpcb(&lwp0);
+	pcb->pcb_cr0 = rcr0() & ~CR0_TS;
 #ifdef MULTIPROCESSOR
 	/* propagate this to the idle pcb's. */
 	cpu_init_idle_lwps();
 #endif
 
-	init_TSC_tc();
-
 	spl0();
 #if NLAPIC > 0
 	lapic_tpr = 0;
-#endif
-
-#if defined(VIA_PADLOCK)
-	via_padlock_attach();
 #endif
 }

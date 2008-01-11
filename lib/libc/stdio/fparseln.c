@@ -1,4 +1,4 @@
-/*	$NetBSD: fparseln.c,v 1.7 2007/03/08 19:57:53 drochner Exp $	*/
+/*	$NetBSD: fparseln.c,v 1.10 2009/10/21 01:07:45 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Christos Zoulas.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fparseln.c,v 1.7 2007/03/08 19:57:53 drochner Exp $");
+__RCSID("$NetBSD: fparseln.c,v 1.10 2009/10/21 01:07:45 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -46,7 +41,7 @@ __RCSID("$NetBSD: fparseln.c,v 1.7 2007/03/08 19:57:53 drochner Exp $");
 __weak_alias(fparseln,_fparseln)
 #endif
 
-#if ! HAVE_FPARSELN
+#if ! HAVE_FPARSELN || BROKEN_FPARSELN
 
 #ifndef HAVE_NBTOOL_CONFIG_H
 #include "reentrant.h"
@@ -251,4 +246,4 @@ line 6
 */
 
 #endif /* TEST */
-#endif	/* ! HAVE_FPARSELN */
+#endif	/* ! HAVE_FPARSELN || BROKEN_FPARSELN */

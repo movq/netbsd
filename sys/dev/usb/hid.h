@@ -1,4 +1,4 @@
-/*	$NetBSD: hid.h,v 1.11 2006/07/26 10:40:50 tron Exp $	*/
+/*	$NetBSD: hid.h,v 1.13 2010/05/12 18:44:49 plunky Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/hid.h,v 1.7 1999/11/17 22:33:40 n_hibma Exp $ */
 
 /*
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -91,5 +84,6 @@ int hid_get_item(struct hid_data *, struct hid_item *);
 int hid_report_size(const void *, int, enum hid_kind, u_int8_t);
 int hid_locate(const void *, int, u_int32_t, u_int8_t, enum hid_kind,
     struct hid_location *, u_int32_t *);
-u_long hid_get_data(u_char *, struct hid_location *);
+long hid_get_data(const u_char *, const struct hid_location *);
+u_long hid_get_udata(const u_char *, const struct hid_location *);
 int hid_is_collection(const void *, int, u_int8_t, u_int32_t);

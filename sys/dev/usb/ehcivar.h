@@ -1,4 +1,4 @@
-/*	$NetBSD: ehcivar.h,v 1.26 2007/12/09 20:28:23 jmcneill Exp $ */
+/*	$NetBSD: ehcivar.h,v 1.38 2011/01/18 08:29:24 matt Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,6 +33,8 @@ typedef struct ehci_soft_qtd {
 	ehci_qtd_t qtd;
 	struct ehci_soft_qtd *nextqtd; /* mirrors nextqtd in TD */
 	ehci_physaddr_t physaddr;
+	usb_dma_t dma;                  /* qTD's DMA infos */
+	int offs;                       /* qTD's offset in usb_dma_t */
 	usbd_xfer_handle xfer;
 	LIST_ENTRY(ehci_soft_qtd) hnext;
 	u_int16_t len;
@@ -52,17 +47,43 @@ typedef struct ehci_soft_qh {
 	struct ehci_soft_qh *next;
 	struct ehci_soft_qtd *sqtd;
 	ehci_physaddr_t physaddr;
+	usb_dma_t dma;                  /* QH's DMA infos */
+	int offs;                       /* QH's offset in usb_dma_t */
 	int islot;
 } ehci_soft_qh_t;
 #define EHCI_SQH_SIZE ((sizeof (struct ehci_soft_qh) + EHCI_QH_ALIGN - 1) / EHCI_QH_ALIGN * EHCI_QH_ALIGN)
 #define EHCI_SQH_CHUNK (EHCI_PAGE_SIZE / EHCI_SQH_SIZE)
 
+typedef struct ehci_soft_itd {
+	ehci_itd_t itd;
+	union {
+		struct {
+			/* soft_itds links in a periodic frame*/
+			struct ehci_soft_itd *next;
+			struct ehci_soft_itd *prev;
+		} frame_list;
+		/* circular list of free itds */
+		LIST_ENTRY(ehci_soft_itd) free_list;
+	} u;
+	struct ehci_soft_itd *xfer_next; /* Next soft_itd in xfer */
+	ehci_physaddr_t physaddr;
+	usb_dma_t dma;
+	int offs;
+	int slot;
+	struct timeval t; /* store free time */
+} ehci_soft_itd_t;
+#define EHCI_ITD_SIZE ((sizeof(struct ehci_soft_itd) + EHCI_QH_ALIGN - 1) / EHCI_ITD_ALIGN * EHCI_ITD_ALIGN)
+#define EHCI_ITD_CHUNK (EHCI_PAGE_SIZE / EHCI_ITD_SIZE)
+
 struct ehci_xfer {
 	struct usbd_xfer xfer;
 	struct usb_task	abort_task;
-	LIST_ENTRY(ehci_xfer) inext; /* list of active xfers */
+	TAILQ_ENTRY(ehci_xfer) inext; /* list of active xfers */
 	ehci_soft_qtd_t *sqtdstart;
 	ehci_soft_qtd_t *sqtdend;
+	ehci_soft_itd_t *itdstart;
+	ehci_soft_itd_t *itdend;
+	u_int isoc_len;
 	int isdone;	/* used only when DIAGNOSTIC is defined */
 };
 #define EXFER(xfer) ((struct ehci_xfer *)(xfer))
@@ -84,24 +105,27 @@ struct ehci_soft_islot {
 #define EHCI_HASH_SIZE 128
 #define EHCI_COMPANION_MAX 8
 
+#define EHCI_FREE_LIST_INTERVAL 100
+
 typedef struct ehci_softc {
-	struct usbd_bus sc_bus;		/* base device */
+	device_t sc_dev;
+	struct usbd_bus sc_bus;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	bus_size_t sc_size;
 	u_int sc_offs;			/* offset to operational regs */
 	int sc_flags;			/* misc flags */
 #define EHCIF_DROPPED_INTR_WORKAROUND	0x01
+#define EHCIF_ETTF			0x02 /* Emb. Transaction Translater func. */
 
 	char sc_vendor[32];		/* vendor string for root hub */
 	int sc_id_vendor;		/* vendor ID for root hub */
 
 	u_int32_t sc_cmd;		/* shadow of cmd reg during suspend */
-	void *sc_shutdownhook;		/* cookie from shutdown hook */
 
 	u_int sc_ncomp;
 	u_int sc_npcomp;
-	struct usbd_bus *sc_comps[EHCI_COMPANION_MAX];
+	device_t sc_comps[EHCI_COMPANION_MAX];
 
 	usb_dma_t sc_fldma;
 	ehci_link_t *sc_flist;
@@ -110,10 +134,17 @@ typedef struct ehci_softc {
 
 	struct ehci_soft_islot sc_islots[EHCI_INTRQHS];
 
-	LIST_HEAD(, ehci_xfer) sc_intrhead;
+	/* jcmm - an array matching sc_flist, but with software pointers,
+	 * not hardware address pointers
+	 */
+	struct ehci_soft_itd **sc_softitds;
+
+	TAILQ_HEAD(, ehci_xfer) sc_intrhead;
+	kmutex_t sc_intrhead_lock;
 
 	ehci_soft_qh_t *sc_freeqhs;
 	ehci_soft_qtd_t *sc_freeqtds;
+	LIST_HEAD(sc_freeitds, ehci_soft_itd) sc_freeitds;
 
 	int sc_noport;
 	u_int8_t sc_hasppc;		/* has Port Power Control */
@@ -132,15 +163,14 @@ typedef struct ehci_softc {
 
 	kmutex_t sc_doorbell_lock;
 
-	usb_callout_t sc_tmo_intrlist;
+	struct callout sc_tmo_intrlist;
 
-#if defined(__NetBSD__) || defined(__OpenBSD__)
-	device_ptr_t sc_child;		/* /dev/usb# device */
-#endif
+	device_t sc_child; /* /dev/usb# device */
 	char sc_dying;
-#if defined(__NetBSD__)
 	struct usb_dma_reserve sc_dma_reserve;
-#endif
+
+	void (*sc_vendor_init)(struct ehci_softc *);
+	int (*sc_vendor_port_status)(struct ehci_softc *, uint32_t, int);
 } ehci_softc_t;
 
 #define EREAD1(sc, a) bus_space_read_1((sc)->iot, (sc)->ioh, (a))
@@ -159,6 +189,8 @@ typedef struct ehci_softc {
 usbd_status	ehci_init(ehci_softc_t *);
 int		ehci_intr(void *);
 int		ehci_detach(ehci_softc_t *, int);
-int		ehci_activate(device_ptr_t, enum devact);
-bool		ehci_suspend(device_t dv);
-bool		ehci_resume(device_t dv);
+int		ehci_activate(device_t, enum devact);
+void		ehci_childdet(device_t, device_t);
+bool		ehci_suspend(device_t, const pmf_qual_t *);
+bool		ehci_resume(device_t, const pmf_qual_t *);
+bool		ehci_shutdown(device_t, int);

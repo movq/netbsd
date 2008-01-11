@@ -1,7 +1,7 @@
-/*	$NetBSD: procfs_vnops.c,v 1.164 2008/01/02 11:49:01 ad Exp $	*/
+/*	$NetBSD: procfs_vnops.c,v 1.180 2010/07/01 02:38:31 rmind Exp $	*/
 
 /*-
- * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -112,7 +105,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.164 2008/01/02 11:49:01 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.180 2010/07/01 02:38:31 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -306,8 +299,7 @@ const struct vnodeopv_desc procfs_vnodeop_opv_desc =
  * memory images.
  */
 int
-procfs_open(v)
-	void *v;
+procfs_open(void *v)
 {
 	struct vop_open_args /* {
 		struct vnode *a_vp;
@@ -325,14 +317,14 @@ procfs_open(v)
 	l1 = curlwp;				/* tracer */
 
 #define	M2K(m)	(((m) & FREAD) && ((m) & FWRITE) ? \
-		 KAUTH_REQ_PROCESS_CANPROCFS_RW : \
-		 (m) & FWRITE ? KAUTH_REQ_PROCESS_CANPROCFS_WRITE : \
-		 KAUTH_REQ_PROCESS_CANPROCFS_READ)
+		 KAUTH_REQ_PROCESS_PROCFS_RW : \
+		 (m) & FWRITE ? KAUTH_REQ_PROCESS_PROCFS_WRITE : \
+		 KAUTH_REQ_PROCESS_PROCFS_READ)
 
-	mutex_enter(&p2->p_mutex);
-	error = kauth_authorize_process(l1->l_cred, KAUTH_PROCESS_CANPROCFS,
+	mutex_enter(p2->p_lock);
+	error = kauth_authorize_process(l1->l_cred, KAUTH_PROCESS_PROCFS,
 	    p2, pfs, KAUTH_ARG(M2K(ap->a_mode)), NULL);
-	mutex_exit(&p2->p_mutex);
+	mutex_exit(p2->p_lock);
 	if (error) {
 		procfs_proc_unlock(p2);
 		return (error);
@@ -382,8 +374,7 @@ procfs_open(v)
  * any exclusive open flag (see _open above).
  */
 int
-procfs_close(v)
-	void *v;
+procfs_close(void *v)
 {
 	struct vop_close_args /* {
 		struct vnode *a_vp;
@@ -415,8 +406,7 @@ procfs_close(v)
  * (vp) is locked on entry, but must be unlocked on exit.
  */
 int
-procfs_inactive(v)
-	void *v;
+procfs_inactive(void *v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
@@ -425,11 +415,11 @@ procfs_inactive(v)
 	struct vnode *vp = ap->a_vp;
 	struct pfsnode *pfs = VTOPFS(vp);
 
-	mutex_enter(&proclist_lock);
-	*ap->a_recycle = (p_find(pfs->pfs_pid, PFIND_LOCKED) == NULL);
-	mutex_exit(&proclist_lock);
+	mutex_enter(proc_lock);
+	*ap->a_recycle = (proc_find(pfs->pfs_pid) == NULL);
+	mutex_exit(proc_lock);
 
-	VOP_UNLOCK(vp, 0);
+	VOP_UNLOCK(vp);
 
 	return (0);
 }
@@ -442,8 +432,7 @@ procfs_inactive(v)
  * from any private lists.
  */
 int
-procfs_reclaim(v)
-	void *v;
+procfs_reclaim(void *v)
 {
 	struct vop_reclaim_args /* {
 		struct vnode *a_vp;
@@ -456,8 +445,7 @@ procfs_reclaim(v)
  * Return POSIX pathconf information applicable to special devices.
  */
 int
-procfs_pathconf(v)
-	void *v;
+procfs_pathconf(void *v)
 {
 	struct vop_pathconf_args /* {
 		struct vnode *a_vp;
@@ -499,8 +487,7 @@ procfs_pathconf(v)
  * of (vp).
  */
 int
-procfs_print(v)
-	void *v;
+procfs_print(void *v)
 {
 	struct vop_print_args /* {
 		struct vnode *a_vp;
@@ -513,8 +500,7 @@ procfs_print(v)
 }
 
 int
-procfs_link(v)
-	void *v;
+procfs_link(void *v)
 {
 	struct vop_link_args /* {
 		struct vnode *a_dvp;
@@ -528,8 +514,7 @@ procfs_link(v)
 }
 
 int
-procfs_symlink(v)
-	void *v;
+procfs_symlink(void *v)
 {
 	struct vop_symlink_args /* {
 		struct vnode *a_dvp;
@@ -626,8 +611,7 @@ procfs_dir(pfstype t, struct lwp *caller, struct proc *target, char **bpp,
  * this is relatively minimal for procfs.
  */
 int
-procfs_getattr(v)
-	void *v;
+procfs_getattr(void *v)
 {
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
@@ -659,8 +643,7 @@ procfs_getattr(v)
 	case PFScwd:
 	case PFSchroot:
 	case PFSexe:
-		MALLOC(path, char *, MAXPATHLEN + 4, M_TEMP,
-		    M_WAITOK|M_CANFAIL);
+		path = malloc(MAXPATHLEN + 4, M_TEMP, M_WAITOK|M_CANFAIL);
 		if (path == NULL && procp != NULL) {
 			procfs_proc_unlock(procp);
 			return (ENOMEM);
@@ -673,10 +656,11 @@ procfs_getattr(v)
 	}
 
 	if (procp != NULL) {
-		mutex_enter(&procp->p_mutex);
+		mutex_enter(procp->p_lock);
 		error = kauth_authorize_process(kauth_cred_get(),
-		    KAUTH_PROCESS_CANSEE, procp, NULL, NULL, NULL);
-		mutex_exit(&procp->p_mutex);
+		    KAUTH_PROCESS_CANSEE, procp,
+		    KAUTH_ARG(KAUTH_REQ_PROCESS_CANSEE_ENTRY), NULL, NULL);
+		mutex_exit(procp->p_lock);
 		if (error != 0) {
 		    	procfs_proc_unlock(procp);
 		    	if (path != NULL)
@@ -688,7 +672,7 @@ procfs_getattr(v)
 	error = 0;
 
 	/* start by zeroing out the attributes */
-	VATTR_NULL(vap);
+	vattr_null(vap);
 
 	/* next do all the common fields */
 	vap->va_type = ap->a_vp->v_type;
@@ -792,14 +776,13 @@ procfs_getattr(v)
 
 	case PFSfd:
 		if (pfs->pfs_fd != -1) {
-			struct file *fp;
+			file_t *fp;
 
-			fp = fd_getfile(procp->p_fd, pfs->pfs_fd);
+			fp = fd_getfile2(procp, pfs->pfs_fd);
 			if (fp == NULL) {
 				error = EBADF;
 				break;
 			}
-			FILE_USE(fp);
 			vap->va_nlink = 1;
 			vap->va_uid = kauth_cred_geteuid(fp->f_cred);
 			vap->va_gid = kauth_cred_getegid(fp->f_cred);
@@ -812,7 +795,7 @@ procfs_getattr(v)
 				vap->va_bytes = vap->va_size = 0;
 				break;
 			}
-			FILE_UNUSE(fp, curlwp);
+			closef(fp);
 			break;
 		}
 		/*FALLTHROUGH*/
@@ -926,6 +909,21 @@ procfs_setattr(void *v)
 	return (0);
 }
 
+static int
+procfs_check_possible(struct vnode *vp, mode_t mode)
+{
+
+	return 0;
+}
+
+static int
+procfs_check_permitted(struct vattr *va, mode_t mode, kauth_cred_t cred)
+{
+
+	return genfs_can_access(va->va_type, va->va_mode,
+	    va->va_uid, va->va_gid, mode, cred);
+}
+
 /*
  * implement access checking.
  *
@@ -936,8 +934,7 @@ procfs_setattr(void *v)
  * that the operation really does make sense.
  */
 int
-procfs_access(v)
-	void *v;
+procfs_access(void *v)
 {
 	struct vop_access_args /* {
 		struct vnode *a_vp;
@@ -950,8 +947,13 @@ procfs_access(v)
 	if ((error = VOP_GETATTR(ap->a_vp, &va, ap->a_cred)) != 0)
 		return (error);
 
-	return (vaccess(va.va_type, va.va_mode,
-	    va.va_uid, va.va_gid, ap->a_mode, ap->a_cred));
+	error = procfs_check_possible(ap->a_vp, ap->a_mode);
+	if (error)
+		return error;
+
+	error = procfs_check_permitted(&va, ap->a_mode, ap->a_cred);
+
+	return error;
 }
 
 /*
@@ -975,8 +977,7 @@ procfs_access(v)
  * We try to exit with the parent locked in error cases.
  */
 int
-procfs_lookup(v)
-	void *v;
+procfs_lookup(void *v)
 {
 	struct vop_lookup_args /* {
 		struct vnode * a_dvp;
@@ -992,7 +993,7 @@ procfs_lookup(v)
 	pid_t pid, vnpid;
 	struct pfsnode *pfs;
 	struct proc *p = NULL;
-	struct lwp *l = NULL;
+	struct lwp *plwp;
 	int i, error;
 	pfstype type;
 
@@ -1003,7 +1004,7 @@ procfs_lookup(v)
 
 	if (cnp->cn_namelen == 1 && *pname == '.') {
 		*vpp = dvp;
-		VREF(dvp);
+		vref(dvp);
 		return (0);
 	}
 
@@ -1063,7 +1064,7 @@ procfs_lookup(v)
 		 * re-lock.
 		 */
 		if (cnp->cn_flags & ISDOTDOT) {
-			VOP_UNLOCK(dvp, 0);
+			VOP_UNLOCK(dvp);
 			error = procfs_root(dvp->v_mount, vpp);
 			vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 			return (error);
@@ -1072,22 +1073,33 @@ procfs_lookup(v)
 		if (procfs_proc_lock(pfs->pfs_pid, &p, ESRCH) != 0)
 			break;
 
+		mutex_enter(p->p_lock);
+		LIST_FOREACH(plwp, &p->p_lwps, l_sibling) {
+			if (plwp->l_stat != LSZOMB)
+				break;
+		}
+		/* Process is exiting if no-LWPS or all LWPs are LSZOMB */
+		if (plwp == NULL) {
+			mutex_exit(p->p_lock);
+			procfs_proc_unlock(p);
+			return ESRCH;
+		}
+
+		lwp_addref(plwp);
+		mutex_exit(p->p_lock);
+
 		for (pt = proc_targets, i = 0; i < nproc_targets; pt++, i++) {
-			struct lwp *plwp;
 			int found;
 
-			mutex_enter(&p->p_smutex);
-			plwp = proc_representative_lwp(p, NULL, 1);
-			lwp_addref(plwp);
-			mutex_exit(&p->p_smutex);
 			found = cnp->cn_namelen == pt->pt_namlen &&
 			    memcmp(pt->pt_name, pname, cnp->cn_namelen) == 0 &&
 			    (pt->pt_valid == NULL
 			      || (*pt->pt_valid)(plwp, dvp->v_mount));
-			lwp_delref(plwp);
 			if (found)
 				break;
 		}
+		lwp_delref(plwp);
+
 		if (i == nproc_targets) {
 			procfs_proc_unlock(p);
 			break;
@@ -1095,7 +1107,7 @@ procfs_lookup(v)
 		if (pt->pt_pfstype == PFSfile) {
 			fvp = p->p_textvp;
 			/* We already checked that it exists. */
-			VREF(fvp);
+			vref(fvp);
 			procfs_proc_unlock(p);
 			vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY);
 			*vpp = fvp;
@@ -1109,7 +1121,7 @@ procfs_lookup(v)
 
 	case PFSfd: {
 		int fd;
-		struct file *fp;
+		file_t *fp;
 
 		if ((error = procfs_proc_lock(pfs->pfs_pid, &p, ENOENT)) != 0)
 			return error;
@@ -1120,7 +1132,7 @@ procfs_lookup(v)
 		 * locked. Then re-lock the directory.
 		 */
 		if (cnp->cn_flags & ISDOTDOT) {
-			VOP_UNLOCK(dvp, 0);
+			VOP_UNLOCK(dvp);
 			error = procfs_allocvp(dvp->v_mount, vpp, pfs->pfs_pid,
 			    PFSproc, -1, p);
 			procfs_proc_unlock(p);
@@ -1129,27 +1141,24 @@ procfs_lookup(v)
 		}
 		fd = atoi(pname, cnp->cn_namelen);
 
-		fp = fd_getfile(p->p_fd, fd);
+		fp = fd_getfile2(p, fd);
 		if (fp == NULL) {
 			procfs_proc_unlock(p);
 			return ENOENT;
 		}
-
-		FILE_USE(fp);
-		fvp = (struct vnode *)fp->f_data;
+		fvp = fp->f_data;
 
 		/* Don't show directories */
 		if (fp->f_type == DTYPE_VNODE && fvp->v_type != VDIR) {
-			VREF(fvp);
-			FILE_UNUSE(fp, l);
+			vref(fvp);
+			closef(fp);
 			procfs_proc_unlock(p);
-			vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY |
-			    (p == curproc ? LK_CANRECURSE : 0));
+			vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY);
 			*vpp = fvp;
 			return 0;
 		}
 
-		FILE_UNUSE(fp, l);
+		closef(fp);
 		error = procfs_allocvp(dvp->v_mount, vpp, pfs->pfs_pid,
 		    PFSfd, fd, p);
 		procfs_proc_unlock(p);
@@ -1169,9 +1178,7 @@ procfs_validfile(struct lwp *l, struct mount *mp)
 }
 
 static int
-procfs_validfile_linux(l, mp)
-	struct lwp *l;
-	struct mount *mp;
+procfs_validfile_linux(struct lwp *l, struct mount *mp)
 {
 	int flags;
 
@@ -1207,7 +1214,8 @@ procfs_root_readdir_callback(struct proc *p, void *arg)
 	}
 
 	if (kauth_authorize_process(kauth_cred_get(),
-	    KAUTH_PROCESS_CANSEE, p, NULL, NULL, NULL) != 0)
+	    KAUTH_PROCESS_CANSEE, p,
+	    KAUTH_ARG(KAUTH_REQ_PROCESS_CANSEE_ENTRY), NULL, NULL) != 0)
 		return 0;
 
 	memset(&d, 0, UIO_MX);
@@ -1217,9 +1225,9 @@ procfs_root_readdir_callback(struct proc *p, void *arg)
 	    UIO_MX - offsetof(struct dirent, d_name), "%ld", (long)p->p_pid);
 	d.d_type = DT_DIR;
 
-	mutex_exit(&proclist_lock);
+	mutex_exit(proc_lock);
 	error = uiomove(&d, UIO_MX, uiop);
-	mutex_enter(&proclist_lock);
+	mutex_enter(proc_lock);
 	if (error) {
 		ctxp->error = error;
 		return -1;
@@ -1246,8 +1254,7 @@ procfs_root_readdir_callback(struct proc *p, void *arg)
  * this should just be done through read()
  */
 int
-procfs_readdir(v)
-	void *v;
+procfs_readdir(void *v)
 {
 	struct vop_readdir_args /* {
 		struct vnode *a_vp;
@@ -1309,10 +1316,11 @@ procfs_readdir(v)
 		for (pt = &proc_targets[i];
 		     uio->uio_resid >= UIO_MX && i < nproc_targets; pt++, i++) {
 			if (pt->pt_valid) {
-				/* XXX LWP can disappear */
-				mutex_enter(&p->p_smutex);
-				l = proc_representative_lwp(p, NULL, 1);
-				mutex_exit(&p->p_smutex);
+				/* XXXSMP LWP can disappear */
+				mutex_enter(p->p_lock);
+				l = LIST_FIRST(&p->p_lwps);
+				KASSERT(l != NULL);
+				mutex_exit(p->p_lock);
 				if ((*pt->pt_valid)(l, vp->v_mount) == 0)
 					continue;
 			}
@@ -1334,21 +1342,22 @@ procfs_readdir(v)
 	}
 	case PFSfd: {
 		struct proc *p;
-		struct filedesc	*fdp;
-		struct file *fp;
+		file_t *fp;
 		int lim, nc = 0;
 
 		if ((error = procfs_proc_lock(pfs->pfs_pid, &p, ESRCH)) != 0)
 			return error;
 
+		/* XXX Should this be by file as well? */
 		if (kauth_authorize_process(kauth_cred_get(),
-		    KAUTH_PROCESS_CANSEE, p, NULL, NULL, NULL) != 0) {
+		    KAUTH_PROCESS_CANSEE, p,
+		    KAUTH_ARG(KAUTH_REQ_PROCESS_CANSEE_OPENFILES), NULL,
+		    NULL) != 0) {
 		    	procfs_proc_unlock(p);
 			return ESRCH;
 		}
 
-		fdp = p->p_fd;
-		nfd = fdp->fd_nfiles;
+		nfd = p->p_fd->fd_dt->dt_nfiles;
 
 		lim = min((int)p->p_rlimit[RLIMIT_NOFILE].rlim_cur, maxfiles);
 		if (i >= lim) {
@@ -1382,9 +1391,9 @@ procfs_readdir(v)
 		}
 		for (; uio->uio_resid >= UIO_MX && i < nfd; i++) {
 			/* check the descriptor exists */
-			if ((fp = fd_getfile(fdp, i - 2)) == NULL)
+			if ((fp = fd_getfile2(p, i - 2)) == NULL)
 				continue;
-			mutex_exit(&fp->f_lock);
+			closef(fp);
 
 			d.d_fileno = PROCFS_FILENO(pfs->pfs_pid, PFSfd, i - 2);
 			d.d_namlen = snprintf(d.d_name, sizeof(d.d_name),
@@ -1519,8 +1528,7 @@ procfs_readdir(v)
  * readlink reads the link of `curproc' and others
  */
 int
-procfs_readlink(v)
-	void *v;
+procfs_readlink(void *v)
 {
 	struct vop_readlink_args *ap = v;
 	char bf[16];		/* should be enough */
@@ -1540,8 +1548,7 @@ procfs_readlink(v)
 	    pfs->pfs_fileno == PROCFS_FILENO(pfs->pfs_pid, PFSexe, -1)) {
 		if ((error = procfs_proc_lock(pfs->pfs_pid, &pown, ESRCH)) != 0)
 			return error;
-		MALLOC(path, char *, MAXPATHLEN + 4, M_TEMP,
-		    M_WAITOK|M_CANFAIL);
+		path = malloc(MAXPATHLEN + 4, M_TEMP, M_WAITOK|M_CANFAIL);
 		if (path == NULL) {
 			procfs_proc_unlock(pown);
 			return (ENOMEM);
@@ -1553,30 +1560,27 @@ procfs_readlink(v)
 		procfs_proc_unlock(pown);
 		len = strlen(bp);
 	} else {
-		struct file *fp;
+		file_t *fp;
 		struct vnode *vxp, *vp;
 
 		if ((error = procfs_proc_lock(pfs->pfs_pid, &pown, ESRCH)) != 0)
 			return error;
 
-		fp = fd_getfile(pown->p_fd, pfs->pfs_fd);
+		fp = fd_getfile2(pown, pfs->pfs_fd);
 		if (fp == NULL) {
 			procfs_proc_unlock(pown);
 			return EBADF;
 		}
 
-		FILE_USE(fp);
 		switch (fp->f_type) {
 		case DTYPE_VNODE:
 			vxp = (struct vnode *)fp->f_data;
 			if (vxp->v_type != VDIR) {
-				FILE_UNUSE(fp, curlwp);
 				error = EINVAL;
 				break;
 			}
 			if ((path = malloc(MAXPATHLEN, M_TEMP, M_WAITOK))
 			    == NULL) {
-				FILE_UNUSE(fp, curlwp);
 				error = ENOMEM;
 				break;
 			}
@@ -1615,7 +1619,7 @@ procfs_readlink(v)
 			error = EINVAL;
 			break;
 		}	
-		FILE_UNUSE(fp, curlwp);
+		closef(fp);
 		procfs_proc_unlock(pown);
 	}
 
@@ -1630,9 +1634,7 @@ procfs_readlink(v)
  * convert decimal ascii to int
  */
 static int
-atoi(b, len)
-	const char *b;
-	size_t len;
+atoi(const char *b, size_t len)
 {
 	int p = 0;
 

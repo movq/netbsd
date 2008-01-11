@@ -1,4 +1,4 @@
-/*	$NetBSD: pxa2x0_com.c,v 1.9 2007/10/17 19:53:44 garbled Exp $	*/
+/*	$NetBSD: pxa2x0_com.c,v 1.12 2009/12/06 12:27:33 kiyohara Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxa2x0_com.c,v 1.9 2007/10/17 19:53:44 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxa2x0_com.c,v 1.12 2009/12/06 12:27:33 kiyohara Exp $");
 
 #include "opt_com.h"
 
@@ -62,14 +62,14 @@ __KERNEL_RCSID(0, "$NetBSD: pxa2x0_com.c,v 1.9 2007/10/17 19:53:44 garbled Exp $
 
 #include "locators.h"
 
-static int	pxauart_match(struct device *, struct cfdata *, void *);
-static void	pxauart_attach(struct device *, struct device *, void *);
+static int	pxauart_match(device_t, cfdata_t , void *);
+static void	pxauart_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pxauart, sizeof(struct com_softc),
+CFATTACH_DECL_NEW(pxauart, sizeof(struct com_softc),
     pxauart_match, pxauart_attach, NULL, NULL);
 
 static int
-pxauart_match(struct device *parent, struct cfdata *cf, void *aux)
+pxauart_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pxaip_attach_args *pxa = aux;
 	bus_space_tag_t bt = &pxa2x0_a4x_bs_tag;	/* XXX: This sucks */
@@ -103,8 +103,9 @@ pxauart_match(struct device *parent, struct cfdata *cf, void *aux)
 	case PXA2X0_HWUART_BASE:
 		if (pxa->pxa_intr != PXA2X0_INT_HWUART)
 			return (0);
-		gpioconf = CPU_IS_PXA250 ? pxa25x_com_hwuart_gpioconf :
-			    pxa27x_com_hwuart_gpioconf;
+		if (CPU_IS_PXA270)
+			return (0);
+		gpioconf = pxa25x_com_hwuart_gpioconf;
 		break;
 
 	default:
@@ -135,14 +136,16 @@ pxauart_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-pxauart_attach(struct device *parent, struct device *self, void *aux)
+pxauart_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_softc *sc = (struct com_softc *)self;
+	struct com_softc *sc = device_private(self);
 	struct pxaip_attach_args *pxa = aux;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
 	bus_addr_t iobase;
+	int cken = 0;
 
+	sc->sc_dev = self;
 	iot = &pxa2x0_a4x_bs_tag;	/* XXX: This sucks */
 	iobase = pxa->pxa_addr;
 	sc->sc_frequency = PXA2X0_COM_FREQ;
@@ -150,10 +153,18 @@ pxauart_attach(struct device *parent, struct device *self, void *aux)
 
 	if (com_is_console(iot, iobase, &ioh) == 0 &&
 	    bus_space_map(iot, iobase, pxa->pxa_size, 0, &ioh)) {
-		printf(": can't map registers\n");
+		aprint_error(": can't map registers\n");
 		return;
 	}
 	COM_INIT_REGS(sc->sc_regs, iot, ioh, iobase);
+
+	switch (pxa->pxa_addr) {
+	case PXA2X0_FFUART_BASE: cken = CKEN_FFUART; break;
+	case PXA2X0_STUART_BASE: cken = CKEN_STUART; break;
+	case PXA2X0_BTUART_BASE: cken = CKEN_BTUART; break;
+	case PXA2X0_HWUART_BASE: cken = CKEN_HWUART; break;
+	}
+	pxa2x0_clkman_config(cken, 1);
 
 	com_attach_subr(sc);
 

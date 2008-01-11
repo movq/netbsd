@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.25 2007/12/15 19:44:49 perry Exp $	*/
+/*	$NetBSD: main.c,v 1.42 2010/03/22 14:40:54 pooka Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -52,8 +52,8 @@
 #endif
 
 #ifndef lint
-COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+COPYRIGHT("@(#) Copyright (c) 1992, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -65,6 +65,7 @@ COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -94,6 +95,7 @@ static struct hashtab *mkopttab;
 static struct nvlist **nextopt;
 static struct nvlist **nextmkopt;
 static struct nvlist **nextappmkopt;
+static struct nvlist **nextcndmkopt;
 static struct nvlist **nextfsopt;
 
 static	void	usage(void) __dead;
@@ -117,7 +119,6 @@ static	void	do_kill_orphans(struct devbase *, struct attr *,
     struct devbase *, int);
 static	int	kill_orphans_cb(const char *, void *, void *);
 static	int	cfcrosscheck(struct config *, const char *, struct nvlist *);
-static	const char *strtolower(const char *);
 void	defopt(struct hashtab *ht, const char *fname,
 	     struct nvlist *opts, struct nvlist *deps, int obs);
 
@@ -139,7 +140,7 @@ const char *progname;
 int
 main(int argc, char **argv)
 {
-	char *p, cname[20];
+	char *p, cname[PATH_MAX];
 	const char *last_component;
 	int pflag, xflag, ch, removeit;
 
@@ -211,15 +212,16 @@ main(int argc, char **argv)
 		}
 	}
 
+	if (xflag && optind != 2) {
+		errx(EXIT_FAILURE, "-x must be used alone");
+	}
+
 	argc -= optind;
 	argv += optind;
 	if (argc > 1) {
 		usage();
 	}
 
-	if (xflag && (builddir != NULL || srcdir != NULL || Pflag || pflag ||
-	    vflag || Lflag))
-		errx(EXIT_FAILURE, "-x must be used alone");
 	if (Lflag && (builddir != NULL || Pflag || pflag))
 		errx(EXIT_FAILURE, "-L can only be used with -s and -v");
 
@@ -263,7 +265,6 @@ main(int argc, char **argv)
 	needcnttab = ht_new();
 	opttab = ht_new();
 	mkopttab = ht_new();
-	condmkopttab = ht_new();
 	fsopttab = ht_new();
 	deffstab = ht_new();
 	defopttab = ht_new();
@@ -279,6 +280,7 @@ main(int argc, char **argv)
 	nextopt = &options;
 	nextmkopt = &mkoptions;
 	nextappmkopt = &appmkoptions;
+	nextcndmkopt = &condmkoptions;
 	nextfsopt = &fsoptions;
 
 	/*
@@ -328,29 +330,42 @@ main(int argc, char **argv)
 		/* Open temporary configuration file */
 		tmpdir = getenv("TMPDIR");
 		if (tmpdir == NULL)
-			tmpdir = "/tmp";
+			tmpdir = _PATH_TMP;
 		snprintf(cname, sizeof(cname), "%s/config.tmp.XXXXXX", tmpdir);
 		cfd = mkstemp(cname);
 		if (cfd == -1)
 			err(EXIT_FAILURE, "Cannot create `%s'", cname);
 
 		printf("Using configuration data embedded in kernel...\n");
-		if (!extract_config(conffile, cname, cfd))
+		if (!extract_config(conffile, cname, cfd)) {
+			unlink(cname);
 			errx(EXIT_FAILURE, "%s does not contain embedded "
 			    "configuration data", conffile);
+		}
 
 		removeit = 1;
 		close(cfd);
 		firstfile(cname);
 	}
 
+	 /*
+	  * Log config file.  We don't know until yyparse() if we're
+	  * going to need config_file.h (i.e. if we're doing ioconf-only
+	  * or not).  Just start creating the file, and when we know
+	  * later, we'll just keep or discard our work here.
+	  */
+	logconfig_start();
+
 	/*
 	 * Parse config file (including machine definitions).
 	 */
-	logconfig_start();
 	if (yyparse())
 		stop();
-	logconfig_end();
+
+	if (ioconfname && cfg)
+		fclose(cfg);
+	else
+		logconfig_end();
 
 	if (removeit)
 		unlink(cname);
@@ -365,6 +380,17 @@ main(int argc, char **argv)
 	 */
 	if (fixdevis())
 		stop();
+
+	/*
+	 * If working on an ioconf-only config, process here and exit
+	 */
+	if (ioconfname) {
+		pack();
+		mkioconf();
+		emitlocs();
+		emitioconfh();
+		return 0;
+	}
 
 	/*
 	 * Deal with option dependencies.
@@ -402,10 +428,6 @@ main(int argc, char **argv)
 			errors++;
 		}
 	}
-	if (fsoptions == NULL) {
-		warnx( "need at least one \"file-system\" line");
-		errors++;
-	}
 	if (crosscheck() || errors)
 		stop();
 
@@ -421,7 +443,7 @@ main(int argc, char **argv)
 	 * Ready to go.  Build all the various files.
 	 */
 	if (mksymlinks() || mkmakefile() || mkheaders() || mkswap() ||
-	    mkioconf() || (do_devsw ? mkdevsw() : 0) || mkident())
+	    mkioconf() || (do_devsw ? mkdevsw() : 0) || mkident() || errors)
 		stop();
 	(void)printf("Build directory is %s\n", builddir);
 	(void)printf("Don't forget to run \"make depend\"\n");
@@ -582,13 +604,10 @@ add_dependencies(struct nvlist *nv, struct nvlist *deps)
 }
 
 /*
- * Define one or more file systems.  If file system options file name is
- * specified, a preprocessor #define for that file system will be placed
- * in that file.  In this case, only one file system may be specified.
- * Otherwise, no preprocessor #defines will be generated.
+ * Define one or more file systems.
  */
 void
-deffilesystem(const char *fname, struct nvlist *fses, struct nvlist *deps)
+deffilesystem(struct nvlist *fses, struct nvlist *deps)
 {
 	struct nvlist *nv;
 
@@ -610,23 +629,6 @@ deffilesystem(const char *fname, struct nvlist *fses, struct nvlist *deps)
 		if (ht_insert(deffstab, nv->nv_name, nv))
 			panic("file system `%s' already in table?!",
 			    nv->nv_name);
-
-		if (fname != NULL) {
-			/*
-			 * Only one file system allowed in this case.
-			 */
-			if (nv->nv_next != NULL) {
-				cfgerror("only one file system per option "
-				    "file may be specified");
-				return;
-			}
-
-			if (ht_insert(optfiletab, fname, nv)) {
-				cfgerror("option file `%s' already exists",
-				    fname);
-				return;
-			}
-		}
 
 		add_dependencies(nv, deps);
 	}
@@ -668,7 +670,7 @@ find_declared_option(const char *name)
 	if ((option = ht_lookup(defopttab, name)) != NULL ||
 	    (option = ht_lookup(defparamtab, name)) != NULL ||
 	    (option = ht_lookup(defflagtab, name)) != NULL ||
-	    (option = ht_lookup(fsopttab, name)) != NULL) {
+	    (option = ht_lookup(deffstab, name)) != NULL) {
 		return (option);
 	}
 
@@ -948,21 +950,13 @@ appendmkoption(const char *name, const char *value)
  * Add a conditional appending "make" option.
  */
 void
-appendcondmkoption(const char *selname, const char *name, const char *value)
+appendcondmkoption(struct nvlist *cnd, const char *name, const char *value)
 {
-	struct nvlist *nv, *lnv;
-	const char *n;
+	struct nvlist *nv;
 
-	n = strtolower(selname);
-	nv = newnv(name, value, NULL, 0, NULL);
-	if (ht_insert(condmkopttab, n, nv) == 0)
-		return;
-
-	if ((lnv = ht_lookup(condmkopttab, n)) == NULL)
-		panic("appendcondmkoption");
-	for (; lnv->nv_next != NULL; lnv = lnv->nv_next)
-		/* search for the last list element */;
-	lnv->nv_next = nv;
+	nv = newnv(name, value, cnd, 0, NULL);
+	*nextcndmkopt = nv;
+	nextcndmkopt = &nv->nv_next;
 }
 
 /*
@@ -1033,8 +1027,14 @@ deva_has_instances(struct deva *deva, int unit)
 {
 	struct devi *i;
 
+	/*
+	 * EHAMMERTOOBIG: we shouldn't check i_pseudoroot here.
+	 * What we want by this check is them to appear non-present
+	 * except for purposes of other devices being able to attach
+	 * to them.
+	 */
 	for (i = deva->d_ihead; i != NULL; i = i->i_asame)
-		if (i->i_active == DEVI_ACTIVE &&
+		if (i->i_active == DEVI_ACTIVE && i->i_pseudoroot == 0 &&
 		    (unit == WILD || unit == i->i_unit || i->i_unit == STAR))
 			return (1);
 	return (0);
@@ -1055,21 +1055,11 @@ devbase_has_instances(struct devbase *dev, int unit)
 	 *
 	 *	1. Included in this kernel configuration.
 	 *
-	 *	2. Have one or more interface attributes.
+	 *	2. Be declared "defpseudodev".
 	 */
 	if (dev->d_ispseudo) {
-		struct nvlist *nv;
-		struct attr *a;
-
-		if (ht_lookup(devitab, dev->d_name) == NULL)
-			return (0);
-
-		for (nv = dev->d_attrs; nv != NULL; nv = nv->nv_next) {
-			a = nv->nv_ptr;
-			if (a->a_iattr)
-				return (1);
-		}
-		return (0);
+		return ((ht_lookup(devitab, dev->d_name) != NULL)
+			&& (dev->d_ispseudo > 1));
 	}
 
 	for (da = dev->d_ahead; da != NULL; da = da->d_bsame)
@@ -1097,7 +1087,7 @@ cfcrosscheck(struct config *cf, const char *what, struct nvlist *nv)
 		if (has_attr(dev->d_attrs, s_ifnet))
 			devunit = nv->nv_ifunit;	/* XXX XXX XXX */
 		else
-			devunit = minor((uint32_t)nv->nv_int) / maxpartitions;
+			devunit = (int)(minor(nv->nv_num) / maxpartitions);
 		if (devbase_has_instances(dev, devunit))
 			continue;
 		if (devbase_has_instances(dev, STAR) &&
@@ -1264,7 +1254,7 @@ logconfig_start(void)
 
 	tmpdir = getenv("TMPDIR");
 	if (tmpdir == NULL)
-		tmpdir = "/tmp";
+		tmpdir = _PATH_TMP;
 	(void)snprintf(line, sizeof(line), "%s/config.tmp.XXXXXX", tmpdir);
 	if ((fd = mkstemp(line)) == -1 ||
 	    (cfg = fdopen(fd, "r+")) == NULL) {
@@ -1410,7 +1400,7 @@ logconfig_end(void)
 	fclose(cfg);
 }
 
-static const char *
+const char *
 strtolower(const char *name)
 {
 	const char *n;

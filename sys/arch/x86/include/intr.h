@@ -1,7 +1,7 @@
-/*	$NetBSD: intr.h,v 1.30 2007/12/26 11:51:12 yamt Exp $	*/
+/*	$NetBSD: intr.h,v 1.42 2011/04/03 22:29:27 dyoung Exp $	*/
 
 /*-
- * Copyright (c) 1998, 2001, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,15 @@
 #define _X86_INTR_H_
 
 #define	__HAVE_FAST_SOFTINTS
+#define	__HAVE_PREEMPTION
 
+#ifdef _KERNEL
+#include <sys/types.h>
+#else
+#include <stdbool.h>
+#endif
+
+#include <sys/evcnt.h>
 #include <machine/intrdefs.h>
 
 #ifndef _LOCORE
@@ -102,6 +103,7 @@ struct intrhand {
 	int	(*ih_realfun)(void *);
 	void	*ih_realarg;
 	struct	intrhand *ih_next;
+	struct	intrhand **ih_prevp;
 	int	ih_pin;
 	int	ih_slot;
 	struct cpu_info *ih_cpu;
@@ -109,6 +111,8 @@ struct intrhand {
 
 #define IMASK(ci,level) (ci)->ci_imask[(level)]
 #define IUNMASK(ci,level) (ci)->ci_iunmask[(level)]
+
+#ifdef _KERNEL
 
 void Xspllower(int);
 void spllower(int);
@@ -155,6 +159,8 @@ splraiseipl(ipl_cookie_t icookie)
  */
 
 void Xsoftintr(void);
+void Xpreemptrecurse(void);
+void Xpreemptresume(void);
 
 extern struct intrstub i8259_stubs[];
 extern struct intrstub ioapic_edge_stubs[];
@@ -165,28 +171,23 @@ struct cpu_info;
 struct pcibus_attach_args;
 
 void intr_default_setup(void);
-int x86_nmi(void);
-void intr_calculatemasks(struct cpu_info *);
-int intr_allocate_slot_cpu(struct cpu_info *, struct pic *, int, int *);
-int intr_allocate_slot(struct pic *, int, int, int, struct cpu_info **, int *,
-		       int *);
-void *intr_establish(int, struct pic *, int, int, int, int (*)(void *), void *);
+void x86_nmi(void);
+void *intr_establish(int, struct pic *, int, int, int, int (*)(void *), void *, bool);
 void intr_disestablish(struct intrhand *);
 void intr_add_pcibus(struct pcibus_attach_args *);
 const char *intr_string(int);
 void cpu_intr_init(struct cpu_info *);
 int intr_find_mpmapping(int, int, int *);
 struct pic *intr_findpic(int);
-#ifdef INTRDEBUG
 void intr_printconfig(void);
-#endif
 
 int x86_send_ipi(struct cpu_info *, int);
 void x86_broadcast_ipi(int);
-void x86_multicast_ipi(int, int);
 void x86_ipi_handler(void);
 
 extern void (*ipifunc[X86_NIPI])(struct cpu_info *);
+
+#endif /* _KERNEL */
 
 #endif /* !_LOCORE */
 

@@ -1,4 +1,4 @@
-/* $NetBSD: pcppi_acpi.c,v 1.9 2008/01/10 07:58:39 dyoung Exp $ */
+/* $NetBSD: pcppi_acpi.c,v 1.12 2010/03/05 14:00:17 jruoho Exp $ */
 
 /*
  * Copyright (c) 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,32 +30,24 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcppi_acpi.c,v 1.9 2008/01/10 07:58:39 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcppi_acpi.c,v 1.12 2010/03/05 14:00:17 jruoho Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
-#include <sys/errno.h>
-#include <sys/ioctl.h>
 #include <sys/device.h>
-#include <sys/proc.h>
 
-#include <sys/bus.h>
-
-#include <dev/acpi/acpica.h>
-#include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
 
 #include <dev/isa/pcppivar.h>
 
-static int	pcppi_acpi_match(device_t, struct cfdata *, void *);
+static int	pcppi_acpi_match(device_t, cfdata_t, void *);
 static void	pcppi_acpi_attach(device_t, device_t, void *);
 
 struct pcppi_acpi_softc {
 	struct pcppi_softc sc_pcppi;
 };
 
-CFATTACH_DECL(pcppi_acpi, sizeof(struct pcppi_acpi_softc), pcppi_acpi_match,
-    pcppi_acpi_attach, pcppi_detach, NULL);
+CFATTACH_DECL_NEW(pcppi_acpi, sizeof(struct pcppi_acpi_softc),
+    pcppi_acpi_match, pcppi_acpi_attach, pcppi_detach, NULL);
 
 /*
  * Supported device IDs
@@ -70,7 +62,7 @@ static const char * const pcppi_acpi_ids[] = {
  * pcppi_acpi_match: autoconf(9) match routine
  */
 static int
-pcppi_acpi_match(device_t parent, struct cfdata *match, void *aux)
+pcppi_acpi_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -93,11 +85,10 @@ pcppi_acpi_attach(device_t parent, device_t self, void *aux)
 	struct acpi_io *io;
 	ACPI_STATUS rv;
 
-	aprint_naive("\n");
-	aprint_normal("\n");
+	sc->sc_dv = self;
 
 	/* parse resources */
-	rv = acpi_resource_parse(&sc->sc_dv, aa->aa_node->ad_handle, "_CRS",
+	rv = acpi_resource_parse(sc->sc_dv, aa->aa_node->ad_handle, "_CRS",
 	    &res, &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))
 		return;
@@ -105,8 +96,8 @@ pcppi_acpi_attach(device_t parent, device_t self, void *aux)
 	/* find our i/o registers */
 	io = acpi_res_io(&res, 0);
 	if (io == NULL) {
-		aprint_error("%s: unable to find i/o register resource\n",
-		    sc->sc_dv.dv_xname);
+		aprint_error_dev(self,
+		    "unable to find i/o register resource\n");
 		goto out;
 	}
 
@@ -114,7 +105,7 @@ pcppi_acpi_attach(device_t parent, device_t self, void *aux)
 	sc->sc_size = io->ar_length;
 	if (bus_space_map(sc->sc_iot, io->ar_base, sc->sc_size,
 		    0, &sc->sc_ppi_ioh)) {
-		aprint_error("%s: can't map i/o space\n", sc->sc_dv.dv_xname);
+		aprint_error_dev(self, "can't map i/o space\n");
 		goto out;
 	}
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic_cas.S,v 1.3 2007/12/22 23:19:40 mrg Exp $	*/
+/*	$NetBSD: atomic_cas.S,v 1.6 2008/05/25 15:56:12 chs Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,21 +33,34 @@
 
 	.text
 
-ENTRY_NOPROFILE(_atomic_cas_32)
+ENTRY(_atomic_cas_32)
 	cas	[%o0], %o1, %o2
 	retl
 	 mov	%o2, %o0
+
 ATOMIC_OP_ALIAS(atomic_cas_32,_atomic_cas_32)
 ATOMIC_OP_ALIAS(atomic_cas_uint,_atomic_cas_32)
 STRONG_ALIAS(_atomic_cas_uint,_atomic_cas_32)
 
-ENTRY_NOPROFILE(_atomic_cas_64)
+ATOMIC_OP_ALIAS(atomic_cas_32_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_32_ni,_atomic_cas_32)
+ATOMIC_OP_ALIAS(atomic_cas_uint_ni,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_uint_ni,_atomic_cas_32)
+
+ENTRY(_atomic_cas_64)
 	casx	[%o0], %o1, %o2
 	retl
 	 mov	%o2, %o0
-ATOMIC_OP_ALIAS(atomic_cas_64,_atomic_cas_64)
 
+ATOMIC_OP_ALIAS(atomic_cas_64,_atomic_cas_64)
 ATOMIC_OP_ALIAS_SIZE(atomic_cas_ulong,_atomic_cas)
 STRONG_ALIAS_SIZE(_atomic_cas_ulong,_atomic_cas)
 ATOMIC_OP_ALIAS_SIZE(atomic_cas_ptr,_atomic_cas)
 STRONG_ALIAS_SIZE(_atomic_cas_ptr,_atomic_cas)
+
+ATOMIC_OP_ALIAS(atomic_cas_64_ni,_atomic_cas_64)
+STRONG_ALIAS_SIZE(_atomic_cas_64_ni,_atomic_cas)
+ATOMIC_OP_ALIAS_SIZE(atomic_cas_ulong_ni,_atomic_cas)
+STRONG_ALIAS_SIZE(_atomic_cas_ulong_ni,_atomic_cas)
+ATOMIC_OP_ALIAS_SIZE(atomic_cas_ptr_ni,_atomic_cas)
+STRONG_ALIAS_SIZE(_atomic_cas_ptr_ni,_atomic_cas)

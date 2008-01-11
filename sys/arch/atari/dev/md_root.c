@@ -1,4 +1,4 @@
-/*	NetBSD: md_root.c,v 1.17 2002/05/23 14:59:28 leo Exp $	*/
+/*	$NetBSD: md_root.c,v 1.33 2009/10/20 19:10:10 snj Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman.
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Leo Weppelman.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -31,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: md_root.c,v 1.25 2008/01/02 11:48:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: md_root.c,v 1.33 2009/10/20 19:10:10 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,22 +95,21 @@ struct read_info {
 };
 
 
-static int  loaddisk __P((struct  md_conf *, dev_t ld_dev, struct lwp *));
-static int  ramd_norm_read __P((struct read_info *));
+static int  loaddisk(struct  md_conf *, dev_t ld_dev, struct lwp *);
+static int  ramd_norm_read(struct read_info *);
 
 #ifdef support_compression
-static int  cpy_uncompressed __P((void *, int, struct read_info *));
-static int  md_compressed __P((void *, int, struct read_info *));
+static int  cpy_uncompressed(void *, int, struct read_info *);
+static int  md_compressed(void *, int, struct read_info *);
 #endif
 
 /*
  * This is called during autoconfig.
  */
 void
-md_attach_hook(unit, md)
-int		unit;
-struct md_conf	*md;
+md_attach_hook(int unit, struct md_conf *md)
 {
+
 	if (atari_realconfig && (unit < RAMD_NDEV) && rd_info[unit].ramd_flag) {
 		printf ("md%d: %sauto-load on open. Size %ld bytes.\n", unit,
 		    rd_info[unit].ramd_flag & RAMD_LCOMP ? "decompress/" : "",
@@ -125,13 +119,11 @@ struct md_conf	*md;
 }
 
 void
-md_open_hook(unit, md)
-int		unit;
-struct md_conf	*md;
+md_open_hook(int unit, struct md_conf *md)
 {
 	struct ramd_info *ri;
 
-	if(unit >= RAMD_NDEV)
+	if (unit >= RAMD_NDEV)
 		return;
 
 	ri = &rd_info[unit];
@@ -139,9 +131,9 @@ struct md_conf	*md;
 		return;	/* Only configure once */
 	md->md_addr = malloc(ri->ramd_size, M_DEVBUF, M_WAITOK);
 	md->md_size = ri->ramd_size;
-	if(md->md_addr == NULL)
+	if (md->md_addr == NULL)
 		return;
-	if(ri->ramd_flag & RAMD_LOAD) {
+	if (ri->ramd_flag & RAMD_LOAD) {
 		if (loaddisk(md, ri->ramd_dev, curlwp)) {
 			free(md->md_addr, M_DEVBUF);
 			md->md_addr = NULL;
@@ -152,10 +144,7 @@ struct md_conf	*md;
 }
 
 static int
-loaddisk(md, ld_dev, lwp)
-struct md_conf		*md;
-dev_t			ld_dev;
-struct lwp		*lwp;
+loaddisk(struct md_conf *md, dev_t ld_dev, struct lwp *lwp)
 {
 	struct buf		*buf;
 	int			error;
@@ -165,7 +154,7 @@ struct lwp		*lwp;
 
 	bdp = bdevsw_lookup(ld_dev);
 	if (bdp == NULL)
-		return (ENXIO);
+		return ENXIO;
 
 	/*
 	 * Initialize our buffer header:
@@ -191,31 +180,30 @@ struct lwp		*lwp;
 	/*
 	 * Open device and try to get some statistics.
 	 */
-	if((error = bdp->d_open(ld_dev, FREAD | FNONBLOCK, 0, lwp)) != 0) {
+	if ((error = bdp->d_open(ld_dev, FREAD | FNONBLOCK, 0, lwp)) != 0) {
 		putiobuf(buf);
-		return(error);
+		return error;
 	}
-	if(bdp->d_ioctl(ld_dev, DIOCGDINFO, (void *)&dl, FREAD, lwp) == 0) {
+	if (bdp->d_ioctl(ld_dev, DIOCGDINFO, (void *)&dl, FREAD, lwp) == 0) {
 		/* Read on a cylinder basis */
 		rs.chunk    = dl.d_secsize * dl.d_secpercyl;
 		rs.media_sz = dl.d_secperunit * dl.d_secsize;
 	}
 
 #ifdef support_compression
-	if(ri->ramd_flag & RAMD_LCOMP)
+	if (ri->ramd_flag & RAMD_LCOMP)
 		error = decompress(cpy_uncompressed, md_compressed, &rs);
 	else
 #endif /* support_compression */
 		error = ramd_norm_read(&rs);
 
-	bdp->d_close(ld_dev,FREAD | FNONBLOCK, 0, lwp);
+	bdp->d_close(ld_dev, FREAD | FNONBLOCK, 0, lwp);
 	putiobuf(buf);
-	return(error);
+	return error;
 }
 
 static int
-ramd_norm_read(rsp)
-struct read_info	*rsp;
+ramd_norm_read(struct read_info *rsp)
 {
 	long		bytes_left;
 	int		done, error;
@@ -226,11 +214,12 @@ struct read_info	*rsp;
 	bp         = rsp->bp;
 	error      = 0;
 
-	while(bytes_left > 0) {
+	while (bytes_left > 0) {
 		bp->b_cflags = BC_BUSY;
 		bp->b_flags  = B_PHYS | B_READ;
+		bp->b_oflags &= ~BO_DONE;
 		bp->b_blkno  = btodb(rsp->offset);
-		bp->b_bcount = rsp->chunk;
+		bp->b_bcount = min(rsp->chunk, bytes_left);
 		bp->b_data   = rsp->bufp;
 		bp->b_error  = 0;
 
@@ -243,18 +232,19 @@ struct read_info	*rsp;
 
 		/* Dot counter */
 		printf(".");
-		if(!(++dotc % 40))
+		if (!(++dotc % 40))
 			printf("\n");
 
 		done = bp->b_bcount - bp->b_resid;
+
 		bytes_left   -= done;
 		rsp->offset  += done;
 		rsp->bufp    += done;
 
-		if(error || !done)
+		if (error || !done)
 			break;
 
-		if((rsp->offset == rsp->media_sz) && (bytes_left != 0)) {
+		if ((rsp->offset == rsp->media_sz) && (bytes_left != 0)) {
 			printf("\nInsert next media and hit any key...");
 			cngetc();
 			printf("\n");
@@ -262,7 +252,7 @@ struct read_info	*rsp;
 		}
 	}
 	printf("\n");
-	return(error);
+	return error;
 }
 
 #ifdef support_compression
@@ -273,26 +263,21 @@ struct read_info	*rsp;
  * Copy from the uncompression buffer to the ramdisk
  */
 static int
-cpy_uncompressed(buf, nbyte, rsp)
-void *			buf;
-struct read_info	*rsp;
-int			nbyte;
+cpy_uncompressed(void * buf, int nbyte, struct read_info *rsp)
 {
-	if((rsp->bufp + nbyte) >= rsp->ebufp)
-		return(0);
-	bcopy(buf, rsp->bufp, nbyte);
+
+	if ((rsp->bufp + nbyte) >= rsp->ebufp)
+		return 0;
+	memcpy(rsp->bufp, buf, nbyte);
 	rsp->bufp += nbyte;
-	return(0);
+	return 0;
 }
 
 /*
  * Read a maximum of 'nbyte' bytes into 'buf'.
  */
 static int
-md_compressed(buf, nbyte, rsp)
-void *			buf;
-struct read_info	*rsp;
-int			nbyte;
+md_compressed(void * buf, int nbyte, struct read_info *rsp)
 {
 	static int	dotc = 0;
 	struct buf	*bp;
@@ -304,9 +289,10 @@ int			nbyte;
 	bp     = rsp->bp;
 	nbyte &= ~(DEV_BSIZE - 1);
 
-	while(nbyte > 0) {
+	while (nbyte > 0) {
 		bp->b_cflags = BC_BUSY;
 		bp->b_flags  = B_PHYS | B_READ;
+		bp->b_oflags &= ~BO_DONE;
 		bp->b_blkno  = btodb(rsp->offset);
 		bp->b_bcount = min(rsp->chunk, nbyte);
 		bp->b_data   = buf;
@@ -317,28 +303,29 @@ int			nbyte;
 
 		/* Wait for results	*/
 		biowait(bp);
+		error = bp->b_error;
 
 		/* Dot counter */
 		printf(".");
-		if(!(++dotc % 40))
+		if (!(++dotc % 40))
 			printf("\n");
 
 		done = bp->b_bcount - bp->b_resid;
+
 		nbyte        -= done;
 		nread        += done;
 		rsp->offset  += done;
 
-		if(error || !done)
+		if (error || !done)
 			break;
 
-		if((rsp->offset == rsp->media_sz) && (nbyte != 0)) {
-		if(rsp->offset == rsp->media_sz) {
+		if ((rsp->offset == rsp->media_sz) && (nbyte != 0)) {
 			printf("\nInsert next media and hit any key...");
-			if(cngetc() != '\n')
+			if (cngetc() != '\n')
 				printf("\n");
 			rsp->offset = 0;
 		}
 	}
-	return(nread);
+	return nread;
 }
 #endif /* support_compression */

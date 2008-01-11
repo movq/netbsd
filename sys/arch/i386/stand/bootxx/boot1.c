@@ -1,4 +1,4 @@
-/*	$NetBSD: boot1.c,v 1.15 2007/10/17 19:54:59 garbled Exp $	*/
+/*	$NetBSD: boot1.c,v 1.20 2011/01/06 01:08:48 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: boot1.c,v 1.15 2007/10/17 19:54:59 garbled Exp $");
+__RCSID("$NetBSD: boot1.c,v 1.20 2011/01/06 01:08:48 jakllsch Exp $");
 
 #include <lib/libsa/stand.h>
 #include <lib/libkern/libkern.h>
@@ -51,11 +44,11 @@ __RCSID("$NetBSD: boot1.c,v 1.15 2007/10/17 19:54:59 garbled Exp $");
 #define XSTR(x) #x
 #define STR(x) XSTR(x)
 
-static uint32_t bios_sector;
+static daddr_t bios_sector;
 
 static struct biosdisk_ll d;
 
-const char *boot1(uint32_t, uint32_t *);
+const char *boot1(uint32_t, uint64_t *);
 extern void putstr(const char *);
 
 extern struct disklabel ptn_disklabel;
@@ -67,15 +60,15 @@ ob(void)
 }
 
 const char *
-boot1(uint32_t biosdev, uint32_t *sector)
+boot1(uint32_t biosdev, uint64_t *sector)
 {
-        struct stat sb;
+	struct stat sb;
 	int fd;
 
 	bios_sector = *sector;
 	d.dev = biosdev;
 
-        putstr("\r\nNetBSD/x86 " STR(FS) " Primary Bootstrap\r\n");
+	putstr("\r\nNetBSD/x86 " STR(FS) " Primary Bootstrap\r\n");
 
 	if (set_geometry(&d, NULL))
 		return "set_geometry\r\n";
@@ -114,9 +107,8 @@ boot1(uint32_t biosdev, uint32_t *sector)
 
 done:
 	/* if we fail here, so will fstat, so keep going */
-	if (fstat(fd, &sb) == -1) {
+	if (fd == -1 || fstat(fd, &sb) == -1)
 		return "Can't open /boot\r\n";
-	}
 
 	biosdev = (uint32_t)sb.st_size;
 #if 0

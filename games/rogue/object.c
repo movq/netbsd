@@ -1,4 +1,4 @@
-/*	$NetBSD: object.c,v 1.11 2007/12/27 23:53:00 dholland Exp $	*/
+/*	$NetBSD: object.c,v 1.14 2009/08/12 08:44:45 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)object.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: object.c,v 1.11 2007/12/27 23:53:00 dholland Exp $");
+__RCSID("$NetBSD: object.c,v 1.14 2009/08/12 08:44:45 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,8 +58,9 @@ __RCSID("$NetBSD: object.c,v 1.11 2007/12/27 23:53:00 dholland Exp $");
 object level_objects;
 unsigned short dungeon[DROWS][DCOLS];
 short foods = 0;
-object *free_list = (object *) 0;
-char *fruit = (char *) 0;
+char *fruit = NULL;
+
+static object *free_list = NULL;
 
 fighter rogue = {
 	INIT_AW,	/* armor */
@@ -161,8 +162,19 @@ struct id id_rings[RINGS] = {
 	 {270, "", "of searching ",0},
 };
 
+static void gr_armor(object *);
+static void gr_potion(object *);
+static void gr_scroll(object *);
+static void gr_wand(object *);
+static void gr_weapon(object *, int);
+static unsigned short gr_what_is(void);
+static void make_party(void);
+static void plant_gold(short, short, boolean);
+static void put_gold(void);
+static void rand_place(object *);
+
 void
-put_objects()
+put_objects(void)
 {
 	short i, n;
 	object *obj;
@@ -184,8 +196,8 @@ put_objects()
 	put_gold();
 }
 
-void
-put_gold()
+static void
+put_gold(void)
 {
 	short i, j;
 	short row,col;
@@ -214,10 +226,8 @@ put_gold()
 	}
 }
 
-void
-plant_gold(row, col, is_maze)
-	short row, col;
-	boolean is_maze;
+static void
+plant_gold(short row, short col, boolean is_maze)
 {
 	object *obj;
 
@@ -229,26 +239,22 @@ plant_gold(row, col, is_maze)
 		obj->quantity += obj->quantity / 2;
 	}
 	dungeon[row][col] |= OBJECT;
-	(void) add_to_pack(obj, &level_objects, 0);
+	(void)add_to_pack(obj, &level_objects, 0);
 }
 
 void
-place_at(obj, row, col)
-	object *obj;
-	int row, col;
+place_at(object *obj, int row, int col)
 {
 	obj->row = row;
 	obj->col = col;
 	dungeon[row][col] |= OBJECT;
-	(void) add_to_pack(obj, &level_objects, 0);
+	(void)add_to_pack(obj, &level_objects, 0);
 }
 
 object *
-object_at(pack, row, col)
-	object *pack;
-	short row, col;
+object_at(object *pack, short row, short col)
 {
-	object *obj = (object *) 0;
+	object *obj = NULL;
 
 	if (dungeon[row][col] & (MONSTER | OBJECT)) {
 		obj = pack->next_object;
@@ -264,8 +270,7 @@ object_at(pack, row, col)
 }
 
 object *
-get_letter_object(ch)
-	int ch;
+get_letter_object(int ch)
 {
 	object *obj;
 
@@ -278,8 +283,7 @@ get_letter_object(ch)
 }
 
 void
-free_stuff(objlist)
-	object *objlist;
+free_stuff(object *objlist)
 {
 	object *obj;
 
@@ -292,8 +296,7 @@ free_stuff(objlist)
 }
 
 const char *
-name_of(obj)
-	const object *obj;
+name_of(const object *obj)
 {
 	const char *retstring;
 
@@ -349,7 +352,7 @@ name_of(obj)
 }
 
 object *
-gr_object()
+gr_object(void)
 {
 	object *obj;
 
@@ -387,8 +390,8 @@ gr_object()
 	return(obj);
 }
 
-unsigned short
-gr_what_is()
+static unsigned short
+gr_what_is(void)
 {
 	short percent;
 	unsigned short what_is;
@@ -413,9 +416,8 @@ gr_what_is()
 	return(what_is);
 }
 
-void
-gr_scroll(obj)
-	object *obj;
+static void
+gr_scroll(object *obj)
 {
 	short percent;
 
@@ -452,9 +454,8 @@ gr_scroll(obj)
 	}
 }
 
-void
-gr_potion(obj)
-	object *obj;
+static void
+gr_potion(object *obj)
 {
 	short percent;
 
@@ -493,10 +494,8 @@ gr_potion(obj)
 	}
 }
 
-void
-gr_weapon(obj, assign_wk)
-	object *obj;
-	int assign_wk;
+static void
+gr_weapon(object *obj, int assign_wk)
 {
 	short percent;
 	short i;
@@ -507,7 +506,7 @@ gr_weapon(obj, assign_wk)
 		obj->which_kind = get_rand(0, (WEAPONS - 1));
 	}
 	if ((obj->which_kind == ARROW) || (obj->which_kind == DAGGER) ||
-		(obj->which_kind == SHURIKEN) | (obj->which_kind == DART)) {
+		(obj->which_kind == SHURIKEN) || (obj->which_kind == DART)) {
 		obj->quantity = get_rand(3, 15);
 		obj->quiver = get_rand(0, 126);
 	} else {
@@ -559,9 +558,8 @@ gr_weapon(obj, assign_wk)
 	}
 }
 
-void
-gr_armor(obj)
-	object *obj;
+static void
+gr_armor(object *obj)
 {
 	short percent;
 	short blessing;
@@ -586,9 +584,8 @@ gr_armor(obj)
 	}
 }
 
-void
-gr_wand(obj)
-	object *obj;
+static void
+gr_wand(object *obj)
 {
 	obj->what_is = WAND;
 	obj->which_kind = get_rand(0, (WANDS - 1));
@@ -596,9 +593,7 @@ gr_wand(obj)
 }
 
 void
-get_food(obj, force_ration)
-	object *obj;
-	boolean force_ration;
+get_food(object *obj, boolean force_ration)
 {
 	obj->what_is = FOOD;
 
@@ -610,7 +605,7 @@ get_food(obj, force_ration)
 }
 
 void
-put_stairs()
+put_stairs(void)
 {
 	short row, col;
 
@@ -619,8 +614,7 @@ put_stairs()
 }
 
 int
-get_armor_class(obj)
-	const object *obj;
+get_armor_class(const object *obj)
 {
 	if (obj) {
 		return(obj->class + obj->d_enchant);
@@ -629,14 +623,14 @@ get_armor_class(obj)
 }
 
 object *
-alloc_object()
+alloc_object(void)
 {
 	object *obj;
 
 	if (free_list) {
 		obj = free_list;
 		free_list = free_list->next_object;
-	} else if (!(obj = (object *) md_malloc(sizeof(object)))) {
+	} else if (!(obj = md_malloc(sizeof(object)))) {
 			messagef(0, "cannot allocate object, saving game");
 			save_into_file(error_file);
 			clean_up("alloc_object:  save failed");
@@ -651,15 +645,14 @@ alloc_object()
 }
 
 void
-free_object(obj)
-	object *obj;
+free_object(object *obj)
 {
 	obj->next_object = free_list;
 	free_list = obj;
 }
 
-void
-make_party()
+static void
+make_party(void)
 {
 	short n;
 
@@ -672,7 +665,7 @@ make_party()
 }
 
 void
-show_objects()
+show_objects(void)
 {
 	object *obj;
 	short mc, rc, row, col;
@@ -704,14 +697,14 @@ show_objects()
 
 	while (monster) {
 		if (monster->m_flags & IMITATES) {
-			mvaddch(monster->row, monster->col, (int) monster->disguise);
+			mvaddch(monster->row, monster->col, (int)monster->disguise);
 		}
 		monster = monster->next_monster;
 	}
 }
 
 void
-put_amulet()
+put_amulet(void)
 {
 	object *obj;
 
@@ -720,9 +713,8 @@ put_amulet()
 	rand_place(obj);
 }
 
-void
-rand_place(obj)
-	object *obj;
+static void
+rand_place(object *obj)
 {
 	short row, col;
 
@@ -731,14 +723,14 @@ rand_place(obj)
 }
 
 void
-c_object_for_wizard()
+c_object_for_wizard(void)
 {
 	short ch, max, wk;
 	object *obj;
 	char buf[80];
 
 	max = 0;
-	if (pack_count((object *) 0) >= MAX_PACK_COUNT) {
+	if (pack_count(NULL) >= MAX_PACK_COUNT) {
 		messagef(0, "pack full");
 		return;
 	}
@@ -791,7 +783,7 @@ GIL:
 		if (get_input_line("which kind?", "", buf, sizeof(buf), "", 0, 1)) {
 			wk = get_number(buf);
 			if ((wk >= 0) && (wk <= max)) {
-				obj->which_kind = (unsigned short) wk;
+				obj->which_kind = wk;
 				if (obj->what_is == RING) {
 					gr_ring(obj, 0);
 				}
@@ -806,5 +798,5 @@ GIL:
 	}
 	get_desc(obj, buf, sizeof(buf));
 	messagef(0, "%s", buf);
-	(void) add_to_pack(obj, &rogue.pack, 1);
+	(void)add_to_pack(obj, &rogue.pack, 1);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_extern.h,v 1.22 2007/07/31 21:14:17 pooka Exp $	*/
+/*	$NetBSD: cd9660_extern.h,v 1.24 2008/06/28 01:34:05 rumble Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -100,10 +100,6 @@ MALLOC_DECLARE(M_ISOFSMNT);
 extern struct pool cd9660_node_pool;
 extern int cd9660_utf8_joliet;
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_cd9660_setup);
-#endif /* SYSCTL_SETUP_PROTO */
-
 int cd9660_mountroot(void);
 
 extern int (**cd9660_vnodeop_p)(void *);
@@ -112,7 +108,7 @@ extern int (**cd9660_fifoop_p)(void *);
 
 int isochar(const u_char *, const u_char *, int, u_int16_t *);
 int isofncmp(const u_char *, size_t, const u_char *, size_t, int);
-void isofntrans(u_char *, int, u_char *, u_short *, int, int, int, int);
+void isofntrans(const u_char *, int, u_char *, u_short *, int, int, int, int);
 ino_t isodirino(struct iso_directory_record *, struct iso_mnt *);
 #endif /* _KERNEL */
 

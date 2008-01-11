@@ -1,4 +1,4 @@
-/*	$NetBSD: if_inarp.h,v 1.39 2007/03/04 06:03:20 christos Exp $	*/
+/*	$NetBSD: if_inarp.h,v 1.42 2009/02/18 13:17:50 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -39,7 +39,6 @@ struct llinfo_arp {
 	struct	rtentry *la_rt;
 	struct	mbuf *la_hold;		/* last packet until resolved/timeout */
 	long	la_asked;		/* last time we QUERIED for this addr */
-#define la_timer la_rt->rt_rmx.rmx_expire /* deletion time in seconds */
 };
 
 struct sockaddr_inarp {
@@ -62,12 +61,13 @@ struct sockaddr_inarp {
 #ifdef _KERNEL
 extern struct ifqueue arpintrq;
 void arp_ifinit(struct ifnet *, struct ifaddr *);
-void arp_rtrequest(int, struct rtentry *, struct rt_addrinfo *);
+void arp_rtrequest(int, struct rtentry *, const struct rt_addrinfo *);
 int arpresolve(struct ifnet *, struct rtentry *, struct mbuf *,
 		    const struct sockaddr *, u_char *);
 void arpintr(void);
 void arprequest(struct ifnet *, const struct in_addr *, const struct in_addr *,
     const u_int8_t *);
+void arp_init(void);
 void arp_drain(void);
 int arpioctl(u_long, void *);
 void arpwhohas(struct ifnet *, struct in_addr *);

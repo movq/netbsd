@@ -1,4 +1,4 @@
-/*	$NetBSD: mixerctl.c,v 1.21 2003/10/23 22:17:58 cube Exp $	*/
+/*	$NetBSD: mixerctl.c,v 1.24 2009/07/14 21:02:24 apb Exp $	*/
 
 /*
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: mixerctl.c,v 1.21 2003/10/23 22:17:58 cube Exp $");
+__RCSID("$NetBSD: mixerctl.c,v 1.24 2009/07/14 21:02:24 apb Exp $");
 #endif
 
 #include <stdio.h>
@@ -90,7 +83,7 @@ findfield(char *name)
 }
 
 static void
-prfield(struct field *p, char *sep, int prvalset)
+prfield(struct field *p, const char *sep, int prvalset)
 {
 	mixer_ctrl_t *m;
 	int i, n;
@@ -254,7 +247,7 @@ incfield(struct field *p, int inc)
 }
 
 static void
-wrarg(int fd, char *arg, char *sep)
+wrarg(int fd, char *arg, const char *sep)
 {
 	char *q;
 	struct field *p;
@@ -312,7 +305,7 @@ wrarg(int fd, char *arg, char *sep)
 }
 
 static void
-prarg(int fd, char *arg, char *sep)
+prarg(int fd, char *arg, const char *sep)
 {
 	struct field *p;
 
@@ -328,8 +321,8 @@ main(int argc, char **argv)
 {
 	int fd, i, j, ch, pos;
 	int aflag = 0, wflag = 0;
-	char *file;
-	char *sep = "=";
+	const char *file;
+	const char *sep = "=";
 	mixer_devinfo_t dinfo;
 	int ndev;
 
@@ -371,7 +364,7 @@ main(int argc, char **argv)
     
 	fd = open(file, O_RDWR);
         /* Try with mixer0. */
-        if (fd < 0 && file == _PATH_MIXER) {
+        if (fd < 0 && strcmp(file, _PATH_MIXER) == 0) {
         	file = _PATH_MIXER0;
                 fd = open(file, O_RDWR);
         }

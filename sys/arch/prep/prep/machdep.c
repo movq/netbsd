@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.67 2007/10/17 19:56:53 garbled Exp $	*/
+/*	$NetBSD: machdep.c,v 1.71 2010/08/07 06:16:22 kiyohara Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.67 2007/10/17 19:56:53 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.71 2010/08/07 06:16:22 kiyohara Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_openpic.h"
@@ -53,7 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.67 2007/10/17 19:56:53 garbled Exp $")
 #include <sys/syscallargs.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
-#include <sys/user.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -275,6 +274,8 @@ cpu_reboot(int howto, char *what)
 halt_sys:
 	doshutdownhooks();
 
+	pmf_system_shutdown(boothowto);
+
 	if (howto & RB_HALT) {
                 printf("\n");
                 printf("The operating system has halted.\n");
@@ -424,7 +425,7 @@ setup_ivr(PPC_DEVICE *dev)
  */
 
 static void
-prep_init()
+prep_init(void)
 {
 	PPC_DEVICE *ppc_dev;
 	int i, foundmpic;
@@ -442,8 +443,6 @@ prep_init()
 		if (ppc_dev[i].DeviceId.DevId == 0x244d000d) { /* MPIC */
 			foundmpic = prep_setup_openpic(&ppc_dev[i]);
 		}
-#else
-		;
 #endif
 
 	}
@@ -466,7 +465,10 @@ static void
 init_intr(void)
 {
         int i;
+
+#if defined(PIC_OPENPIC)
         openpic_base = 0;
+#endif
 
 	pic_init();
         i = find_platform_quirk(res->VitalProductData.PrintableModel);

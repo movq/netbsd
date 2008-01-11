@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.4 2008/01/01 12:51:08 yamt Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.12 2010/07/07 01:14:53 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,13 +49,16 @@ void	x86_lfence(void);
 void	x86_sfence(void);
 void	x86_mfence(void);
 void	x86_flush(void);
-void	x86_patch(void);
+#ifndef XEN
+void	x86_patch(bool);
+#endif
 void	invlpg(vaddr_t);
 void	lidt(struct region_descriptor *);
 void	lldt(u_short);
 void	ltr(u_short);
-void	lcr0(u_int);
-u_int	rcr0(void);
+void	lcr0(u_long);
+u_long	rcr0(void);
+void	lcr2(vaddr_t);
 vaddr_t	rcr2(void);
 void	lcr3(vaddr_t);
 vaddr_t	rcr3(void);
@@ -110,6 +106,8 @@ void	x86_write_psl(u_long);
 u_long	x86_read_flags(void);
 void	x86_write_flags(u_long);
 
+void	x86_reset(void);
+
 /* 
  * Some of the undocumented AMD64 MSRs need a 'passcode' to access.
  *
@@ -119,11 +117,13 @@ void	x86_write_flags(u_long);
 #define	OPTERON_MSR_PASSCODE	0x9c5a203aU
 
 uint64_t	rdmsr(u_int);
-u_int64_t	rdmsr_locked(u_int, u_int);
+uint64_t	rdmsr_locked(u_int, u_int);
 uint64_t	rdtsc(void);
 uint64_t	rdpmc(u_int);
 void		wrmsr(u_int, uint64_t);
-void		wrmsr_locked(u_int, u_int, u_int64_t);
+void		wrmsr_locked(u_int, u_int, uint64_t);
+void		setfs(int);
+void		setusergs(int);
 
 #endif /* _KERNEL */
 

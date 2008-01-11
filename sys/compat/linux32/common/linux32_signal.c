@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_signal.c,v 1.7 2007/12/20 23:02:58 dsl Exp $ */
+/*	$NetBSD: linux32_signal.c,v 1.13 2009/06/08 13:34:23 njoly Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_signal.c,v 1.7 2007/12/20 23:02:58 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_signal.c,v 1.13 2009/06/08 13:34:23 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/ucred.h>
@@ -55,6 +55,12 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_signal.c,v 1.7 2007/12/20 23:02:58 dsl Exp $
 
 extern const int native_to_linux32_signo[];
 extern const int linux32_to_native_signo[];
+
+#ifdef DEBUG_LINUX
+#define DPRINTF(a)      uprintf a
+#else
+#define DPRINTF(a)
+#endif
 
 void
 linux32_to_native_sigset(sigset_t *bss, const linux32_sigset_t *lss)
@@ -181,7 +187,7 @@ linux32_old_to_native_sigset(sigset_t *bss, const linux32_old_sigset_t *lss)
 {
 	linux32_sigset_t ls;
 
-	bzero(&ls, sizeof(ls));
+	memset(&ls, 0, sizeof(ls));
 	ls.sig[0] = *lss;
 	
 	linux32_to_native_sigset(bss, &ls);
@@ -205,19 +211,27 @@ linux32_sys_rt_sigaction(struct lwp *l, const struct linux32_sys_rt_sigaction_ar
 	int vers = 0;
 	void *tramp = NULL;
 
-	if (SCARG(uap, sigsetsize) != sizeof(linux32_sigset_t))
+	if (SCARG(uap, sigsetsize) != sizeof(linux32_sigset_t)) {
+		DPRINTF(("rt_sigaction: Inconsistent sigsetsize %u %zu\n", 
+		    SCARG(uap, sigsetsize), sizeof(linux32_sigset_t)));
 		return EINVAL;
+	}
 
 	if (SCARG_P32(uap, nsa) != NULL) {
 		if ((error = copyin(SCARG_P32(uap, nsa), 
-		    &nls32, sizeof(nls32))) != 0)
+		    &nls32, sizeof(nls32))) != 0) {
+			DPRINTF(("rt_sigaction: Copyin %d\n", error));
 			return error;
+		}
 		linux32_to_native_sigaction(&ns, &nls32);
 	}
 
 	sig = SCARG(uap, signum);
-	if (sig < 0 || sig >= LINUX32__NSIG)
+	if (sig < 0 || sig >= LINUX32__NSIG) {
+		DPRINTF(("rt_sigaction: Bad signal number %d %d\n", 
+		    sig, LINUX32__NSIG));
 		return EINVAL;
+	}
 	if (sig > 0 && !linux32_to_native_signo[sig]) {
 		/* unknown signal... */
 		os.sa_handler = SIG_IGN;
@@ -228,16 +242,20 @@ linux32_sys_rt_sigaction(struct lwp *l, const struct linux32_sys_rt_sigaction_ar
 		    linux32_to_native_signo[sig],	
 		    SCARG_P32(uap, nsa) ? &ns : NULL,
 		    SCARG_P32(uap, osa) ? &os : NULL,
-		    tramp, vers)) != 0)
+		    tramp, vers)) != 0) {
+			DPRINTF(("rt_sigaction: sigaction %d\n", error));
 			return error;
+		}
 	}
 
 	if (SCARG_P32(uap, osa) != NULL) {
 		native_to_linux32_sigaction(&ols32, &os);
 
 		if ((error = copyout(&ols32, SCARG_P32(uap, osa),
-		    sizeof(ols32))) != 0)
+		    sizeof(ols32))) != 0) {
+			DPRINTF(("rt_sigaction: Copyout %d\n", error));
 			return error;
+		}
 	}
 
 	return 0;
@@ -283,11 +301,11 @@ linux32_sys_rt_sigprocmask(struct lwp *l, const struct linux32_sys_rt_sigprocmas
 		linux32_to_native_sigset(&ns, &nls32);
 	}
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	error = sigprocmask1(l, how,
 	    SCARG_P32(uap, set) ? &ns : NULL,
 	    SCARG_P32(uap, oset) ? &os : NULL);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
       
         if (error != 0)
 		return error;
@@ -370,4 +388,85 @@ linux32_sys_signal(struct lwp *l, const struct linux32_sys_signal_args *uap, reg
 
         *retval = (int)(long)obsa.sa_handler;
         return 0;
+}
+
+int
+linux32_sys_rt_sigpending(struct lwp *l, const struct linux32_sys_rt_sigpending_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(linux32_sigsetp_t) set;
+		syscallarg(netbsd32_size_t) sigsetsize;
+	} */
+	sigset_t bss;
+	linux32_sigset_t lss;
+
+	if (SCARG(uap, sigsetsize) != sizeof(linux32_sigset_t))
+		return EINVAL;
+
+	sigpending1(l, &bss);
+	native_to_linux32_sigset(&lss, &bss);
+	return copyout(&lss, SCARG_P32(uap, set), sizeof(lss));
+}
+
+int
+linux32_sys_siggetmask(struct lwp *l, const void *v, register_t *retval)
+{
+	struct proc *p = l->l_proc;
+	sigset_t bss;
+	linux32_old_sigset_t lss;
+	int error;
+
+	mutex_enter(p->p_lock);
+	error = sigprocmask1(l, SIG_SETMASK, 0, &bss);
+	mutex_exit(p->p_lock);
+	if (error)
+		return error;
+	native_to_linux32_old_sigset(&lss, &bss);
+	*retval = lss;
+	return 0;
+}
+
+int
+linux32_sys_sigsetmask(struct lwp *l, const struct linux32_sys_sigsetmask_args *uap, register_t *retval)
+{
+	/* {
+		syscallarg(linux32_old_sigset_t) mask;
+	} */
+	sigset_t nbss, obss;
+	linux32_old_sigset_t nlss, olss;
+	struct proc *p = l->l_proc;
+	int error;
+
+	nlss = SCARG(uap, mask);
+	linux32_old_to_native_sigset(&nbss, &nlss);
+	mutex_enter(p->p_lock);
+	error = sigprocmask1(l, SIG_SETMASK, &nbss, &obss);
+	mutex_exit(p->p_lock);
+	if (error)
+		return error;
+	native_to_linux32_old_sigset(&olss, &obss);
+	*retval = olss;
+	return 0;
+}
+
+int
+linux32_sys_rt_queueinfo(struct lwp *l, const struct linux32_sys_rt_queueinfo_args *uap, register_t *retval)
+{
+	/*
+		syscallarg(int) pid;
+		syscallarg(int) sig;
+		syscallarg(linux32_siginfop_t) uinfo;
+	*/
+	int error;
+	linux32_siginfo_t info;
+
+	error = copyin(SCARG_P32(uap, uinfo), &info, sizeof(info));
+	if (error)
+		return error;
+	if (info.lsi_code >= 0)
+		return EPERM;
+
+	/* XXX To really implement this we need to      */
+	/* XXX keep a list of queued signals somewhere. */
+	return linux32_sys_kill(l, (const void *)uap, retval);
 }

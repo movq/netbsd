@@ -1,4 +1,4 @@
-/*	$NetBSD: math.h,v 1.46 2007/02/22 22:08:19 drochner Exp $	*/
+/*	$NetBSD: math.h,v 1.54 2011/02/06 00:44:08 christos Exp $	*/
 
 /*
  * ====================================================
@@ -59,8 +59,12 @@ union __long_double_u {
  * ANSI/POSIX
  */
 /* 7.12#3 HUGE_VAL, HUGELF, HUGE_VALL */
+#if __GNUC_PREREQ__(3, 3)
+#define HUGE_VAL	__builtin_huge_val()
+#else
 extern const union __double_u __infinity;
 #define HUGE_VAL	__infinity.__val
+#endif
 
 /*
  * ISO C99
@@ -72,14 +76,21 @@ extern const union __double_u __infinity;
     ((_XOPEN_SOURCE  - 0) >= 600) || \
     defined(_ISOC99_SOURCE) || defined(_NETBSD_SOURCE)
 /* 7.12#3 HUGE_VAL, HUGELF, HUGE_VALL */
+#if __GNUC_PREREQ__(3, 3)
+#define	HUGE_VALF	__builtin_huge_valf()
+#define	HUGE_VALL	__builtin_huge_vall()
+#else
 extern const union __float_u __infinityf;
 #define	HUGE_VALF	__infinityf.__val
 
 extern const union __long_double_u __infinityl;
 #define	HUGE_VALL	__infinityl.__val
+#endif
 
 /* 7.12#4 INFINITY */
-#ifdef __INFINITY
+#if __GNUC_PREREQ__(3, 3)
+#define	INFINITY	__builtin_inff()
+#elif defined(__INFINITY)
 #define	INFINITY	__INFINITY	/* float constant which overflows */
 #else
 #define	INFINITY	HUGE_VALF	/* positive infinity */
@@ -87,8 +98,12 @@ extern const union __long_double_u __infinityl;
 
 /* 7.12#5 NAN: a quiet NaN, if supported */
 #ifdef __HAVE_NANF
+#if __GNUC_PREREQ__(3,3)
+#define	NAN	__builtin_nanf("")
+#else
 extern const union __float_u __nanf;
 #define	NAN		__nanf.__val
+#endif
 #endif /* __HAVE_NANF */
 
 /* 7.12#6 number classification macros */
@@ -148,7 +163,7 @@ extern  _LIB_VERSION_TYPE  _LIB_VERSION;
 #ifndef __cplusplus
 struct exception {
 	int type;
-	char *name;
+	const char *name;
 	double arg1;
 	double arg2;
 	double retval;
@@ -190,6 +205,7 @@ double	sinh(double);
 double	tanh(double);
 
 double	exp(double);
+double	exp2(double);
 double	frexp(double, int *);
 double	ldexp(double, int);
 double	log(double);
@@ -278,6 +294,7 @@ float	tanhf(float);
 /* 7.12.6 exp / log */
 
 float	expf(float);
+float	exp2f(float);
 float	expm1f(float);
 float	frexpf(float, int *);
 int	ilogbf(float);
@@ -294,6 +311,7 @@ float	scalbnf(float, int);
 
 float	cbrtf(float);
 float	fabsf(float);
+long double	fabsl(long double);
 float	hypotf(float, float);
 float	powf(float, float);
 float	sqrtf(float);
@@ -331,15 +349,22 @@ long long int	llroundf(float);
 float	fmodf(float, float);
 float	remainderf(float, float);
 
+/* 7.12.10.3 The remquo functions */
+double	remquo(double, double, int *);
+float	remquof(float, float, int *);
+
 /* 7.12.11 manipulation */
 
 float	copysignf(float, float);
+long double	copysignl(long double, long double);
 double	nan(const char *);
 float	nanf(const char *);
 long double	nanl(const char *);
 float	nextafterf(float, float);
+long double     nextafterl(long double, long double);
+double	nexttoward(double, long double);
 
-/* 7.12.14 comparision */
+/* 7.12.14 comparison */
 
 #define isunordered(x, y)	(isnan(x) || isnan(y))
 #define isgreater(x, y)		(!isunordered((x), (y)) && (x) > (y))
@@ -348,6 +373,15 @@ float	nextafterf(float, float);
 #define islessequal(x, y)	(!isunordered((x), (y)) && (x) <= (y))
 #define islessgreater(x, y)	(!isunordered((x), (y)) && \
 				 ((x) > (y) || (y) > (x)))
+double	fdim(double, double);
+double	fmax(double, double);
+double	fmin(double, double);
+float	fdimf(float, float);
+float	fmaxf(float, float);
+float	fminf(float, float);
+long double fdiml(long double, long double);
+long double fmaxl(long double, long double);
+long double fminl(long double, long double);
 
 #endif /* !_ANSI_SOURCE && ... */
 

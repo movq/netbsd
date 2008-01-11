@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.2 2007/11/22 16:17:04 bouyer Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.13 2010/11/12 02:07:27 dholland Exp $	*/
 /*	NetBSD: mainbus.c,v 1.53 2003/10/27 14:11:47 junyoung Exp 	*/
 
 /*
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.2 2007/11/22 16:17:04 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.13 2010/11/12 02:07:27 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,8 +45,9 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.2 2007/11/22 16:17:04 bouyer Exp $");
 
 #include "opt_xen.h"
 #include "opt_mpbios.h"
+#include "opt_pcifixup.h"
 
-#include "acpi.h"
+#include "acpica.h"
 #include "ioapic.h"
 
 #include "ipmi.h"
@@ -61,18 +62,23 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.2 2007/11/22 16:17:04 bouyer Exp $");
 #include <x86/ipmivar.h>
 #endif
 
-#if defined(XEN3) && NPCI > 0
+#if NPCI > 0
 #include <dev/pci/pcivar.h>
-#if NACPI > 0
+#if NACPICA > 0
 #include <dev/acpi/acpivar.h>
-#include <dev/acpi/acpi_madt.h>       
-#include <machine/mpacpi.h>       
-#endif /* NACPI > 0 */
+#include <xen/mpacpi.h>       
+#endif /* NACPICA > 0 */
 #ifdef MPBIOS
 #include <machine/mpbiosvar.h>       
 #endif /* MPBIOS */
+#ifdef PCI_BUS_FIXUP
+#include <arch/x86/pci/pci_bus_fixup.h>
+#ifdef PCI_ADDR_FIXUP
+#include <arch/x86/pci/pci_addr_fixup.h>
+#endif  
+#endif
 
-#if defined(MPBIOS) || NACPI > 0
+#if defined(MPBIOS) || NACPICA > 0
 struct mp_bus *mp_busses;
 int mp_nbus;
 struct mp_intr_map *mp_intrs;
@@ -88,14 +94,14 @@ int mp_verbose = 1;
 #else /* MPVERBOSE */
 int mp_verbose = 0;
 #endif /* MPVERBOSE */
-#endif /* defined(MPBIOS) || NACPI > 0 */
-#endif /* defined(XEN3) && NPCI > 0 */
+#endif /* defined(MPBIOS) || NACPICA > 0 */
+#endif /* NPCI > 0 */
 
 
-int	mainbus_match(struct device *, struct cfdata *, void *);
-void	mainbus_attach(struct device *, struct device *, void *);
+int	mainbus_match(device_t, cfdata_t, void *);
+void	mainbus_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbus_match, mainbus_attach, NULL, NULL);
 
 int	mainbus_print(void *, const char *);
@@ -115,10 +121,7 @@ union mainbus_attach_args {
  * Probe for the mainbus; always succeeds.
  */
 int
-mainbus_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+mainbus_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return 1;
@@ -128,59 +131,55 @@ mainbus_match(parent, match, aux)
  * Attach the mainbus.
  */
 void
-mainbus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+mainbus_attach(device_t parent, device_t self, void *aux)
 {
+#if defined(DOM0OPS) && NPCI > 0
+	int mode;
+#endif
 	union mainbus_attach_args mba;
-#if defined(DOM0OPS) && defined(XEN3)
+#if defined(DOM0OPS)
 	int numcpus = 0;
 #ifdef MPBIOS
 	int mpbios_present = 0;
 #endif
-#if NACPI > 0 || defined(MPBIOS)
-	int numioapics = 0;     
+#ifdef PCI_BUS_FIXUP
+	int pci_maxbus = 0;
 #endif
-#endif /* defined(DOM0OPS) && defined(XEN3) */
+#endif /* defined(DOM0OPS) */
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 
-#ifndef XEN3
-	memset(&mba.mba_caa, 0, sizeof(mba.mba_caa));
-	mba.mba_caa.cpu_number = 0;
-	mba.mba_caa.cpu_role = CPU_ROLE_SP;
-	mba.mba_caa.cpu_func = 0;
-	config_found_ia(self, "cpubus", &mba.mba_caa, mainbus_print);
-#else /* XEN3 */
 #ifdef DOM0OPS
-	if (xen_start_info.flags & SIF_INITDOMAIN) {
+	if (xendomain_is_dom0()) {
 #ifdef MPBIOS
 		mpbios_present = mpbios_probe(self);
 #endif
 #if NPCI > 0
 		/* ACPI needs to be able to access PCI configuration space. */
-		pci_mode = pci_mode_detect();
+		mode = pci_mode_detect();
 #ifdef PCI_BUS_FIXUP
-		pci_maxbus = pci_bus_fixup(NULL, 0);
-		aprint_debug("PCI bus max, after pci_bus_fixup: %i\n",
-		    pci_maxbus);
+		if (mode != 0) {
+			pci_maxbus = pci_bus_fixup(NULL, 0);
+			aprint_debug_dev(self, "PCI bus max, after "
+			    "pci_bus_fixup: %i\n", pci_maxbus);
 #ifdef PCI_ADDR_FIXUP
-		pciaddr.extent_port = NULL;
-		pciaddr.extent_mem = NULL;
-		pci_addr_fixup(NULL, pci_maxbus);
+			pciaddr.extent_port = NULL;
+			pciaddr.extent_mem = NULL;
+			pci_addr_fixup(NULL, pci_maxbus);
 #endif /* PCI_ADDR_FIXUP */
+		}
 #endif /* PCI_BUS_FIXUP */
-#if NACPI > 0
+#if NACPICA > 0
 		acpi_present = acpi_probe();
 		if (acpi_present)
-			mpacpi_active = mpacpi_scan_apics(self,
-			    &numcpus, &numioapics);
+			mpacpi_active = mpacpi_scan_apics(self, &numcpus);
 		if (!mpacpi_active)
 #endif
 		{
 #ifdef MPBIOS
 			if (mpbios_present)
-				mpbios_scan(self, &numcpus, &numioapics);       
+				mpbios_scan(self, &numcpus);       
 			else
 #endif
 			if (numcpus == 0) {
@@ -198,12 +197,11 @@ mainbus_attach(parent, self, aux)
 #endif /* NPCI */
 	}
 #endif /* DOM0OPS */
-#endif /* XEN3 */
 
 #if NIPMI > 0
 	memset(&mba.mba_ipmi, 0, sizeof(mba.mba_ipmi));
-	mba.mba_ipmi.iaa_iot = X86_BUS_SPACE_IO;
-	mba.mba_ipmi.iaa_memt = X86_BUS_SPACE_MEM;
+	mba.mba_ipmi.iaa_iot = x86_bus_space_io;
+	mba.mba_ipmi.iaa_memt = x86_bus_space_mem;
 	if (ipmi_probe(&mba.mba_ipmi))
 		config_found_ia(self, "ipmibus", &mba.mba_ipmi, 0);
 #endif
@@ -215,9 +213,7 @@ mainbus_attach(parent, self, aux)
 }
 
 int
-mainbus_print(aux, pnp)
-	void *aux;
-	const char *pnp;
+mainbus_print(void *aux, const char *pnp)
 {
 	union mainbus_attach_args *mba = aux;
 

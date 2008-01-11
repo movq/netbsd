@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.acorn26,v 1.9 2007/03/04 13:12:22 bjh21 Exp $
+#	$NetBSD: Makefile.acorn26,v 1.11 2011/01/21 15:59:04 joerg Exp $
 
 # Makefile for NetBSD
 #
@@ -36,7 +36,7 @@ CWARNFLAGS+=	-Wcomment
 # We'd like GCC to leave R14 alone as much as possible (so page faults in the
 # kernel are safer).
 CFLAGS+=	-ffixed-r14 -mapcs-frame -fno-omit-frame-pointer
-AFLAGS+=	-x assembler-with-cpp -traditional-cpp
+AFLAGS+=	-x assembler-with-cpp
 
 ##
 ## (3) libkern and compat
@@ -54,6 +54,9 @@ locore.o: ${ACORN26}/acorn26/locore.S assym.h
 
 vectors.o: ${ARM}/arm/vectors.S assym.h
 	${NORMAL_S}
+
+bcopyinout.o copyinout.o copystr.o cpu_in_cksum.o fiq_subr.o: assym.h
+sigcode.o: assym.h
 
 ##
 ## (5) link settings

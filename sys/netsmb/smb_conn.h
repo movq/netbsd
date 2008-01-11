@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_conn.h,v 1.17 2005/12/11 12:25:16 christos Exp $	*/
+/*	$NetBSD: smb_conn.h,v 1.20 2010/12/17 13:05:29 pooka Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -169,11 +169,12 @@ struct smb_share_info {
 
 #ifdef _KERNEL
 
-#include <sys/lock.h>
+#include <sys/mutex.h>
+#include <sys/condvar.h>
 #include <netsmb/smb_subr.h>
 
 #define CONNADDREQ(a1,a2)	((a1)->sa_len == (a2)->sa_len && \
-				 bcmp(a1, a2, (a1)->sa_len) == 0)
+				 memcmp(a1, a2, (a1)->sa_len) == 0)
 
 struct smb_vc;
 struct smb_share;
@@ -197,14 +198,13 @@ struct smb_connobj;
 typedef void smb_co_gone_t (struct smb_connobj *cp, struct smb_cred *scred);
 typedef void smb_co_free_t (struct smb_connobj *cp);
 
-#define	SMB_CO_LOCK(cp)		smb_sl_lock(&(cp)->co_interlock)
-#define	SMB_CO_UNLOCK(cp)	smb_sl_unlock(&(cp)->co_interlock)
-
 struct smb_connobj {
+	kcondvar_t		co_lock;
+	struct lwp		*co_locker;
+	kmutex_t		co_interlock;
+	int			co_lockcnt;
 	int			co_level;	/* SMBL_ */
 	int			co_flags;
-	struct lock		co_lock;
-	struct smb_slock	co_interlock;
 	int			co_usecount;
 	struct smb_connobj *	co_parent;
 	SLIST_HEAD(,smb_connobj)co_children;
@@ -359,10 +359,10 @@ int  smb_sm_lookup(struct smb_vcspec *vcspec,
  */
 void smb_co_ref(struct smb_connobj *cp);
 void smb_co_rele(struct smb_connobj *cp, struct smb_cred *scred);
-int  smb_co_get(struct smb_connobj *cp, int flags, struct smb_cred *scred);
+int  smb_co_get(struct smb_connobj *cp, struct smb_cred *scred);
 void smb_co_put(struct smb_connobj *cp, struct smb_cred *scred);
-int  smb_co_lock(struct smb_connobj *cp, int flags);
-void smb_co_unlock(struct smb_connobj *cp, int flags);
+int  smb_co_lock(struct smb_connobj *cp);
+void smb_co_unlock(struct smb_connobj *cp);
 
 /*
  * session level functions
@@ -371,12 +371,12 @@ int  smb_vc_create(struct smb_vcspec *vcspec,
 	struct smb_cred *scred, struct smb_vc **vcpp);
 int  smb_vc_connect(struct smb_vc *vcp, struct smb_cred *scred);
 int  smb_vc_access(struct smb_vc *vcp, struct smb_cred *scred, mode_t mode);
-int  smb_vc_get(struct smb_vc *vcp, int flags, struct smb_cred *scred);
+int  smb_vc_get(struct smb_vc *vcp, struct smb_cred *scred);
 void smb_vc_put(struct smb_vc *vcp, struct smb_cred *scred);
 void smb_vc_ref(struct smb_vc *vcp);
 void smb_vc_rele(struct smb_vc *vcp, struct smb_cred *scred);
-int  smb_vc_lock(struct smb_vc *vcp, int flags);
-void smb_vc_unlock(struct smb_vc *vcp, int flags);
+int  smb_vc_lock(struct smb_vc *vcp);
+void smb_vc_unlock(struct smb_vc *vcp);
 int  smb_vc_lookupshare(struct smb_vc *vcp, struct smb_sharespec *shspec,
 	struct smb_cred *scred, struct smb_share **sspp);
 const char * smb_vc_getpass(struct smb_vc *vcp);
@@ -390,10 +390,10 @@ int  smb_share_create(struct smb_vc *vcp, struct smb_sharespec *shspec,
 int  smb_share_access(struct smb_share *ssp, struct smb_cred *scred, mode_t mode);
 void smb_share_ref(struct smb_share *ssp);
 void smb_share_rele(struct smb_share *ssp, struct smb_cred *scred);
-int  smb_share_get(struct smb_share *ssp, int flags, struct smb_cred *scred);
+int  smb_share_get(struct smb_share *ssp, struct smb_cred *scred);
 void smb_share_put(struct smb_share *ssp, struct smb_cred *scred);
-int  smb_share_lock(struct smb_share *ssp, int flags);
-void smb_share_unlock(struct smb_share *ssp, int flags);
+int  smb_share_lock(struct smb_share *ssp);
+void smb_share_unlock(struct smb_share *ssp);
 int  smb_share_valid(struct smb_share *ssp);
 const char * smb_share_getpass(struct smb_share *ssp);
 
@@ -445,12 +445,7 @@ struct smbiod {
 	SIMPLEQ_HEAD(, smb_rq)
 				iod_rqlist;	/* list of outstanding requests */
 	int			iod_muxwant;
-#ifdef __NetBSD__
 	struct lwp *		iod_l;
-#else
-	struct proc *		iod_p;
-	struct thread *		iod_td;
-#endif
 	struct smb_cred		iod_scred;
 	struct smb_slock	iod_evlock;	/* iod_evlist */
 	SIMPLEQ_HEAD(,smbiod_event) iod_evlist;

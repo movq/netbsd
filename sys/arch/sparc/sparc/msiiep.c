@@ -1,4 +1,4 @@
-/*	$NetBSD: msiiep.c,v 1.35 2007/03/04 06:00:46 christos Exp $ */
+/*	$NetBSD: msiiep.c,v 1.40 2011/05/17 17:34:53 dyoung Exp $ */
 
 /*
  * Copyright (c) 2001 Valeriy E. Ushakov
@@ -27,7 +27,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.35 2007/03/04 06:00:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msiiep.c,v 1.40 2011/05/17 17:34:53 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -352,7 +352,7 @@ mspcic_attach(struct device *parent, struct device *self, void *aux)
 	pba.pba_dmat = sc->sc_dmat;
 	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &mspcic_pc_tag;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 
 	config_found_ia(self, "pcibus", &pba, mspcic_print);
 }
@@ -563,7 +563,7 @@ mspcic_intr_establish(bus_space_tag_t t, int line, int ipl,
 
 	ih->ih_fun = handler;
 	ih->ih_arg = arg;
-	intr_establish(pil, ipl, ih, fastvec);
+	intr_establish(pil, ipl, ih, fastvec, false);
 
 	return(ih);
 }
@@ -657,10 +657,12 @@ mspcic_dmamap_load(bus_dma_tag_t t, bus_dmamap_t map,
 }
 
 static void
-mspcic_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t dmam)
+mspcic_dmamap_unload(bus_dma_tag_t t, bus_dmamap_t map)
 {
 
-	panic("mspcic_dmamap_unload: not implemented");
+	/* Mark the mappings as invalid. */
+	map->dm_mapsize = 0;
+	map->dm_nsegs = 0;
 }
 
 
@@ -692,14 +694,15 @@ mspcic_dmamem_map(bus_dma_tag_t tag, bus_dma_segment_t *segs, int nsegs,
 	 * to the kernel virtual address space.
 	 */
 	mlist = segs[0]._ds_mlist;
-	TAILQ_FOREACH(m, mlist, pageq) {
+	TAILQ_FOREACH(m, mlist, pageq.queue) {
 		paddr_t pa;
 
 		if (size == 0)
 			panic("mspcic_dmamem_map: size botch");
 
 		pa = VM_PAGE_TO_PHYS(m);
-		pmap_kenter_pa(va, pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE);
+		pmap_kenter_pa(va,
+		    pa | PMAP_NC, VM_PROT_READ | VM_PROT_WRITE, 0);
 		va += pagesz;
 		size -= pagesz;
 	}

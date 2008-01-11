@@ -1,4 +1,33 @@
-/*	$NetBSD: ffs_vnops.c,v 1.96 2008/01/09 16:15:23 ad Exp $	*/
+/*	$NetBSD: ffs_vnops.c,v 1.118 2011/04/27 07:24:53 hannken Exp $	*/
+
+/*-
+ * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Wasabi Systems, Inc, and by Andrew Doran.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -32,7 +61,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.96 2008/01/09 16:15:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.118 2011/04/27 07:24:53 hannken Exp $");
+
+#if defined(_KERNEL_OPT)
+#include "opt_ffs.h"
+#include "opt_wapbl.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,6 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.96 2008/01/09 16:15:23 ad Exp $");
 #include <sys/pool.h>
 #include <sys/signalvar.h>
 #include <sys/kauth.h>
+#include <sys/wapbl.h>
 #include <sys/fstrans.h>
 
 #include <miscfs/fifofs/fifo.h>
@@ -58,6 +93,7 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_vnops.c,v 1.96 2008/01/09 16:15:23 ad Exp $");
 #include <ufs/ufs/dir.h>
 #include <ufs/ufs/ufs_extern.h>
 #include <ufs/ufs/ufsmount.h>
+#include <ufs/ufs/ufs_wapbl.h>
 
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
@@ -79,7 +115,6 @@ const struct vnodeopv_entry_desc ffs_vnodeop_entries[] = {
 	{ &vop_setattr_desc, ufs_setattr },		/* setattr */
 	{ &vop_read_desc, ffs_read },			/* read */
 	{ &vop_write_desc, ffs_write },			/* write */
-	{ &vop_lease_desc, ufs_lease_check },		/* lease */
 	{ &vop_ioctl_desc, ufs_ioctl },			/* ioctl */
 	{ &vop_fcntl_desc, ufs_fcntl },			/* fcntl */
 	{ &vop_poll_desc, ufs_poll },			/* poll */
@@ -99,12 +134,12 @@ const struct vnodeopv_entry_desc ffs_vnodeop_entries[] = {
 	{ &vop_abortop_desc, ufs_abortop },		/* abortop */
 	{ &vop_inactive_desc, ufs_inactive },		/* inactive */
 	{ &vop_reclaim_desc, ffs_reclaim },		/* reclaim */
-	{ &vop_lock_desc, ffs_lock },			/* lock */
-	{ &vop_unlock_desc, ffs_unlock },		/* unlock */
+	{ &vop_lock_desc, ufs_lock },			/* lock */
+	{ &vop_unlock_desc, ufs_unlock },		/* unlock */
 	{ &vop_bmap_desc, ufs_bmap },			/* bmap */
 	{ &vop_strategy_desc, ufs_strategy },		/* strategy */
 	{ &vop_print_desc, ufs_print },			/* print */
-	{ &vop_islocked_desc, ffs_islocked },		/* islocked */
+	{ &vop_islocked_desc, ufs_islocked },		/* islocked */
 	{ &vop_pathconf_desc, ufs_pathconf },		/* pathconf */
 	{ &vop_advlock_desc, ufs_advlock },		/* advlock */
 	{ &vop_bwrite_desc, vn_bwrite },		/* bwrite */
@@ -134,14 +169,13 @@ const struct vnodeopv_entry_desc ffs_specop_entries[] = {
 	{ &vop_setattr_desc, ufs_setattr },		/* setattr */
 	{ &vop_read_desc, ufsspec_read },		/* read */
 	{ &vop_write_desc, ufsspec_write },		/* write */
-	{ &vop_lease_desc, spec_lease_check },		/* lease */
 	{ &vop_ioctl_desc, spec_ioctl },		/* ioctl */
 	{ &vop_fcntl_desc, ufs_fcntl },			/* fcntl */
 	{ &vop_poll_desc, spec_poll },			/* poll */
 	{ &vop_kqfilter_desc, spec_kqfilter },		/* kqfilter */
 	{ &vop_revoke_desc, spec_revoke },		/* revoke */
 	{ &vop_mmap_desc, spec_mmap },			/* mmap */
-	{ &vop_fsync_desc, ffs_fsync },			/* fsync */
+	{ &vop_fsync_desc, ffs_spec_fsync },		/* fsync */
 	{ &vop_seek_desc, spec_seek },			/* seek */
 	{ &vop_remove_desc, spec_remove },		/* remove */
 	{ &vop_link_desc, spec_link },			/* link */
@@ -154,12 +188,12 @@ const struct vnodeopv_entry_desc ffs_specop_entries[] = {
 	{ &vop_abortop_desc, spec_abortop },		/* abortop */
 	{ &vop_inactive_desc, ufs_inactive },		/* inactive */
 	{ &vop_reclaim_desc, ffs_reclaim },		/* reclaim */
-	{ &vop_lock_desc, ffs_lock },			/* lock */
-	{ &vop_unlock_desc, ffs_unlock },		/* unlock */
+	{ &vop_lock_desc, ufs_lock },			/* lock */
+	{ &vop_unlock_desc, ufs_unlock },		/* unlock */
 	{ &vop_bmap_desc, spec_bmap },			/* bmap */
 	{ &vop_strategy_desc, spec_strategy },		/* strategy */
 	{ &vop_print_desc, ufs_print },			/* print */
-	{ &vop_islocked_desc, ffs_islocked },		/* islocked */
+	{ &vop_islocked_desc, ufs_islocked },		/* islocked */
 	{ &vop_pathconf_desc, spec_pathconf },		/* pathconf */
 	{ &vop_advlock_desc, spec_advlock },		/* advlock */
 	{ &vop_bwrite_desc, vn_bwrite },		/* bwrite */
@@ -179,46 +213,45 @@ const struct vnodeopv_desc ffs_specop_opv_desc =
 int (**ffs_fifoop_p)(void *);
 const struct vnodeopv_entry_desc ffs_fifoop_entries[] = {
 	{ &vop_default_desc, vn_default_error },
-	{ &vop_lookup_desc, fifo_lookup },		/* lookup */
-	{ &vop_create_desc, fifo_create },		/* create */
-	{ &vop_mknod_desc, fifo_mknod },		/* mknod */
-	{ &vop_open_desc, fifo_open },			/* open */
+	{ &vop_lookup_desc, vn_fifo_bypass },		/* lookup */
+	{ &vop_create_desc, vn_fifo_bypass },		/* create */
+	{ &vop_mknod_desc, vn_fifo_bypass },		/* mknod */
+	{ &vop_open_desc, vn_fifo_bypass },		/* open */
 	{ &vop_close_desc, ufsfifo_close },		/* close */
 	{ &vop_access_desc, ufs_access },		/* access */
 	{ &vop_getattr_desc, ufs_getattr },		/* getattr */
 	{ &vop_setattr_desc, ufs_setattr },		/* setattr */
 	{ &vop_read_desc, ufsfifo_read },		/* read */
 	{ &vop_write_desc, ufsfifo_write },		/* write */
-	{ &vop_lease_desc, fifo_lease_check },		/* lease */
-	{ &vop_ioctl_desc, fifo_ioctl },		/* ioctl */
+	{ &vop_ioctl_desc, vn_fifo_bypass },		/* ioctl */
 	{ &vop_fcntl_desc, ufs_fcntl },			/* fcntl */
-	{ &vop_poll_desc, fifo_poll },			/* poll */
-	{ &vop_kqfilter_desc, fifo_kqfilter },		/* kqfilter */
-	{ &vop_revoke_desc, fifo_revoke },		/* revoke */
-	{ &vop_mmap_desc, fifo_mmap },			/* mmap */
+	{ &vop_poll_desc, vn_fifo_bypass },		/* poll */
+	{ &vop_kqfilter_desc, vn_fifo_bypass },		/* kqfilter */
+	{ &vop_revoke_desc, vn_fifo_bypass },		/* revoke */
+	{ &vop_mmap_desc, vn_fifo_bypass },		/* mmap */
 	{ &vop_fsync_desc, ffs_fsync },			/* fsync */
-	{ &vop_seek_desc, fifo_seek },			/* seek */
-	{ &vop_remove_desc, fifo_remove },		/* remove */
-	{ &vop_link_desc, fifo_link },			/* link */
-	{ &vop_rename_desc, fifo_rename },		/* rename */
-	{ &vop_mkdir_desc, fifo_mkdir },		/* mkdir */
-	{ &vop_rmdir_desc, fifo_rmdir },		/* rmdir */
-	{ &vop_symlink_desc, fifo_symlink },		/* symlink */
-	{ &vop_readdir_desc, fifo_readdir },		/* readdir */
-	{ &vop_readlink_desc, fifo_readlink },		/* readlink */
-	{ &vop_abortop_desc, fifo_abortop },		/* abortop */
+	{ &vop_seek_desc, vn_fifo_bypass },		/* seek */
+	{ &vop_remove_desc, vn_fifo_bypass },		/* remove */
+	{ &vop_link_desc, vn_fifo_bypass },		/* link */
+	{ &vop_rename_desc, vn_fifo_bypass },		/* rename */
+	{ &vop_mkdir_desc, vn_fifo_bypass },		/* mkdir */
+	{ &vop_rmdir_desc, vn_fifo_bypass },		/* rmdir */
+	{ &vop_symlink_desc, vn_fifo_bypass },		/* symlink */
+	{ &vop_readdir_desc, vn_fifo_bypass },		/* readdir */
+	{ &vop_readlink_desc, vn_fifo_bypass },		/* readlink */
+	{ &vop_abortop_desc, vn_fifo_bypass },		/* abortop */
 	{ &vop_inactive_desc, ufs_inactive },		/* inactive */
 	{ &vop_reclaim_desc, ffs_reclaim },		/* reclaim */
-	{ &vop_lock_desc, ffs_lock },			/* lock */
-	{ &vop_unlock_desc, ffs_unlock },		/* unlock */
-	{ &vop_bmap_desc, fifo_bmap },			/* bmap */
-	{ &vop_strategy_desc, fifo_strategy },		/* strategy */
+	{ &vop_lock_desc, ufs_lock },			/* lock */
+	{ &vop_unlock_desc, ufs_unlock },		/* unlock */
+	{ &vop_bmap_desc, vn_fifo_bypass },		/* bmap */
+	{ &vop_strategy_desc, vn_fifo_bypass },		/* strategy */
 	{ &vop_print_desc, ufs_print },			/* print */
-	{ &vop_islocked_desc, ffs_islocked },		/* islocked */
-	{ &vop_pathconf_desc, fifo_pathconf },		/* pathconf */
-	{ &vop_advlock_desc, fifo_advlock },		/* advlock */
+	{ &vop_islocked_desc, ufs_islocked },		/* islocked */
+	{ &vop_pathconf_desc, vn_fifo_bypass },		/* pathconf */
+	{ &vop_advlock_desc, vn_fifo_bypass },		/* advlock */
 	{ &vop_bwrite_desc, vn_bwrite },		/* bwrite */
-	{ &vop_putpages_desc, fifo_putpages }, 		/* putpages */
+	{ &vop_putpages_desc, vn_fifo_bypass }, 	/* putpages */
 	{ &vop_openextattr_desc, ffs_openextattr },	/* openextattr */
 	{ &vop_closeextattr_desc, ffs_closeextattr },	/* closeextattr */
 	{ &vop_getextattr_desc, ffs_getextattr },	/* getextattr */
@@ -231,6 +264,61 @@ const struct vnodeopv_desc ffs_fifoop_opv_desc =
 	{ &ffs_fifoop_p, ffs_fifoop_entries };
 
 #include <ufs/ufs/ufs_readwrite.c>
+
+int
+ffs_spec_fsync(void *v)
+{
+	struct vop_fsync_args /* {
+		struct vnode *a_vp;
+		kauth_cred_t a_cred;
+		int a_flags;
+		off_t a_offlo;
+		off_t a_offhi;
+		struct lwp *a_l;
+	} */ *ap = v;
+	int error, flags, uflags;
+	struct vnode *vp;
+	struct mount *mp;
+
+	flags = ap->a_flags;
+	uflags = UPDATE_CLOSE | ((flags & FSYNC_WAIT) ? UPDATE_WAIT : 0);
+	vp = ap->a_vp;
+	mp = vp->v_mount;
+
+	fstrans_start(mp, FSTRANS_LAZY);
+
+	error = spec_fsync(v);
+	if (error)
+		goto out;
+
+#ifdef WAPBL
+	if (mp && mp->mnt_wapbl) {
+		/*
+		 * Don't bother writing out metadata if the syncer is
+		 * making the request.  We will let the sync vnode
+		 * write it out in a single burst through a call to
+		 * VFS_SYNC().
+		 */
+		if ((flags & (FSYNC_DATAONLY | FSYNC_LAZY)) != 0)
+			goto out;
+		if ((VTOI(vp)->i_flag & (IN_ACCESS | IN_CHANGE | IN_UPDATE
+		    | IN_MODIFY | IN_MODIFIED | IN_ACCESSED)) != 0) {
+			error = UFS_WAPBL_BEGIN(mp);
+			if (error != 0)
+				goto out;
+			error = ffs_update(vp, NULL, NULL, uflags);
+			UFS_WAPBL_END(mp);
+		}
+		goto out;
+	}
+#endif /* WAPBL */
+
+	error = ffs_update(vp, NULL, NULL, uflags);
+
+out:
+	fstrans_done(mp);
+	return error;
+}
 
 int
 ffs_fsync(void *v)
@@ -249,20 +337,18 @@ ffs_fsync(void *v)
 	int bsize;
 	daddr_t blk_high;
 	struct vnode *vp;
+	struct mount *mp;
 
 	vp = ap->a_vp;
+	mp = vp->v_mount;
 
-	fstrans_start(vp->v_mount, FSTRANS_LAZY);
-	/*
-	 * XXX no easy way to sync a range in a file with softdep.
-	 */
-	if ((ap->a_offlo == 0 && ap->a_offhi == 0) || DOINGSOFTDEP(vp) ||
-	    (vp->v_type != VREG)) {
+	fstrans_start(mp, FSTRANS_LAZY);
+	if ((ap->a_offlo == 0 && ap->a_offhi == 0) || (vp->v_type != VREG)) {
 		error = ffs_full_fsync(vp, ap->a_flags);
 		goto out;
 	}
 
-	bsize = vp->v_mount->mnt_stat.f_iosize;
+	bsize = mp->mnt_stat.f_iosize;
 	blk_high = ap->a_offhi / bsize;
 	if (ap->a_offhi % bsize != 0)
 		blk_high++;
@@ -278,6 +364,42 @@ ffs_fsync(void *v)
 	if (error) {
 		goto out;
 	}
+
+#ifdef WAPBL
+	KASSERT(vp->v_type == VREG);
+	if (mp->mnt_wapbl) {
+		/*
+		 * Don't bother writing out metadata if the syncer is
+		 * making the request.  We will let the sync vnode
+		 * write it out in a single burst through a call to
+		 * VFS_SYNC().
+		 */
+		if ((ap->a_flags & (FSYNC_DATAONLY | FSYNC_LAZY)) != 0) {
+			fstrans_done(mp);
+			return 0;
+		}
+		error = 0;
+		if (vp->v_tag == VT_UFS && VTOI(vp)->i_flag &
+		    (IN_ACCESS | IN_CHANGE | IN_UPDATE | IN_MODIFY |
+				 IN_MODIFIED | IN_ACCESSED)) {
+			error = UFS_WAPBL_BEGIN(mp);
+			if (error) {
+				fstrans_done(mp);
+				return error;
+			}
+			error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE |
+			    ((ap->a_flags & FSYNC_WAIT) ? UPDATE_WAIT : 0));
+			UFS_WAPBL_END(mp);
+		}
+		if (error || (ap->a_flags & FSYNC_NOLOG) != 0) {
+			fstrans_done(mp);
+			return error;
+		}
+		error = wapbl_flush(mp->mnt_wapbl, 0);
+		fstrans_done(mp);
+		return error;
+	}
+#endif /* WAPBL */
 
 	/*
 	 * Then, flush indirect blocks.
@@ -310,9 +432,9 @@ ffs_fsync(void *v)
 		mutex_exit(&vp->v_interlock);
 	}
 
-	error = ffs_update(vp, NULL, NULL,
-	    ((ap->a_flags & (FSYNC_WAIT | FSYNC_DATAONLY)) == FSYNC_WAIT)
-	    ? UPDATE_WAIT : 0);
+	error = ffs_update(vp, NULL, NULL, UPDATE_CLOSE |
+	    (((ap->a_flags & (FSYNC_WAIT | FSYNC_DATAONLY)) == FSYNC_WAIT)
+	    ? UPDATE_WAIT : 0));
 
 	if (error == 0 && ap->a_flags & FSYNC_CACHE) {
 		int l = 0;
@@ -321,131 +443,95 @@ ffs_fsync(void *v)
 	}
 
 out:
-	fstrans_done(vp->v_mount);
+	fstrans_done(mp);
 	return error;
 }
 
 /*
- * Synch an open file.
+ * Synch an open file.  Called for VOP_FSYNC().
  */
 /* ARGSUSED */
 int
 ffs_full_fsync(struct vnode *vp, int flags)
 {
-	struct buf *bp, *nbp;
-	int error, passes, skipmeta, inodedeps_only, waitfor;
+	int error, i, uflags;
+	struct mount *mp;
 
-	if (vp->v_type == VBLK &&
-	    vp->v_specmountpoint != NULL &&
-	    (vp->v_specmountpoint->mnt_flag & MNT_SOFTDEP))
-		softdep_fsync_mountdev(vp);
+	KASSERT(vp->v_tag == VT_UFS);
+	KASSERT(VTOI(vp) != NULL);
+	KASSERT(vp->v_type != VCHR && vp->v_type != VBLK);
 
-	mutex_enter(&vp->v_interlock);
+	error = 0;
+	uflags = UPDATE_CLOSE | ((flags & FSYNC_WAIT) ? UPDATE_WAIT : 0);
 
-	inodedeps_only = DOINGSOFTDEP(vp) && (flags & FSYNC_RECLAIM)
-	    && UVM_OBJ_IS_CLEAN(&vp->v_uobj) && LIST_EMPTY(&vp->v_dirtyblkhd);
+	mp = vp->v_mount;
 
 	/*
-	 * Flush all dirty data associated with a vnode.
+	 * Flush all dirty data associated with the vnode.
 	 */
+	if (vp->v_type == VREG) {
+		int pflags = PGO_ALLPAGES | PGO_CLEANIT;
 
-	if (vp->v_type == VREG || vp->v_type == VBLK) {
-		error = VOP_PUTPAGES(vp, 0, 0, PGO_ALLPAGES | PGO_CLEANIT |
-		    ((flags & FSYNC_WAIT) ? PGO_SYNCIO : 0) |
-		    (fstrans_getstate(vp->v_mount) == FSTRANS_SUSPENDING ?
-			PGO_FREE : 0));
-		if (error) {
-			return error;
-		}
-	} else
-		mutex_exit(&vp->v_interlock);
-
-	passes = NIADDR + 1;
-	skipmeta = 0;
-	if (flags & FSYNC_WAIT)
-		skipmeta = 1;
-
-loop:
-	mutex_enter(&bufcache_lock);
-	LIST_FOREACH(bp, &vp->v_dirtyblkhd, b_vnbufs) {
-		bp->b_cflags &= ~BC_SCANNED;
-	}
-	for (bp = LIST_FIRST(&vp->v_dirtyblkhd); bp; bp = nbp) {
-		nbp = LIST_NEXT(bp, b_vnbufs);
-		if (bp->b_cflags & (BC_BUSY | BC_SCANNED))
-			continue;
-		if ((bp->b_oflags & BO_DELWRI) == 0)
-			panic("ffs_fsync: not dirty");
-		if (skipmeta && bp->b_lblkno < 0)
-			continue;
-		bp->b_cflags |= BC_BUSY | BC_VFLUSH | BC_SCANNED;
-		mutex_exit(&bufcache_lock);
-		/*
-		 * On our final pass through, do all I/O synchronously
-		 * so that we can find out if our flush is failing
-		 * because of write errors.
-		 */
-		if (passes > 0 || !(flags & FSYNC_WAIT))
-			(void) bawrite(bp);
-		else if ((error = bwrite(bp)) != 0)
-			return (error);
-		/*
-		 * Since we unlocked during the I/O, we need
-		 * to start from a known point.
-		 */
-		mutex_enter(&bufcache_lock);
-		nbp = LIST_FIRST(&vp->v_dirtyblkhd);
-	}
-	mutex_exit(&bufcache_lock);
-	if (skipmeta) {
-		skipmeta = 0;
-		goto loop;
-	}
-
-	if (flags & FSYNC_WAIT) {
+		if ((flags & FSYNC_WAIT))
+			pflags |= PGO_SYNCIO;
+		if (fstrans_getstate(mp) == FSTRANS_SUSPENDING)
+			pflags |= PGO_FREE;
 		mutex_enter(&vp->v_interlock);
-		while (vp->v_numoutput) {
-			cv_wait(&vp->v_cv, &vp->v_interlock);
-		}
-		mutex_exit(&vp->v_interlock);
-
-		/*
-		 * Ensure that any filesystem metadata associated
-		 * with the vnode has been written.
-		 */
-		if ((error = softdep_sync_metadata(vp)) != 0)
-			return (error);
-
-		if (!LIST_EMPTY(&vp->v_dirtyblkhd)) {
-			/*
-			* Block devices associated with filesystems may
-			* have new I/O requests posted for them even if
-			* the vnode is locked, so no amount of trying will
-			* get them clean. Thus we give block devices a
-			* good effort, then just give up. For all other file
-			* types, go around and try again until it is clean.
-			*/
-			if (passes > 0) {
-				passes--;
-				goto loop;
-			}
-#ifdef DIAGNOSTIC
-			if (vp->v_type != VBLK)
-				vprint("ffs_fsync: dirty", vp);
-#endif
-		}
+		error = VOP_PUTPAGES(vp, 0, 0, pflags);
+		if (error)
+			return error;
 	}
 
-	if (inodedeps_only)
-		waitfor = 0;
-	else
-		waitfor = (flags & FSYNC_WAIT) ? UPDATE_WAIT : 0;
-	error = ffs_update(vp, NULL, NULL, waitfor);
+#ifdef WAPBL
+	if (mp && mp->mnt_wapbl) {
+		/*
+		 * Don't bother writing out metadata if the syncer is
+		 * making the request.  We will let the sync vnode
+		 * write it out in a single burst through a call to
+		 * VFS_SYNC().
+		 */
+		if ((flags & (FSYNC_DATAONLY | FSYNC_LAZY)) != 0)
+			return 0;
 
-	if (error == 0 && flags & FSYNC_CACHE) {
-		int i = 0;
-		VOP_IOCTL(VTOI(vp)->i_devvp, DIOCCACHESYNC, &i, FWRITE,
-			curlwp->l_cred);
+		if ((VTOI(vp)->i_flag & (IN_ACCESS | IN_CHANGE | IN_UPDATE
+		    | IN_MODIFY | IN_MODIFIED | IN_ACCESSED)) != 0) {
+			error = UFS_WAPBL_BEGIN(mp);
+			if (error)
+				return error;
+			error = ffs_update(vp, NULL, NULL, uflags);
+			UFS_WAPBL_END(mp);
+		}
+		if (error || (flags & FSYNC_NOLOG) != 0)
+			return error;
+
+		/*
+		 * Don't flush the log if the vnode being flushed
+		 * contains no dirty buffers that could be in the log.
+		 */
+		if (!LIST_EMPTY(&vp->v_dirtyblkhd)) {
+			error = wapbl_flush(mp->mnt_wapbl, 0);
+			if (error)
+				return error;
+		}
+
+		if ((flags & FSYNC_WAIT) != 0) {
+			mutex_enter(&vp->v_interlock);
+			while (vp->v_numoutput != 0)
+				cv_wait(&vp->v_cv, &vp->v_interlock);
+			mutex_exit(&vp->v_interlock);
+		}
+
+		return error;
+	}
+#endif /* WAPBL */
+
+	error = vflushbuf(vp, (flags & FSYNC_WAIT) != 0);
+	if (error == 0)
+		error = ffs_update(vp, NULL, NULL, uflags);
+	if (error == 0 && (flags & FSYNC_CACHE) != 0) {
+		i = 1;
+		(void)VOP_IOCTL(VTOI(vp)->i_devvp, DIOCCACHESYNC, &i, FWRITE,
+		    kauth_cred_get());
 	}
 
 	return error;
@@ -469,6 +555,20 @@ ffs_reclaim(void *v)
 	int error;
 
 	fstrans_start(mp, FSTRANS_LAZY);
+	/*
+	 * The inode must be freed and updated before being removed
+	 * from its hash chain.  Other threads trying to gain a hold
+	 * on the inode will be stalled because it is locked (VI_XLOCK).
+	 */
+	error = UFS_WAPBL_BEGIN(mp);
+	if (error) {
+		fstrans_done(mp);
+		return error;
+	}
+	if (ip->i_nlink <= 0 && ip->i_omode != 0 &&
+	    (vp->v_mount->mnt_flag & MNT_RDONLY) == 0)
+		ffs_vfree(vp, ip->i_number, ip->i_omode);
+	UFS_WAPBL_END(mp);
 	if ((error = ufs_reclaim(vp)) != 0) {
 		fstrans_done(mp);
 		return (error);
@@ -496,43 +596,6 @@ ffs_reclaim(void *v)
 	fstrans_done(mp);
 	return (0);
 }
-
-#if 0
-int
-ffs_getpages(void *v)
-{
-	struct vop_getpages_args /* {
-		struct vnode *a_vp;
-		voff_t a_offset;
-		struct vm_page **a_m;
-		int *a_count;
-		int a_centeridx;
-		vm_prot_t a_access_type;
-		int a_advice;
-		int a_flags;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
-	struct inode *ip = VTOI(vp);
-	struct fs *fs = ip->i_fs;
-
-	/*
-	 * don't allow a softdep write to create pages for only part of a block.
-	 * the dependency tracking requires that all pages be in memory for
-	 * a block involved in a dependency.
-	 */
-
-	if (ap->a_flags & PGO_OVERWRITE &&
-	    (blkoff(fs, ap->a_offset) != 0 ||
-	     blkoff(fs, *ap->a_count << PAGE_SHIFT) != 0) &&
-	    DOINGSOFTDEP(ap->a_vp)) {
-		if ((ap->a_flags & PGO_LOCKED) == 0) {
-			mutex_exit(&vp->v_interlock);
-		}
-		return EINVAL;
-	}
-	return genfs_getpages(v);
-}
-#endif
 
 /*
  * Return the last logical file offset that should be written for this file
@@ -709,94 +772,4 @@ ffs_deleteextattr(void *v)
 
 	/* XXX Not implemented for UFS2 file systems. */
 	return (EOPNOTSUPP);
-}
-
-/*
- * Lock the node.
- */
-int
-ffs_lock(void *v)
-{
-	struct vop_lock_args /* {
-		struct vnode *a_vp;
-		int a_flags;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
-	struct mount *mp = vp->v_mount;
-	struct lock *lkp;
-	int flags = ap->a_flags;
-	int result;
-
-	/*
-	 * Fake lock during file system suspension.
-	 */
-	if ((vp->v_type == VREG || vp->v_type == VDIR) &&
-	    fstrans_is_owner(mp) &&
-	    fstrans_getstate(mp) == FSTRANS_SUSPENDING) {
-		if ((flags & LK_INTERLOCK) != 0)
-			mutex_exit(&vp->v_interlock);
-		return 0;
-	}
-
-	KASSERT((flags & ~(LK_SHARED | LK_EXCLUSIVE | LK_SLEEPFAIL |
-	    LK_INTERLOCK | LK_NOWAIT | LK_CANRECURSE)) == 0);
-	for (;;) {
-		if ((flags & LK_INTERLOCK) == 0) {
-			mutex_enter(&vp->v_interlock);
-			flags |= LK_INTERLOCK;
-		}
-		lkp = vp->v_vnlock;
-		result = lockmgr(lkp, flags, &vp->v_interlock);
-		if (lkp == vp->v_vnlock || result != 0)
-			return result;
-		/*
-		 * Apparent success, except that the vnode mutated between
-		 * snapshot file vnode and regular file vnode while this
-		 * thread slept.  The lock currently held is not the right
-		 * lock.  Release it, and try to get the new lock.
-		 */
-		(void) lockmgr(lkp, LK_RELEASE, NULL);
-		flags &= ~LK_INTERLOCK;
-	}
-}
-
-/*
- * Unlock the node.
- */
-int
-ffs_unlock(void *v)
-{
-	struct vop_unlock_args /* {
-		struct vnode *a_vp;
-		int a_flags;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
-	struct mount *mp = vp->v_mount;
-
-	/*
-	 * Fake unlock during file system suspension.
-	 */
-	if ((vp->v_type == VREG || vp->v_type == VDIR) &&
-	    fstrans_is_owner(mp) &&
-	    fstrans_getstate(mp) == FSTRANS_SUSPENDING) {
-		if ((ap->a_flags & LK_INTERLOCK) != 0)
-			mutex_exit(&vp->v_interlock);
-		return 0;
-	}
-	return (lockmgr(vp->v_vnlock, ap->a_flags | LK_RELEASE,
-	    &vp->v_interlock));
-}
-
-/*
- * Return whether or not the node is locked.
- */
-int
-ffs_islocked(void *v)
-{
-	struct vop_islocked_args /* {
-		struct vnode *a_vp;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
-
-	return (lockstatus(vp->v_vnlock));
 }

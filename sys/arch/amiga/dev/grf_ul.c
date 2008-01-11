@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_ul.c,v 1.41 2007/03/05 19:48:20 he Exp $ */
+/*	$NetBSD: grf_ul.c,v 1.46 2009/10/26 19:16:54 cegger Exp $ */
 #define UL_DEBUG
 
 /*-
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,7 +33,7 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_ul.c,v 1.41 2007/03/05 19:48:20 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_ul.c,v 1.46 2009/10/26 19:16:54 cegger Exp $");
 
 #include "grful.h"
 #if NGRFUL > 0
@@ -169,8 +162,7 @@ static struct grfvideo_mode *current_mon;
  */
 
 static int
-ulisr(arg)
-	void *arg;
+ulisr(void *arg)
 {
 	struct grf_softc *gp = arg;
 	volatile struct gspregs *ba;
@@ -199,8 +191,7 @@ ulisr(arg)
  * for the moment, a NOP.
  */
 int
-ulowell_alive(mdp)
-	struct grfvideo_mode *mdp;
+ulowell_alive(struct grfvideo_mode *mdp)
 {
 	return 1;
 }
@@ -209,8 +200,7 @@ ulowell_alive(mdp)
  * Load the (mostly) ite support code and the default colormaps.
  */
 static void
-ul_load_code(gp)
-	struct grf_softc *gp;
+ul_load_code(struct grf_softc *gp)
 {
 	struct grf_ul_softc *gup;
 	volatile struct gspregs *ba;
@@ -308,7 +298,7 @@ ul_load_code(gp)
 	 * into the real one some time after the TMS code is started below.
 	 * This might be considered a rude hack.
 	 */
-	bcopy(ul_ovl_palette, gup->gus_ovcmap, 3*4);
+	memcpy(gup->gus_ovcmap, ul_ovl_palette, 3*4);
 
 	/*
 	 * Unflush cache, unhalt CPU -> nmi starts to run. This MUST NOT BE
@@ -367,9 +357,7 @@ ul_load_code(gp)
 }
 
 static int
-ul_load_mon(gp, md)
-	struct grf_softc *gp;
-	struct grfvideo_mode *md;
+ul_load_mon(struct grf_softc *gp, struct grfvideo_mode *md)
 {
 	struct grf_ul_softc *gup;
 	struct grfinfo *gi;
@@ -458,10 +446,7 @@ static struct cfdata *cfdata;
  * tricky regarding the console.
  */
 int
-grfulmatch(pdp, cfp, auxp)
-	struct device *pdp;
-	struct cfdata *cfp;
-	void *auxp;
+grfulmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 #ifdef ULOWELLCONSOLE
 	static int ulconunit = -1;
@@ -505,9 +490,7 @@ grfulmatch(pdp, cfp, auxp)
  * attach to the grfbus (zbus)
  */
 void
-grfulattach(pdp, dp, auxp)
-	struct device *pdp, *dp;
-	void *auxp;
+grfulattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	static struct grf_ul_softc congrf;
 	struct zbus_args *zap;
@@ -527,7 +510,7 @@ grfulattach(pdp, dp, auxp)
 		/*
 		 * inited earlier, just copy (not device struct)
 		 */
-		bcopy(&congrf.gus_sc.g_display, &gp->g_display,
+		memcpy(&gp->g_display, &congrf.gus_sc.g_display,
 		    (char *)&gup->gus_isr - (char *)&gp->g_display);
 
 		/* ...and transfer the isr */
@@ -567,9 +550,7 @@ grfulattach(pdp, dp, auxp)
 }
 
 int
-grfulprint(auxp, pnp)
-	void *auxp;
-	const char *pnp;
+grfulprint(void *auxp, const char *pnp)
 {
 	if (pnp)
 		aprint_normal("grf%d at %s", ((struct grf_softc *)auxp)->g_unit,
@@ -578,9 +559,7 @@ grfulprint(auxp, pnp)
 }
 
 static int
-ul_getvmode (gp, vm)
-	struct grf_softc *gp;
-	struct grfvideo_mode *vm;
+ul_getvmode (struct grf_softc *gp, struct grfvideo_mode *vm)
 {
 	struct grfvideo_mode *md;
 
@@ -616,9 +595,7 @@ ul_getvmode (gp, vm)
 
 
 static int
-ul_setvmode (gp, mode)
-	struct grf_softc *gp;
-	unsigned mode;
+ul_setvmode (struct grf_softc *gp, unsigned mode)
 {
 	struct grf_ul_softc *gup;
 	volatile struct gspregs *ba;
@@ -642,9 +619,7 @@ ul_setvmode (gp, mode)
  */
 
 static inline void
-ul_setfb(gp, cmd)
-	struct grf_softc *gp;
-	u_long cmd;
+ul_setfb(struct grf_softc *gp, u_long cmd)
 {
 	struct grf_ul_softc *gup;
 	volatile struct gspregs *ba;
@@ -680,12 +655,7 @@ ul_setfb(gp, cmd)
  * Return a UNIX error number or 0 for success.
  */
 int
-ul_mode(gp, cmd, arg, a2, a3)
-	struct grf_softc *gp;
-	u_long cmd;
-	void *arg;
-	u_long a2;
-	int a3;
+ul_mode(struct grf_softc *gp, u_long cmd, void *arg, u_long a2, int a3)
 {
 	int i;
 	struct grfdyninfo *gd;
@@ -728,11 +698,7 @@ ul_mode(gp, cmd, arg, a2, a3)
 }
 
 int
-ul_ioctl (gp, cmd, data, dev)
-	register struct grf_softc *gp;
-	u_long cmd;
-	void *data;
-	dev_t dev;
+ul_ioctl (register struct grf_softc *gp, u_long cmd, void *data, dev_t dev)
 {
 	switch (cmd) {
 #if 0
@@ -775,10 +741,7 @@ ul_ioctl (gp, cmd, data, dev)
 }
 
 int
-ul_getcmap (gp, cmap, dev)
-	struct grf_softc *gp;
-	struct grf_colormap *cmap;
-	dev_t dev;
+ul_getcmap (struct grf_softc *gp, struct grf_colormap *cmap, dev_t dev)
 {
 	struct grf_ul_softc *gup;
 	u_int8_t *mymap;
@@ -816,10 +779,7 @@ ul_getcmap (gp, cmap, dev)
 }
 
 int
-ul_putcmap (gp, cmap, dev)
-	struct grf_softc *gp;
-	struct grf_colormap *cmap;
-	dev_t dev;
+ul_putcmap (struct grf_softc *gp, struct grf_colormap *cmap, dev_t dev)
 {
 	struct grf_ul_softc *gup;
 	volatile struct gspregs *ba;
@@ -897,10 +857,7 @@ ul_putcmap (gp, cmap, dev)
 }
 
 int
-ul_blank(gp, onoff, dev)
-	struct grf_softc *gp;
-	int *onoff;
-	dev_t dev;
+ul_blank(struct grf_softc *gp, int *onoff, dev_t dev)
 {
 	volatile struct gspregs *gsp;
 
@@ -924,20 +881,14 @@ int ul_BltOpMap[16] = {
 };
 
 int
-ul_bitblt (gp, bb, dev)
-	struct grf_softc *gp;
-	struct grf_bitblt *bb;
-	dev_t dev;
+ul_bitblt (struct grf_softc *gp, struct grf_bitblt *bb, dev_t dev)
 {
 	/* XXX not yet implemented, but pretty trivial */
 	return EPASSTHROUGH;
 }
 
 void
-gsp_write(gsp, ptr, size)
-	volatile struct gspregs *gsp;
-	u_short *ptr;
-	size_t size;
+gsp_write(volatile struct gspregs *gsp, u_short *ptr, size_t size)
 {
 	u_short put, new_put, next, oc;
 	u_long put_hi, oa;

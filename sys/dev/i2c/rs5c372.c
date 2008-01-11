@@ -1,4 +1,4 @@
-/*	$NetBSD: rs5c372.c,v 1.7 2007/12/11 12:09:23 lukem Exp $	*/
+/*	$NetBSD: rs5c372.c,v 1.11 2011/05/28 13:59:31 phx Exp $	*/
 
 /*
  * Copyright (c) 2005 Kimihiro Nonaka
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rs5c372.c,v 1.7 2007/12/11 12:09:23 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rs5c372.c,v 1.11 2011/05/28 13:59:31 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,36 +44,43 @@ __KERNEL_RCSID(0, "$NetBSD: rs5c372.c,v 1.7 2007/12/11 12:09:23 lukem Exp $");
 #include <dev/i2c/rs5c372reg.h>
 
 struct rs5c372rtc_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	i2c_tag_t sc_tag;
 	int sc_address;
 	struct todr_chip_handle sc_todr;
 };
 
-static int rs5c372rtc_match(struct device *, struct cfdata *, void *);
-static void rs5c372rtc_attach(struct device *, struct device *, void *);
+static int rs5c372rtc_match(device_t, cfdata_t, void *);
+static void rs5c372rtc_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(rs5c372rtc, sizeof(struct rs5c372rtc_softc),
+CFATTACH_DECL_NEW(rs5c372rtc, sizeof(struct rs5c372rtc_softc),
     rs5c372rtc_match, rs5c372rtc_attach, NULL, NULL);
 
 static void rs5c372rtc_reg_write(struct rs5c372rtc_softc *, int, uint8_t);
 static int rs5c372rtc_clock_read(struct rs5c372rtc_softc *, struct clock_ymdhms *);
 static int rs5c372rtc_clock_write(struct rs5c372rtc_softc *, struct clock_ymdhms *);
-static int rs5c372rtc_gettime(struct todr_chip_handle *, volatile struct timeval *);
-static int rs5c372rtc_settime(struct todr_chip_handle *, volatile struct timeval *);
+static int rs5c372rtc_gettime(struct todr_chip_handle *, struct timeval *);
+static int rs5c372rtc_settime(struct todr_chip_handle *, struct timeval *);
 
 static int
-rs5c372rtc_match(struct device *parent, struct cfdata *cf, void *arg)
+rs5c372rtc_match(device_t parent, cfdata_t cf, void *arg)
 {
 	struct i2c_attach_args *ia = arg;
 
-	if (ia->ia_addr == RS5C372_ADDR)
-		return (1);
-	return (0);
+	if (ia->ia_name) {
+		/* direct config - check name */
+		if (strcmp(ia->ia_name, "rs5c372rtc") == 0)
+			return 1;
+	} else {
+		/* indirect config - check typical address */
+		if (ia->ia_addr == RS5C372_ADDR)
+			return 1;
+	}
+	return 0;
 }
 
 static void
-rs5c372rtc_attach(struct device *parent, struct device *self, void *arg)
+rs5c372rtc_attach(device_t parent, device_t self, void *arg)
 {
 	struct rs5c372rtc_softc *sc = device_private(self);
 	struct i2c_attach_args *ia = arg;
@@ -83,6 +90,7 @@ rs5c372rtc_attach(struct device *parent, struct device *self, void *arg)
 
 	sc->sc_tag = ia->ia_tag;
 	sc->sc_address = ia->ia_addr;
+	sc->sc_dev = self;
 	sc->sc_todr.cookie = sc;
 	sc->sc_todr.todr_gettime = rs5c372rtc_gettime;
 	sc->sc_todr.todr_settime = rs5c372rtc_settime;
@@ -96,7 +104,7 @@ rs5c372rtc_attach(struct device *parent, struct device *self, void *arg)
 }
 
 static int
-rs5c372rtc_gettime(struct todr_chip_handle *ch, volatile struct timeval *tv)
+rs5c372rtc_gettime(struct todr_chip_handle *ch, struct timeval *tv)
 {
 	struct rs5c372rtc_softc *sc = ch->cookie;
 	struct clock_ymdhms dt;
@@ -113,7 +121,7 @@ rs5c372rtc_gettime(struct todr_chip_handle *ch, volatile struct timeval *tv)
 }
 
 static int
-rs5c372rtc_settime(struct todr_chip_handle *ch, volatile struct timeval *tv)
+rs5c372rtc_settime(struct todr_chip_handle *ch, struct timeval *tv)
 {
 	struct rs5c372rtc_softc *sc = ch->cookie;
 	struct clock_ymdhms dt;
@@ -132,8 +140,8 @@ rs5c372rtc_reg_write(struct rs5c372rtc_softc *sc, int reg, uint8_t val)
 	uint8_t cmdbuf[2];
 
 	if (iic_acquire_bus(sc->sc_tag, I2C_F_POLL)) {
-		printf("%s: rs5c372rtc_reg_write: failed to acquire I2C bus\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "rs5c372rtc_reg_write: failed to acquire I2C bus\n");
 		return;
 	}
 
@@ -143,8 +151,8 @@ rs5c372rtc_reg_write(struct rs5c372rtc_softc *sc, int reg, uint8_t val)
 	if (iic_exec(sc->sc_tag, I2C_OP_WRITE_WITH_STOP, sc->sc_address,
 	             cmdbuf, 1, &cmdbuf[1], 1, I2C_F_POLL)) {
 		iic_release_bus(sc->sc_tag, I2C_F_POLL);
-		printf("%s: rs5c372rtc_reg_write: failed to write reg%d\n",
-		    sc->sc_dev.dv_xname, reg);
+		aprint_error_dev(sc->sc_dev,
+		    "rs5c372rtc_reg_write: failed to write reg%d\n", reg);
 		return;
 	}
 
@@ -158,8 +166,8 @@ rs5c372rtc_clock_read(struct rs5c372rtc_softc *sc, struct clock_ymdhms *dt)
 	uint8_t cmdbuf[1];
 
 	if (iic_acquire_bus(sc->sc_tag, I2C_F_POLL)) {
-		printf("%s: rs5c372rtc_clock_read: failed to acquire I2C bus\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "rs5c372rtc_clock_read: failed to acquire I2C bus\n");
 		return (0);
 	}
 
@@ -167,8 +175,8 @@ rs5c372rtc_clock_read(struct rs5c372rtc_softc *sc, struct clock_ymdhms *dt)
 	if (iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP, sc->sc_address,
 	             cmdbuf, 1, bcd, RS5C372_NRTC_REGS, I2C_F_POLL)) {
 		iic_release_bus(sc->sc_tag, I2C_F_POLL);
-		printf("%s: rs5c372rtc_clock_read: failed to read rtc\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "rs5c372rtc_clock_read: failed to read rtc\n");
 		return (0);
 	}
 
@@ -206,8 +214,8 @@ rs5c372rtc_clock_write(struct rs5c372rtc_softc *sc, struct clock_ymdhms *dt)
 	bcd[RS5C372_YEAR] = TOBCD(dt->dt_year % 100);
 
 	if (iic_acquire_bus(sc->sc_tag, I2C_F_POLL)) {
-		printf("%s: rs5c372rtc_clock_write: failed to "
-		    "acquire I2C bus\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "rs5c372rtc_clock_write: failed to "
+		    "acquire I2C bus\n");
 		return (0);
 	}
 
@@ -215,8 +223,8 @@ rs5c372rtc_clock_write(struct rs5c372rtc_softc *sc, struct clock_ymdhms *dt)
 	if (iic_exec(sc->sc_tag, I2C_OP_WRITE_WITH_STOP, sc->sc_address,
 	             cmdbuf, 1, bcd, RS5C372_NRTC_REGS, I2C_F_POLL)) {
 		iic_release_bus(sc->sc_tag, I2C_F_POLL);
-		printf("%s: rs5c372rtc_clock_write: failed to write rtc\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "rs5c372rtc_clock_write: failed to write rtc\n");
 		return (0);
 	}
 

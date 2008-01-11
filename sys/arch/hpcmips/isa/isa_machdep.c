@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.c,v 1.33 2008/01/04 22:13:56 ad Exp $	*/
+/*	$NetBSD: isa_machdep.c,v 1.38 2009/08/19 15:12:31 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.33 2008/01/04 22:13:56 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isa_machdep.c,v 1.38 2009/08/19 15:12:31 dyoung Exp $");
 
 #include "opt_vr41xx.h"
 
@@ -206,6 +199,11 @@ isa_attach_hook(struct device *parent, struct device *self,
 
 }
 
+void
+isa_detach_hook(isa_chipset_tag_t ic, device_t self)
+{
+}
+
 const struct evcnt *
 isa_intr_evcnt(isa_chipset_tag_t ic, int irq)
 {
@@ -266,9 +264,7 @@ isa_intr_establish(isa_chipset_tag_t ic, int intr, int type, int level,
 }
 
 void
-isa_intr_disestablish(ic, arg)
-	isa_chipset_tag_t ic;
-	void *arg;
+isa_intr_disestablish(isa_chipset_tag_t ic, void *arg)
 {
 	struct vrisab_softc *sc = ic->ic_sc;
 	/* Call Vr routine */
@@ -353,7 +349,7 @@ probe_com(u_int32_t port_addr)
 }
 
 static void
-__find_comport()
+__find_comport(void)
 {
 	int found;
 	u_int32_t port, step;

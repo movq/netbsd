@@ -1,4 +1,4 @@
-/* $NetBSD: veriexecgen.c,v 1.15 2007/05/15 19:47:47 elad Exp $ */
+/* $NetBSD: veriexecgen.c,v 1.17 2009/08/21 04:09:41 elad Exp $ */
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,9 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +36,7 @@
 
 #ifndef lint
 #ifdef __RCSID
-__RCSID("$NetBSD: veriexecgen.c,v 1.15 2007/05/15 19:47:47 elad Exp $");
+__RCSID("$NetBSD: veriexecgen.c,v 1.17 2009/08/21 04:09:41 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -132,7 +129,7 @@ static void
 usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage:  %s [-AaDrSvW] [-d dir] [-o fingerprintdb] [-p prefix]\n"
+	    "usage:  %s [-AaDrSTvW] [-d dir] [-o fingerprintdb] [-p prefix]\n"
 	    "\t\t    [-t algorithm]\n"
 	    "\t%s [-h]\n", getprogname(), getprogname());
 }
@@ -392,7 +389,7 @@ main(int argc, char **argv)
 	/* error out if we have a dangling symlink or other fs problem */
 	v.exit_on_error = 1;
 
-	while ((ch = getopt(argc, argv, "AaDd:ho:p:rSt:vW")) != -1) {
+	while ((ch = getopt(argc, argv, "AaDd:ho:p:rSTt:vW")) != -1) {
 		switch (ch) {
 		case 'A':
 			v.append_output = 1;

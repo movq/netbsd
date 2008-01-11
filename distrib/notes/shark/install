@@ -1,4 +1,4 @@
-.\"     $NetBSD: install,v 1.2 2002/06/30 12:36:54 lukem Exp $
+.\"     $NetBSD: install,v 1.5 2009/04/23 01:56:50 snj Exp $
 .\"
 .\" Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@ The steps taken for installing
 .Nx*M
 are different for diskless and hard disk configurations.
 .Ss2 Installation for diskless configurations
-This sections assumes you know how to configure DHCP, TFTP,
+This section assumes you know how to configure DHCP, TFTP,
 and NFS services on your server.
 .Pp
 .(enum
@@ -86,7 +79,7 @@ installation on your hard disk,
 you may copy the special installation kernel into your existing
 root file system.
 .Pp
-.Dl client# Ic gzcat .../shark/installation/instkernel/netbsd.gz > /netbsd.inst
+.Dl client# Ic gzcat .../shark/installation/instkernel/netbsd.gz \*[Gt] /netbsd.inst
 .Pp
 You may then boot the installation kernel.
 .Pp
@@ -99,7 +92,7 @@ You must configure a DHCP and TFTP server in order to do this.
 .Pp
 Place the installation kernel into the TFTP server's download area.
 .Pp
-.Dl server# Ic gzcat .../shark/installation/instkernel/netbsd.gz > /tftpboot/shark-inst
+.Dl server# Ic gzcat .../shark/installation/instkernel/netbsd.gz \*[Gt] /tftpboot/shark-inst
 .Pp
 Note that your DHCP server must be configured to specify
 this file as the boot file for the client.

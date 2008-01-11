@@ -1,4 +1,4 @@
-/*	$NetBSD: graphics.c,v 1.14 2007/12/15 19:44:38 perry Exp $	*/
+/*	$NetBSD: graphics.c,v 1.16 2009/08/12 04:48:03 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -46,7 +46,7 @@
 #if 0
 static char sccsid[] = "@(#)graphics.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: graphics.c,v 1.14 2007/12/15 19:44:38 perry Exp $");
+__RCSID("$NetBSD: graphics.c,v 1.16 2009/08/12 04:48:03 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,7 +60,9 @@ __RCSID("$NetBSD: graphics.c,v 1.14 2007/12/15 19:44:38 perry Exp $");
 #define C_BEACON		'*'
 #define C_CREDIT		'*'
 
-WINDOW	*radar, *cleanradar, *credit, *input, *planes;
+static void draw_line(WINDOW *, int, int, int, int, const char *);
+
+static WINDOW *radar, *cleanradar, *credit, *input, *planes;
 
 int
 getAChar(void)
@@ -115,7 +117,8 @@ init_gr(void)
 {
 	static char	buffer[BUFSIZ];
 
-	(void)initscr();
+	if (!initscr())
+		errx(0, "couldn't initialize screen");
 	setbuf(stdout, buffer);
 	input = newwin(INPUT_LINES, COLS - PLANE_COLS, LINES - INPUT_LINES, 0);
 	credit = newwin(INPUT_LINES, PLANE_COLS, LINES - INPUT_LINES, 
@@ -215,7 +218,7 @@ setup_screen(const C_SCREEN *scp)
 	(void)fflush(stdout);
 }
 
-void
+static void
 draw_line(WINDOW *w, int x, int y, int lx, int ly, const char *s)
 {
 	int	dx, dy;

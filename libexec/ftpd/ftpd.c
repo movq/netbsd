@@ -1,7 +1,7 @@
-/*	$NetBSD: ftpd.c,v 1.182 2007/07/23 10:41:05 lukem Exp $	*/
+/*	$NetBSD: ftpd.c,v 1.194 2009/07/13 19:05:40 roy Exp $	*/
 
 /*
- * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997-2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -96,16 +89,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1985, 1988, 1990, 1992, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1985, 1988, 1990, 1992, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)ftpd.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: ftpd.c,v 1.182 2007/07/23 10:41:05 lukem Exp $");
+__RCSID("$NetBSD: ftpd.c,v 1.194 2009/07/13 19:05:40 roy Exp $");
 #endif
 #endif /* not lint */
 
@@ -200,7 +192,7 @@ off_t	byte_count;
 static char ttyline[20];
 
 #ifdef USE_PAM
-static int	auth_pam(struct passwd **, const char *);
+static int	auth_pam(void);
 pam_handle_t	*pamh = NULL;
 #endif
 
@@ -250,6 +242,7 @@ static int	 bind_pasv_addr(void);
 static int	 checkuser(const char *, const char *, int, int, char **);
 static int	 checkaccess(const char *);
 static int	 checkpassword(const struct passwd *, const char *);
+static void	 do_pass(int, int, const char *);
 static void	 end_login(void);
 static FILE	*getdatasock(const char *);
 static char	*gunique(const char *);
@@ -347,6 +340,24 @@ main(int argc, char *argv[])
 			break;
 
 		case 'C':
+			if ((p = strchr(optarg, '@')) != NULL) {
+				*p++ = '\0';
+				strlcpy(remotehost, p, MAXHOSTNAMELEN + 1);
+				if (inet_pton(AF_INET, p,
+				    &his_addr.su_addr) == 1) {
+					his_addr.su_family = AF_INET;
+					his_addr.su_len =
+					    sizeof(his_addr.si_su.su_sin);
+#ifdef INET6
+				} else if (inet_pton(AF_INET6, p,
+				    &his_addr.su_6addr) == 1) {
+					his_addr.su_family = AF_INET6;
+					his_addr.su_len =
+					    sizeof(his_addr.si_su.su_sin6);
+#endif
+				} else
+					his_addr.su_family = AF_UNSPEC;
+			}
 			pw = sgetpwnam(optarg);
 			exit(checkaccess(optarg) ? 0 : 1);
 			/* NOTREACHED */
@@ -848,6 +859,9 @@ user(const char *name)
 #ifdef	LOGIN_CAP
 	login_cap_t *lc = NULL;
 #endif
+#ifdef USE_PAM
+	int e;
+#endif
 
 	class = NULL;
 	if (logged_in) {
@@ -897,7 +911,7 @@ user(const char *name)
 			if (logging)
 				syslog(LOG_NOTICE,
 				    "ANONYMOUS FTP LOGIN REFUSED FROM %s",
-				    remotehost);
+				    remoteloghost);
 			end_login();
 			goto cleanup_user;
 		}
@@ -927,6 +941,7 @@ user(const char *name)
 		}
 		curclass.type = CLASS_CHROOT;
 	}
+
 			/* determine default class */
 	if (class == NULL) {
 		switch (curclass.type) {
@@ -968,7 +983,7 @@ user(const char *name)
 		reply(530, "User %s may not use FTP.", curname);
 		if (logging)
 			syslog(LOG_NOTICE, "FTP LOGIN REFUSED FROM %s, %s",
-			    remotehost, curname);
+			    remoteloghost, curname);
 		end_login();
 		goto cleanup_user;
 	}
@@ -976,6 +991,11 @@ user(const char *name)
 			/* if haven't asked yet (i.e, not anon), ask now */
 	if (!askpasswd) {
 		askpasswd = 1;
+#ifdef USE_PAM
+		e = auth_pam();		/* this does reply(331, ...) */
+		do_pass(1, e, "");
+		goto cleanup_user;
+#else /* !USE_PAM */
 #ifdef SKEY
 		if (skey_haskey(curname) == 0) {
 			const char *myskey;
@@ -987,6 +1007,7 @@ user(const char *name)
 		} else
 #endif
 			reply(331, "Password required for %s.", curname);
+#endif /* !USE_PAM */
 	}
 
  cleanup_user:
@@ -1072,18 +1093,38 @@ checkuser(const char *fname, const char *name, int def, int nofile,
 
 					/* have a host specifier */
 		if ((p = strchr(word, '@')) != NULL) {
-			unsigned long	net, mask, addr;
-			int		bits;
+			unsigned char	net[16], mask[16], *addr;
+			int		addrlen, bits, bytes, a;
 
 			*p++ = '\0';
 					/* check against network or CIDR */
-			if (isdigit((unsigned char)*p) &&
-			    (bits = inet_net_pton(AF_INET, p,
-			    &net, sizeof(net))) != -1) {
-				net = ntohl(net);
-				mask = 0xffffffffU << (32 - bits);
-				addr = ntohl(his_addr.su_addr.s_addr);
-				if ((addr & mask) != net)
+			memset(net, 0x00, sizeof(net));
+			if ((bits = inet_net_pton(his_addr.su_family, p, net,
+			    sizeof(net))) != -1) {
+#ifdef INET6
+				if (his_addr.su_family == AF_INET) {
+#endif
+					addrlen = 4;
+					addr = (unsigned char *)&his_addr.su_addr;
+#ifdef INET6
+				} else {
+					addrlen = 16;
+					addr = (unsigned char *)&his_addr.su_6addr;
+				}
+#endif
+				bytes = bits / 8;
+				bits = bits % 8;
+				if (bytes > 0)
+					memset(mask, 0xFF, bytes);
+				if (bytes < addrlen)
+					mask[bytes] = 0xFF << (8 - bits);
+				if (bytes + 1 < addrlen)
+					memset(mask + bytes + 1, 0x00,
+					    addrlen - bytes - 1);
+				for (a = 0; a < addrlen; a++)
+					if ((addr[a] & mask[a]) != net[a])
+						break;
+				if (a < addrlen)
 					continue;
 
 					/* check against hostname glob */
@@ -1271,6 +1312,22 @@ end_login(void)
 void
 pass(const char *passwd)
 {
+	do_pass(0, 0, passwd);
+}
+
+/*
+ * Perform the passwd confirmation and login.
+ *
+ * If pass_checked is zero, confirm passwd is correct, & ignore pass_rval.
+ * This is the traditional PASS implementation.
+ *
+ * If pass_checked is non-zero, use pass_rval and ignore passwd.
+ * This is used by auth_pam() which has already parsed PASS.
+ * This only applies to curclass.type != CLASS_GUEST.
+ */
+static void
+do_pass(int pass_checked, int pass_rval, const char *passwd)
+{
 	int		 rval;
 	char		 root[MAXPATHLEN];
 #ifdef	LOGIN_CAP
@@ -1279,6 +1336,9 @@ pass(const char *passwd)
 #ifdef USE_PAM
 	int e;
 #endif
+
+	rval = 1;
+
 	if (logged_in || askpasswd == 0) {
 		reply(503, "Login with USER first.");
 		return;
@@ -1290,17 +1350,14 @@ pass(const char *passwd)
 			rval = 1;	/* failure below */
 			goto skip;
 		}
-#ifdef USE_PAM
-		rval = auth_pam(&pw, passwd);
-#ifdef notdef
-		/* If PAM fails, we proceed with other authentications */
-		if (rval >= 0) {
+		if (pass_checked) {	/* password validated in user() */
+			rval = pass_rval;
 			goto skip;
 		}
-#else
-		/* If PAM fails, that's it */
+#ifdef USE_PAM
+		syslog(LOG_ERR, "do_pass: USE_PAM shouldn't get here");
+		rval = 1;
 		goto skip;
-#endif
 #endif
 #if defined(KERBEROS)
 		if (klogin(pw, "", hostname, (char *)passwd) == 0) {
@@ -1345,16 +1402,16 @@ pass(const char *passwd)
 			    "Login incorrect.");
 			if (logging) {
 				syslog(LOG_NOTICE,
-				    "FTP LOGIN FAILED FROM %s", remotehost);
+				    "FTP LOGIN FAILED FROM %s", remoteloghost);
 				syslog(LOG_AUTHPRIV | LOG_NOTICE,
 				    "FTP LOGIN FAILED FROM %s, %s",
-				    remotehost, curname);
+				    remoteloghost, curname);
 			}
 			pw = NULL;
 			if (login_attempts++ >= 5) {
 				syslog(LOG_NOTICE,
 				    "repeated login failures from %s",
-				    remotehost);
+				    remoteloghost);
 				exit(0);
 			}
 			return;
@@ -1366,7 +1423,7 @@ pass(const char *passwd)
 		reply(530, "User %s may not use FTP.", pw->pw_name);
 		if (logging)
 			syslog(LOG_NOTICE, "FTP LOGIN REFUSED FROM %s, %s",
-			    remotehost, pw->pw_name);
+			    remoteloghost, pw->pw_name);
 		goto bad;
 	}
 
@@ -1584,7 +1641,7 @@ pass(const char *passwd)
 		if (logging)
 			syslog(LOG_INFO,
 			"ANONYMOUS FTP LOGIN FROM %s, %s (class: %s, type: %s)",
-			    remotehost, passwd,
+			    remoteloghost, passwd,
 			    curclass.classname, CURCLASSTYPE);
 			/* store guest password reply into pw_passwd */
 		REASSIGN(pw->pw_passwd, ftpd_strdup(passwd));
@@ -1601,7 +1658,7 @@ pass(const char *passwd)
 		if (logging)
 			syslog(LOG_INFO,
 			    "FTP LOGIN FROM %s as %s (class: %s, type: %s)",
-			    remotehost, pw->pw_name,
+			    remoteloghost, pw->pw_name,
 			    curclass.classname, CURCLASSTYPE);
 	}
 	(void) umask(curclass.umask);
@@ -1619,7 +1676,7 @@ pass(const char *passwd)
 }
 
 void
-retrieve(char *argv[], const char *name)
+retrieve(const char *argv[], const char *name)
 {
 	FILE *fin, *dout;
 	struct stat st;
@@ -1628,7 +1685,7 @@ retrieve(char *argv[], const char *name)
 	struct timeval start, finish, td, *tdp;
 	struct rusage rusage_before, rusage_after;
 	const char *dispname;
-	char *error;
+	const char *error;
 
 	sendrv = closerv = stderrfd = -1;
 	isconversion = isdata = isls = dolog = 0;
@@ -1767,7 +1824,7 @@ store(const char *name, const char *fmode, int unique)
 	struct stat st;
 	int (*closefunc)(FILE *);
 	struct timeval start, finish, td, *tdp;
-	char *desc, *error;
+	const char *desc, *error;
 
 	din = NULL;
 	desc = (*fmode == 'w') ? "put" : "append";
@@ -2073,14 +2130,14 @@ send_data_with_read(int filefd, int netfd, const struct stat *st, int isdata)
 {
 	struct timeval then;
 	off_t bufrem;
-	size_t readsize;
+	ssize_t readsize;
 	char *buf;
 	int c, error;
 
-	if (curclass.readsize)
+	if (curclass.readsize > 0)
 		readsize = curclass.readsize;
 	else
-		readsize = (size_t)st->st_blksize;
+		readsize = st->st_blksize;
 	if ((buf = malloc(readsize)) == NULL) {
 		perror_reply(451, "Local resource failure: malloc");
 		return (SS_NO_TRANSFER);
@@ -2089,7 +2146,8 @@ send_data_with_read(int filefd, int netfd, const struct stat *st, int isdata)
 	if (curclass.rateget) {
 		bufrem = curclass.rateget;
 		(void)gettimeofday(&then, NULL);
-	}
+	} else
+		bufrem = readsize;
 	while (1) {
 		(void) alarm(curclass.timeout);
 		c = read(filefd, buf, readsize);
@@ -2114,10 +2172,11 @@ send_data_with_mmap(int filefd, int netfd, const struct stat *st, int isdata)
 {
 	struct timeval then;
 	off_t bufrem, filesize, off, origoff;
-	size_t mapsize, winsize;
+	ssize_t mapsize, winsize;
 	int error, sendbufsize, sendlowat;
 	void *win;
 
+	bufrem = 0;
 	if (curclass.sendbufsize) {
 		sendbufsize = curclass.sendbufsize;
 		if (setsockopt(netfd, SOL_SOCKET, SO_SNDBUF,
@@ -2137,9 +2196,9 @@ send_data_with_mmap(int filefd, int netfd, const struct stat *st, int isdata)
 	winsize = curclass.mmapsize;
 	filesize = st->st_size;
 	if (ftpd_debug)
-		syslog(LOG_INFO, "mmapsize = %ld, writesize = %ld",
-		    (long)winsize, (long)curclass.writesize);
-	if (winsize == 0)
+		syslog(LOG_INFO, "mmapsize = " LLF ", writesize = " LLF,
+		    (LLT)winsize, (LLT)curclass.writesize);
+	if (winsize <= 0)
 		goto try_read;
 
 	off = lseek(filefd, (off_t)0, SEEK_CUR);
@@ -2150,7 +2209,8 @@ send_data_with_mmap(int filefd, int netfd, const struct stat *st, int isdata)
 	if (curclass.rateget) {
 		bufrem = curclass.rateget;
 		(void)gettimeofday(&then, NULL);
-	}
+	} else
+		bufrem = winsize;
 	while (1) {
 		mapsize = MIN(filesize - off, winsize);
 		if (mapsize == 0)
@@ -2180,7 +2240,7 @@ send_data_with_mmap(int filefd, int netfd, const struct stat *st, int isdata)
 }
 
 /*
- * Tranfer the contents of "instr" to "outstr" peer using the appropriate
+ * Transfer the contents of "instr" to "outstr" peer using the appropriate
  * encapsulation of the data subject to Mode, Structure, and Type.
  *
  * NB: Form isn't handled.
@@ -2296,7 +2356,7 @@ receive_data(FILE *instr, FILE *outstr)
 	int	volatile bare_lfs;
 	off_t	byteswritten;
 	char	*buf;
-	size_t	readsize;
+	ssize_t	readsize;
 	struct sigaction sa, sa_saved;
 	struct stat st;
 
@@ -2332,7 +2392,7 @@ receive_data(FILE *instr, FILE *outstr)
 		if (curclass.readsize)
 			readsize = curclass.readsize;
 		else if (fstat(filefd, &st))
-			readsize = (size_t)st.st_blksize;
+			readsize = (ssize_t)st.st_blksize;
 		else
 			readsize = BUFSIZ;
 		if ((buf = malloc(readsize)) == NULL) {
@@ -2482,11 +2542,11 @@ statcmd(void)
 {
 	struct sockinet *su = NULL;
 	static char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-	u_char *a, *p;
+	unsigned char *a, *p;
 	int ispassive, af;
 	off_t otbi, otbo, otb;
 
-	a = p = (u_char *)NULL;
+	a = p = (unsigned char *)NULL;
 
 	reply(-211, "%s FTP server status:", hostname);
 	reply(0, "Version: %s", EMPTYSTR(version) ? "<suppressed>" : version);
@@ -2543,8 +2603,8 @@ statcmd(void)
  printaddr:
 							/* PASV/PORT */
 		if (su->su_family == AF_INET) {
-			a = (u_char *) &su->su_addr;
-			p = (u_char *) &su->su_port;
+			a = (unsigned char *) &su->su_addr;
+			p = (unsigned char *) &su->su_port;
 #define UC(b) (((int) b) & 0xff)
 			reply(0, "%s (%d,%d,%d,%d,%d,%d)",
 				ispassive ? "PASV" : "PORT" ,
@@ -2559,15 +2619,15 @@ statcmd(void)
 		alen = 0;
 		switch (su->su_family) {
 		case AF_INET:
-			a = (u_char *) &su->su_addr;
-			p = (u_char *) &su->su_port;
+			a = (unsigned char *) &su->su_addr;
+			p = (unsigned char *) &su->su_port;
 			alen = sizeof(su->su_addr);
 			af = 4;
 			break;
 #ifdef INET6
 		case AF_INET6:
-			a = (u_char *) &su->su_6addr;
-			p = (u_char *) &su->su_port;
+			a = (unsigned char *) &su->su_6addr;
+			p = (unsigned char *) &su->su_port;
 			alen = sizeof(su->su_6addr);
 			af = 6;
 			break;
@@ -2789,18 +2849,29 @@ static void
 logremotehost(struct sockinet *who)
 {
 
-	if (getnameinfo((struct sockaddr *)&who->si_su,
-	    who->su_len, remotehost, sizeof(remotehost), NULL, 0, 
-	    getnameopts))
-		strlcpy(remotehost, "?", sizeof(remotehost));
+#if defined(HAVE_SOCKADDR_SNPRINTF)
+	char abuf[BUFSIZ];
+#endif
 
+	struct sockaddr *sa = (struct sockaddr *)&who->si_su;
+	if (getnameinfo(sa, who->su_len, remotehost, sizeof(remotehost), NULL,
+	    0, getnameopts))
+		strlcpy(remotehost, "?", sizeof(remotehost));
+#if defined(HAVE_SOCKADDR_SNPRINTF)
+	sockaddr_snprintf(abuf, sizeof(abuf), "%a", sa);
+	snprintf(remoteloghost, sizeof(remoteloghost), "%s(%s)", remotehost,
+	    abuf);
+#else
+	strlcpy(remoteloghost, remotehost, sizeof(remoteloghost));
+#endif
+	
 #if defined(HAVE_SETPROCTITLE)
 	snprintf(proctitle, sizeof(proctitle), "%s: connected", remotehost);
 	setproctitle("%s", proctitle);
 #endif /* defined(HAVE_SETPROCTITLE) */
 	if (logging)
 		syslog(LOG_INFO, "connection from %s to %s",
-		    remotehost, hostname);
+		    remoteloghost, hostname);
 }
 
 /*
@@ -2869,6 +2940,7 @@ static int
 handleoobcmd()
 {
 	char *cp;
+	int ret;
 
 	if (!urgflag)
 		return (0);
@@ -2877,9 +2949,14 @@ handleoobcmd()
 	if (!transflag)
 		return (0);
 	cp = tmpline;
-	if (getline(cp, sizeof(tmpline), stdin) == NULL) {
+	ret = get_line(cp, sizeof(tmpline)-1, stdin);
+	if (ret == -1) {
 		reply(221, "You could at least say goodbye.");
 		dologout(0);
+	} else if (ret == -2) {
+		/* Ignore truncated command */
+		/* XXX: abort xfer with "500 command too long", & return 1 ? */
+		return 0;
 	}
 		/*
 		 * Manually parse OOB commands, because we can't
@@ -2941,7 +3018,8 @@ bind_pasv_addr(void)
 void
 passive(void)
 {
-	socklen_t len, recvbufsize;
+	socklen_t len;
+	int recvbufsize;
 	char *p, *a;
 
 	if (pdata >= 0)
@@ -3059,7 +3137,7 @@ af2epsvproto(int af)
  * 229 Entering Extended Passive Mode (|||port|)
  */
 void
-long_passive(char *cmd, int pf)
+long_passive(const char *cmd, int pf)
 {
 	socklen_t len;
 	char *p, *a;
@@ -3302,7 +3380,7 @@ perror_reply(int code, const char *string)
 }
 
 static char *onefile[] = {
-	"",
+	NULL,
 	0
 };
 
@@ -3361,7 +3439,7 @@ send_file_list(const char *whichf)
 			/* XXX: nuke this support? */
 			if (dirname[0] == '-' && *dirlist == NULL &&
 			    transflag == 0) {
-				char *argv[] = { INTERNAL_LS, "", NULL };
+				const char *argv[] = { INTERNAL_LS, "", NULL };
 
 				argv[1] = dirname;
 				retrieve(argv, dirname);
@@ -3513,8 +3591,9 @@ logxfer(const char *command, off_t bytes, const char *file1, const char *file2,
 			    " %s", r2);
 		if (elapsed != NULL)
 			len += snprintf(buf + len, sizeof(buf) - len,
-			    " in %ld.%.03d seconds", elapsed->tv_sec,
-			    (int)(elapsed->tv_usec / 1000));
+			    " in " LLF ".%.03ld seconds",
+			    (LLT)elapsed->tv_sec,
+			    (long)(elapsed->tv_usec / 1000));
 		if (error != NULL)
 			len += snprintf(buf + len, sizeof(buf) - len,
 			    ": %s", error);
@@ -3536,7 +3615,7 @@ logxfer(const char *command, off_t bytes, const char *file1, const char *file2,
 
 	time(&now);
 	len = snprintf(buf, sizeof(buf),
-	    "%.24s %ld %s " LLF " %s %c %s %c %c %s FTP 0 * %c\n",
+	    "%.24s " LLF " %s " LLF " %s %c %s %c %c %s FTP 0 * %c\n",
 
 /*
  * XXX: wu-ftpd puts ' (send)' or ' (recv)' in the syslog message, and removes
@@ -3544,7 +3623,8 @@ logxfer(const char *command, off_t bytes, const char *file1, const char *file2,
  *	given that syslog messages don't contain the full date.
  */
 	    ctime(&now),
-	    elapsed == NULL ? 0 : elapsed->tv_sec + (elapsed->tv_usec > 0),
+	    (LLT)
+	    (elapsed == NULL ? 0 : elapsed->tv_sec + (elapsed->tv_usec > 0)),
 	    remotehost,
 	    (LLT) bytes,
 	    r1,
@@ -3584,9 +3664,9 @@ logrusage(const struct rusage *rusage_before,
 
 	timersub(&rusage_after->ru_utime, &rusage_before->ru_utime, &usrtime);
 	timersub(&rusage_after->ru_stime, &rusage_before->ru_stime, &systime);
-	syslog(LOG_INFO, "%ld.%.03du %ld.%.03ds %ld+%ldio %ldpf+%ldw",
-	    usrtime.tv_sec, (int)(usrtime.tv_usec / 1000),
-	    systime.tv_sec, (int)(systime.tv_usec / 1000),
+	syslog(LOG_INFO, LLF ".%.03ldu " LLF ".%.03lds %ld+%ldio %ldpf+%ldw",
+	    (LLT)usrtime.tv_sec, (long)(usrtime.tv_usec / 1000),
+	    (LLT)systime.tv_sec, (long)(systime.tv_usec / 1000),
 	    rusage_after->ru_inblock - rusage_before->ru_inblock,
 	    rusage_after->ru_oublock - rusage_before->ru_oublock,
 	    rusage_after->ru_majflt - rusage_before->ru_majflt,
@@ -3600,7 +3680,8 @@ logrusage(const struct rusage *rusage_before,
 int
 checkpassword(const struct passwd *pwent, const char *password)
 {
-	char	*orig, *new;
+	const char *orig;
+	char	*new;
 	time_t	 change, expire, now;
 
 	change = expire = 0;
@@ -3610,7 +3691,9 @@ checkpassword(const struct passwd *pwent, const char *password)
 	time(&now);
 	orig = pwent->pw_passwd;	/* save existing password */
 	expire = pwent->pw_expire;
-	change = (pwent->pw_change == _PASSWORD_CHGNOW)? now : pwent->pw_change;
+	change = pwent->pw_change;
+	if (change == _PASSWORD_CHGNOW)
+		change = now;
 
 	if (orig[0] == '\0')		/* don't allow empty passwords */
 		return 1;
@@ -3658,50 +3741,110 @@ cprintf(FILE *fd, const char *fmt, ...)
  * the following code is stolen from imap-uw PAM authentication module and
  * login.c
  */
-#define COPY_STRING(s) (s ? strdup(s) : NULL)
-
 typedef struct {
-	const char *uname;		/* user name */
-	const char *pass;		/* password */
+	const char *uname;	/* user name */
+	int	    triedonce;	/* if non-zero, tried before */
 } ftpd_cred_t;
 
 static int
 auth_conv(int num_msg, const struct pam_message **msg,
     struct pam_response **resp, void *appdata)
 {
-	int i;
+	int i, ret;
+	size_t n;
 	ftpd_cred_t *cred = (ftpd_cred_t *) appdata;
 	struct pam_response *myreply;
+	char pbuf[FTP_BUFLEN];
 
+	if (num_msg <= 0 || num_msg > PAM_MAX_NUM_MSG)
+		return (PAM_CONV_ERR);
 	myreply = calloc(num_msg, sizeof *myreply);
 	if (myreply == NULL)
 		return PAM_BUF_ERR;
 
 	for (i = 0; i < num_msg; i++) {
+		myreply[i].resp_retcode = 0;
+		myreply[i].resp = NULL;
 		switch (msg[i]->msg_style) {
-		case PAM_PROMPT_ECHO_ON:	/* assume want user name */
-			myreply[i].resp_retcode = PAM_SUCCESS;
-			myreply[i].resp = COPY_STRING(cred->uname);
+		case PAM_PROMPT_ECHO_ON:	/* user */
+			myreply[i].resp = ftpd_strdup(cred->uname);
 			/* PAM frees resp. */
 			break;
-		case PAM_PROMPT_ECHO_OFF:	/* assume want password */
-			myreply[i].resp_retcode = PAM_SUCCESS;
-			myreply[i].resp = COPY_STRING(cred->pass);
-			/* PAM frees resp. */
+		case PAM_PROMPT_ECHO_OFF:	/* authtok (password) */
+				/*
+				 * Only send a single 331 reply and
+				 * then expect a PASS.
+				 */
+			if (cred->triedonce) {
+				syslog(LOG_ERR,
+			"auth_conv: already performed PAM_PROMPT_ECHO_OFF");
+				goto fail;
+			}
+			cred->triedonce++;
+			if (msg[i]->msg[0] == '\0') {
+				(void)strlcpy(pbuf, "password", sizeof(pbuf));
+			} else {
+					/* Uncapitalize msg */
+				(void)strlcpy(pbuf, msg[i]->msg, sizeof(pbuf));
+				if (isupper((unsigned char)pbuf[0]))
+					pbuf[0] = tolower(
+					    (unsigned char)pbuf[0]);
+					/* Remove trailing ':' and whitespace */
+				n = strlen(pbuf);
+				while (n-- > 0) {
+					if (isspace((unsigned char)pbuf[n]) ||
+					    pbuf[n] == ':')
+						pbuf[n] = '\0';
+					else
+						break;
+				}
+			}
+				/* Send reply, wait for a response. */
+			reply(331, "User %s accepted, provide %s.",
+			    cred->uname, pbuf);
+			(void) alarm(curclass.timeout);
+			ret = get_line(pbuf, sizeof(pbuf)-1, stdin);
+			(void) alarm(0);
+			if (ret == -1) {
+				reply(221, "You could at least say goodbye.");
+				dologout(0);
+			} else if (ret == -2) {
+			    /* XXX: should we do this reply(-530, ..) ? */
+				reply(-530, "Command too long.");
+				goto fail;
+			}
+				/* Ensure it is PASS */
+			if (strncasecmp(pbuf, "PASS ", 5) != 0) {
+				syslog(LOG_ERR,
+				    "auth_conv: unexpected reply '%.4s'", pbuf);
+				/* XXX: should we do this reply(-530, ..) ? */
+				reply(-530, "Unexpected reply '%.4s'.", pbuf);
+				goto fail;
+			}
+				/* Strip CRLF from "PASS" reply */
+			n = strlen(pbuf);
+			while (--n >= 5 &&
+			    (pbuf[n] == '\r' || pbuf[n] == '\n'))
+			    pbuf[n] = '\0';
+				/* Copy password into reply */
+			myreply[i].resp = ftpd_strdup(pbuf+5);
+				/* PAM frees resp. */
 			break;
 		case PAM_TEXT_INFO:
 		case PAM_ERROR_MSG:
-			myreply[i].resp_retcode = PAM_SUCCESS;
-			myreply[i].resp = NULL;
 			break;
 		default:			/* unknown message style */
-			free(myreply);
-			return PAM_CONV_ERR;
+			goto fail;
 		}
 	}
 
 	*resp = myreply;
 	return PAM_SUCCESS;
+
+ fail:
+	free(myreply);
+	*resp = NULL;
+	return PAM_CONV_ERR;
 }
 
 /*
@@ -3710,18 +3853,19 @@ auth_conv(int num_msg, const struct pam_message **msg,
  * error occurs (e.g., the "/etc/pam.conf" file is missing) then this
  * function returns -1.  This can be used as an indication that we should
  * fall back to a different authentication mechanism.
+ * pw maybe be updated to a new user if PAM_USER changes from curname.
  */
 static int
-auth_pam(struct passwd **ppw, const char *pwstr)
+auth_pam(void)
 {
 	const char *tmpl_user;
 	const void *item;
 	int rval;
 	int e;
-	ftpd_cred_t auth_cred = { (*ppw)->pw_name, pwstr };
+	ftpd_cred_t auth_cred = { curname, 0 };
 	struct pam_conv conv = { &auth_conv, &auth_cred };
 
-	e = pam_start("ftpd", (*ppw)->pw_name, &conv, &pamh);
+	e = pam_start("ftpd", curname, &conv, &pamh);
 	if (e != PAM_SUCCESS) {
 		/*
 		 * In OpenPAM, it's OK to pass NULL to pam_strerror()
@@ -3754,6 +3898,9 @@ auth_pam(struct passwd **ppw, const char *pwstr)
 	}
 
 	e = pam_authenticate(pamh, 0);
+	if (ftpd_debug)
+		syslog(LOG_DEBUG, "pam_authenticate: user '%s' returned %d",
+		    curname, e);
 	switch (e) {
 	case PAM_SUCCESS:
 		/*
@@ -3776,8 +3923,17 @@ auth_pam(struct passwd **ppw, const char *pwstr)
 		if ((e = pam_get_item(pamh, PAM_USER, &item)) ==
 		    PAM_SUCCESS) {
 			tmpl_user = (const char *) item;
-			if (strcmp((*ppw)->pw_name, tmpl_user) != 0)
-				*ppw = sgetpwnam(tmpl_user);
+			if (pw == NULL
+			    || strcmp(pw->pw_name, tmpl_user) != 0) {
+				pw = sgetpwnam(tmpl_user);
+				if (ftpd_debug)
+					syslog(LOG_DEBUG,
+					    "auth_pam: PAM changed "
+					    "user from '%s' to '%s'",
+					    curname, pw->pw_name);
+				(void)strlcpy(curname, pw->pw_name,
+				    curname_len);
+			}
 		} else
 			syslog(LOG_ERR, "Couldn't get PAM_USER: %s",
 			    pam_strerror(pamh, e));

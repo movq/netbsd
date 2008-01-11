@@ -1,4 +1,4 @@
-/*	$NetBSD: ss.c,v 1.72 2007/07/29 12:50:23 ad Exp $	*/
+/*	$NetBSD: ss.c,v 1.80 2009/12/06 22:48:17 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1995 Kenneth Stailey.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.72 2007/07/29 12:50:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.80 2009/12/06 22:48:17 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.72 2007/07/29 12:50:23 ad Exp $");
 #include <sys/buf.h>
 #include <sys/bufq.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/device.h>
 #include <sys/conf.h>
 #include <sys/vnode.h>
@@ -69,13 +68,12 @@ __KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.72 2007/07/29 12:50:23 ad Exp $");
 #define MODE_NONREWIND	1
 #define MODE_CONTROL	3
 
-static int	ssmatch(struct device *, struct cfdata *, void *);
-static void	ssattach(struct device *, struct device *, void *);
-static int	ssdetach(struct device *self, int flags);
-static int	ssactivate(struct device *self, enum devact act);
+static int	ssmatch(device_t, cfdata_t, void *);
+static void	ssattach(device_t, device_t, void *);
+static int	ssdetach(device_t self, int flags);
 
 CFATTACH_DECL(ss, sizeof(struct ss_softc),
-    ssmatch, ssattach, ssdetach, ssactivate);
+    ssmatch, ssattach, ssdetach, NULL);
 
 extern struct cfdriver ss_cd;
 
@@ -123,7 +121,7 @@ static const struct scsipi_inquiry_pattern ss_patterns[] = {
 };
 
 static int
-ssmatch(struct device *parent, struct cfdata *match,
+ssmatch(device_t parent, cfdata_t match,
     void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
@@ -142,7 +140,7 @@ ssmatch(struct device *parent, struct cfdata *match,
  * special handlers into the ss_softc structure
  */
 static void
-ssattach(struct device *parent, struct device *self, void *aux)
+ssattach(device_t parent, device_t self, void *aux)
 {
 	struct ss_softc *ss = device_private(self);
 	struct scsipibus_attach_args *sa = aux;
@@ -186,7 +184,7 @@ ssattach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-ssdetach(struct device *self, int flags)
+ssdetach(device_t self, int flags)
 {
 	struct ss_softc *ss = device_private(self);
 	int s, cmaj, mn;
@@ -216,25 +214,6 @@ ssdetach(struct device *self, int flags)
 	return (0);
 }
 
-static int
-ssactivate(struct device *self, enum devact act)
-{
-	int rv = 0;
-
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-
-	case DVACT_DEACTIVATE:
-		/*
-		 * Nothing to do; we key off the device's DVF_ACTIVE.
-		 */
-		break;
-	}
-	return (rv);
-}
-
 /*
  * open the device.
  */
@@ -249,10 +228,8 @@ ssopen(dev_t dev, int flag, int mode, struct lwp *l)
 	struct scsipi_adapter *adapt;
 
 	unit = SSUNIT(dev);
-	if (unit >= ss_cd.cd_ndevs)
-		return (ENXIO);
-	ss = ss_cd.cd_devs[unit];
-	if (!ss)
+	ss = device_lookup_private(&ss_cd, unit);
+	if (ss == NULL)
 		return (ENXIO);
 
 	if (!device_is_active(&ss->sc_dev))
@@ -263,11 +240,11 @@ ssopen(dev_t dev, int flag, int mode, struct lwp *l)
 	periph = ss->sc_periph;
 	adapt = periph->periph_channel->chan_adapter;
 
-	SC_DEBUG(periph, SCSIPI_DB1, ("open: dev=0x%x (unit %d (of %d))\n", dev,
+	SC_DEBUG(periph, SCSIPI_DB1, ("open: dev=0x%"PRIx64" (unit %d (of %d))\n", dev,
 	    unit, ss_cd.cd_ndevs));
 
 	if (periph->periph_flags & PERIPH_OPEN) {
-		printf("%s: already open\n", ss->sc_dev.dv_xname);
+		aprint_error_dev(&ss->sc_dev, "already open\n");
 		return (EBUSY);
 	}
 
@@ -313,7 +290,7 @@ bad:
 static int
 ssclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
+	struct ss_softc *ss = device_lookup_private(&ss_cd, SSUNIT(dev));
 	struct scsipi_periph *periph = ss->sc_periph;
 	struct scsipi_adapter *adapt = periph->periph_channel->chan_adapter;
 	int error;
@@ -350,7 +327,7 @@ ssclose(dev_t dev, int flag, int mode, struct lwp *l)
 static void
 ssminphys(struct buf *bp)
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(bp->b_dev)];
+	struct ss_softc *ss = device_lookup_private(&ss_cd, SSUNIT(bp->b_dev));
 	struct scsipi_periph *periph = ss->sc_periph;
 
 	scsipi_adapter_minphys(periph->periph_channel, bp);
@@ -373,7 +350,7 @@ ssminphys(struct buf *bp)
 static int
 ssread(dev_t dev, struct uio *uio, int flag)
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
+	struct ss_softc *ss = device_lookup_private(&ss_cd, SSUNIT(dev));
 	int error;
 
 	if (!device_is_active(&ss->sc_dev))
@@ -400,7 +377,7 @@ ssread(dev_t dev, struct uio *uio, int flag)
 static void
 ssstrategy(struct buf *bp)
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(bp->b_dev)];
+	struct ss_softc *ss = device_lookup_private(&ss_cd, SSUNIT(bp->b_dev));
 	struct scsipi_periph *periph = ss->sc_periph;
 	int s;
 
@@ -440,7 +417,7 @@ ssstrategy(struct buf *bp)
 	 * at the end (a bit silly because we only have on user..
 	 * (but it could fork()))
 	 */
-	BUFQ_PUT(ss->buf_queue, bp);
+	bufq_put(ss->buf_queue, bp);
 
 	/*
 	 * Tell the device to get going on the transfer if it's
@@ -495,7 +472,7 @@ ssstart(struct scsipi_periph *periph)
 		/*
 		 * See if there is a buf with work for us to do..
 		 */
-		if ((bp = BUFQ_PEEK(ss->buf_queue)) == NULL)
+		if ((bp = bufq_peek(ss->buf_queue)) == NULL)
 			return;
 
 		if (ss->special && ss->special->read) {
@@ -535,7 +512,7 @@ ssdone(struct scsipi_xfer *xs, int error)
 int
 ssioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
+	struct ss_softc *ss = device_lookup_private(&ss_cd, SSUNIT(dev));
 	int error = 0;
 	struct scan_io *sio;
 

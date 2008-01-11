@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.72 2007/08/09 15:23:02 he Exp $
+#	$NetBSD: Makefile.inc,v 1.78 2009/10/02 02:45:29 tsarna Exp $
 #	@(#)Makefile.inc	8.2 (Berkeley) 9/5/93
 
 # net sources
@@ -76,15 +76,45 @@ MLINKS+=inet.3 addr.3 inet.3 inet_addr.3 inet.3 inet_aton.3 \
 MLINKS+=inet_net.3 inet_net_ntop.3 inet_net.3 inet_net_pton.3
 MLINKS+=linkaddr.3 link_addr.3 linkaddr.3 link_ntoa.3 linkaddr.3 linkntoa.3
 MLINKS+=rcmd.3 iruserok.3 rcmd.3 rresvport.3 rcmd.3 ruserok.3 rcmd.3 orcmd.3
-MLINKS+=resolver.3 dn_comp.3 resolver.3 dn_expand.3 resolver.3 res_init.3 \
-	resolver.3 res_mkquery.3 resolver.3 res_send.3 resolver.3 res_query.3 \
-	resolver.3 res_search.3
+MLINKS+=resolver.3 dn_comp.3 \
+	resolver.3 dn_expand.3 \
+	resolver.3 fp_nquery.3 \
+	resolver.3 fp_resstat.3 \
+	resolver.3 hostalias.3 \
+	resolver.3 p_query.3 \
+	resolver.3 res_close.3 \
+	resolver.3 res_findzonecut.3 \
+	resolver.3 res_getservers.3 \
+	resolver.3 res_hostalias.3 \
+	resolver.3 res_init.3 \
+	resolver.3 res_isourserver.3 \
+	resolver.3 res_mkquery.3 \
+	resolver.3 res_nclose.3 \
+	resolver.3 res_ndestroy.3 \
+	resolver.3 res_ninit.3 \
+	resolver.3 res_nmkquery.3 \
+	resolver.3 res_nmkupdate.3 \
+	resolver.3 res_nquery.3 \
+	resolver.3 res_nquerydomain.3 \
+	resolver.3 res_nsearch.3 \
+	resolver.3 res_nsend.3 \
+	resolver.3 res_nsendsigned.3 \
+	resolver.3 res_nupdate.3 \
+	resolver.3 res_ourserver_p.3 \
+	resolver.3 res_pquery.3 \
+	resolver.3 res_query.3 \
+	resolver.3 res_querydomain.3 \
+	resolver.3 res_search.3 \
+	resolver.3 res_send.3 \
+	resolver.3 res_setservers.3 \
+	resolver.3 res_update.3
 
 # IPv6
 MAN+=	gai_strerror.3 getaddrinfo.3 getnameinfo.3 if_indextoname.3 \
 	inet6_option_space.3 inet6_rthdr_space.3 \
 	inet6_opt_init.3 inet6_rth_space.3
 MLINKS+=getaddrinfo.3 freeaddrinfo.3 \
+	getaddrinfo.3 allocaddrinfo.3 \
 	getifaddrs.3 freeifaddrs.3 \
 	if_indextoname.3 if_nametoindex.3 if_indextoname.3 if_nameindex.3 \
 	if_indextoname.3 if_freenameindex.3 \

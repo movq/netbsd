@@ -1,4 +1,4 @@
-/* $NetBSD: btconfig.c,v 1.10 2007/12/30 18:26:43 plunky Exp $ */
+/* $NetBSD: btconfig.c,v 1.24 2010/11/28 20:37:24 plunky Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,9 +32,8 @@
  */
 
 #include <sys/cdefs.h>
-__COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc.\n"
-	    "All rights reserved.\n");
-__RCSID("$NetBSD: btconfig.c,v 1.10 2007/12/30 18:26:43 plunky Exp $");
+__COPYRIGHT("@(#) Copyright (c) 2006 Itronix, Inc.  All rights reserved.");
+__RCSID("$NetBSD: btconfig.c,v 1.24 2010/11/28 20:37:24 plunky Exp $");
 
 #include <sys/ioctl.h>
 #include <sys/param.h>
@@ -46,37 +45,32 @@ __RCSID("$NetBSD: btconfig.c,v 1.10 2007/12/30 18:26:43 plunky Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <util.h>
-
-/* inquiry results storage */
-struct result {
-	bdaddr_t	bdaddr;
-	uint8_t		page_scan_rep_mode;
-	uint8_t		uclass[HCI_CLASS_SIZE];
-	uint16_t	clock_offset;
-	int8_t		rssi;
-};
 
 int main(int, char *[]);
 void badarg(const char *);
 void badparam(const char *);
+void badval(const char *, const char *);
 void usage(void);
 int set_unit(unsigned long);
 void config_unit(void);
+void print_val(const char *, const char **, int);
 void print_info(int);
 void print_stats(void);
-void print_class(const char *);
+void print_class(const char *, uint8_t *);
+void print_class0(void);
 void print_voice(int);
 void tag(const char *);
-void print_features(const char *, uint8_t *);
+void print_features0(uint8_t *);
+void print_features1(uint8_t *);
+void print_result(int, struct bt_devinquiry *);
 void do_inquiry(void);
-void print_result(int, struct result *, int);
 
 void hci_req(uint16_t, uint8_t , void *, size_t, void *, size_t);
-#define save_value(opcode, cbuf, clen)	hci_req(opcode, 0, cbuf, clen, NULL, 0)
-#define load_value(opcode, rbuf, rlen)	hci_req(opcode, 0, NULL, 0, rbuf, rlen)
-#define hci_cmd(opcode, cbuf, clen)	hci_req(opcode, 0, cbuf, clen, NULL, 0)
+void save_value(uint16_t, void *, size_t);
+void load_value(uint16_t, void *, size_t);
 
 #define MAX_STR_SIZE	0xff
 
@@ -107,6 +101,7 @@ int opt_reset = 0;
 			"\010INIT_FEATURES"	\
 			"\011POWER_UP_NOOP"	\
 			"\012INIT_COMMANDS"	\
+			"\013MASTER"		\
 			""
 
 /* authorisation (flag) */
@@ -118,6 +113,9 @@ int opt_encrypt = 0;
 /* scan enable options (flags) */
 int opt_pscan = 0;
 int opt_iscan = 0;
+
+/* master role option */
+int opt_master = 0;
 
 /* link policy options (flags) */
 int opt_switch = 0;
@@ -141,10 +139,12 @@ char name[MAX_STR_SIZE];
 int opt_pin = 0;
 
 /* Inquiry */
-int opt_rssi = 0;			/* inquiry_with_rssi (flag) */
+int opt_rssi = 0;			/* inquiry_with_rssi (obsolete flag) */
+int opt_imode = 0;			/* inquiry mode */
 int opt_inquiry = 0;
-#define INQUIRY_LENGTH		10	/* about 12 seconds */
+#define INQUIRY_LENGTH		10	/* seconds */
 #define INQUIRY_MAX_RESPONSES	10
+const char *imodes[] = { "std", "rssi", "ext", NULL };
 
 /* Voice Settings */
 int opt_voice = 0;
@@ -160,7 +160,7 @@ uint32_t scomtu;
 
 struct parameter {
 	const char	*name;
-	enum { P_SET, P_CLR, P_STR, P_HEX, P_NUM } type;
+	enum { P_SET, P_CLR, P_STR, P_HEX, P_NUM, P_VAL } type;
 	int		*opt;
 	void		*val;
 } parameters[] = {
@@ -173,6 +173,8 @@ struct parameter {
 	{ "-pscan",	P_CLR,	&opt_pscan,	NULL	},
 	{ "iscan",	P_SET,	&opt_iscan,	NULL	},
 	{ "-iscan",	P_CLR,	&opt_iscan,	NULL	},
+	{ "master",	P_SET,	&opt_master,	NULL	},
+	{ "-master",	P_CLR,	&opt_master,	NULL	},
 	{ "switch",	P_SET,	&opt_switch,	NULL	},
 	{ "-switch",	P_CLR,	&opt_switch,	NULL	},
 	{ "hold",	P_SET,	&opt_hold,	NULL	},
@@ -191,6 +193,7 @@ struct parameter {
 	{ "variable",	P_CLR,	&opt_pin,	NULL	},
 	{ "inq",	P_SET,	&opt_inquiry,	NULL	},
 	{ "inquiry",	P_SET,	&opt_inquiry,	NULL	},
+	{ "imode",	P_VAL,	&opt_imode,	imodes	},
 	{ "rssi",	P_SET,	&opt_rssi,	NULL	},
 	{ "-rssi",	P_CLR,	&opt_rssi,	NULL	},
 	{ "reset",	P_SET,	&opt_reset,	NULL	},
@@ -294,6 +297,17 @@ main(int ac, char *av[])
 				*(uint32_t *)(p->val) = strtoul(*++av, NULL, 10);
 				*(p->opt) = 1;
 				break;
+
+			case P_VAL:
+				if (--ac < 1) badarg(p->name);
+				++av;
+				ch = 0;
+				do {
+					if (((char **)(p->val))[ch] == NULL)
+						badval(p->name, *av);
+				} while (strcmp(((char **)(p->val))[ch++], *av));
+				*(p->opt) = ch;
+				break;
 			}
 
 			av++, ac--;
@@ -322,6 +336,14 @@ badarg(const char *param)
 {
 
 	fprintf(stderr, "parameter '%s' needs argument\n", param);
+	exit(EXIT_FAILURE);
+}
+
+void
+badval(const char *param, const char *value)
+{
+
+	fprintf(stderr, "bad value '%s' for parameter '%s'\n", value, param);
 	exit(EXIT_FAILURE);
 }
 
@@ -359,88 +381,53 @@ tag(const char *f)
 }
 
 /*
- * basic HCI cmd request function with argument return.
- *
- * Normally, this will return on COMMAND_STATUS or COMMAND_COMPLETE for the given
- * opcode, but if event is given then it will ignore COMMAND_STATUS (unless error)
- * and wait for the specified event.
- *
- * if rbuf/rlen is given, results will be copied into the result buffer for
- * COMMAND_COMPLETE/event responses.
+ * basic HCI request wrapper with error check
  */
 void
-hci_req(uint16_t opcode, uint8_t event, void *cbuf, size_t clen, void *rbuf, size_t rlen)
+hci_req(uint16_t opcode, uint8_t event, void *cbuf, size_t clen,
+    void *rbuf, size_t rlen)
 {
-	uint8_t msg[sizeof(hci_cmd_hdr_t) + HCI_CMD_PKT_SIZE];
-	hci_event_hdr_t *ep;
-	hci_cmd_hdr_t *cp;
+	struct bt_devreq req;
 
-	cp = (hci_cmd_hdr_t *)msg;
-	cp->type = HCI_CMD_PKT;
-	cp->opcode = opcode = htole16(opcode);
-	cp->length = clen = MIN(clen, sizeof(msg) - sizeof(hci_cmd_hdr_t));
+	req.opcode = opcode;
+	req.event = event;
+	req.cparam = cbuf;
+	req.clen = clen;
+	req.rparam = rbuf;
+	req.rlen = rlen;
 
-	if (clen) memcpy((cp + 1), cbuf, clen);
+	if (bt_devreq(hci, &req, 10) == -1)
+		err(EXIT_FAILURE, "cmd (%02x|%03x)",
+		    HCI_OGF(opcode), HCI_OCF(opcode));
 
-	if (send(hci, msg, sizeof(hci_cmd_hdr_t) + clen, 0) < 0)
-		err(EXIT_FAILURE, "HCI Send");
+	if (event == 0 && rlen > 0 && ((uint8_t *)rbuf)[0] != 0)
+		errx(EXIT_FAILURE, "cmd (%02x|%03x): status 0x%02x",
+		    HCI_OGF(opcode), HCI_OCF(opcode), ((uint8_t *)rbuf)[0]);
+}
 
-	ep = (hci_event_hdr_t *)msg;
-	for(;;) {
-		if (recv(hci, msg, sizeof(msg), 0) < 0) {
-			if (errno == EAGAIN || errno == EINTR)
-				continue;
+/*
+ * write value to device with opcode.
+ * provide a small response buffer so that the status can be checked
+ */
+void
+save_value(uint16_t opcode, void *cbuf, size_t clen)
+{
+	uint8_t buf[1];
 
-			err(EXIT_FAILURE, "HCI Recv");
-		}
+	hci_req(opcode, 0, cbuf, clen, buf, sizeof(buf));
+}
 
-		if (ep->event == HCI_EVENT_COMMAND_STATUS) {
-			hci_command_status_ep *cs;
+/*
+ * read value from device with opcode.
+ * use our own buffer and only return the value from the response packet
+ */
+void
+load_value(uint16_t opcode, void *rbuf, size_t rlen)
+{
+	uint8_t buf[UINT8_MAX];
 
-			cs = (hci_command_status_ep *)(ep + 1);
-			if (cs->opcode != opcode)
-				continue;
-
-			if (cs->status)
-				errx(EXIT_FAILURE,
-				    "HCI cmd (%4.4x) failed (status %d)",
-				    opcode, cs->status);
-
-			if (event == 0)
-				break;
-
-			continue;
-		}
-
-		if (ep->event == HCI_EVENT_COMMAND_COMPL) {
-			hci_command_compl_ep *cc;
-			uint8_t *ptr;
-
-			cc = (hci_command_compl_ep *)(ep + 1);
-			if (cc->opcode != opcode)
-				continue;
-
-			if (rbuf == NULL)
-				break;
-
-			ptr = (uint8_t *)(cc + 1);
-			if (*ptr)
-				errx(EXIT_FAILURE,
-				    "HCI cmd (%4.4x) failed (status %d)",
-				    opcode, *ptr);
-
-			memcpy(rbuf, ++ptr, rlen);
-			break;
-		}
-
-		if (ep->event == event) {
-			if (rbuf == NULL)
-				break;
-
-			memcpy(rbuf, (ep + 1), rlen);
-			break;
-		}
-	}
+	hci_req(opcode, 0, NULL, 0, buf, sizeof(buf));
+	memcpy(rbuf, buf + 1, rlen);
 }
 
 int
@@ -488,23 +475,29 @@ config_unit(void)
 	}
 
 	if (opt_reset) {
-		hci_cmd(HCI_CMD_RESET, NULL, 0);
+		static const struct timespec ts = { 0, 100000000 }; /* 100ms */
 
 		btr.btr_flags |= BTF_INIT;
 		if (ioctl(hci, SIOCSBTFLAGS, &btr) < 0)
 			err(EXIT_FAILURE, "SIOCSBTFLAGS");
 
-		/*
-		 * although the reset command will automatically
-		 * carry out these commands, we do them manually
-		 * just so we can wait for completion.
-		 */
-		hci_cmd(HCI_CMD_READ_BDADDR, NULL, 0);
-		hci_cmd(HCI_CMD_READ_BUFFER_SIZE, NULL, 0);
-		hci_cmd(HCI_CMD_READ_LOCAL_FEATURES, NULL, 0);
+		hci_req(HCI_CMD_RESET, 0, NULL, 0, NULL, 0);
 
-		if (set_unit(SIOCGBTINFO) < 0)
-			err(EXIT_FAILURE, "%s", btr.btr_name);
+		do {
+			nanosleep(&ts, NULL);
+			if (ioctl(hci, SIOCGBTINFO, &btr) < 0)
+				err(EXIT_FAILURE, "%s", btr.btr_name);
+		} while ((btr.btr_flags & BTF_INIT) != 0);
+	}
+
+	if (opt_master) {
+		if (opt_master > 0)
+			btr.btr_flags |= BTF_MASTER;
+		else
+			btr.btr_flags &= ~BTF_MASTER;
+
+		if (ioctl(hci, SIOCSBTFLAGS, &btr) < 0)
+			err(EXIT_FAILURE, "SIOCSBTFLAGS");
 	}
 
 	if (opt_switch || opt_hold || opt_sniff || opt_park) {
@@ -600,11 +593,28 @@ config_unit(void)
 		}
 	}
 
-	if (opt_rssi) {
+	if (opt_imode | opt_rssi) {
 		uint8_t val = (opt_rssi > 0 ? 1 : 0);
+
+		if (opt_imode)
+			val = opt_imode - 1;
 
 		save_value(HCI_CMD_WRITE_INQUIRY_MODE, &val, sizeof(val));
 	}
+}
+
+/*
+ * print value from NULL terminated array given index
+ */
+void
+print_val(const char *hdr, const char **argv, int idx)
+{
+	int i = 0;
+
+	while (i < idx && *argv != NULL)
+		i++, argv++;
+
+	printf("\t%s: %s\n", hdr, *argv == NULL ? "unknown" : *argv);
 }
 
 /*
@@ -614,7 +624,6 @@ void
 print_info(int level)
 {
 	uint8_t version, val, buf[MAX_STR_SIZE];
-	uint16_t val16;
 
 	if (lflag) {
 		tag(btr.btr_name);
@@ -633,11 +642,11 @@ print_info(int level)
 		return;
 
 	printf("\tnum_cmd = %d\n"
-	       "\tnum_acl = %d, acl_mtu = %d\n"
-	       "\tnum_sco = %d, sco_mtu = %d\n",
+	       "\tnum_acl = %d (max %d), acl_mtu = %d\n"
+	       "\tnum_sco = %d (max %d), sco_mtu = %d\n",
 	       btr.btr_num_cmd,
-	       btr.btr_num_acl, btr.btr_acl_mtu,
-	       btr.btr_num_sco, btr.btr_sco_mtu);
+	       btr.btr_num_acl, btr.btr_max_acl, btr.btr_acl_mtu,
+	       btr.btr_num_sco, btr.btr_max_sco, btr.btr_sco_mtu);
 
 	if (level-- < 1 || (btr.btr_flags & BTF_UP) == 0)
 		return;
@@ -645,16 +654,17 @@ print_info(int level)
 	load_value(HCI_CMD_READ_LOCAL_VER, &version, sizeof(version));
 	printf("\tHCI version: ");
 	switch(version) {
-	case HCI_SPEC_V10:	printf("1.0\n");	break;
-	case HCI_SPEC_V11:	printf("1.0b\n");	break;
+	case HCI_SPEC_V10:	printf("1.0b\n");	break;
+	case HCI_SPEC_V11:	printf("1.1\n");	break;
 	case HCI_SPEC_V12:	printf("1.2\n");	break;
-	case HCI_SPEC_V20:	printf("2.0\n");	break;
+	case HCI_SPEC_V20:	printf("2.0 + EDR\n");	break;
+	case HCI_SPEC_V21:	printf("2.1 + EDR\n");	break;
+	case HCI_SPEC_V30:	printf("3.0 + HS\n");	break;
 	default:		printf("unknown\n");	break;
 	}
 
 	load_value(HCI_CMD_READ_UNIT_CLASS, buf, HCI_CLASS_SIZE);
-	class = (buf[2] << 16) | (buf[1] << 8) | (buf[0]);
-	print_class("\t");
+	print_class("\tclass:", buf);
 
 	load_value(HCI_CMD_READ_LOCAL_NAME, buf, HCI_UNIT_NAME_SIZE);
 	printf("\tname: \"%s\"\n", buf);
@@ -665,6 +675,12 @@ print_info(int level)
 
 	load_value(HCI_CMD_READ_PIN_TYPE, &val, sizeof(val));
 	printf("\tpin: %s\n", val ? "fixed" : "variable");
+
+	val = 0;
+	if (version >= HCI_SPEC_V12)
+		load_value(HCI_CMD_READ_INQUIRY_MODE, &val, sizeof(val));
+
+	print_val("inquiry mode", imodes, val);
 
 	width = printf("\toptions:");
 
@@ -693,13 +709,6 @@ print_info(int level)
 	if (val & HCI_LINK_POLICY_ENABLE_PARK_MODE)	tag("park");
 	else if (level > 0)				tag("-park");
 
-	val = 0;
-	if (version >= HCI_SPEC_V12)
-		load_value(HCI_CMD_READ_INQUIRY_MODE, &val, sizeof(val));
-
-	if (val)				tag("rssi");
-	else if (level > 0)			tag("-rssi");
-
 	tag(NULL);
 
 	if (level-- < 1)
@@ -721,14 +730,19 @@ print_info(int level)
 	if ((ptype & HCI_PKT_3MBPS_DH5) == 0)	tag("3-DH5");
 	tag(NULL);
 
-	load_value(HCI_CMD_READ_PAGE_TIMEOUT, &val16, sizeof(val16));
-	printf("\tpage timeout: %d ms\n", val16 * 5 / 8);
+	load_value(HCI_CMD_READ_PAGE_TIMEOUT, buf, sizeof(uint16_t));
+	printf("\tpage timeout: %d ms\n", le16dec(buf) * 5 / 8);
 
 	if (level-- < 1)
 		return;
 
-	load_value(HCI_CMD_READ_LOCAL_FEATURES, buf, HCI_FEATURES_SIZE);
-	print_features("\tfeatures:", buf);
+	if (ioctl(hci, SIOCGBTFEAT, &btr) < 0)
+		err(EXIT_FAILURE, "SIOCGBTFEAT");
+
+	width = printf("\tfeatures:");
+	print_features0(btr.btr_features0);
+	print_features1(btr.btr_features1);
+	tag(NULL);
 }
 
 void
@@ -759,10 +773,8 @@ print_stats(void)
 }
 
 void
-print_features(const char *str, uint8_t *f)
+print_features0(uint8_t *f)
 {
-
-	width = printf("%s", str);
 
 	/* ------------------- byte 0 --------------------*/
 	if (*f & HCI_LMP_3SLOT)		    tag("<3 slot>");
@@ -817,6 +829,8 @@ print_features(const char *str, uint8_t *f)
 
 	/* ------------------- byte 5 --------------------*/
 	if (*f & HCI_LMP_5SLOT_EDR_ACL)	    tag("<5 slot EDR ACL>");
+	if (*f & HCI_LMP_SNIFF_SUBRATING)   tag("<sniff subrating>");
+	if (*f & HCI_LMP_PAUSE_ENCRYPTION)  tag("<pause encryption>");
 	if (*f & HCI_LMP_AFH_CAPABLE_MASTER)tag("<AFH capable master>");
 	if (*f & HCI_LMP_AFH_CLASS_MASTER)  tag("<AFH class master>");
 	if (*f & HCI_LMP_EDR_eSCO_2MBPS)    tag("<EDR eSCO 2Mbps>");
@@ -825,39 +839,62 @@ print_features(const char *str, uint8_t *f)
 	f++;
 
 	/* ------------------- byte 6 --------------------*/
+	if (*f & HCI_LMP_EXTENDED_INQUIRY)  tag("<extended inquiry>");
+	if (*f & HCI_LMP_SIMPLE_PAIRING)    tag("<secure simple pairing>");
+	if (*f & HCI_LMP_ENCAPSULATED_PDU)  tag("<encapsulated PDU>");
+	if (*f & HCI_LMP_ERRDATA_REPORTING) tag("<errdata reporting>");
+	if (*f & HCI_LMP_NOFLUSH_PB_FLAG)   tag("<no flush PB flag>");
 	f++;
 
 	/* ------------------- byte 7 --------------------*/
+	if (*f & HCI_LMP_LINK_SUPERVISION_TO)tag("<link supervision timeout changed>");
+	if (*f & HCI_LMP_INQ_RSP_TX_POWER)  tag("<inquiry rsp TX power level>");
+	if (*f & HCI_LMP_ENHANCED_POWER_CONTROL)tag("<enhanced power control>");
 	if (*f & HCI_LMP_EXTENDED_FEATURES) tag("<extended features>");
+}
+
+void
+print_features1(uint8_t *f)
+{
+
+	/* ------------------- byte 0 --------------------*/
+	if (*f & HCI_LMP_SSP)		    tag("<secure simple pairing>");
+}
+
+void
+print_class(const char *str, uint8_t *uclass)
+{
+
+	class = (uclass[2] << 16) | (uclass[1] << 8) | uclass[0];
+	width = printf("%s [0x%06x]", str, class);
+
+	switch(__SHIFTOUT(class, __BITS(0, 1))) {
+	case 0:	print_class0();		break;
+	default:			break;
+	}
 
 	tag(NULL);
 }
 
 void
-print_class(const char *str)
+print_class0(void)
 {
-	int major, minor;
 
-	major = (class & 0x1f00) >> 8;
-	minor = (class & 0x00fc) >> 2;
-
-	width = printf("%sclass: [0x%6.6x]", str, class);
-
-	switch (major) {
+	switch (__SHIFTOUT(class, __BITS(8, 12))) {
 	case 1:	/* Computer */
-		switch (minor) {
-		case 1: tag("Desktop");				break;
-		case 2: tag("Server");				break;
+		switch (__SHIFTOUT(class, __BITS(2, 7))) {
+		case 1: tag("Desktop workstation");		break;
+		case 2: tag("Server-class computer");		break;
 		case 3: tag("Laptop");				break;
-		case 4: tag("Handheld");			break;
-		case 5: tag("Palm Sized");			break;
-		case 6: tag("Wearable");			break;
+		case 4: tag("Handheld PC/PDA");			break;
+		case 5: tag("Palm Sized PC/PDA");		break;
+		case 6: tag("Wearable computer");		break;
+		default: tag("Computer");			break;
 		}
-		tag("Computer");
 		break;
 
 	case 2:	/* Phone */
-		switch (minor) {
+		switch (__SHIFTOUT(class, __BITS(2, 7))) {
 		case 1: tag("Cellular Phone");			break;
 		case 2: tag("Cordless Phone");			break;
 		case 3: tag("Smart Phone");			break;
@@ -869,7 +906,7 @@ print_class(const char *str)
 
 	case 3:	/* LAN */
 		tag("LAN");
-		switch ((minor & 0x38) >> 3) {
+		switch (__SHIFTOUT(class, __BITS(5, 7))) {
 		case 0: tag("[Fully available]");		break;
 		case 1: tag("[1-17% utilised]");		break;
 		case 2: tag("[17-33% utilised]");		break;
@@ -882,7 +919,7 @@ print_class(const char *str)
 		break;
 
 	case 4:	/* Audio/Visual */
-		switch (minor) {
+		switch (__SHIFTOUT(class, __BITS(2, 7))) {
 		case 1: tag("Wearable Headset");		break;
 		case 2: tag("Hands-free Audio");		break;
 		case 4: tag("Microphone");			break;
@@ -904,7 +941,7 @@ print_class(const char *str)
 		break;
 
 	case 5:	/* Peripheral */
-		switch (minor & 0x0f) {
+		switch (__SHIFTOUT(class, __BITS(2, 5))) {
 		case 1: tag("Joystick");			break;
 		case 2: tag("Gamepad");				break;
 		case 3: tag("Remote Control");			break;
@@ -914,20 +951,20 @@ print_class(const char *str)
 		default: tag("Peripheral");			break;
 		}
 
-		if (minor & 0x10) tag("Keyboard");
-		if (minor & 0x20) tag("Mouse");
+		if (class & __BIT(6)) tag("Keyboard");
+		if (class & __BIT(7)) tag("Mouse");
 		break;
 
 	case 6:	/* Imaging */
-		if (minor & 0x20) tag("Printer");
-		if (minor & 0x10) tag("Scanner");
-		if (minor & 0x08) tag("Camera");
-		if (minor & 0x04) tag("Display");
-		if ((minor & 0x3c) == 0) tag("Imaging");
+		if (class & __BIT(4)) tag("Display");
+		if (class & __BIT(5)) tag("Camera");
+		if (class & __BIT(6)) tag("Scanner");
+		if (class & __BIT(7)) tag("Printer");
+		if ((class & __BITS(4, 7)) == 0) tag("Imaging");
 		break;
 
 	case 7:	/* Wearable */
-		switch (minor) {
+		switch (__SHIFTOUT(class, __BITS(2, 7))) {
 		case 1: tag("Wrist Watch");			break;
 		case 2: tag("Pager");				break;
 		case 3: tag("Jacket");				break;
@@ -938,7 +975,7 @@ print_class(const char *str)
 		break;
 
 	case 8:	/* Toy */
-		switch (minor) {
+		switch (__SHIFTOUT(class, __BITS(2, 7))) {
 		case 1: tag("Robot");				break;
 		case 2: tag("Vehicle");				break;
 		case 3: tag("Doll / Action Figure");		break;
@@ -948,20 +985,32 @@ print_class(const char *str)
 		}
 		break;
 
+	case 9: /* Health */
+		switch (__SHIFTOUT(class, __BITS(2, 7))) {
+		case 1:	tag("Blood Pressure Monitor");		break;
+		case 2:	tag("Thermometer");			break;
+		case 3:	tag("Weighing Scale");			break;
+		case 4:	tag("Glucose Meter");			break;
+		case 5:	tag("Pulse Oximeter");			break;
+		case 6:	tag("Heart/Pulse Rate Monitor");	break;
+		case 7:	tag("Health Data Display");		break;
+		default: tag("Health");				break;
+		}
+		break;
+
 	default:
 		break;
 	}
 
-	if (class & 0x002000)	tag("<Limited Discoverable>");
-	if (class & 0x010000)	tag("<Positioning>");
-	if (class & 0x020000)	tag("<Networking>");
-	if (class & 0x040000)	tag("<Rendering>");
-	if (class & 0x080000)	tag("<Capturing>");
-	if (class & 0x100000)	tag("<Object Transfer>");
-	if (class & 0x200000)	tag("<Audio>");
-	if (class & 0x400000)	tag("<Telephony>");
-	if (class & 0x800000)	tag("<Information>");
-	tag(NULL);
+	if (class & __BIT(13))	tag("<Limited Discoverable>");
+	if (class & __BIT(16))	tag("<Positioning>");
+	if (class & __BIT(17))	tag("<Networking>");
+	if (class & __BIT(18))	tag("<Rendering>");
+	if (class & __BIT(19))	tag("<Capturing>");
+	if (class & __BIT(20))	tag("<Object Transfer>");
+	if (class & __BIT(21))	tag("<Audio>");
+	if (class & __BIT(22))	tag("<Telephony>");
+	if (class & __BIT(23))	tag("<Information>");
 }
 
 void
@@ -1001,19 +1050,13 @@ print_voice(int level)
 }
 
 void
-print_result(int num, struct result *r, int rssi)
+print_result(int num, struct bt_devinquiry *r)
 {
 	hci_remote_name_req_cp ncp;
 	hci_remote_name_req_compl_ep nep;
-#if 0
-	hci_read_remote_features_cp fcp;
-	hci_read_remote_features_compl_ep fep;
-#endif
 	struct hostent *hp;
 
-	printf("%3d: bdaddr %s",
-			num,
-			bt_ntoa(&r->bdaddr, NULL));
+	printf("%3d: bdaddr %s", num, bt_ntoa(&r->bdaddr, NULL));
 
 	hp = bt_gethostbyaddr((const char *)&r->bdaddr, sizeof(bdaddr_t), AF_BLUETOOTH);
 	if (hp != NULL)
@@ -1023,7 +1066,7 @@ print_result(int num, struct result *r, int rssi)
 
 	memset(&ncp, 0, sizeof(ncp));
 	bdaddr_copy(&ncp.bdaddr, &r->bdaddr);
-	ncp.page_scan_rep_mode = r->page_scan_rep_mode;
+	ncp.page_scan_rep_mode = r->pscan_rep_mode;
 	ncp.clock_offset = r->clock_offset;
 
 	hci_req(HCI_CMD_REMOTE_NAME_REQ,
@@ -1032,37 +1075,18 @@ print_result(int num, struct result *r, int rssi)
 		&nep, sizeof(nep));
 
 	printf("   : name \"%s\"\n", nep.name);
-
-	class = (r->uclass[2] << 16) | (r->uclass[1] << 8) | (r->uclass[0]);
-	print_class("   : ");
-
-#if 0
-	hci_req(HCI_CMD_READ_REMOTE_FEATURES,
-		HCI_EVENT_READ_REMOTE_FEATURES_COMPL,
-		&fcp, sizeof(fcp),
-		&fep, sizeof(fep));
-
-	print_features("   : features", fep.features);
-#endif
-
-	printf("   : page scan rep mode 0x%02x\n", r->page_scan_rep_mode);
+	print_class("   : class", r->dev_class);
+	printf("   : page scan rep mode 0x%02x\n", r->pscan_rep_mode);
 	printf("   : clock offset %d\n", le16toh(r->clock_offset));
-
-	if (rssi)
-		printf("   : rssi %d\n", r->rssi);
-
+	printf("   : rssi %d\n", r->rssi);
 	printf("\n");
 }
 
 void
 do_inquiry(void)
 {
-	uint8_t buf[HCI_EVENT_PKT_SIZE];
-	struct result result[INQUIRY_MAX_RESPONSES];
-	hci_inquiry_cp inq;
-	struct hci_filter f;
-	hci_event_hdr_t *hh;
-	int i, j, num, rssi;
+	struct bt_devinquiry *result;
+	int i, num;
 
 	if (opt_inquiry == 0)
 		return;
@@ -1070,97 +1094,18 @@ do_inquiry(void)
 	printf("Device Discovery from device: %s ...", btr.btr_name);
 	fflush(stdout);
 
-	memset(&f, 0, sizeof(f));
-	hci_filter_set(HCI_EVENT_COMMAND_STATUS, &f);
-	hci_filter_set(HCI_EVENT_COMMAND_COMPL, &f);
-	hci_filter_set(HCI_EVENT_INQUIRY_RESULT, &f);
-	hci_filter_set(HCI_EVENT_RSSI_RESULT, &f);
-	hci_filter_set(HCI_EVENT_INQUIRY_COMPL, &f);
-	hci_filter_set(HCI_EVENT_REMOTE_NAME_REQ_COMPL, &f);
-	hci_filter_set(HCI_EVENT_READ_REMOTE_FEATURES_COMPL, &f);
-	if (setsockopt(hci, BTPROTO_HCI, SO_HCI_EVT_FILTER, &f, sizeof(f)) < 0)
-		err(EXIT_FAILURE, "Can't set event filter");
+	num = bt_devinquiry(btr.btr_name, INQUIRY_LENGTH,
+	    INQUIRY_MAX_RESPONSES, &result);
 
-	/* General Inquiry LAP is 0x9e8b33 */
-	inq.lap[0] = 0x33;
-	inq.lap[1] = 0x8b;
-	inq.lap[2] = 0x9e;
-	inq.inquiry_length = INQUIRY_LENGTH;
-	inq.num_responses = INQUIRY_MAX_RESPONSES;
-
-	hci_cmd(HCI_CMD_INQUIRY, &inq, sizeof(inq));
-
-	num = 0;
-	rssi = 0;
-	hh = (hci_event_hdr_t *)buf;
-
-	for (;;) {
-		if (recv(hci, buf, sizeof(buf), 0) <= 0)
-			err(EXIT_FAILURE, "recv");
-
-		if (hh->event == HCI_EVENT_INQUIRY_COMPL)
-			break;
-
-		if (hh->event == HCI_EVENT_INQUIRY_RESULT) {
-			hci_inquiry_result_ep *ep = (hci_inquiry_result_ep *)(hh + 1);
-			hci_inquiry_response *ir = (hci_inquiry_response *)(ep + 1);
-
-			for (i = 0 ; i < ep->num_responses ; i++) {
-				if (num == INQUIRY_MAX_RESPONSES)
-					break;
-
-				/* some devices keep responding, ignore dupes */
-				for (j = 0 ; j < num ; j++)
-					if (bdaddr_same(&result[j].bdaddr, &ir[i].bdaddr))
-						break;
-
-				if (j < num)
-					continue;
-
-				bdaddr_copy(&result[num].bdaddr, &ir[i].bdaddr);
-				memcpy(&result[num].uclass, &ir[i].uclass, HCI_CLASS_SIZE);
-				result[num].page_scan_rep_mode = ir[i].page_scan_rep_mode;
-				result[num].clock_offset = ir[i].clock_offset;
-				result[num].rssi = 0;
-				num++;
-				printf(".");
-				fflush(stdout);
-			}
-			continue;
-		}
-
-		if (hh->event == HCI_EVENT_RSSI_RESULT) {
-			hci_rssi_result_ep *ep = (hci_rssi_result_ep *)(hh + 1);
-			hci_rssi_response *rr = (hci_rssi_response *)(ep + 1);
-
-			for (i = 0 ; i < ep->num_responses ; i++) {
-				if (num == INQUIRY_MAX_RESPONSES)
-					break;
-
-				/* some devices keep responding, ignore dupes */
-				for (j = 0 ; j < num ; j++)
-					if (bdaddr_same(&result[j].bdaddr, &rr[i].bdaddr))
-						break;
-
-				if (j < num)
-					continue;
-
-				bdaddr_copy(&result[num].bdaddr, &rr[i].bdaddr);
-				memcpy(&result[num].uclass, &rr[i].uclass, HCI_CLASS_SIZE);
-				result[num].page_scan_rep_mode = rr[i].page_scan_rep_mode;
-				result[num].clock_offset = rr[i].clock_offset;
-				result[num].rssi = rr[i].rssi;
-				rssi = 1;
-				num++;
-				printf(".");
-				fflush(stdout);
-			}
-			continue;
-		}
+	if (num == -1) {
+		printf("failed\n");
+		err(EXIT_FAILURE, "%s", btr.btr_name);
 	}
 
 	printf(" %d response%s\n", num, (num == 1 ? "" : "s"));
 
 	for (i = 0 ; i < num ; i++)
-		print_result(i + 1, &result[i], rssi);
+		print_result(i + 1, &result[i]);
+
+	free(result);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: cd.c,v 1.39 2006/05/04 11:16:53 simonb Exp $	*/
+/*	$NetBSD: cd.c,v 1.41 2011/02/17 15:13:49 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)cd.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: cd.c,v 1.39 2006/05/04 11:16:53 simonb Exp $");
+__RCSID("$NetBSD: cd.c,v 1.41 2011/02/17 15:13:49 pooka Exp $");
 #endif
 #endif /* not lint */
 
@@ -84,7 +84,8 @@ cdcmd(int argc, char **argv)
 	struct stat statb;
 	int print = cdprint;	/* set -cdprint to enable */
 
-	nextopt(nullstr);
+	while (nextopt("P") != '\0')
+		;
 
 	/*
 	 * Try (quite hard) to have 'curdir' defined, nothing has set
@@ -424,7 +425,7 @@ find_curdir(int noerror)
 			(void) close(pip[0]);
 			if (pip[1] != 1) {
 				close(1);
-				copyfd(pip[1], 1);
+				copyfd(pip[1], 1, 1);
 				close(pip[1]);
 			}
 			(void) execl("/bin/pwd", "pwd", (char *)0);

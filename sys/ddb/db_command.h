@@ -1,4 +1,4 @@
-/*	$NetBSD: db_command.h,v 1.31 2007/12/25 18:33:36 perry Exp $	*/
+/*	$NetBSD: db_command.h,v 1.35 2009/03/07 22:02:17 ad Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 1999, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -120,36 +113,39 @@ struct db_command {
 	/* function to call */
 	void		(*fcn)(db_expr_t, bool, db_expr_t, const char *);
 	/*
-	 *Flag is used for modifing command behaviour.
-	 *CS_OWN && CS_MORE are specify type of command arguments.
-	 *CS_OWN commandmanage arguments in own way.
-	 *CS_MORE db_command() prepare argument list.
+	 * Flag is used for modifing command behaviour.
+	 * CS_OWN && CS_MORE are specify type of command arguments.
+	 * CS_OWN commandmanage arguments in own way.
+	 * CS_MORE db_command() prepare argument list.
 	 *
-	 *CS_COMPAT is set for all level 2 commands with level 3 childs (show all pages)
+	 * CS_COMPAT is set for all level 2 commands with level 3 childs (show all pages)
 	 *
-	 *CS_SHOW identify show command in BASE command list
-	 *CS_MACH identify mach command in BASE command list
+	 * CS_SHOW identify show command in BASE command list
+	 * CS_MACH identify mach command in BASE command list
 	 *
-	 *CS_SET_DOT specify if this command is put to last added command memory.
-	 *CS_NOREPEAT this command does not repeat
+	 * CS_SET_DOT specify if this command is put to last added command memory.
+	 * CS_NOREPEAT this command does not repeat
 	 */
 	uint16_t		flag;		/* extra info: */
-#define	CS_OWN		0x1		/* non-standard syntax */
-#define	CS_MORE		0x2		/* standard syntax, but may have other
-					   words at end */
-#define CS_COMPAT	0x4		/*is set for compatibilty with old ddb versions*/
-	
-#define CS_SHOW		0x8		/*select show list*/
-#define CS_MACH		0x16		/*select machine dependent list*/
+#define	CS_OWN		0x1			/* non-standard syntax */
+#define	CS_MORE		0x2			/* standard syntax, but may have other
+					   				words at end */
+#define CS_COMPAT	0x4			/* is set for compatibilty with old 
+									ddb versions*/
+#define CS_SHOW		0x8			/* select show list */
+#define CS_MACH		0x10		/* select machine dependent list */
 
 #define	CS_SET_DOT	0x100		/* set dot after command */
 #define	CS_NOREPEAT	0x200		/* don't set last_command */
 #ifdef DDB_VERBOSE_HELP
-	const char *cmd_descr; /*description of command*/
-	const char *cmd_arg;   /*command arguments*/
+	const char *cmd_descr; /* description of command */
+	const char *cmd_arg;   /* command arguments */
 	const char *cmd_arg_help;	/* arguments description */
 #endif
 };
 
-#endif /*_DDB_COMMAND_*/
+void	*db_alloc(size_t);
+void	*db_zalloc(size_t);
+void	db_free(void *, size_t);
 
+#endif /*_DDB_COMMAND_*/

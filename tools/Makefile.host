@@ -1,5 +1,6 @@
-#	$NetBSD: Makefile.host,v 1.23 2003/11/16 18:06:01 dsl Exp $
+#	$NetBSD: Makefile.host,v 1.28 2011/04/10 16:52:36 joerg Exp $
 
+NOINFO=		# defined
 NOLINT=		# defined
 NOMAN=		# defined
 
@@ -41,6 +42,7 @@ ${var}:=	${${var}}
 HOSTPROGNAME?=	${HOSTPROG}
 HOST_BINDIR?=	${TOOLDIR}/bin
 HOST_CPPFLAGS:=	${HOST_CPPFLAGS} ${CPPFLAGS}
+HOST_CPPFLAGS:=	${HOST_CPPFLAGS:N-Wp,-iremap,*:N--sysroot=*}
 .undef LINKS
 
 SRCS?=		${HOSTPROG}.c

@@ -1,4 +1,4 @@
-/*	$NetBSD: bcsp.c,v 1.11 2007/12/03 10:41:59 plunky Exp $	*/
+/*	$NetBSD: bcsp.c,v 1.19 2011/05/25 16:33:37 uebayasi Exp $	*/
 /*
  * Copyright (c) 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcsp.c,v 1.11 2007/12/03 10:41:59 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcsp.c,v 1.19 2011/05/25 16:33:37 uebayasi Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -49,9 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: bcsp.c,v 1.11 2007/12/03 10:41:59 plunky Exp $");
 #include <netbt/hci.h>
 
 #include <dev/bluetooth/bcsp.h>
-#include <dev/bluetooth/btuart.h>
-
-#include "ioconf.h"
 
 #ifdef BCSP_DEBUG
 #ifdef DPRINTF
@@ -133,7 +130,7 @@ struct bcsp_softc {
 #define	BCSP_ENABLED	(1 << 1)	/* is enabled */
 
 void bcspattach(int);
-static int bcsp_match(device_t, struct cfdata *, void *);
+static int bcsp_match(device_t, cfdata_t, void *);
 static void bcsp_attach(device_t, device_t, void *);
 static int bcsp_detach(device_t, int);
 
@@ -187,6 +184,7 @@ static void bcsp_stats(device_t, struct bt_stats *, int);
 static void bcsp_packet_print(struct mbuf *m);
 #endif
 
+extern struct cfdriver bcsp_cd;
 
 /*
  * It doesn't need to be exported, as only bcspattach() uses it,
@@ -247,7 +245,7 @@ bcspattach(int num __unused)
  */
 /* ARGSUSED */
 static int
-bcsp_match(device_t self __unused, struct cfdata *cfdata __unused,
+bcsp_match(device_t self __unused, cfdata_t cfdata __unused,
 	   void *arg __unused)
 {
 
@@ -374,14 +372,15 @@ bcspopen(dev_t device __unused, struct tty *tp)
 {
 	struct bcsp_softc *sc;
 	device_t dev;
-	struct cfdata *cfdata;
+	cfdata_t cfdata;
 	struct lwp *l = curlwp;		/* XXX */
 	int error, unit, s;
 	static char name[] = "bcsp";
 
-	if ((error = kauth_authorize_device_tty(l->l_cred,
-	    KAUTH_GENERIC_ISSUSER, tp)) != 0)
-		return error;
+	error = kauth_authorize_device(l->l_cred, KAUTH_DEVICE_BLUETOOTH_BCSP,
+	    KAUTH_ARG(KAUTH_REQ_DEVICE_BLUETOOTH_BCSP_ADD), NULL, NULL, NULL);
+	if (error)
+		return (error);
 
 	s = spltty();
 
@@ -397,15 +396,16 @@ bcspopen(dev_t device __unused, struct tty *tp)
 
 	cfdata = malloc(sizeof(struct cfdata), M_DEVBUF, M_WAITOK);
 	for (unit = 0; unit < bcsp_cd.cd_ndevs; unit++)
-		if (bcsp_cd.cd_devs[unit] == NULL)
+		if (device_lookup(&bcsp_cd, unit) == NULL)
 			break;
 	cfdata->cf_name = name;
 	cfdata->cf_atname = name;
 	cfdata->cf_unit = unit;
 	cfdata->cf_fstate = FSTATE_STAR;
 
-	aprint_normal("%s%d at tty major %d minor %d",
-	    name, unit, major(tp->t_dev), minor(tp->t_dev));
+	aprint_normal("%s%d at tty major %llu minor %llu",
+	    name, unit, (unsigned long long)major(tp->t_dev),
+	    (unsigned long long)minor(tp->t_dev));
 	dev = config_attach_pseudo(cfdata);
 	if (dev == NULL) {
 		splx(s);
@@ -435,7 +435,7 @@ static int
 bcspclose(struct tty *tp, int flag __unused)
 {
 	struct bcsp_softc *sc = tp->t_sc;
-	struct cfdata *cfdata;
+	cfdata_t cfdata;
 	int s;
 
 	/* terminate link-establishment */
@@ -998,7 +998,7 @@ bcsp_send_ack_command(struct bcsp_softc *sc)
 }
 
 static __inline struct mbuf *
-bcsp_create_ackpkt()
+bcsp_create_ackpkt(void)
 {
 	struct mbuf *m;
 	bcsp_hdr_t *hdrp;

@@ -1,4 +1,4 @@
-/*	$NetBSD: in_var.h,v 1.60 2007/12/05 23:47:18 dyoung Exp $	*/
+/*	$NetBSD: in_var.h,v 1.65 2010/11/05 01:35:57 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -98,6 +91,7 @@ struct in_ifaddr {
 	LIST_HEAD(, in_multi) ia_multiaddrs; /* list of multicast addresses */
 	struct	in_multi *ia_allhosts;	/* multicast address record for
 					   the allhosts multicast group */
+	uint16_t ia_idsalt;		/* ip_id salt for this ia */
 };
 
 struct	in_aliasreq {
@@ -309,11 +303,54 @@ void	in_purgeif(struct ifnet *);
 void	ip_input(struct mbuf *);
 int	ipflow_fastforward(struct mbuf *);
 
+
+struct ipid_state;
+typedef struct ipid_state ipid_state_t;
+
+ipid_state_t *	ip_id_init(void);
+void		ip_id_fini(ipid_state_t *);
+uint16_t	ip_randomid(ipid_state_t *, uint16_t);
+
+extern ipid_state_t *	ip_ids;
+extern uint16_t		ip_id;
+extern int		ip_do_randomid;
+
+/*
+ * ip_newid_range: "allocate" num contiguous IP IDs.
+ *
+ * => Return the first ID.
+ */
+static __inline uint16_t
+ip_newid_range(const struct in_ifaddr *ia, u_int num)
+{
+	uint16_t id;
+
+	if (ip_do_randomid) {
+		/* XXX ignore num */
+		return ip_randomid(ip_ids, ia ? ia->ia_idsalt : 0);
+	}
+
+	/* Never allow an IP ID of 0 (detect wrap). */
+	if ((uint16_t)(ip_id + num) < ip_id) {
+		ip_id = 1;
+	}
+	id = htons(ip_id);
+	ip_id += num;
+	return id;
+}
+
+static __inline uint16_t
+ip_newid(const struct in_ifaddr *ia)
+{
+
+	return ip_newid_range(ia, 1);
+}
+
 #ifdef SYSCTLFN_PROTO
 int	sysctl_inpcblist(SYSCTLFN_PROTO);
 #endif
 
-#endif
+#endif	/* !_KERNEL */
 
 /* INET6 stuff */
 #include <netinet6/in6_var.h>

@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.4 2002/06/29 21:39:54 chris Exp $
+.\"	$NetBSD: hardware,v 1.7 2009/04/23 01:56:49 snj Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,16 +29,12 @@
 \*V runs on a Chalice CATS systems from Simtec Electronics and Intel EBSA
 boards.
 The minimal configuration is said to
-require 8 MB of RAM and 50 MB of disk space, though we do not know of anyone
+require 8 MB of RAM and 100 MB of disk space, though we do not know of anyone
 running with a system quite this minimal today.
-To install the entire system requires much more disk space
-(the unpacked binary distribution,
-without sources, requires at least 65 MB without counting space needed for
-swap space, etc), and to run X or compile the system, more RAM is
-recommended.
-(8 MB of RAM will actually allow you to run X and/or compile,
+To install the entire system requires much more disk space.
+8 MB of RAM might actually allow you to run X and/or compile,
 but it won't be speedy. Note that until you have around 16 MB of RAM,
-getting more RAM is more important than getting a faster CPU.)
+getting more RAM is more important than getting a faster CPU.
 .
 .Ss2 Supported Chalice CATS devices
 .(bullet -offset indent -compact
@@ -105,8 +94,6 @@ SVEC FD1000-TP
 .It
 Znyx ZX34X
 .bullet)
-.It
-Qlogic ISP [12]0x0 SCSI/FibreChannel boards
 .It
 Adaptec AHA-2910, 2915, 2920, and 2930C adapters
 .It

@@ -1,7 +1,6 @@
-/*      $NetBSD: if_atm.c,v 1.27 2007/09/05 05:29:35 dyoung Exp $       */
+/*      $NetBSD: if_atm.c,v 1.32 2011/02/01 19:43:12 chuck Exp $       */
 
 /*
- *
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atm.c,v 1.27 2007/09/05 05:29:35 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atm.c,v 1.32 2011/02/01 19:43:12 chuck Exp $");
 
 #include "opt_inet.h"
 #include "opt_natm.h"
@@ -80,7 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_atm.c,v 1.27 2007/09/05 05:29:35 dyoung Exp $");
  */
 
 void
-atm_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
+atm_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 {
 	struct sockaddr *gate = rt->rt_gateway;
 	struct atm_pseudoioctl api;
@@ -162,10 +155,9 @@ atm_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
 		/*
 		 * let the lower level know this circuit is active
 		 */
-		bcopy(CLLADDR(satocsdl(gate)), &api.aph, sizeof(api.aph));
+		memcpy(&api.aph, CLLADDR(satocsdl(gate)), sizeof(api.aph));
 		api.rxhand = NULL;
-		if (rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMENA,
-							(void *)&api) != 0) {
+		if (rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMENA, &api) != 0) {
 			printf("atm: couldn't add VC\n");
 			goto failed;
 		}
@@ -205,10 +197,9 @@ failed:
 		 * tell the lower layer to disable this circuit
 		 */
 
-		bcopy(CLLADDR(satocsdl(gate)), &api.aph, sizeof(api.aph));
+		memcpy(&api.aph, CLLADDR(satocsdl(gate)), sizeof(api.aph));
 		api.rxhand = NULL;
-		(void)rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMDIS,
-							(void *)&api);
+		(void)rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMDIS, &api);
 
 		break;
 	}
@@ -269,7 +260,7 @@ atmresolve(struct rtentry *rt, struct mbuf *m, const struct sockaddr *dst,
 
 
 	if (sdl->sdl_family == AF_LINK && sdl->sdl_alen == sizeof(*desten)) {
-		bcopy(CLLADDR(sdl), desten, sdl->sdl_alen);
+		memcpy(desten, CLLADDR(sdl), sdl->sdl_alen);
 		return (1);	/* ok, go for it! */
 	}
 

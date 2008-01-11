@@ -1,4 +1,4 @@
-/*	$NetBSD: uniq.c,v 1.3 2007/06/24 19:51:43 christos Exp $	*/
+/*	$NetBSD: uniq.c,v 1.5 2010/04/25 00:54:46 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: uniq.c,v 1.3 2007/06/24 19:51:43 christos Exp $");
+__RCSID("$NetBSD: uniq.c,v 1.5 2010/04/25 00:54:46 joerg Exp $");
 
 #include <stdio.h>
 #include <string.h>
@@ -47,9 +40,17 @@ __RCSID("$NetBSD: uniq.c,v 1.3 2007/06/24 19:51:43 christos Exp $");
 #include <ctype.h>
 #include <fcntl.h>
 
-extern const HASHINFO hinfo;
+#include "extern.h"
 
-void uniq(const char *);
+static const HASHINFO hinfo = {
+	.bsize = 256,
+	.ffactor = 4,
+	.nelem = 32768,
+	.cachesize = 1024,
+	.hash = NULL,
+	.lorder = 0
+};
+
 static int comp(const char *, char **, size_t *);
 
 /*

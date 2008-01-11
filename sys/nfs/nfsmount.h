@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsmount.h,v 1.46 2007/07/31 21:14:19 pooka Exp $	*/
+/*	$NetBSD: nfsmount.h,v 1.51 2011/01/22 22:26:10 matt Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,11 +37,13 @@
 
 #ifndef _NFS_NFSMOUNT_H_
 #define _NFS_NFSMOUNT_H_
-#ifdef _KERNEL
+
+#if defined(_KERNEL) && !defined(NFS_ARGS_ONLY)
 #include <sys/condvar.h>
 #include <sys/rwlock.h>
 #include <sys/mutex.h>
 #include <sys/disk.h>
+#include <sys/rbtree.h>
 #endif
 
 /*
@@ -120,7 +122,7 @@ struct nfs_args {
 #define NFSMNT_STALEWRITEVERF	0x00008000  /* Write verifier is changing */
 #define NFSMNT_WCCKLUDGE	0x00010000  /* see nfs_check_wccdata() */
 
-#ifdef _KERNEL
+#if defined(_KERNEL) && !defined(NFS_ARGS_ONLY)
 /*
  * Mount structure.
  * One allocated on every NFS mount.
@@ -128,13 +130,15 @@ struct nfs_args {
  */
 struct	nfsmount {
 	kmutex_t nm_lock;		/* Lock for this structure */
+	krwlock_t nm_rbtlock;		/* Lock for the rbtree */
 	kcondvar_t nm_rcvcv;
 	kcondvar_t nm_sndcv;
 	int	nm_flag;		/* Flags for soft/hard... */
 	struct	mount *nm_mountp;	/* Vfs structure for this filesystem */
 	int	nm_numgrps;		/* Max. size of groupslist */
-	struct vnode *nm_vnode;
+	struct	vnode *nm_vnode;
 	struct	socket *nm_so;		/* Rpc socket */
+	struct	rb_tree nm_rbtree;	/* red/black tree by fh for nfsnode */
 	int	nm_sotype;		/* Type of socket */
 	int	nm_soproto;		/* and protocol */
 	int	nm_soflags;		/* pr_flags for socket protocol */
@@ -185,17 +189,16 @@ struct	nfsmount {
  */
 VFS_PROTOS(nfs);
 
-int	mountnfs __P((struct nfs_args *argp, struct mount *mp,
+int	mountnfs(struct nfs_args *argp, struct mount *mp,
 		struct mbuf *nam, const char *pth, const char *hst,
-		struct vnode **vpp, struct lwp *p));
-void	nfs_decode_args __P((struct nfsmount *, struct nfs_args *,
-		struct lwp *l));
-int	nfs_fsinfo __P((struct nfsmount *, struct vnode *, kauth_cred_t,
-			struct lwp *));
+		struct vnode **vpp, struct lwp *p);
+void	nfs_decode_args(struct nfsmount *, struct nfs_args *,
+		struct lwp *l);
+int	nfs_fsinfo(struct nfsmount *, struct vnode *, kauth_cred_t,
+			struct lwp *);
 
-void	nfs_vfs_init __P((void));
-void	nfs_vfs_reinit __P((void));
-void	nfs_vfs_done __P((void));
+void	nfs_vfs_init(void);
+void	nfs_vfs_done(void);
 
 #endif /* _KERNEL */
 

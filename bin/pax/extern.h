@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.54 2008/01/10 04:24:51 tls Exp $	*/
+/*	$NetBSD: extern.h,v 1.56 2009/04/07 19:52:35 perry Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -183,7 +183,7 @@ void ls_tty(ARCHD *);
 void safe_print(const char *, FILE *);
 u_long asc_ul(char *, int, int);
 int ul_asc(u_long, char *, int, int);
-#if !defined(NET2_STAT) && !defined(_LP64)
+#if !defined(_LP64)
 unsigned long long asc_ull(char *, int, int);
 int ull_asc(unsigned long long, char *, int, int);
 #endif
@@ -216,7 +216,7 @@ int do_chroot;
  * pat_rep.c
  */
 int rep_add(char *);
-int pat_add(char *, char *);
+int pat_add(char *, char *, int);
 void pat_chk(void);
 int pat_sel(ARCHD *);
 int pat_match(ARCHD *);

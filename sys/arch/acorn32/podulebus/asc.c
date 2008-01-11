@@ -1,4 +1,4 @@
-/*	$NetBSD: asc.c,v 1.14 2005/12/11 12:16:05 christos Exp $	*/
+/*	$NetBSD: asc.c,v 1.16 2009/05/12 06:54:10 cegger Exp $	*/
 
 /*
  * Copyright (c) 2001 Richard Earnshaw
@@ -98,7 +98,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.14 2005/12/11 12:16:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.16 2009/05/12 06:54:10 cegger Exp $");
 
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -268,7 +268,7 @@ ascattach(struct device *pdp, struct device *dp, void *auxp)
 #endif
 	{
 		evcnt_attach_dynamic(&sc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
-		    dp->dv_xname, "intr");
+		    device_xname(dp), "intr");
 		sc->sc_ih = podulebus_irq_establish(pa->pa_ih, IPL_BIO,
 		    asc_intr, sc, &sc->sc_intrcnt);
 		if (sc->sc_ih == NULL)
@@ -337,10 +337,13 @@ void
 asc_dump(void)
 {
 	int i;
+	struct sbi_softc *sc;
 
-	for (i = 0; i < asc_cd.cd_ndevs; ++i)
-		if (asc_cd.cd_devs[i])
-			sbic_dump(asc_cd.cd_devs[i]);
+	for (i = 0; i < asc_cd.cd_ndevs; ++i) {
+		sc = device_lookup_private(&asc_cd, i);
+		if (sc != NULL)
+			sbic_dump(sc);
+	}
 }
 
 int

@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.7 2006/11/10 17:36:08 christos Exp $
+#	$NetBSD: Makefile,v 1.9 2011/05/26 12:56:28 joerg Exp $
 
-MKPRIVATELIB=	yes
+LIBISPRIVATE=	yes
 
 .include <bsd.own.mk>
 
@@ -87,6 +87,8 @@ COPTS.write-java.c = -Wno-stack-protector
 COPTS.write-mo.c = -Wno-stack-protector
 COPTS.write-po.c = -Wno-stack-protector
 COPTS.write-tcl.c = -Wno-stack-protector
+
+CWARNFLAGS.clang+=	-Wno-tautological-compare
 
 .include <bsd.lib.mk>
 

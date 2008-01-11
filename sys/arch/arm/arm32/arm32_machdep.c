@@ -1,4 +1,4 @@
-/*	$NetBSD: arm32_machdep.c,v 1.53 2007/12/16 07:31:48 mrg Exp $	*/
+/*	$NetBSD: arm32_machdep.c,v 1.74 2010/11/28 08:23:22 hannken Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -42,8 +42,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.53 2007/12/16 07:31:48 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.74 2010/11/28 08:23:22 hannken Exp $");
 
+#include "opt_modular.h"
 #include "opt_md.h"
 #include "opt_pmap_debug.h"
 
@@ -51,7 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.53 2007/12/16 07:31:48 mrg Exp $
 #include <sys/systm.h>
 #include <sys/reboot.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/kernel.h>
 #include <sys/mbuf.h>
 #include <sys/mount.h>
@@ -61,6 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.53 2007/12/16 07:31:48 mrg Exp $
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
 #include <sys/cpu.h>
+#include <sys/module.h>
 
 #include <dev/cons.h>
 
@@ -68,34 +69,18 @@ __KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.53 2007/12/16 07:31:48 mrg Exp $
 #include <arm/arm32/machdep.h>
 #include <machine/bootconfig.h>
 
-#include "opt_ipkdb.h"
-#include "md.h"
-
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-extern int physmem;
-
-#if NMD > 0 && defined(MEMORY_DISK_HOOKS) && !defined(MEMORY_DISK_ROOT_SIZE)
+#if defined(MEMORY_DISK_HOOKS) && !defined(MEMORY_DISK_ROOT_SIZE)
 extern size_t md_root_size;		/* Memory disc size */
-#endif	/* NMD && MEMORY_DISK_HOOKS && !MEMORY_DISK_ROOT_SIZE */
+#endif	/* MEMORY_DISK_HOOKS && !MEMORY_DISK_ROOT_SIZE */
 
 pv_addr_t kernelstack;
-
-/* the following is used externally (sysctl_hw) */
-char	machine[] = MACHINE;		/* from <machine/param.h> */
-char	machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
-
-/* Our exported CPU info; we can have only one. */
-struct cpu_info cpu_info_store;
 
 void *	msgbufaddr;
 extern paddr_t msgbufphys;
 
 int kernel_debug = 0;
-
-struct user *proc0paddr;
 
 /* exported variable to be filled in by the bootloaders */
 char *booted_kernel;
@@ -103,9 +88,9 @@ char *booted_kernel;
 
 /* Prototypes */
 
-void data_abort_handler		__P((trapframe_t *frame));
-void prefetch_abort_handler	__P((trapframe_t *frame));
-extern void configure		__P((void));
+void data_abort_handler(trapframe_t *frame);
+void prefetch_abort_handler(trapframe_t *frame);
+extern void configure(void);
 
 /*
  * arm32_vector_init:
@@ -168,7 +153,7 @@ arm32_vector_init(vaddr_t va, int which)
  */
 
 void
-halt()
+halt(void)
 {
 	while (1)
 		cpu_sleep(0);
@@ -180,11 +165,11 @@ halt()
 void
 bootsync(void)
 {
-	static int bootsyncdone = 0;
+	static bool bootsyncdone = false;
 
 	if (bootsyncdone) return;
 
-	bootsyncdone = 1;
+	bootsyncdone = true;
 
 	/* Make sure we can still manage to do things */
 	if (GetCPSR() & I32_bit) {
@@ -208,7 +193,7 @@ bootsync(void)
  *
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
 	vaddr_t minaddr;
 	vaddr_t maxaddr;
@@ -234,7 +219,8 @@ cpu_startup()
 	/* msgbufphys was setup during the secondary boot strap */
 	for (loop = 0; loop < btoc(MSGBUFSIZE); ++loop)
 		pmap_kenter_pa((vaddr_t)msgbufaddr + loop * PAGE_SIZE,
-		    msgbufphys + loop * PAGE_SIZE, VM_PROT_READ|VM_PROT_WRITE);
+		    msgbufphys + loop * PAGE_SIZE,
+		    VM_PROT_READ|VM_PROT_WRITE, 0);
 	pmap_update(pmap_kernel());
 	initmsgbuf(msgbufaddr, round_page(MSGBUFSIZE));
 
@@ -250,36 +236,19 @@ cpu_startup()
 	minaddr = 0;
 
 	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
-
-	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				   VM_PHYS_SIZE, 0, false, NULL);
 
-	/*
-	 * Finally, allocate mbuf cluster submap.
-	 */
-	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
-
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
 
-	curpcb = &lwp0.l_addr->u_pcb;
+	curpcb = lwp_getpcb(&lwp0);
 	curpcb->pcb_flags = 0;
-	curpcb->pcb_un.un_32.pcb32_und_sp = (u_int)lwp0.l_addr +
-	    USPACE_UNDEF_STACK_TOP;
-	curpcb->pcb_un.un_32.pcb32_sp = (u_int)lwp0.l_addr +
-	    USPACE_SVC_STACK_TOP;
-
-        curpcb->pcb_tf = (struct trapframe *)curpcb->pcb_un.un_32.pcb32_sp - 1;
+	curpcb->pcb_un.un_32.pcb32_sp =
+	    uvm_lwp_getuarea(&lwp0) + USPACE_SVC_STACK_TOP;
+	curpcb->pcb_tf = (struct trapframe *)curpcb->pcb_un.un_32.pcb32_sp - 1;
 }
 
 /*
@@ -371,8 +340,7 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 }
 
 void
-parse_mi_bootargs(args)
-	char *args;
+parse_mi_bootargs(char *args)
 {
 	int integer;
 
@@ -399,7 +367,7 @@ parse_mi_bootargs(args)
 /*	if (get_bootconf_option(args, "nbuf", BOOTOPT_TYPE_INT, &integer))
 		bufpages = integer;*/
 
-#if NMD > 0 && defined(MEMORY_DISK_HOOKS) && !defined(MEMORY_DISK_ROOT_SIZE)
+#if defined(MEMORY_DISK_HOOKS) && !defined(MEMORY_DISK_ROOT_SIZE)
 	if (get_bootconf_option(args, "memorydisc", BOOTOPT_TYPE_INT, &integer)
 	    || get_bootconf_option(args, "memorydisk", BOOTOPT_TYPE_INT, &integer)) {
 		md_root_size = integer;
@@ -409,7 +377,7 @@ parse_mi_bootargs(args)
 		if (md_root_size > 2048*1024)
 			md_root_size = 2048*1024;
 	}
-#endif	/* NMD && MEMORY_DISK_HOOKS && !MEMORY_DISK_ROOT_SIZE */
+#endif	/* MEMORY_DISK_HOOKS && !MEMORY_DISK_ROOT_SIZE */
 
 	if (get_bootconf_option(args, "quiet", BOOTOPT_TYPE_BOOLEAN, &integer)
 	    || get_bootconf_option(args, "-q", BOOTOPT_TYPE_BOOLEAN, &integer))
@@ -421,22 +389,94 @@ parse_mi_bootargs(args)
 			boothowto |= AB_VERBOSE;
 }
 
+#ifdef __HAVE_FAST_SOFTINTS
+#if IPL_SOFTSERIAL != IPL_SOFTNET + 1
+#error IPLs are screwed up
+#elif IPL_SOFTNET != IPL_SOFTBIO + 1
+#error IPLs are screwed up
+#elif IPL_SOFTBIO != IPL_SOFTCLOCK + 1
+#error IPLs are screwed up
+#elif !(IPL_SOFTCLOCK > IPL_NONE)
+#error IPLs are screwed up
+#elif (IPL_NONE != 0)
+#error IPLs are screwed up
+#endif
+
+#define	SOFTINT2IPLMAP \
+	(((IPL_SOFTSERIAL - IPL_SOFTCLOCK) << (SOFTINT_SERIAL * 4)) | \
+	 ((IPL_SOFTNET    - IPL_SOFTCLOCK) << (SOFTINT_NET    * 4)) | \
+	 ((IPL_SOFTBIO    - IPL_SOFTCLOCK) << (SOFTINT_BIO    * 4)) | \
+	 ((IPL_SOFTCLOCK  - IPL_SOFTCLOCK) << (SOFTINT_CLOCK  * 4)))
+#define	SOFTINT2IPL(l)	((SOFTINT2IPLMAP >> ((l) * 4)) & 0x0f)
+
+/*
+ * This returns a mask of softint IPLs that be dispatch at <ipl>
+ * SOFTIPLMASK(IPL_NONE)	= 0x0000000f
+ * SOFTIPLMASK(IPL_SOFTCLOCK)	= 0x0000000e
+ * SOFTIPLMASK(IPL_SOFTBIO)	= 0x0000000c
+ * SOFTIPLMASK(IPL_SOFTNET)	= 0x00000008
+ * SOFTIPLMASK(IPL_SOFTSERIAL)	= 0x00000000
+ */
+#define	SOFTIPLMASK(ipl) (0x0f << (ipl))
+
+void softint_switch(lwp_t *, int);
+
 void
-cpu_need_resched(struct cpu_info *ci, int flags)
+softint_trigger(uintptr_t mask)
 {
-	bool immed = (flags & RESCHED_IMMED) != 0;
-
-	if (ci->ci_want_resched && !immed)
-		return;
-
-	ci->ci_want_resched = 1;
-	if (curlwp != ci->ci_data.cpu_idlelwp)
-		setsoftast();
+	curcpu()->ci_softints |= mask;
 }
 
-bool
-cpu_intr_p(void)
+void
+softint_init_md(lwp_t *l, u_int level, uintptr_t *machdep)
 {
-
-	return curcpu()->ci_idepth != 0;
+	lwp_t ** lp = &curcpu()->ci_softlwps[level];
+	KASSERT(*lp == NULL || *lp == l);
+	*lp = l;
+	*machdep = 1 << SOFTINT2IPL(level);
+	KASSERT(level != SOFTINT_CLOCK || *machdep == (1 << (IPL_SOFTCLOCK - IPL_SOFTCLOCK)));
+	KASSERT(level != SOFTINT_BIO || *machdep == (1 << (IPL_SOFTBIO - IPL_SOFTCLOCK)));
+	KASSERT(level != SOFTINT_NET || *machdep == (1 << (IPL_SOFTNET - IPL_SOFTCLOCK)));
+	KASSERT(level != SOFTINT_SERIAL || *machdep == (1 << (IPL_SOFTSERIAL - IPL_SOFTCLOCK)));
 }
+
+void
+dosoftints(void)
+{
+	struct cpu_info * const ci = curcpu();
+	const int opl = ci->ci_cpl;
+	const uint32_t softiplmask = SOFTIPLMASK(opl);
+
+	for (;;) {
+		u_int softints = ci->ci_softints & softiplmask;
+		KASSERT((softints != 0) == ((ci->ci_softints >> opl) != 0));
+		if (softints == 0)
+			return;
+		ci->ci_cpl = IPL_HIGH;
+#define	DOSOFTINT(n) \
+		if (softints & (1 << (IPL_SOFT ## n - IPL_SOFTCLOCK))) { \
+			ci->ci_softints &= \
+			    ~(1 << (IPL_SOFT ## n - IPL_SOFTCLOCK)); \
+			softint_switch(ci->ci_softlwps[SOFTINT_ ## n], \
+			    IPL_SOFT ## n); \
+			ci->ci_cpl = opl; \
+			continue; \
+		}
+		DOSOFTINT(SERIAL);
+		DOSOFTINT(NET);
+		DOSOFTINT(BIO);
+		DOSOFTINT(CLOCK);
+		panic("dosoftints wtf (softints=%u?, ipl=%d)", softints, opl);
+	}
+}
+#endif /* __HAVE_FAST_SOFTINTS */
+
+#ifdef MODULAR
+/*
+ * Push any modules loaded by the boot loader.
+ */
+void
+module_init_md(void)
+{
+}
+#endif /* MODULAR */

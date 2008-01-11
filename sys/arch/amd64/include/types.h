@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.23 2008/01/08 20:37:34 joerg Exp $	*/
+/*	$NetBSD: types.h,v 1.37 2011/03/12 22:54:37 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -31,8 +31,10 @@
  *	@(#)types.h	7.5 (Berkeley) 3/9/91
  */
 
-#ifndef	_MACHTYPES_H_
-#define	_MACHTYPES_H_
+#ifndef	_X86_64_MACHTYPES_H_
+#define	_X86_64_MACHTYPES_H_
+
+#ifdef __x86_64__
 
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
@@ -50,10 +52,18 @@ typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
+#define	PRIxPADDR	"lx"
+#define	PRIxPSIZE	"lx"
+#define	PRIuPSIZE	"lu"
+#define	PRIxVADDR	"lx"
+#define	PRIxVSIZE	"lx"
+#define	PRIuVSIZE	"lu"
 #endif
 
-typedef long int		register_t;
-typedef int			register32_t;
+typedef long int	register_t;
+typedef int		register32_t;
+#define	PRIxREGISTER	"lx"
+#define	PRIxREGISTER32	"x"
 
 typedef	volatile unsigned char		__cpu_simple_lock_t;
 
@@ -68,15 +78,27 @@ typedef	volatile unsigned char		__cpu_simple_lock_t;
 
 #define	__HAVE_DEVICE_REGISTER
 #define	__HAVE_CPU_COUNTER
+#define	__HAVE_CPU_DATA_FIRST
+#define	__HAVE_MD_CPU_OFFLINE
 #define	__HAVE_SYSCALL_INTERN
 #define	__HAVE_MINIMAL_EMUL
-#define __HAVE_TIMECOUNTER
 #define	__HAVE_ATOMIC64_OPS
+#define	__HAVE_ATOMIC_AS_MEMBAR
+#define	__HAVE_CPU_LWP_SETPRIVATE
+#define	__HAVE___LWP_GETPRIVATE_FAST
+#define	__HAVE_TLS_VARIANT_II
+#define	__HAVE_COMMON___TLS_GET_ADDR
+#define	__HAVE_INTR_CONTROL
 
 #ifdef _KERNEL_OPT
 #include "opt_xen.h"
-#define __HAVE_RAS
-#define __HAVE_GENERIC_TODR
+#define	__HAVE_RAS
 #endif
 
-#endif	/* _MACHTYPES_H_ */
+#else	/*	!__x86_64__	*/
+
+#include <i386/types.h>
+
+#endif	/*	__x86_64__	*/
+
+#endif	/* _X86_64_MACHTYPES_H_ */

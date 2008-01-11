@@ -1,4 +1,4 @@
-/*	$NetBSD: geodeide.c,v 1.14 2007/02/09 21:55:27 ad Exp $	*/
+/*	$NetBSD: geodeide.c,v 1.19 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2004 Manuel Bouyer.
@@ -11,11 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -37,12 +32,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: geodeide.c,v 1.14 2007/02/09 21:55:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: geodeide.c,v 1.19 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
@@ -52,14 +45,14 @@ __KERNEL_RCSID(0, "$NetBSD: geodeide.c,v 1.14 2007/02/09 21:55:27 ad Exp $");
 #include <dev/pci/pciide_geode_reg.h>
 
 static void geodeide_chip_map(struct pciide_softc *,
-				 struct pci_attach_args *);
+				 const struct pci_attach_args *);
 static void geodeide_setup_channel(struct ata_channel *);
 static int geodeide_dma_init(void *, int, int, void *, size_t, int);
 
-static int  geodeide_match(struct device *, struct cfdata *, void *);
-static void geodeide_attach(struct device *, struct device *, void *);
+static int  geodeide_match(device_t, cfdata_t, void *);
+static void geodeide_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(geodeide, sizeof(struct pciide_softc),
+CFATTACH_DECL_NEW(geodeide, sizeof(struct pciide_softc),
     geodeide_match, geodeide_attach, NULL, NULL);
 
 static const struct pciide_product_desc pciide_geode_products[] = {
@@ -81,8 +74,7 @@ static const struct pciide_product_desc pciide_geode_products[] = {
 };
 
 static int
-geodeide_match(struct device *parent, struct cfdata *match,
-    void *aux)
+geodeide_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -96,27 +88,28 @@ geodeide_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-geodeide_attach(struct device *parent, struct device *self, void *aux)
+geodeide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (void *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_geode_products));
 }
 
 static void
-geodeide_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
+geodeide_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 {
 	struct pciide_channel *cp;
 	int channel;
-	bus_size_t cmdsize, ctlsize;
 
 	if (pciide_chipen(sc, pa) == 0)
 		return;
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 	if (sc->sc_dma_ok) {
@@ -167,7 +160,7 @@ geodeide_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		/* controller is compat-only */
 		if (pciide_chansetup(sc, channel, 0) == 0)
 			continue;
-		pciide_mapchan(pa, cp, 0, &cmdsize, &ctlsize, pciide_pci_intr);
+		pciide_mapchan(pa, cp, 0, pciide_pci_intr);
 	}
 }
 

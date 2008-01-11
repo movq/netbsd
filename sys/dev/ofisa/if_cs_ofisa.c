@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cs_ofisa.c,v 1.16 2007/10/19 12:00:37 ad Exp $	*/
+/*	$NetBSD: if_cs_ofisa.c,v 1.24 2009/09/22 16:44:08 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.16 2007/10/19 12:00:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.24 2009/09/22 16:44:08 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,17 +63,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.16 2007/10/19 12:00:37 ad Exp $");
 #include <dev/ic/cs89x0var.h>
 #include <dev/isa/cs89x0isavar.h>
 
-int	cs_ofisa_match(struct device *, struct cfdata *, void *);
-void	cs_ofisa_attach(struct device *, struct device *, void *);
+static int	cs_ofisa_match(device_t, cfdata_t, void *);
+static void	cs_ofisa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(cs_ofisa, sizeof(struct cs_softc_isa),
+CFATTACH_DECL_NEW(cs_ofisa, sizeof(struct cs_softc_isa),
     cs_ofisa_match, cs_ofisa_attach, NULL, NULL);
 
 int
-cs_ofisa_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+cs_ofisa_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct ofisa_attach_args *aa = aux;
 	static const char *const compatible_strings[] = {
@@ -101,12 +91,10 @@ cs_ofisa_match(parent, cf, aux)
 }
 
 void
-cs_ofisa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+cs_ofisa_attach(device_t parent, device_t self, void *aux)
 {
-	struct cs_softc *sc = device_private(self);
-	struct cs_softc_isa *isc = (void *)sc;
+	struct cs_softc_isa *isc = device_private(self);
+	struct cs_softc *sc = &isc->sc_cs;
 	struct ofisa_attach_args *aa = aux;
 	struct ofisa_reg_desc reg[2];
 	struct ofisa_intr_desc intr;
@@ -117,6 +105,7 @@ cs_ofisa_attach(parent, self, aux)
 	const char *message = NULL;
 	u_int8_t enaddr[6];
 
+	sc->sc_dev = self;
 	isc->sc_ic = aa->ic;
 	sc->sc_iot = aa->iot;
 	sc->sc_memt = aa->memt;
@@ -244,19 +233,17 @@ cs_ofisa_attach(parent, self, aux)
 		printf("\n");
 
 	if (message != NULL)
-		printf("%s: %s\n", sc->sc_dev.dv_xname, message);
+		printf("%s: %s\n", device_xname(self), message);
 
 	if (defmedia == -1) {
-		printf("%s: unable to get default media\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to get default media\n");
 		defmedia = media[0];	/* XXX What to do? */
 	}
 
 	sc->sc_ih = isa_intr_establish(isc->sc_ic, sc->sc_irq, intr.share,
 	    IPL_NET, cs_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to establish interrupt\n");
 		return;
 	}
 

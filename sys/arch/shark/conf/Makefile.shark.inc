@@ -1,10 +1,9 @@
-#	$NetBSD: Makefile.shark.inc,v 1.9 2007/11/17 09:07:42 skrll Exp $
+#	$NetBSD: Makefile.shark.inc,v 1.13 2010/07/06 06:00:00 mrg Exp $
 
 MACHINE_ARCH=		arm
 CPPFLAGS+=		-D${MACHINE}
 GENASSYM_EXTRAS+=	${THISARM}/shark/genassym.cf
 
-.if (${OBJECT_FMT} == "ELF")
 # Need to convert the kernel from ELF to a.out so that OpenFirmware
 # can load it.
 
@@ -18,9 +17,17 @@ SYSTEM_LD_HEAD_EXTRA+=; \
 
 SYSTEM_LD_TAIL_EXTRA+=; \
 	echo \
-	 "${OBJCOPY} -O a.out-arm-netbsd -R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident $@ $@.aout"; \
-	${OBJCOPY} -O a.out-arm-netbsd -R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident $@ $@.aout
+	 "${OBJCOPY} -O a.out-arm-netbsd \
+		-R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident \
+		-R .debug_abbrev -R .debug_info -R .debug_line -R .debug_str \
+		-R .debug_frame -R .debug_loc -R .debug_pubnames \
+		-R .debug_aranges -R .ARM.attributes \
+		$@ $@.aout"; \
+	${OBJCOPY} -O a.out-arm-netbsd \
+		-R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident \
+		-R .debug_abbrev -R .debug_info -R .debug_line -R .debug_str \
+		-R .debug_frame -R .debug_loc -R .debug_pubnames \
+		-R .debug_aranges -R .ARM.attributes \
+		$@ $@.aout
 
 KERNIMAGES=	netbsd netbsd.aout
-
-.endif

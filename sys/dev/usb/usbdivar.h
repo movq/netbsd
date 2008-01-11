@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdivar.h,v 1.81 2007/07/09 21:01:25 ad Exp $	*/
+/*	$NetBSD: usbdivar.h,v 1.93 2011/05/27 17:19:18 drochner Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdivar.h,v 1.11 1999/11/17 22:33:51 n_hibma Exp $	*/
 
 /*
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,12 +31,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if defined(__NetBSD__)
 #include <sys/callout.h>
-#endif
 
 /* From usb_mem.h */
-DECLARE_USB_DMA_T;
+struct usb_dma_block;
+typedef struct {
+	struct usb_dma_block *block;
+	u_int offs;
+} usb_dma_t;
 
 struct usbd_xfer;
 struct usbd_pipe;
@@ -51,6 +46,7 @@ struct usbd_pipe;
 struct usbd_endpoint {
 	usb_endpoint_descriptor_t *edesc;
 	int			refcnt;
+	int datatoggle;
 };
 
 struct usbd_bus_methods {
@@ -100,13 +96,11 @@ struct usbd_hub {
 	struct usbd_port        ports[1];
 };
 
-struct usb_softc;
-
 /*****/
 
 struct usbd_bus {
 	/* Filled by HC driver */
-	USBBASEDEVICE		bdev; /* base device, host adapter */
+	void			*hci_private;
 	const struct usbd_bus_methods *methods;
 	u_int32_t		pipe_size; /* size of a pipe struct */
 	/* Filled by usb driver */
@@ -114,7 +108,7 @@ struct usbd_bus {
 	usbd_device_handle	devices[USB_MAX_DEVICES];
 	char			needs_explore;/* a hub a signalled a change */
 	char			use_polling;
-	struct usb_softc       *usbctl;
+	device_t		usbctl;
 	struct usb_device_stats	stats;
 	int 			intr_context;
 	u_int			no_intrs;
@@ -127,9 +121,7 @@ struct usbd_bus {
 #define USBREV_STR { "unknown", "pre 1.0", "1.0", "1.1", "2.0" }
 
 	void		       *soft; /* soft interrupt cookie */
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 	bus_dma_tag_t		dmatag;	/* DMA tag */
-#endif
 };
 
 struct usbd_device {
@@ -154,7 +146,9 @@ struct usbd_device {
 	usb_config_descriptor_t *cdesc;	       /* full config descr */
 	const struct usbd_quirks     *quirks;  /* device quirks, always set */
 	struct usbd_hub	       *hub;           /* only if this is a hub */
-	device_ptr_t	       *subdevs;       /* sub-devices, 0 terminated */
+	int			subdevlen;     /* array length of following */
+	device_t	       *subdevs;       /* sub-devices */
+	int			nifaces_claimed; /* number of ifaces in use */
 };
 
 struct usbd_interface {
@@ -224,13 +218,13 @@ struct usbd_xfer {
 #define UXFER_ABORTING	0x01	/* xfer is aborting. */
 #define UXFER_ABORTWAIT	0x02	/* abort completion is being awaited. */
 
-	usb_callout_t		timeout_handle;
+        struct callout timeout_handle;
 };
 
 void usbd_init(void);
 void usbd_finish(void);
 
-#ifdef USB_DEBUG
+#if defined(USB_DEBUG) || defined(EHCI_DEBUG)
 void usbd_dump_iface(struct usbd_interface *iface);
 void usbd_dump_device(struct usbd_device *dev);
 void usbd_dump_endpoint(struct usbd_endpoint *endp);
@@ -246,8 +240,11 @@ usbd_status	usbd_setup_pipe(usbd_device_handle dev,
 				usbd_interface_handle iface,
 				struct usbd_endpoint *, int,
 				usbd_pipe_handle *pipe);
-usbd_status	usbd_new_device(device_ptr_t, usbd_bus_handle, int, int, int,
-				struct usbd_port *);
+usbd_status	usbd_new_device(device_t, usbd_bus_handle, int, int, int,
+                                struct usbd_port *);
+usbd_status	usbd_reattach_device(device_t, usbd_device_handle,
+                                     int, const int *);
+
 void		usbd_remove_device(usbd_device_handle, struct usbd_port *);
 int		usbd_printBCD(char *, size_t, int);
 usbd_status	usbd_fill_iface_data(usbd_device_handle, int, int);
@@ -255,7 +252,7 @@ void		usb_free_device(usbd_device_handle);
 
 usbd_status	usb_insert_transfer(usbd_xfer_handle);
 void		usb_transfer_complete(usbd_xfer_handle);
-void		usb_disconnect_port(struct usbd_port *, device_ptr_t);
+int		usb_disconnect_port(struct usbd_port *, device_t, int);
 
 /* Routines from usb.c */
 void		usb_needs_explore(usbd_device_handle);
@@ -275,44 +272,3 @@ void		usb_schedsoftintr(struct usbd_bus *);
 #else
 #define SPLUSBCHECK
 #endif
-
-/* Locator stuff. */
-
-#if defined(__NetBSD__)
-#include "locators.h"
-#elif defined(__FreeBSD__) || defined(__OpenBSD__)
-/* XXX these values are used to statically bind some elements in the USB tree
- * to specific driver instances. This should be somehow emulated in FreeBSD
- * but can be done later on.
- * The values are copied from the files.usb file in the NetBSD sources.
- */
-#define UHUBCF_PORT_DEFAULT -1
-#define UHUBCF_CONFIGURATION_DEFAULT -1
-#define UHUBCF_INTERFACE_DEFAULT -1
-#define UHUBCF_VENDOR_DEFAULT -1
-#define UHUBCF_PRODUCT_DEFAULT -1
-#define UHUBCF_RELEASE_DEFAULT -1
-#endif
-
-#if defined (__OpenBSD__)
-#define	UHUBCF_PORT		0
-#define	UHUBCF_CONFIGURATION	1
-#define	UHUBCF_INTERFACE	2
-#define	UHUBCF_VENDOR		3
-#define	UHUBCF_PRODUCT		4
-#define	UHUBCF_RELEASE		5
-#endif
-
-#define	uhubcf_port		cf_loc[USBDEVIFCF_PORT]
-#define	uhubcf_configuration	cf_loc[USBDEVIFCF_CONFIGURATION]
-#define	uhubcf_interface	cf_loc[USBDEVIFCF_INTERFACE]
-#define	uhubcf_vendor		cf_loc[USBDEVIFCF_VENDOR]
-#define	uhubcf_product		cf_loc[USBDEVIFCF_PRODUCT]
-#define	uhubcf_release		cf_loc[USBDEVIFCF_RELEASE]
-#define	UHUB_UNK_PORT		USBDEVIFCF_PORT_DEFAULT /* wildcarded 'port' */
-#define	UHUB_UNK_CONFIGURATION	USBDEVIFCF_CONFIGURATION_DEFAULT /* wildcarded 'configuration' */
-#define	UHUB_UNK_INTERFACE	USBDEVIFCF_INTERFACE_DEFAULT /* wildcarded 'interface' */
-#define	UHUB_UNK_VENDOR		USBDEVIFCF_VENDOR_DEFAULT /* wildcarded 'vendor' */
-#define	UHUB_UNK_PRODUCT	USBDEVIFCF_PRODUCT_DEFAULT /* wildcarded 'product' */
-#define	UHUB_UNK_RELEASE	USBDEVIFCF_RELEASE_DEFAULT /* wildcarded 'release' */
-

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atw_pci.c,v 1.15 2007/10/19 12:00:44 ad Exp $	*/
+/*	$NetBSD: if_atw_pci.c,v 1.24 2010/02/24 22:38:00 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.15 2007/10/19 12:00:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atw_pci.c,v 1.24 2010/02/24 22:38:00 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,10 +88,12 @@ struct atw_pci_softc {
 	pcitag_t		psc_pcitag;	/* our PCI tag */
 };
 
-static int	atw_pci_match(struct device *, struct cfdata *, void *);
-static void	atw_pci_attach(struct device *, struct device *, void *);
+static int	atw_pci_match(device_t, cfdata_t, void *);
+static void	atw_pci_attach(device_t, device_t, void *);
+static bool	atw_pci_suspend(device_t, const pmf_qual_t *);
+static bool	atw_pci_resume(device_t, const pmf_qual_t *);
 
-CFATTACH_DECL(atw_pci, sizeof(struct atw_pci_softc),
+CFATTACH_DECL_NEW(atw_pci, sizeof(struct atw_pci_softc),
     atw_pci_match, atw_pci_attach, NULL, NULL);
 
 static const struct atw_pci_product {
@@ -128,8 +123,7 @@ atw_pci_lookup(const struct pci_attach_args *pa)
 }
 
 static int
-atw_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+atw_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -139,37 +133,39 @@ atw_pci_match(struct device *parent, struct cfdata *match,
 	return (0);
 }
 
-static int
-atw_pci_enable(struct atw_softc *sc)
+static bool
+atw_pci_resume(device_t self, const pmf_qual_t *qual)
 {
-	struct atw_pci_softc *psc = (void *)sc;
+	struct atw_pci_softc *psc = device_private(self);
+	struct atw_softc *sc = &psc->psc_atw;
 
 	/* Establish the interrupt. */
 	psc->psc_intrcookie = pci_intr_establish(psc->psc_pc, psc->psc_ih,
 	    IPL_NET, atw_intr, sc);
 	if (psc->psc_intrcookie == NULL) {
-		printf("%s: unable to establish interrupt\n",
-		    sc->sc_dev.dv_xname);
-		return (1);
+		aprint_error_dev(sc->sc_dev, "unable to establish interrupt\n");
+		return false;
 	}
 
-	return (0);
+	return true;
 }
 
-static void
-atw_pci_disable(struct atw_softc *sc)
+static bool
+atw_pci_suspend(device_t self, const pmf_qual_t *qual)
 {
-	struct atw_pci_softc *psc = (void *)sc;
+	struct atw_pci_softc *psc = device_private(self);
 
 	/* Unhook the interrupt handler. */
 	pci_intr_disestablish(psc->psc_pc, psc->psc_intrcookie);
 	psc->psc_intrcookie = NULL;
+
+	return atw_suspend(self, qual);
 }
 
 static void
-atw_pci_attach(struct device *parent, struct device *self, void *aux)
+atw_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct atw_pci_softc *psc = (void *) self;
+	struct atw_pci_softc *psc = device_private(self);
 	struct atw_softc *sc = &psc->psc_atw;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
@@ -179,6 +175,8 @@ atw_pci_attach(struct device *parent, struct device *self, void *aux)
 	int ioh_valid, memh_valid;
 	const struct atw_pci_product *app;
 	int error;
+
+	sc->sc_dev = self;
 
 	psc->psc_pc = pa->pa_pc;
 	psc->psc_pcitag = pa->pa_tag;
@@ -190,12 +188,6 @@ atw_pci_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	/*
-	 * No power management hooks.
-	 * XXX Maybe we should add some!
-	 */
-	sc->sc_flags |= ATWF_ENABLED;
-
-	/*
 	 * Get revision info, and set some chip-specific variables.
 	 */
 	sc->sc_rev = PCI_REVISION(pa->pa_class);
@@ -203,10 +195,9 @@ atw_pci_attach(struct device *parent, struct device *self, void *aux)
 	    (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
 
 	/* power up chip */
-	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
 	    NULL)) && error != EOPNOTSUPP) {
-		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
-		    error);
+		aprint_error_dev(self, "cannot activate %d\n", error);
 		return;
 	}
 
@@ -260,29 +251,36 @@ atw_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (pci_intr_map(pa, &psc->psc_ih)) {
-		printf("%s: unable to map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, psc->psc_ih);
 	psc->psc_intrcookie = pci_intr_establish(pc, psc->psc_ih, IPL_NET,
 	    atw_intr, sc);
 	if (psc->psc_intrcookie == NULL) {
-		printf("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
-
-	sc->sc_enable = atw_pci_enable;
-	sc->sc_disable = atw_pci_disable;
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/*
-	 * Finish off the attach.
+	 * Bus-independent attach.
 	 */
 	atw_attach(sc);
+
+	if (pmf_device_register1(sc->sc_dev, atw_pci_suspend, atw_pci_resume,
+	    atw_shutdown))
+		pmf_class_network_register(sc->sc_dev, &sc->sc_if);
+	else
+		aprint_error_dev(sc->sc_dev,
+		    "couldn't establish power handler\n");
+
+	/*
+	 * Power down the socket.
+	 */
+	pmf_device_suspend(sc->sc_dev, &sc->sc_qual);
 }

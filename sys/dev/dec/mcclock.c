@@ -1,4 +1,4 @@
-/* $NetBSD: mcclock.c,v 1.19 2008/01/04 01:00:43 simonb Exp $ */
+/* $NetBSD: mcclock.c,v 1.26 2011/04/06 14:51:12 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mcclock.c,v 1.19 2008/01/04 01:00:43 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcclock.c,v 1.26 2011/04/06 14:51:12 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -51,9 +51,9 @@ __KERNEL_RCSID(0, "$NetBSD: mcclock.c,v 1.19 2008/01/04 01:00:43 simonb Exp $");
 #endif
 
 
-void	mcclock_init(struct device *);
-int	mcclock_get(todr_chip_handle_t, volatile struct timeval *);
-int	mcclock_set(todr_chip_handle_t, volatile struct timeval *);
+void	mcclock_init(device_t);
+int	mcclock_get(todr_chip_handle_t, struct timeval *);
+int	mcclock_set(todr_chip_handle_t, struct timeval *);
 
 const struct clockfns mcclock_clockfns = {
 	mcclock_init, 
@@ -65,12 +65,10 @@ const struct clockfns mcclock_clockfns = {
 	    (*(dev)->sc_busfns->mc_bf_read)(dev, reg)
 
 void
-mcclock_attach(sc, busfns)
-	struct mcclock_softc *sc;
-	const struct mcclock_busfns *busfns;
+mcclock_attach(struct mcclock_softc *sc, const struct mcclock_busfns *busfns)
 {
 
-	printf(": mc146818 or compatible\n");
+	printf(": mc146818 or compatible");
 
 	sc->sc_busfns = busfns;
 
@@ -86,8 +84,7 @@ mcclock_attach(sc, busfns)
 }
 
 void
-mcclock_init(dev)
-	struct device *dev;
+mcclock_init(device_t dev)
 {
 	struct mcclock_softc *sc = (struct mcclock_softc *)dev;
 	int rate;
@@ -129,7 +126,7 @@ again:
 		break;
 	default:
 		printf("%s: Cannot get %d Hz clock; using %d Hz\n",
-		    sc->sc_dev.dv_xname, hz, MC_DEFAULTHZ);
+		    device_xname(&sc->sc_dev), hz, MC_DEFAULTHZ);
 		hz = MC_DEFAULTHZ;
 		goto again;
 	}
@@ -152,7 +149,7 @@ again:
  * Get the time of day, based on the clock's value and/or the base value.
  */
 int
-mcclock_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
+mcclock_get(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	struct mcclock_softc *sc = (struct mcclock_softc *)tch->cookie;
 	uint32_t yearsecs;
@@ -198,7 +195,7 @@ mcclock_get(todr_chip_handle_t tch, volatile struct timeval *tvp)
  * Reset the TODR based on the time value.
  */
 int
-mcclock_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
+mcclock_set(todr_chip_handle_t tch, struct timeval *tvp)
 {
 	struct mcclock_softc *sc = (struct mcclock_softc *)tch->cookie;
 	struct clock_ymdhms dt;
@@ -222,7 +219,8 @@ mcclock_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
 
 #ifdef DEBUG
 	if (dt.dt_year != 1972)
-		printf("resettodr: botch (%d, %ld)\n", yearsecs, time_second);
+		printf("resettodr: botch (%d, %" PRId64 ")\n",
+		    yearsecs, time_second);
 #endif
 
 	s = splclock();
@@ -235,7 +233,7 @@ mcclock_set(todr_chip_handle_t tch, volatile struct timeval *tvp)
 	regs[MC_DOW] = dt.dt_wday;
 	regs[MC_DOM] = dt.dt_day;
 	regs[MC_MONTH] = dt.dt_mon;
-	regs[MC_YEAR] = dt.dt_year;
+	regs[MC_YEAR] = dt.dt_year - 1900;	/* rt clock wants 2 digits */
 
 	s = splclock();
 	MC146818_PUTTOD(sc, &regs);

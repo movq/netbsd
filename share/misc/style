@@ -1,4 +1,4 @@
-/* $NetBSD: style,v 1.41 2007/09/20 18:27:17 plunky Exp $ */
+/* $NetBSD: style,v 1.47 2010/10/30 20:12:32 christos Exp $ */
 
 /*
  * The revision control tag appears first, with a blank line after it.
@@ -25,11 +25,12 @@
  * source file per program contains a __COPYRIGHT() section.
  * Historic Berkeley code may also have an __SCCSID() section.
  * Only one instance of each of these macros can occur in each file.
+ * Don't use newlines in the identifiers.
  */
 #include <sys/cdefs.h>
-__COPYRIGHT("@(#) Copyright (c) 2000\n\
-	The NetBSD Foundation, inc. All rights reserved.\n");
-__RCSID("$NetBSD: style,v 1.41 2007/09/20 18:27:17 plunky Exp $");
+__COPYRIGHT("@(#) Copyright (c) 2008\
+ The NetBSD Foundation, inc. All rights reserved.");
+__RCSID("$NetBSD: style,v 1.47 2010/10/30 20:12:32 christos Exp $");
 
 /*
  * VERY important single-line comments look like this.
@@ -109,7 +110,7 @@ __RCSID("$NetBSD: style,v 1.41 2007/09/20 18:27:17 plunky Exp $");
 
 /*
  * ANSI function declarations for private functions (i.e. functions not used
- * elsewhere) and the main() function go at the top of the source module. 
+ * elsewhere) and the main() function go at the top of the source module.
  * Don't associate a name with the types.  I.e. use:
  *	void function(int);
  * Use your discretion on indenting between the return type and the name, and
@@ -120,7 +121,7 @@ __RCSID("$NetBSD: style,v 1.41 2007/09/20 18:27:17 plunky Exp $");
 static char *function(int, int, float, int);
 static int dirinfo(const char *, struct stat *, struct dirent *,
 		   struct statfs *, int *, char **[]);
-static void usage(void);
+static void usage(void) __dead;	/* declare functions that don't return dead */
 int main(int, char *[]);
 
 /*
@@ -360,9 +361,12 @@ function(int a1, int a2, float fl, int a4)
 	 * Routines returning ``void *'' should not have their return
 	 * values cast to more specific pointer types.
 	 *
+	 * Prefer sizeof(*var) over sizeof(type) because if type changes,
+	 * the change needs to be done in one place.
+	 *
 	 * Use err/warn(3), don't roll your own!
 	 */
-	if ((four = malloc(sizeof(struct foo))) == NULL)
+	if ((four = malloc(sizeof(*four))) == NULL)
 		err(1, NULL);
 	if ((six = (int *)overflow()) == NULL)
 		errx(1, "Number overflowed.");
@@ -395,7 +399,7 @@ dirinfo(const char *p, struct stat *sb, struct dirent *de, struct statfs *sf,
 	/*
 	 * To printf quantities that might be larger that "long", include
 	 * <inttypes.h>, cast quantities to intmax_t or uintmax_t and use
-	 * PRI?MAX constants, which may be found in <machine/int_fmtio.h>.
+	 * PRI?MAX constants.
 	 */
 	(void)printf("The size of %s is %" PRIdMAX " (%#" PRIxMAX ")\n", p,
 	    (intmax_t)sb->st_size, (uintmax_t)sb->st_size);
@@ -417,7 +421,7 @@ dirinfo(const char *p, struct stat *sb, struct dirent *de, struct statfs *sf,
 /*
  * Functions that support variable numbers of arguments should look like this.
  * (With the #include <stdarg.h> appearing at the top of the file with the
- * other include files).
+ * other include files.)
  */
 #include <stdarg.h>
 
@@ -428,7 +432,7 @@ vaf(const char *fmt, ...)
 
 	va_start(ap, fmt);
 	STUFF;
-	va_end(ap);	
+	va_end(ap);
 				/* No return needed for void functions. */
 }
 

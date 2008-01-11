@@ -1,4 +1,4 @@
-/*	$NetBSD: ypserv.c,v 1.21 2007/12/15 19:44:57 perry Exp $	*/
+/*	$NetBSD: ypserv.c,v 1.24 2011/04/25 22:54:05 wiz Exp $	*/
 
 /*
  * Copyright (c) 1994 Mats O Jansson <moj@stacken.kth.se>
@@ -12,11 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Mats O Jansson
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -33,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ypserv.c,v 1.21 2007/12/15 19:44:57 perry Exp $");
+__RCSID("$NetBSD: ypserv.c,v 1.24 2011/04/25 22:54:05 wiz Exp $");
 #endif
 
 #include <sys/types.h>
@@ -97,6 +92,7 @@ static struct bindsock {
 
 static void	usage(void) __dead;
 static int	bind_resv_port(int, sa_family_t, in_port_t);
+void		ypserv_sock_hostname(struct host_info *host);
 
 static void
 _msgout(int level, const char *msg, ...)
@@ -108,6 +104,11 @@ _msgout(int level, const char *msg, ...)
         else
 		vsyslog(level, msg, ap);
 	va_end(ap);
+}
+
+void ypserv_sock_hostname(struct host_info *host)
+{
+	host->name[0] = 0;
 }
 
 static void
@@ -142,6 +143,14 @@ ypprog_2(struct svc_req *rqstp, SVCXPRT *transp)
 	(void)request_init(&req, RQ_DAEMON, getprogname(), RQ_CLIENT_SIN,
 	    caller, NULL);
 	sock_methods(&req);
+
+	/*
+	 * Do not do hostname lookups!  This avoids possible delays due
+	 * to DNS, preventing a possible DoS attack, as well as possible 
+	 * circular lookups (e.g. a hostname lookup requiring a request 
+	 * to ourselves).
+	 */
+	req.hostname = ypserv_sock_hostname;
 #endif
 
 	switch (rqstp->rq_proc) {
@@ -429,9 +438,9 @@ usage(void)
 {
 
 #ifdef LIBWRAP
-#define	USAGESTR	"Usage: %s [-d] [-l] [-p <port>]\n"
+#define	USAGESTR	"Usage: %s [-dfl] [-p <port>]\n"
 #else
-#define	USAGESTR	"Usage: %s [-d] [-p <port>]\n"
+#define	USAGESTR	"Usage: %s [-df] [-p <port>]\n"
 #endif
 
 	(void)fprintf(stderr, USAGESTR, getprogname());

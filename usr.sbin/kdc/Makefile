@@ -1,5 +1,6 @@
-# $NetBSD: Makefile,v 1.14 2007/05/28 12:06:37 tls Exp $
+# $NetBSD: Makefile,v 1.17 2009/04/22 15:23:04 lukem Exp $
 
+WARNS?=	1	# XXX -Wshadow -Wextra -Wsign-compare
 NOLINT= # defined
 
 .include <bsd.own.mk>
@@ -9,19 +10,25 @@ USE_FORT?= yes	# network server
 DIST=		${NETBSDSRCDIR}/crypto/dist
 .PATH: ${DIST}/heimdal/kdc
 
-WARNS?=  1
-
 PROG= kdc
 
-SRCS+= 	524.c		\
-	config.c	\
-	connect.c	\
-	kdc_locl.h	\
-	kerberos4.c	\
-	kerberos5.c	\
-	log.c		\
-	main.c		\
-	misc.c		\
+SRCS+= 	524.c			\
+	config.c		\
+	connect.c		\
+	default_config.c	\
+	digest.c		\
+	kaserver.c		\
+	kerberos4.c		\
+	kerberos5.c		\
+	krb5tgs.c		\
+	kx509.c			\
+	log.c			\
+	main.c			\
+	misc.c			\
+	pkinit.c		\
+	process.c		\
+	set_dbinfo.c		\
+	windc.c
 
 CPPFLAGS+= -I.					\
 	-I${DIST}/heimdal/kdc			\
@@ -37,10 +44,11 @@ CPPFLAGS+=-DHAVE_IPV6
 
 VERS!=	cd ${NETBSDSRCDIR}/lib/libvers && ${PRINTOBJDIR}
 
-LDADD+=	-lhdb -lkrb5 -lcrypto -lasn1 -lcom_err \
+LDADD+=	-lhdb -lkrb5 -lhx509 -lheimntlm -lcrypto -lasn1 -lcom_err \
 	-L${VERS} -lvers -lroken -lcrypt -lutil
-DPADD+=	${LIBHDB} ${LIBKRB5} ${LIBCRYPTO} ${LIBASN1} ${LIBCOM_ERR} \
-	${VERS}/libvers.a ${LIBROKEN} ${LIBCRYPT} ${LIBUTIL}
+DPADD+=	${LIBHDB} ${LIBKRB5} ${LIBHX509} ${LIBHEIMNTLM} ${LIBCRYPTO} \
+	${LIBASN1} ${LIBCOM_ERR} ${VERS}/libvers.a ${LIBROKEN} \
+	${LIBCRYPT} ${LIBUTIL}
 
 MAN=	kdc.8
 

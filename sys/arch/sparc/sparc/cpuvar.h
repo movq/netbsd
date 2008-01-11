@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuvar.h,v 1.74 2008/01/08 21:32:10 martin Exp $ */
+/*	$NetBSD: cpuvar.h,v 1.89 2011/02/20 10:02:01 mrg Exp $ */
 
 /*
  *  Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. All advertising materials mentioning features or use of this software
- *     must display the following acknowledgement:
- *         This product includes software developed by the NetBSD
- *         Foundation, Inc. and its contributors.
- *  4. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,6 +37,7 @@
 #include "opt_lockdebug.h"
 #include "opt_ddb.h"
 #include "opt_sparc_arch.h"
+#include "opt_modular.h"
 #endif
 
 #include <sys/device.h>
@@ -111,26 +105,16 @@ struct xpmsg {
 		 * the trap window (see locore.s).
 		 */
 		struct xpmsg_func {
-			int	(*func)(int, int, int);
+			void	(*func)(int, int, int);
 			void	(*trap)(int, int, int);
 			int	arg0;
 			int	arg1;
 			int	arg2;
-			int	retval;
 		} xpmsg_func;
 	} u;
 	volatile int	received;
 	volatile int	complete;
 };
-
-/*
- * This must be locked around all message transactions to ensure only
- * one CPU is generating them.
- */
-extern struct simplelock xpmsg_lock;
-
-#define LOCK_XPMSG()	simple_lock(&xpmsg_lock);
-#define UNLOCK_XPMSG()	simple_unlock(&xpmsg_lock);
 
 /*
  * The cpuinfo structure. This structure maintains information about one
@@ -142,6 +126,13 @@ extern struct simplelock xpmsg_lock;
 
 struct cpu_info {
 	struct cpu_data ci_data;	/* MI per-cpu data */
+
+	/*
+	 * Primary Inter-processor message area.  Keep this aligned
+	 * to a cache line boundary if possible, as the structure
+	 * itself is one (normal 32 byte) cache-line.
+	 */
+	struct xpmsg	msg __aligned(32);
 
 	/* Scheduler flags */
 	int	ci_want_ast;
@@ -157,9 +148,6 @@ struct cpu_info {
 	 * in the curcpu() macro.
 	 */
 	struct cpu_info * volatile ci_self;
-
-	/* Primary Inter-processor message area */
-	struct xpmsg	msg;
 
 	int		ci_cpuid;	/* CPU index (see cpus[] array) */
 
@@ -277,7 +265,7 @@ struct cpu_info {
 	int		mid;		/* Module ID for MP systems */
 	int		mbus;		/* 1 if CPU is on MBus */
 	int		mxcc;		/* 1 if a MBus-level MXCC is present */
-	const char	*cpu_name;	/* CPU model */
+	const char	*cpu_longname;	/* CPU model */
 	int		cpu_impl;	/* CPU implementation code */
 	int		cpu_vers;	/* CPU version code */
 	int		mmu_impl;	/* MMU implementation code */
@@ -341,6 +329,18 @@ struct cpu_info {
 	/*bus_space_handle_t*/ long ci_mxccregs;
 
 	u_int	ci_tt;			/* Last trap (if tracing) */
+
+	/*
+	 * Start/End VA's of this cpu_info region; we upload the other pages
+	 * in this region that aren't part of the cpu_info to uvm.
+	 */
+	vaddr_t	ci_free_sva1, ci_free_eva1, ci_free_sva2, ci_free_eva2;
+
+	struct evcnt ci_savefpstate;
+	struct evcnt ci_xpmsg_mutex_fail;
+	struct evcnt ci_xpmsg_mutex_fail_call;
+	struct evcnt ci_intrcnt[16];
+	struct evcnt ci_sintrcnt[16];
 };
 
 /*
@@ -418,21 +418,21 @@ struct cpu_info {
 #define CPUFLG_HATCHED		0x1000	/* CPU is alive */
 #define CPUFLG_PAUSED		0x2000	/* CPU is paused */
 #define CPUFLG_GOTMSG		0x4000	/* CPU got an lev13 IPI */
-#define CPUFLG_READY		0x8000	/* CPU available for IPI */
 
 
 #define CPU_INFO_ITERATOR		int
-#ifdef MULTIPROCESSOR
-#define CPU_INFO_FOREACH(cii, ci)	cii = 0; ci = cpus[cii], cii < sparc_ncpus; cii++
+/*
+ * Provide two forms of CPU_INFO_FOREACH.  One fast one for non-modular
+ * non-SMP kernels, and the other for everyone else.  Both work in the
+ * non-SMP case, just involving an extra indirection through cpus[0] for
+ * the portable version.
+ */
+#if defined(MULTIPROCESSOR) || defined(MODULAR) || defined(_MODULE)
+#define	CPU_INFO_FOREACH(cii, cp)	cii = 0; (cp = cpus[cii]) && cp->eintstack && cii < sparc_ncpus; cii++
 #else
-#define	CPU_INFO_FOREACH(cii, ci)	(void)cii, ci = curcpu(); ci != NULL; ci = NULL
+#define CPU_INFO_FOREACH(cii, cp)	cii = 0, cp = curcpu(); cp != NULL; cp = NULL
 #endif
 
-/*
- * Useful macros.
- */
-#define CPU_NOTREADY(cpi)	((cpi) == NULL || cpuinfo.mid == (cpi)->mid || \
-				    ((cpi)->flags & CPUFLG_READY) == 0)
 
 /*
  * Related function prototypes
@@ -440,14 +440,16 @@ struct cpu_info {
 void getcpuinfo (struct cpu_info *sc, int node);
 void mmu_install_tables (struct cpu_info *);
 void pmap_alloc_cpu (struct cpu_info *);
-void pmap_globalize_boot_cpu (struct cpu_info *);
 
 #define	CPUSET_ALL	0xffffffffU	/* xcall to all configured CPUs */
 
 #if defined(MULTIPROCESSOR)
-typedef int (*xcall_func_t)(int, int, int);
+void cpu_init_system(void);
+typedef void (*xcall_func_t)(int, int, int);
 typedef void (*xcall_trap_t)(int, int, int);
 void xcall(xcall_func_t, xcall_trap_t, int, int, int, u_int);
+/* from intr.c */
+void xcallintr(void *);
 /* Shorthand */
 #define XCALL0(f,cpuset)		\
 	xcall((xcall_func_t)f, NULL, 0, 0, 0, cpuset)
@@ -480,10 +482,19 @@ void xcall(xcall_func_t, xcall_trap_t, int, int, int, u_int);
 extern int bootmid;			/* Module ID of boot CPU */
 #define CPU_MID2CPUNO(mid)		((mid) != 0 ? (mid) - 8 : 0)
 
-extern struct cpu_info **cpus;
+extern struct cpu_info *cpus[];
+#ifdef MULTIPROCESSOR
 extern u_int cpu_ready_mask;		/* the set of CPUs marked as READY */
+#endif
 
 #define cpuinfo	(*(struct cpu_info *)CPUINFO_VA)
 
+#if defined(DDB) || defined(MULTIPROCESSOR)
+/*
+ * These are called by ddb mach functions.
+ */
+void cpu_debug_dump(void);
+void cpu_xcall_dump(void);
+#endif
 
 #endif	/* _sparc_cpuvar_h */

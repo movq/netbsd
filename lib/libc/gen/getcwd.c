@@ -1,4 +1,4 @@
-/*	$NetBSD: getcwd.c,v 1.45 2007/10/26 19:48:14 christos Exp $	*/
+/*	$NetBSD: getcwd.c,v 1.50 2011/02/21 00:40:07 joerg Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1995
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)getcwd.c	8.5 (Berkeley) 2/7/95";
 #else
-__RCSID("$NetBSD: getcwd.c,v 1.45 2007/10/26 19:48:14 christos Exp $");
+__RCSID("$NetBSD: getcwd.c,v 1.50 2011/02/21 00:40:07 joerg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -50,11 +50,13 @@ __RCSID("$NetBSD: getcwd.c,v 1.45 2007/10/26 19:48:14 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <ssp/ssp.h>
 
 #include "extern.h"
 
 #ifdef __weak_alias
 __weak_alias(getcwd,_getcwd)
+__weak_alias(_sys_getcwd,_getcwd)
 __weak_alias(realpath,_realpath)
 #endif
 
@@ -74,8 +76,13 @@ realpath(const char *path, char *resolved)
 	char *p, wbuf[2][MAXPATHLEN];
 	size_t len;
 
-	_DIAGASSERT(path != NULL);
 	_DIAGASSERT(resolved != NULL);
+
+	/* POSIX sez we must test for this */
+	if (path == NULL) {
+		errno = EINVAL;
+		return NULL;
+	}
 
 	/*
 	 * Build real path one by one with paying an attention to .,
@@ -200,14 +207,8 @@ loop:
 	goto loop;
 }
 
-
-#if defined(_FORTIFY_SOURCE) && !defined(__lint__)
-#undef getcwd
-#define getcwd _getcwd
-#endif
-
 char *
-getcwd(char *pt, size_t size)
+__ssp_real(getcwd)(char *pt, size_t size)
 {
 	char *npt;
 

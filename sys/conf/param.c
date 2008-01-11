@@ -1,4 +1,4 @@
-/*	$NetBSD: param.c,v 1.53 2007/12/26 16:01:35 ad Exp $	*/
+/*	$NetBSD: param.c,v 1.63 2010/02/08 19:02:33 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1989 Regents of the University of California.
@@ -37,13 +37,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: param.c,v 1.53 2007/12/26 16:01:35 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: param.c,v 1.63 2010/02/08 19:02:33 joerg Exp $");
 
 #include "opt_hz.h"
 #include "opt_rtc_offset.h"
 #include "opt_sysv.h"
 #include "opt_sysvparam.h"
-#include "opt_nmbclusters.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: param.c,v 1.53 2007/12/26 16:01:35 ad Exp $");
 #include <ufs/ufs/quota.h>
 #include <sys/kernel.h>
 #include <sys/utsname.h>
+#include <sys/ksem.h>
 #ifdef SYSVSHM
 #include <machine/vmparam.h>
 #include <sys/shm.h>
@@ -68,8 +69,13 @@ __KERNEL_RCSID(0, "$NetBSD: param.c,v 1.53 2007/12/26 16:01:35 ad Exp $");
 #include <sys/msg.h>
 #endif
 
+/*
+ * PCC cannot handle the 80KB string literal.
+ */
+#if !defined(__PCC__)
 #define CONFIG_FILE
 #include "config_file.h"
+#endif
 
 /*
  * System parameter formulae.
@@ -101,6 +107,10 @@ __KERNEL_RCSID(0, "$NetBSD: param.c,v 1.53 2007/12/26 16:01:35 ad Exp $");
 #define	MAXFILES	(3 * (NPROC + MAXUSERS) + 80)
 #endif
 
+#ifndef MAXEXEC
+#define	MAXEXEC		16
+#endif
+
 int	hz = HZ;
 int	tick = 1000000 / HZ;
 /* can adjust 240ms in 60s */
@@ -110,12 +120,21 @@ int	maxproc = NPROC;
 int	desiredvnodes = NVNODE;
 u_int	maxfiles = MAXFILES;
 int	fscale = FSCALE;	/* kernel uses `FSCALE', user uses `fscale' */
+int	maxexec = MAXEXEC;	/* max number of concurrent exec() calls */
+
+#ifdef MULTIPROCESSOR
+u_int	maxcpus = MAXCPUS;
+size_t	coherency_unit = COHERENCY_UNIT;
+#else
+u_int	maxcpus = 1;
+size_t	coherency_unit = ALIGNBYTES + 1;
+#endif
 
 /*
  * Various mbuf-related parameters.  These can also be changed at run-time
  * with sysctl.
  */
-int	nmbclusters = NMBCLUSTERS;
+int	nmbclusters = 0;
 
 #ifndef MBLOWAT
 #define	MBLOWAT		16
@@ -131,8 +150,10 @@ int	mcllowat = MCLLOWAT;
  * Values in support of System V compatible shared memory.	XXX
  */
 #ifdef SYSVSHM
-#ifndef	SHMMAX
+#if !defined(SHMMAX) && defined(SHMMAXPGS)
 #define	SHMMAX	SHMMAXPGS	/* shminit() performs a `*= PAGE_SIZE' */
+#elif !defined(SHMMAX)
+#define SHMMAX 0
 #endif
 #ifndef	SHMMIN
 #define	SHMMIN	1
@@ -143,14 +164,13 @@ int	mcllowat = MCLLOWAT;
 #ifndef	SHMSEG
 #define	SHMSEG	128
 #endif
-#define	SHMALL	SHMMAXPGS
 
 struct	shminfo shminfo = {
 	SHMMAX,
 	SHMMIN,
 	SHMMNI,
 	SHMSEG,
-	SHMALL
+	0
 };
 #endif
 
@@ -192,3 +212,8 @@ struct	msginfo msginfo = {
  */
 const	int msize = MSIZE;
 const	int mclbytes = MCLBYTES;
+
+/*
+ * Values in support of POSIX semaphores.
+ */
+int	ksem_max = KSEM_MAX;

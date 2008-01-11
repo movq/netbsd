@@ -1,4 +1,4 @@
-/* $NetBSD: panel.c,v 1.14 2007/10/17 19:54:08 garbled Exp $ */
+/* $NetBSD: panel.c,v 1.21 2011/05/03 09:15:20 tsutsui Exp $ */
 
 /*
  * Copyright (c) 2002 Dennis I. Chernoivanov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: panel.c,v 1.14 2007/10/17 19:54:08 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: panel.c,v 1.21 2011/05/03 09:15:20 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: panel.c,v 1.14 2007/10/17 19:54:08 garbled Exp $");
 #include <sys/device.h>
 #include <sys/callout.h>
 #include <sys/select.h>
+#include <sys/reboot.h>
 
 #include <machine/bus.h>
 #include <machine/autoconf.h>
@@ -54,9 +55,12 @@ __KERNEL_RCSID(0, "$NetBSD: panel.c,v 1.14 2007/10/17 19:54:08 garbled Exp $");
 #define PANEL_POLLRATE	(hz / 10)
 #define PANEL_REGION	0x20
 #define DATA_OFFSET	0x10
+#define PANEL_COLS	16
+#define PANEL_VCOLS	40
+#define PANEL_ROWS	2
 
 struct panel_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 	struct hd44780_chip sc_lcd;
 	struct lcdkp_chip sc_kp;
@@ -65,8 +69,26 @@ struct panel_softc {
 	struct callout sc_callout;
 };
 
-static int	panel_match(struct device *, struct cfdata *, void *);
-static void	panel_attach(struct device *, struct device *, void *);
+struct lcd_message {
+	const char firstcol[PANEL_VCOLS];
+	const char secondcol[PANEL_VCOLS];
+};
+static const struct lcd_message startup_message = {
+	"NetBSD/cobalt   ",
+	"Starting up...  "
+};
+static const struct lcd_message halt_message = {
+	"NetBSD/cobalt   ",
+	"Halting...      "
+};
+static const struct lcd_message reboot_message = {
+	"NetBSD/cobalt   ",
+	"Rebooting...    "
+};
+
+static int	panel_match(device_t, cfdata_t, void *);
+static void	panel_attach(device_t, device_t, void *);
+static bool	panel_shutdown(device_t, int);
 
 static void	panel_soft(void *);
 
@@ -87,22 +109,22 @@ const struct cdevsw panel_cdevsw = {
 	nostop, notty, panelpoll, nommap,
 };
 
-CFATTACH_DECL(panel, sizeof(struct panel_softc),
+CFATTACH_DECL_NEW(panel, sizeof(struct panel_softc),
     panel_match, panel_attach, NULL, NULL);
 
 static int
-panel_match(struct device *parent, struct cfdata *match, void *aux)
+panel_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return 1;
 }
 
 static void
-panel_attach(struct device *parent, struct device *self, void *aux)
+panel_attach(device_t parent, device_t self, void *aux)
 {
-	struct panel_softc *sc = (void *)self;
+	struct panel_softc *sc = device_private(self);
 	struct mainbus_attach_args *maa = aux;
-
+	struct hd44780_io io;
 	static struct lcdkp_xlate keys[] = {
 		{ 0xfa, 'h' },
 		{ 0xf6, 'k' },
@@ -112,28 +134,39 @@ panel_attach(struct device *parent, struct device *self, void *aux)
 		{ 0xbe, 'e' }
 	};
 
+	sc->sc_lcd.sc_dev = self;
 	sc->sc_lcd.sc_iot = maa->ma_iot;
 	if (bus_space_map(sc->sc_lcd.sc_iot, maa->ma_addr, PANEL_REGION,
 	    0, &sc->sc_lcd.sc_ioir)) {
-		printf(": unable to map registers\n");
+		aprint_error(": unable to map registers\n");
 		return;
 	}
 	bus_space_subregion(sc->sc_lcd.sc_iot, sc->sc_lcd.sc_ioir, DATA_OFFSET,
 	    1, &sc->sc_lcd.sc_iodr);
 
+	printf("\n");
+
 	sc->sc_lcd.sc_dev_ok = 1;
-	sc->sc_lcd.sc_cols = 16;
-	sc->sc_lcd.sc_vcols = 40;
+	sc->sc_lcd.sc_cols = PANEL_COLS;
+	sc->sc_lcd.sc_vcols = PANEL_VCOLS;
 	sc->sc_lcd.sc_flags = HD_8BIT | HD_MULTILINE | HD_KEYPAD;
 
 	sc->sc_lcd.sc_writereg = panel_cbt_hdwritereg;
 	sc->sc_lcd.sc_readreg = panel_cbt_hdreadreg;
-	sc->sc_lcd.sc_dev = self;
 
 	hd44780_attach_subr(&sc->sc_lcd);
 
+	/* Hello World */
+	io.dat = 0;
+	io.len = PANEL_VCOLS * PANEL_ROWS;
+	memcpy(io.buf, &startup_message, io.len);
+	hd44780_ddram_io(&sc->sc_lcd, sc->sc_lcd.sc_curchip, &io,
+	    HD_DDRAM_WRITE);
+
+	pmf_device_register1(self, NULL, NULL, panel_shutdown);
+
 	sc->sc_kp.sc_iot = maa->ma_iot;
-	sc->sc_kp.sc_ioh = MIPS_PHYS_TO_KSEG1(0x1d000000); /* XXX */
+	sc->sc_kp.sc_ioh = MIPS_PHYS_TO_KSEG1(PANEL_BASE); /* XXX */
 
 	sc->sc_kp.sc_knum = sizeof(keys) / sizeof(struct lcdkp_xlate);
 	sc->sc_kp.sc_kpad = keys;
@@ -142,8 +175,26 @@ panel_attach(struct device *parent, struct device *self, void *aux)
 	lcdkp_attach_subr(&sc->sc_kp);
 
 	callout_init(&sc->sc_callout, 0);
+	selinit(&sc->sc_selq);
+}
 
-	printf("\n");
+static bool
+panel_shutdown(device_t self, int howto)
+{
+	struct panel_softc *sc = device_private(self);
+	struct hd44780_io io;
+
+	/* Goodbye World */
+	io.dat = 0;
+	io.len = PANEL_VCOLS * PANEL_ROWS;
+	if (howto & RB_HALT)
+		memcpy(io.buf, &halt_message, io.len);
+	else
+		memcpy(io.buf, &reboot_message, io.len);
+	hd44780_ddram_io(&sc->sc_lcd, sc->sc_lcd.sc_curchip, &io,
+	    HD_DDRAM_WRITE);
+
+	return true;
 }
 
 static uint8_t
@@ -160,7 +211,7 @@ panel_cbt_hdwritereg(struct hd44780_chip *hd, uint32_t en, uint32_t rs,
     uint8_t dat)
 {
 
-	if (rs) 
+	if (rs)
 		bus_space_write_4(hd->sc_iot, hd->sc_iodr, 0x00, dat << 24);
 	else
 		bus_space_write_4(hd->sc_iot, hd->sc_ioir, 0x00, dat << 24);
@@ -183,7 +234,7 @@ panel_cbt_hdreadreg(struct hd44780_chip *hd, uint32_t en, uint32_t rs)
 int
 panelopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct panel_softc *sc = device_lookup(&panel_cd, minor(dev));
+	struct panel_softc *sc = device_lookup_private(&panel_cd, minor(dev));
 
 	return (sc->sc_lcd.sc_dev_ok == 0) ? ENXIO : 0;
 }
@@ -191,9 +242,9 @@ panelopen(dev_t dev, int flag, int mode, struct lwp *l)
 int
 panelclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct panel_softc *sc = device_lookup(&panel_cd, minor(dev));
+	struct panel_softc *sc = device_lookup_private(&panel_cd, minor(dev));
 
-	selwakeup(&sc->sc_selq);
+	selnotify(&sc->sc_selq, 0, 0);
 	return 0;
 }
 
@@ -202,7 +253,7 @@ panelread(dev_t dev, struct uio *uio, int flag)
 {
 	int error;
 	uint8_t b;
-	struct panel_softc *sc = device_lookup(&panel_cd, minor(dev));
+	struct panel_softc *sc = device_lookup_private(&panel_cd, minor(dev));
 
 	if (uio->uio_resid < sizeof(b))
 		return EIO;
@@ -218,7 +269,7 @@ panelwrite(dev_t dev, struct uio *uio, int flag)
 {
 	int error;
 	struct hd44780_io io;
-	struct panel_softc *sc = device_lookup(&panel_cd, minor(dev));
+	struct panel_softc *sc = device_lookup_private(&panel_cd, minor(dev));
 
 	io.dat = 0;
 	io.len = uio->uio_resid;
@@ -235,7 +286,7 @@ panelwrite(dev_t dev, struct uio *uio, int flag)
 int
 panelioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct panel_softc *sc = device_lookup(&panel_cd, minor(dev));
+	struct panel_softc *sc = device_lookup_private(&panel_cd, minor(dev));
 
 	return hd44780_ioctl_subr(&sc->sc_lcd, cmd, data);
 }
@@ -246,8 +297,9 @@ panelpoll(dev_t dev, int events, struct lwp *l)
 	int revents = 0;
 
 	if ((events & (POLLIN | POLLRDNORM)) != 0) {
-		struct panel_softc *sc = device_lookup(&panel_cd, minor(dev));
+		struct panel_softc *sc;
 
+		sc = device_lookup_private(&panel_cd, minor(dev));
 		if (lcdkp_scankey(&sc->sc_kp) != 0) {
 			revents = events & (POLLIN | POLLRDNORM);
 		} else {
@@ -266,7 +318,7 @@ panel_soft(void *arg)
 	struct panel_softc *sc = arg;
 
 	if (lcdkp_scankey(&sc->sc_kp) != 0)
-		selwakeup(&sc->sc_selq);
+		selnotify(&sc->sc_selq, 0, 0);
 	else
 		callout_reset(&sc->sc_callout, PANEL_POLLRATE, panel_soft, sc);
 }

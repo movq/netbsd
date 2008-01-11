@@ -1,4 +1,4 @@
-/*	$NetBSD: udp_usrreq.c,v 1.163 2007/11/27 22:45:30 christos Exp $	*/
+/*	$NetBSD: udp_usrreq.c,v 1.180 2011/05/03 18:28:45 dyoung Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,9 +61,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.163 2007/11/27 22:45:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.180 2011/05/03 18:28:45 dyoung Exp $");
 
 #include "opt_inet.h"
+#include "opt_compat_netbsd.h"
 #include "opt_ipsec.h"
 #include "opt_inet_csum.h"
 #include "opt_ipkdb.h"
@@ -94,13 +95,16 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.163 2007/11/27 22:45:30 christos Ex
 #include <netinet/ip_icmp.h>
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
+#include <netinet/udp_private.h>
 
 #ifdef INET6
 #include <netinet/ip6.h>
 #include <netinet/icmp6.h>
 #include <netinet6/ip6_var.h>
+#include <netinet6/ip6_private.h>
 #include <netinet6/in6_pcb.h>
 #include <netinet6/udp6_var.h>
+#include <netinet6/udp6_private.h>
 #include <netinet6/scope6_var.h>
 #endif
 
@@ -118,18 +122,24 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.163 2007/11/27 22:45:30 christos Ex
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
-#include <netipsec/ipsec_var.h>			/* XXX ipsecstat namespace */
+#include <netipsec/ipsec_var.h>
+#include <netipsec/ipsec_private.h>
 #include <netipsec/esp.h>
 #ifdef INET6
 #include <netipsec/ipsec6.h>
 #endif
-#endif	/* FAST_IPSEC*/
+#endif	/* FAST_IPSEC */
 
 #ifdef IPSEC
 #include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
 #include <netinet6/esp.h>
 #include <netkey/key.h>
-#endif /*IPSEC*/
+#endif /* IPSEC */
+
+#ifdef COMPAT_50
+#include <compat/sys/socket.h>
+#endif
 
 #ifdef IPKDB
 #include <ipkdb/ipkdb.h>
@@ -143,7 +153,8 @@ int	udpcksum = 1;
 int	udp_do_loopback_cksum = 0;
 
 struct	inpcbtable udbtable;
-struct	udpstat udpstat;
+
+percpu_t *udpstat_percpu;
 
 #ifdef INET
 #ifdef IPSEC_NAT_T
@@ -221,15 +232,26 @@ EVCNT_ATTACH_STATIC(udp6_swcsum);
 
 #endif /* UDP_CSUM_COUNTERS */
 
+static void sysctl_net_inet_udp_setup(struct sysctllog **);
+
 void
 udp_init(void)
 {
+
+	sysctl_net_inet_udp_setup(NULL);
 
 	in_pcbinit(&udbtable, udbhashsize, udbhashsize);
 
 	MOWNER_ATTACH(&udp_tx_mowner);
 	MOWNER_ATTACH(&udp_rx_mowner);
 	MOWNER_ATTACH(&udp_mowner);
+
+#ifdef INET
+	udpstat_percpu = percpu_alloc(sizeof(uint64_t) * UDP_NSTATS);
+#endif
+#ifdef INET6
+	udp6stat_percpu = percpu_alloc(sizeof(uint64_t) * UDP6_NSTATS);
+#endif
 }
 
 /*
@@ -324,7 +346,7 @@ udp4_input_checksum(struct mbuf *m, const struct udphdr *uh,
 	return 0;
 
 badcsum:
-	udpstat.udps_badsum++;
+	UDP_STATINC(UDP_STAT_BADSUM);
 	return -1;
 }
 
@@ -346,7 +368,7 @@ udp_input(struct mbuf *m, ...)
 	va_end(ap);
 
 	MCLAIM(m, &udp_rx_mowner);
-	udpstat.udps_ipackets++;
+	UDP_STATINC(UDP_STAT_IPACKETS);
 
 	/*
 	 * Get IP and UDP header together in first mbuf.
@@ -354,7 +376,7 @@ udp_input(struct mbuf *m, ...)
 	ip = mtod(m, struct ip *);
 	IP6_EXTHDR_GET(uh, struct udphdr *, m, iphlen, sizeof(struct udphdr));
 	if (uh == NULL) {
-		udpstat.udps_hdrops++;
+		UDP_STATINC(UDP_STAT_HDROPS);
 		return;
 	}
 	KASSERT(UDP_HDR_ALIGNED_P(uh));
@@ -371,7 +393,7 @@ udp_input(struct mbuf *m, ...)
 	len = ntohs((u_int16_t)uh->uh_ulen);
 	if (ip_len != iphlen + len) {
 		if (ip_len < iphlen + len || len < sizeof(struct udphdr)) {
-			udpstat.udps_badlen++;
+			UDP_STATINC(UDP_STAT_BADLEN);
 			goto bad;
 		}
 		m_adj(m, iphlen + len - ip_len);
@@ -388,25 +410,25 @@ udp_input(struct mbuf *m, ...)
 	sockaddr_in_init(&dst, &ip->ip_dst, uh->uh_dport);
 
 	if ((n = udp4_realinput(&src, &dst, &m, iphlen)) == -1) {
-		udpstat.udps_hdrops++;
+		UDP_STATINC(UDP_STAT_HDROPS);
 		return;
 	}
 #ifdef INET6
 	if (IN_MULTICAST(ip->ip_dst.s_addr) || n == 0) {
 		struct sockaddr_in6 src6, dst6;
 
-		bzero(&src6, sizeof(src6));
+		memset(&src6, 0, sizeof(src6));
 		src6.sin6_family = AF_INET6;
 		src6.sin6_len = sizeof(struct sockaddr_in6);
 		src6.sin6_addr.s6_addr[10] = src6.sin6_addr.s6_addr[11] = 0xff;
-		bcopy(&ip->ip_src, &src6.sin6_addr.s6_addr[12],
+		memcpy(&src6.sin6_addr.s6_addr[12], &ip->ip_src,
 			sizeof(ip->ip_src));
 		src6.sin6_port = uh->uh_sport;
-		bzero(&dst6, sizeof(dst6));
+		memset(&dst6, 0, sizeof(dst6));
 		dst6.sin6_family = AF_INET6;
 		dst6.sin6_len = sizeof(struct sockaddr_in6);
 		dst6.sin6_addr.s6_addr[10] = dst6.sin6_addr.s6_addr[11] = 0xff;
-		bcopy(&ip->ip_dst, &dst6.sin6_addr.s6_addr[12],
+		memcpy(&dst6.sin6_addr.s6_addr[12], &ip->ip_dst,
 			sizeof(ip->ip_dst));
 		dst6.sin6_port = uh->uh_dport;
 
@@ -416,10 +438,10 @@ udp_input(struct mbuf *m, ...)
 
 	if (n == 0) {
 		if (m->m_flags & (M_BCAST | M_MCAST)) {
-			udpstat.udps_noportbcast++;
+			UDP_STATINC(UDP_STAT_NOPORTBCAST);
 			goto bad;
 		}
-		udpstat.udps_noport++;
+		UDP_STATINC(UDP_STAT_NOPORT);
 #ifdef IPKDB
 		if (checkipkdb(&ip->ip_src, uh->uh_sport, uh->uh_dport,
 				m, iphlen + sizeof(struct udphdr),
@@ -459,7 +481,7 @@ udp6_input_checksum(struct mbuf *m, const struct udphdr *uh, int off, int len)
 		goto good;
 	}
 	if (uh->uh_sum == 0) {
-		udp6stat.udp6s_nosum++;
+		UDP6_STATINC(UDP6_STAT_NOSUM);
 		goto bad;
 	}
 
@@ -468,7 +490,7 @@ udp6_input_checksum(struct mbuf *m, const struct udphdr *uh, int off, int len)
 	    M_CSUM_TCP_UDP_BAD | M_CSUM_DATA)) {
 	case M_CSUM_UDPv6|M_CSUM_TCP_UDP_BAD:
 		UDP_CSUM_COUNTER_INCR(&udp6_hwcsum_bad);
-		udp6stat.udp6s_badsum++;
+		UDP6_STATINC(UDP6_STAT_BADSUM);
 		goto bad;
 
 #if 0 /* notyet */
@@ -487,7 +509,7 @@ udp6_input_checksum(struct mbuf *m, const struct udphdr *uh, int off, int len)
 		 */
 		UDP_CSUM_COUNTER_INCR(&udp6_swcsum);
 		if (in6_cksum(m, IPPROTO_UDP, off, len) != 0) {
-			udp6stat.udp6s_badsum++;
+			UDP6_STATINC(UDP6_STAT_BADSUM);
 			goto bad;
 		}
 	}
@@ -518,13 +540,13 @@ udp6_input(struct mbuf **mp, int *offp, int proto)
 	}
 #endif
 
-	udp6stat.udp6s_ipackets++;
+	UDP6_STATINC(UDP6_STAT_IPACKETS);
 
 	/* check for jumbogram is done in ip6_input.  we can trust pkthdr.len */
 	plen = m->m_pkthdr.len - off;
 	IP6_EXTHDR_GET(uh, struct udphdr *, m, off, sizeof(struct udphdr));
 	if (uh == NULL) {
-		ip6stat.ip6s_tooshort++;
+		IP6_STATINC(IP6_STAT_TOOSHORT);
 		return IPPROTO_DONE;
 	}
 	KASSERT(UDP_HDR_ALIGNED_P(uh));
@@ -537,7 +559,7 @@ udp6_input(struct mbuf **mp, int *offp, int proto)
 		ulen = plen;
 
 	if (plen != ulen) {
-		udp6stat.udp6s_badlen++;
+		UDP6_STATINC(UDP6_STAT_BADLEN);
 		goto bad;
 	}
 
@@ -562,12 +584,12 @@ udp6_input(struct mbuf **mp, int *offp, int proto)
 	/*
 	 * Construct source and dst sockaddrs.
 	 */
-	bzero(&src, sizeof(src));
+	memset(&src, 0, sizeof(src));
 	src.sin6_family = AF_INET6;
 	src.sin6_len = sizeof(struct sockaddr_in6);
 	src.sin6_addr = ip6->ip6_src;
 	src.sin6_port = uh->uh_sport;
-	bzero(&dst, sizeof(dst));
+	memset(&dst, 0, sizeof(dst));
 	dst.sin6_family = AF_INET6;
 	dst.sin6_len = sizeof(struct sockaddr_in6);
 	dst.sin6_addr = ip6->ip6_dst;
@@ -575,10 +597,10 @@ udp6_input(struct mbuf **mp, int *offp, int proto)
 
 	if (udp6_realinput(AF_INET6, &src, &dst, m, off) == 0) {
 		if (m->m_flags & M_MCAST) {
-			udp6stat.udp6s_noportmcast++;
+			UDP6_STATINC(UDP6_STAT_NOPORTMCAST);
 			goto bad;
 		}
-		udp6stat.udp6s_noport++;
+		UDP6_STATINC(UDP6_STAT_NOPORT);
 		icmp6_error(m, ICMP6_DST_UNREACH, ICMP6_DST_UNREACH_NOPORT, 0);
 		m = NULL;
 	}
@@ -616,7 +638,7 @@ udp4_sendup(struct mbuf *m, int off /* offset of data portion */,
 #if defined(IPSEC) || defined(FAST_IPSEC)
 	/* check AH/ESP integrity. */
 	if (so != NULL && ipsec4_in_reject_so(m, so)) {
-		ipsecstat.in_polvio++;
+		IPSEC_STATINC(IPSEC_STAT_IN_POLVIO);
 		if ((n = m_copypacket(m, M_DONTWAIT)) != NULL)
 			icmp_error(n, ICMP_UNREACH, ICMP_UNREACH_ADMIN_PROHIBIT,
 			    0, 0);
@@ -626,6 +648,9 @@ udp4_sendup(struct mbuf *m, int off /* offset of data portion */,
 
 	if ((n = m_copypacket(m, M_DONTWAIT)) != NULL) {
 		if (inp && (inp->inp_flags & INP_CONTROLOPTS
+#ifdef SO_OTIMESTAMP
+			 || so->so_options & SO_OTIMESTAMP
+#endif
 			 || so->so_options & SO_TIMESTAMP)) {
 			struct ip *ip = mtod(n, struct ip *);
 			ip_savecontrol(inp, &opts, ip, n);
@@ -638,7 +663,7 @@ udp4_sendup(struct mbuf *m, int off /* offset of data portion */,
 			if (opts)
 				m_freem(opts);
 			so->so_rcv.sb_overflowed++;
-			udpstat.udps_fullsock++;
+			UDP_STATINC(UDP_STAT_FULLSOCK);
 		} else
 			sorwakeup(so);
 	}
@@ -663,7 +688,7 @@ udp6_sendup(struct mbuf *m, int off /* offset of data portion */,
 #if defined(IPSEC) || defined(FAST_IPSEC)
 	/* check AH/ESP integrity. */
 	if (so != NULL && ipsec6_in_reject_so(m, so)) {
-		ipsec6stat.in_polvio++;
+		IPSEC6_STATINC(IPSEC_STAT_IN_POLVIO);
 		if ((n = m_copypacket(m, M_DONTWAIT)) != NULL)
 			icmp6_error(n, ICMP6_DST_UNREACH,
 			    ICMP6_DST_UNREACH_ADMIN, 0);
@@ -673,7 +698,10 @@ udp6_sendup(struct mbuf *m, int off /* offset of data portion */,
 
 	if ((n = m_copypacket(m, M_DONTWAIT)) != NULL) {
 		if (in6p && (in6p->in6p_flags & IN6P_CONTROLOPTS
-			  || in6p->in6p_socket->so_options & SO_TIMESTAMP)) {
+#ifdef SO_OTIMESTAMP
+		    || in6p->in6p_socket->so_options & SO_OTIMESTAMP
+#endif
+		    || in6p->in6p_socket->so_options & SO_TIMESTAMP)) {
 			struct ip6_hdr *ip6 = mtod(n, struct ip6_hdr *);
 			ip6_savecontrol(in6p, &opts, ip6, n);
 		}
@@ -684,7 +712,7 @@ udp6_sendup(struct mbuf *m, int off /* offset of data portion */,
 			if (opts)
 				m_freem(opts);
 			so->so_rcv.sb_overflowed++;
-			udp6stat.udp6s_fullsock++;
+			UDP6_STATINC(UDP6_STAT_FULLSOCK);
 		} else
 			sorwakeup(so);
 	}
@@ -776,9 +804,10 @@ udp4_realinput(struct sockaddr_in *src, struct sockaddr_in *dst,
 		/*
 		 * Locate pcb for datagram.
 		 */
-		inp = in_pcblookup_connect(&udbtable, *src4, *sport, *dst4, *dport);
+		inp = in_pcblookup_connect(&udbtable, *src4, *sport, *dst4,
+		    *dport, 0);
 		if (inp == 0) {
-			++udpstat.udps_pcbhashmiss;
+			UDP_STATINC(UDP_STAT_PCBHASHMISS);
 			inp = in_pcblookup_bind(&udbtable, *dst4, *dport);
 			if (inp == 0)
 				return rcvcnt;
@@ -811,6 +840,12 @@ udp4_realinput(struct sockaddr_in *src, struct sockaddr_in *dst,
 			}
 		}
 #endif
+
+		/*
+		 * Check the minimum TTL for socket.
+		 */
+		if (mtod(m, struct ip *)->ip_ttl < inp->inp_ip_minttl)
+			goto bad;
 
 		udp4_sendup(m, off, (struct sockaddr *)src, inp->inp_socket);
 		rcvcnt++;
@@ -924,9 +959,9 @@ udp6_realinput(int af, struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
 		 * Locate pcb for datagram.
 		 */
 		in6p = in6_pcblookup_connect(&udbtable, &src6, sport, dst6,
-		    dport, 0);
+					     dport, 0, 0);
 		if (in6p == 0) {
-			++udpstat.udps_pcbhashmiss;
+			UDP_STATINC(UDP_STAT_PCBHASHMISS);
 			in6p = in6_pcblookup_bind(&udbtable, dst6, dport, 0);
 			if (in6p == 0)
 				return rcvcnt;
@@ -987,14 +1022,13 @@ udp_ctlinput(int cmd, const struct sockaddr *sa, void *v)
 }
 
 int
-udp_ctloutput(int op, struct socket *so, int level, int optname,
-    struct mbuf **mp)
+udp_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 {
 	int s;
 	int error = 0;
-	struct mbuf *m;
 	struct inpcb *inp;
 	int family;
+	int optval;
 
 	family = so->so_proto->pr_domain->dom_family;
 
@@ -1002,16 +1036,16 @@ udp_ctloutput(int op, struct socket *so, int level, int optname,
 	switch (family) {
 #ifdef INET
 	case PF_INET:
-		if (level != IPPROTO_UDP) {
-			error = ip_ctloutput(op, so, level, optname, mp);
+		if (sopt->sopt_level != IPPROTO_UDP) {
+			error = ip_ctloutput(op, so, sopt);
 			goto end;
 		}
 		break;
 #endif
 #ifdef INET6
 	case PF_INET6:
-		if (level != IPPROTO_UDP) {
-			error = ip6_ctloutput(op, so, level, optname, mp);
+		if (sopt->sopt_level != IPPROTO_UDP) {
+			error = ip6_ctloutput(op, so, sopt);
 			goto end;
 		}
 		break;
@@ -1024,17 +1058,15 @@ udp_ctloutput(int op, struct socket *so, int level, int optname,
 
 	switch (op) {
 	case PRCO_SETOPT:
-		m = *mp;
 		inp = sotoinpcb(so);
 
-		switch (optname) {
+		switch (sopt->sopt_name) {
 		case UDP_ENCAP:
-			if (m == NULL || m->m_len != sizeof(int)) {
-				error = EINVAL;
+			error = sockopt_getint(sopt, &optval);
+			if (error)
 				break;
-			}
 
-			switch(*mtod(m, int *)) {
+			switch(optval) {
 #ifdef IPSEC_NAT_T
 			case 0:
 				inp->inp_flags &= ~INP_ESPINUDP_ALL;
@@ -1059,9 +1091,6 @@ udp_ctloutput(int op, struct socket *so, int level, int optname,
 		default:
 			error = ENOPROTOOPT;
 			break;
-		}
-		if (m != NULL) {
-			m_free(m);
 		}
 		break;
 
@@ -1142,7 +1171,7 @@ udp_output(struct mbuf *m, ...)
 	((struct ip *)ui)->ip_len = htons(sizeof (struct udpiphdr) + len);
 	((struct ip *)ui)->ip_ttl = inp->inp_ip.ip_ttl;	/* XXX */
 	((struct ip *)ui)->ip_tos = inp->inp_ip.ip_tos;	/* XXX */
-	udpstat.udps_opackets++;
+	UDP_STATINC(UDP_STAT_OPACKETS);
 
 	return (ip_output(m, inp->inp_options, ro,
 	    inp->inp_socket->so_options & (SO_DONTROUTE | SO_BROADCAST),
@@ -1173,9 +1202,11 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	s = splsoftnet();
 
 	if (req == PRU_PURGEIF) {
+		mutex_enter(softnet_lock);
 		in_pcbpurgeif0(&udbtable, (struct ifnet *)control);
 		in_purgeif((struct ifnet *)control);
 		in_pcbpurgeif(&udbtable, (struct ifnet *)control);
+		mutex_exit(softnet_lock);
 		splx(s);
 		return (0);
 	}
@@ -1185,7 +1216,9 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	if (req != PRU_SEND && req != PRU_SENDOOB && control)
 		panic("udp_usrreq: unexpected control mbuf");
 #endif
-	if (inp == 0 && req != PRU_ATTACH) {
+	if (req == PRU_ATTACH) {
+		sosetlock(so);
+	} else if (inp == 0) {
 		error = EINVAL;
 		goto release;
 	}
@@ -1329,10 +1362,18 @@ release:
 	return (error);
 }
 
+static int
+sysctl_net_inet_udp_stats(SYSCTLFN_ARGS)
+{
+
+	return (NETSTAT_SYSCTL(udpstat_percpu, UDP_NSTATS));
+}
+
 /*
  * Sysctl for udp variables.
  */
-SYSCTL_SETUP(sysctl_net_inet_udp_setup, "sysctl net.inet.udp subtree setup")
+static void
+sysctl_net_inet_udp_setup(struct sysctllog **clog)
 {
 
 	sysctl_createv(clog, 0, NULL, NULL,
@@ -1391,11 +1432,19 @@ SYSCTL_SETUP(sysctl_net_inet_udp_setup, "sysctl net.inet.udp subtree setup")
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "stats",
 		       SYSCTL_DESCR("UDP statistics"),
-		       NULL, 0, &udpstat, sizeof(udpstat),
+		       sysctl_net_inet_udp_stats, 0, NULL, 0,
 		       CTL_NET, PF_INET, IPPROTO_UDP, UDPCTL_STATS,
 		       CTL_EOL);
 }
 #endif
+
+void
+udp_statinc(u_int stat)
+{
+
+	KASSERT(stat < UDP_NSTATS);
+	UDP_STATINC(stat);
+}
 
 #if (defined INET && defined IPSEC_NAT_T)
 /*

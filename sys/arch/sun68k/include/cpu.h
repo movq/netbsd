@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.19 2007/10/17 19:57:47 garbled Exp $	*/
+/*	$NetBSD: cpu.h,v 1.22 2010/12/22 02:42:29 matt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -102,29 +102,6 @@
  * code to identify machine-dependent functions, etc.
  */
 
-#include <sys/cpu_data.h>
-struct cpu_info {
-	struct cpu_data ci_data;	/* MI per-cpu data */
-	cpuid_t	ci_cpuid;
-	int	ci_mtx_count;
-	int	ci_mtx_oldspl;
-	int	ci_want_resched;
-};
-
-extern struct cpu_info cpu_info_store;
-
-#define	curcpu()			(&cpu_info_store)
-
-/*
- * definitions of cpu-dependent requirements
- * referenced in generic code
- */
-#define	cpu_number()			0
-#define	cpu_swapin(p)			/* nothing */
-#define	cpu_swapout(p)			/* nothing */
-
-void	cpu_proc_fork(struct proc *, struct proc *);
-
 /*
  * Arguments to hardclock and gatherstats encapsulate the previous
  * machine state in an opaque clockframe.  On the sun68k, we use
@@ -144,7 +121,8 @@ struct clockframe {
 #define	CLKF_INTR(framep)	(((framep)->cf_sr & PSL_M) == 0)
 #else
 /* but until we start using PSL_M, we have to do this instead */
-#define	CLKF_INTR(framep)	(0)	/* XXX */
+#include <machine/intr.h>
+#define	CLKF_INTR(framep)	(idepth > 1)	/* XXX */
 #endif
 
 extern int astpending;	 /* need to trap before returning to user mode */

@@ -1,4 +1,4 @@
-/*	$NetBSD: auth_unix.c,v 1.20 2005/02/11 06:21:21 simonb Exp $	*/
+/*	$NetBSD: auth_unix.c,v 1.22 2009/01/11 02:46:29 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char *sccsid = "@(#)auth_unix.c 1.19 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)auth_unix.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: auth_unix.c,v 1.20 2005/02/11 06:21:21 simonb Exp $");
+__RCSID("$NetBSD: auth_unix.c,v 1.22 2009/01/11 02:46:29 christos Exp $");
 #endif
 #endif
 
@@ -141,7 +141,7 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	 * fill in param struct from the given params
 	 */
 	(void)gettimeofday(&now, NULL);
-	aup.aup_time = now.tv_sec;
+	aup.aup_time = (u_long)now.tv_sec;	/* XXX: truncate on 32 bit */
 	aup.aup_machname = machname;
 	aup.aup_uid = uid;
 	aup.aup_gid = gid;
@@ -157,9 +157,9 @@ authunix_create(machname, uid, gid, len, aup_gids)
 	au->au_origcred.oa_length = len = XDR_GETPOS(&xdrs);
 	au->au_origcred.oa_flavor = AUTH_UNIX;
 #ifdef KERNEL
-	au->au_origcred.oa_base = mem_alloc((u_int) len);
+	au->au_origcred.oa_base = mem_alloc((size_t)len);
 #else
-	if ((au->au_origcred.oa_base = mem_alloc((u_int) len)) == NULL) {
+	if ((au->au_origcred.oa_base = mem_alloc((size_t)len)) == NULL) {
 		warnx("authunix_create: out of memory");
 		goto cleanup_authunix_create;
 	}
@@ -299,7 +299,7 @@ authunix_refresh(auth)
 
 	/* update the time and serialize in place */
 	(void)gettimeofday(&now, NULL);
-	aup.aup_time = now.tv_sec;
+	aup.aup_time = (u_long)now.tv_sec;	/* XXX: truncate on 32 bit */
 	xdrs.x_op = XDR_ENCODE;
 	XDR_SETPOS(&xdrs, 0);
 	stat = xdr_authunix_parms(&xdrs, &aup);

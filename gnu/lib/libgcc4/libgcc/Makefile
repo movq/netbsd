@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2007/03/09 04:40:38 matt Exp $
+#	$NetBSD: Makefile,v 1.11 2010/03/14 00:26:10 mrg Exp $
 
 REQUIRETOOLS=	yes
 NOLINT=		# defined
@@ -9,11 +9,9 @@ LIB=		gcc
 
 .if ${MKGCC} != "no"
 
-.if exists(${.CURDIR}/../arch/${MACHINE_ARCH}.mk)
-.include "${.CURDIR}/../arch/${MACHINE_ARCH}.mk"
-.endif
-
 .cc: # disable .cc->NULL transform
+
+.if !defined(MKNATIVE_LIBGCC_NEW)
 
 SRCS+=		${LIB2FUNCS} ${LIB2FUNCS_ST} ${LIB2DIVMOD} \
 		${G_LIB2ADD:T:S/.asm/.S/} ${LIB1ASMFUNCS}
@@ -21,17 +19,32 @@ SRCS+=		${LIB2FUNCS} ${LIB2FUNCS_ST} ${LIB2DIVMOD} \
 SRCS+=		${LIB2_EH}
 .endif
 
+.else	# defined(MKNATIVE_LIBGCC_NEW)
+
+.include "../Makefile.srcs"
+
+# New style.
+TMPLSRCS=	${TMPLSRCS.libgcc.a}
+TMPLFPSRCS=	${TMPLFPSRCS.libgcc.a}
+TMPLASMSRCS=	${TMPLASMSRCS.libgcc.a}
+SRCS=		${SRCS.libgcc.a}
+
+.include "../Makefile.wrapper"
+
+.endif	# defined(MKNATIVE_LIBGCC_NEW)
+
 .include <bsd.lib.mk>
 
-.include "../Makefile.unwind_h"
+.if !defined(MKNATIVE_LIBGCC_NEW)
 
 CLEANFILES+=	${SOBJS:=.tmp1} ${SOBJS:=.tmp2}
 
-.c.so:
+.c.pico:
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} ${CSHLIBFLAGS} ${.IMPSRC} -o ${.TARGET}.tmp1
-	${NM} -pg ${.TARGET}.tmp1 | ${AWK} 'NF == 3 { print "\t.hidden", $$3 }' | \
-	    ${CC} -Wl,-x -r -nostdinc -nostdlib ${CPUFLAGS} -o ${.TARGET}.tmp2 ${.TARGET}.tmp1 -xassembler -
+	${NM} -pg ${.TARGET}.tmp1 | \
+	    ${TOOL_AWK} 'NF == 3 { print "\t.hidden", $$3 }' | \
+	    ${CC} ${COPTS} -Wl,-x -r -nostdinc -nostdlib ${CPUFLAGS} -o ${.TARGET}.tmp2 ${.TARGET}.tmp1 -xassembler -
 .if defined(COPTS) && !empty(COPTS:M*-g*)
 	mv ${.TARGET}.tmp2 ${.TARGET}
 .else
@@ -40,10 +53,11 @@ CLEANFILES+=	${SOBJS:=.tmp1} ${SOBJS:=.tmp2}
 .endif
 	rm -f ${.TARGET}.tmp1
 
-.S.so .s.so:
+.S.pico .s.pico:
 	${_MKTARGET_COMPILE}
 	${COMPILE.S} ${CAPICFLAGS} ${CFLAGS:M-[ID]*} ${.IMPSRC} -o ${.TARGET}.tmp1
-	${NM} -pg ${.TARGET}.tmp1 | ${AWK} 'NF == 3 { print "\t.hidden", $$3 }' | \
+	${NM} -pg ${.TARGET}.tmp1 | \
+	    ${TOOL_AWK} 'NF == 3 { print "\t.hidden", $$3 }' | \
 	    ${CC} -Wl,-x -r -nostdinc -nostdlib -o ${.TARGET}.tmp2 ${.TARGET}.tmp1 -xassembler -
 .if defined(COPTS) && !empty(COPTS:M*-g*)
 	mv ${.TARGET}.tmp2 ${.TARGET}
@@ -52,6 +66,8 @@ CLEANFILES+=	${SOBJS:=.tmp1} ${SOBJS:=.tmp2}
 	rm -f ${.TARGET}.tmp2
 .endif
 	rm -f ${.TARGET}.tmp1
+
+.endif	# !defined(MKNATIVE_LIBGCC_NEW)
 
 .else
 .include <bsd.prog.mk> # do nothing

@@ -1,4 +1,4 @@
-/*	$NetBSD: lint.h,v 1.9 2005/04/07 16:28:40 christos Exp $	*/
+/*	$NetBSD: lint.h,v 1.13 2009/04/15 01:20:57 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -74,6 +74,10 @@ typedef enum {
 	PTR,		/* pointer */
 	ARRAY,		/* array */
 	FUNC,		/* function */
+	COMPLEX,	/* _Complex */
+	FCOMPLEX,	/* float _Complex */
+	DCOMPLEX,	/* double _Complex */
+	LCOMPLEX,	/* long double _Complex */
 	NTSPEC
 } tspec_t;
 
@@ -81,8 +85,8 @@ typedef enum {
  * size of types, name and classification
  */
 typedef	struct {
-	int	tt_sz;			/* size in bits */
-	int	tt_psz;			/* size, different from tt_sz
+	size_t	tt_sz;			/* size in bits */
+	size_t	tt_psz;			/* size, different from tt_sz
 					   if pflag is set */
 	tspec_t	tt_styp;		/* signed counterpart */
 	tspec_t	tt_utyp;		/* unsigned counterpart */
@@ -91,7 +95,8 @@ typedef	struct {
 	u_int	tt_isftyp : 1;		/* 1 if floating point type */
 	u_int	tt_isatyp : 1;		/* 1 if arithmetic type */
 	u_int	tt_issclt : 1;		/* 1 if scalar type */
-	char	*tt_name;		/* Bezeichnung des Typs */
+	u_int	tt_isctyp : 1;		/* 1 if complex type */
+	const char *tt_name;		/* Bezeichnung des Typs */
 } ttab_t;
 
 #define size(t)		(ttab[t].tt_sz)
@@ -102,6 +107,7 @@ typedef	struct {
 #define isutyp(t)	(ttab[t].tt_isutyp)
 #define isftyp(t)	(ttab[t].tt_isftyp)
 #define isatyp(t)	(ttab[t].tt_isatyp)
+#define isctyp(t)	(ttab[t].tt_isctyp)
 #define issclt(t)	(ttab[t].tt_issclt)
 
 extern	ttab_t	ttab[];

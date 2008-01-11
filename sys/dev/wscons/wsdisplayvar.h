@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplayvar.h,v 1.45 2007/12/13 15:14:48 joerg Exp $ */
+/* $NetBSD: wsdisplayvar.h,v 1.48 2010/02/02 16:54:40 drochner Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -149,13 +149,6 @@ struct wsemuldisplaydev_attach_args {
 	void	*accesscookie;				/* access cookie */
 };
 
-#include "locators.h"
-
-#define	wsemuldisplaydevcf_console	cf_loc[WSEMULDISPLAYDEVCF_CONSOLE]	/* spec'd as console? */
-#define	WSEMULDISPLAYDEVCF_CONSOLE_UNK	(WSEMULDISPLAYDEVCF_CONSOLE_DEFAULT)
-#define	wsemuldisplaydevcf_kbdmux	cf_loc[WSEMULDISPLAYDEVCF_KBDMUX]
-#define	wsdisplaydevcf_kbdmux		cf_loc[WSDISPLAYDEVCF_KBDMUX]
-
 struct wscons_syncops {
 	int (*detach)(void *, int, void (*)(void *, int, int), void *);
 	int (*attach)(void *, int, void (*)(void *, int, int), void *);
@@ -173,6 +166,8 @@ void	wsdisplay_preattach(const struct wsscreen_descr *, void *, int, int,
 
 int	wsdisplaydevprint(void *, const char *);
 int	wsemuldisplaydevprint(void *, const char *);
+
+int	wsdisplay_handlex(int);
 
 /*
  * Console interface.
@@ -218,7 +213,7 @@ void wsdisplay_scroll(void *, int);
 #define WSDISPLAY_SCROLL_RESET		(1 << 2)
 #define WSDISPLAY_SCROLL_LOW		(1 << 3)
 
-int wsdisplay_stat_inject(struct device *, u_int, int);
+int wsdisplay_stat_inject(device_t, u_int, int);
 
 /*
  * for general use

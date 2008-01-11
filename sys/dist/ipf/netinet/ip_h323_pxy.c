@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_h323_pxy.c,v 1.9 2007/12/11 04:55:01 lukem Exp $	*/
+/*	$NetBSD: ip_h323_pxy.c,v 1.11 2009/08/19 08:36:11 darrenr Exp $	*/
 
 /*
  * Copyright 2001, QNX Software Systems Ltd. All Rights Reserved
@@ -21,21 +21,8 @@
  *	ported to ipfilter 3.4.20 by Michael Grant mg-ipf@grant.org
  */
 
-#if __FreeBSD_version >= 220000 && defined(_KERNEL)
-# include <sys/fcntl.h>
-# include <sys/filio.h>
-#else
-# ifndef linux
-#  include <sys/ioctl.h>
-# endif
-#endif
-
-#ifdef _KERNEL_OPT
-#include "opt_ipfilter.h"
-#endif
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ip_h323_pxy.c,v 1.9 2007/12/11 04:55:01 lukem Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ip_h323_pxy.c,v 1.11 2009/08/19 08:36:11 darrenr Exp $");
 
 #define IPF_H323_PROXY
 
@@ -69,7 +56,7 @@ unsigned short *port;
 
 	if (datlen < 6)
 		return -1;
-	
+
 	*port = 0;
 	offset = *off;
 	dp = (u_char *)data;
@@ -131,7 +118,7 @@ ap_session_t *aps;
 {
 	int i;
 	ipnat_t *ipn;
-	
+
 	if (aps->aps_data) {
 		for (i = 0, ipn = aps->aps_data;
 		     i < (aps->aps_psiz / sizeof(ipnat_t));
@@ -143,7 +130,7 @@ ap_session_t *aps;
 			 * We are lucky here because this function is not
 			 * called with ipf_nat locked.
 			 */
-			if (fr_nat_ioctl((caddr_t)ipn, SIOCRMNAT, NAT_SYSSPACE|
+			if (fr_nat_ioctl((void *)ipn, SIOCRMNAT, NAT_SYSSPACE|
 				         NAT_LOCKHELD|FWRITE, 0, NULL) == -1) {
 				/*EMPTY*/;
 				/* log the error */
@@ -165,14 +152,14 @@ nat_t *nat;
 {
 	int ipaddr, off, datlen;
 	unsigned short port;
-	void *data;
 	tcphdr_t *tcp;
+	void *data;
 	ip_t *ip;
 
 	ip = fin->fin_ip;
 	tcp = (tcphdr_t *)fin->fin_dp;
 	ipaddr = ip->ip_src.s_addr;
-	
+
 	data = (char *)tcp + (TCP_OFF(tcp) << 2);
 	datlen = fin->fin_dlen - (TCP_OFF(tcp) << 2);
 	if (find_port(ipaddr, data, datlen, &off, &port) == 0) {
@@ -190,7 +177,7 @@ nat_t *nat;
 		ipn = (ipnat_t *)&newarray[aps->aps_psiz];
 		bcopy((void *)nat->nat_ptr, (void *)ipn, sizeof(ipnat_t));
 		(void) strncpy(ipn->in_plabel, "h245", APR_LABELLEN);
-		
+
 		ipn->in_inip = nat->nat_inip.s_addr;
 		ipn->in_inmsk = 0xffffffff;
 		ipn->in_dport = htons(port);
@@ -207,7 +194,7 @@ nat_t *nat;
 		 * of calling fr_nat_ioctl(), we add the nat rule ourself.
 		 */
 		RWLOCK_EXIT(&ipf_nat);
-		if (fr_nat_ioctl((caddr_t)ipn, SIOCADNAT,
+		if (fr_nat_ioctl((void *)ipn, SIOCADNAT,
 				 NAT_SYSSPACE|FWRITE, 0, NULL) == -1) {
 			READ_ENTER(&ipf_nat);
 			return -1;
@@ -245,8 +232,8 @@ nat_t *nat;
 {
 	int ipaddr, off, datlen;
 	tcphdr_t *tcp;
-	void *data;
 	u_short port;
+	void *data;
 	ip_t *ip;
 
 	aps = aps;	/* LINT */
@@ -265,30 +252,32 @@ nat_t *nat;
 				    ip->ip_src, ip->ip_dst);
 		if (nat2 == NULL) {
 			struct ip newip;
-			struct udphdr udp;
-			
+			udphdr_t udp;
+
 			bcopy((void *)ip, (void *)&newip, sizeof(newip));
 			newip.ip_len = fin->fin_hlen + sizeof(udp);
 			newip.ip_p = IPPROTO_UDP;
 			newip.ip_src = nat->nat_inip;
-			
+
 			bzero((char *)&udp, sizeof(udp));
 			udp.uh_sport = port;
-			
+
 			memcpy(&fi, fin, sizeof(fi));
-			fi.fin_state = NULL;
-			fi.fin_nat = NULL;
 			fi.fin_fi.fi_p = IPPROTO_UDP;
 			fi.fin_data[0] = port;
 			fi.fin_data[1] = 0;
 			fi.fin_dp = (char *)&udp;
 
+			MUTEX_ENTER(&ipf_nat_new);
 			nat2 = nat_new(&fi, nat->nat_ptr, NULL,
 				       NAT_SLAVE|IPN_UDP|SI_W_DPORT,
 				       NAT_OUTBOUND);
+			MUTEX_EXIT(&ipf_nat_new);
 			if (nat2 != NULL) {
 				(void) nat_proto(&fi, nat2, IPN_UDP);
-				nat_update(&fi, nat2, nat2->nat_ptr);
+				MUTEX_ENTER(&nat2->nat_lock);
+				nat_update(&fi, nat2);
+				MUTEX_EXIT(&nat2->nat_lock);
 
 				nat2->nat_ptr->in_hits++;
 #ifdef	IPFILTER_LOG

@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_subr.c,v 1.72 2008/01/02 11:49:12 ad Exp $	*/
+/*	$NetBSD: lfs_subr.c,v 1.76 2010/06/25 10:03:52 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_subr.c,v 1.72 2008/01/02 11:49:12 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_subr.c,v 1.76 2010/06/25 10:03:52 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -300,9 +293,9 @@ lfs_seglock(struct lfs *fs, unsigned long flags)
 	if (fs->lfs_seglock) {
 		if (fs->lfs_lockpid == curproc->p_pid &&
 		    fs->lfs_locklwp == curlwp->l_lid) {
-			mutex_exit(&lfs_lock);
 			++fs->lfs_seglock;
 			fs->lfs_sp->seg_flags |= flags;
+			mutex_exit(&lfs_lock);
 			return 0;
 		} else if (flags & SEGM_PAGEDAEMON) {
 			mutex_exit(&lfs_lock);
@@ -368,8 +361,6 @@ lfs_unmark_dirop(struct lfs *fs)
 	for (ip = TAILQ_FIRST(&fs->lfs_dchainhd); ip != NULL; ip = nip) {
 		nip = TAILQ_NEXT(ip, i_lfs_dchain);
 		vp = ITOV(ip);
-		if (VOP_ISLOCKED(vp) == LK_EXCLOTHER)
-			continue;
 		if ((VTOI(vp)->i_flag & (IN_ADIROP | IN_ALLMOD)) == 0) {
 			--lfs_dirvcount;
 			--fs->lfs_dirvcount;
@@ -510,9 +501,11 @@ lfs_segunlock(struct lfs *fs)
 		 * by a superblock completed.
 		 */
 		mutex_enter(&lfs_lock);
-		while (ckp && sync && fs->lfs_iocount)
+		while (ckp && sync && fs->lfs_iocount) {
 			(void)mtsleep(&fs->lfs_iocount, PRIBIO + 1,
 				      "lfs_iocount", 0, &lfs_lock);
+			DLOG((DLOG_SEG, "sleeping on iocount %x == %d\n", fs, fs->lfs_iocount));
+		}
 		while (sync && sp->seg_iocount) {
 			(void)mtsleep(&sp->seg_iocount, PRIBIO + 1,
 				     "seg_iocount", 0, &lfs_lock);

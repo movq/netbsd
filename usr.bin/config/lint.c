@@ -1,4 +1,4 @@
-/*	$NetBSD: lint.c,v 1.5 2007/09/10 10:54:21 cube Exp $	*/
+/*	$NetBSD: lint.c,v 1.8 2009/08/30 21:07:41 cube Exp $	*/
 
 /*
  *  Copyright (c) 2007 The NetBSD Foundation.
@@ -12,9 +12,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -127,13 +124,13 @@ do_emit_instances(struct devbase *d, struct attr *at)
 		da->d_isdef = 2;
 	}
 
-	if (at == NULL && !d->d_ispseudo)
+	if (at == NULL && !d->d_ispseudo && d->d_ihead == NULL)
 		printf("%s0\tat\troot\n", d->d_name);
-	else if (!d->d_ispseudo) {
+	else if (at != NULL && !d->d_ispseudo && da->d_ihead == NULL) {
 		printf("%s0\tat\t%s?", d->d_name, at->a_name);
 
 		for (nv = at->a_locs; nv != NULL; nv = nv->nv_next) {
-			if (nv->nv_int == 0)
+			if (nv->nv_num == 0)
 				printf(" %s %c", nv->nv_name,
 				    nv->nv_str ? '?' : '0');
 		}
@@ -168,7 +165,7 @@ emit_pseudo_instance(const char *name, void *value, void *v)
 {
 	struct devbase *d = value;
 
-	if (d->d_ispseudo)
+	if (d->d_ispseudo && d->d_ihead == NULL)
 		printf("pseudo-device\t%s\n", d->d_name);
 	return 0;
 }

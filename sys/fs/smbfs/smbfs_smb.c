@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_smb.c,v 1.35 2007/03/04 06:03:01 christos Exp $	*/
+/*	$NetBSD: smbfs_smb.c,v 1.41 2009/10/20 20:55:01 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -71,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_smb.c,v 1.35 2007/03/04 06:03:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_smb.c,v 1.41 2009/10/20 20:55:01 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -272,13 +265,49 @@ smbfs_smb_statvfs(struct smb_share *ssp, struct statvfs *sbp,
 	return 0;
 }
 
+static int
+smbfs_smb_seteof(struct smbnode *np, int64_t newsize, struct smb_cred *scred)
+{
+	struct smb_t2rq *t2p;
+	struct smb_share *ssp = np->n_mount->sm_share;
+	struct mbchain *mbp;
+	int error;
+
+	error = smb_t2_alloc(SSTOCP(ssp), SMB_TRANS2_SET_FILE_INFORMATION,
+	    scred, &t2p);
+	if (error)
+		return error;
+	mbp = &t2p->t2_tparam;
+	mb_init(mbp);
+	mb_put_mem(mbp, (void *)&np->n_fid, 2, MB_MSYSTEM);
+	mb_put_uint16le(mbp, SMB_SET_FILE_END_OF_FILE_INFO);
+	mb_put_uint32le(mbp, 0);
+	mbp = &t2p->t2_tdata;
+	mb_init(mbp);
+	mb_put_int64le(mbp, newsize);
+	mb_put_uint32le(mbp, 0);			/* padding */
+	mb_put_uint16le(mbp, 0);
+	t2p->t2_maxpcount = 2;
+	t2p->t2_maxdcount = 0;
+	error = smb_t2_request(t2p);
+	smb_t2_done(t2p);
+	return error;
+}
+
 int
-smbfs_smb_setfsize(struct smbnode *np, int newsize, struct smb_cred *scred)
+smbfs_smb_setfsize(struct smbnode *np, u_quad_t newsize,
+		   struct smb_cred *scred)
 {
 	struct smb_share *ssp = np->n_mount->sm_share;
 	struct smb_rq *rqp;
 	struct mbchain *mbp;
 	int error;
+
+	if (newsize >= (1LL << 32)) {
+		if (!(SMB_CAPS(SSTOVC(ssp)) & SMB_CAP_LARGE_FILES))
+			return EFBIG;
+		return smbfs_smb_seteof(np, (int64_t)newsize, scred);
+	}
 
 	error = smb_rq_alloc(SSTOCP(ssp), SMB_COM_WRITE, scred, &rqp);
 	if (error)
@@ -488,7 +517,7 @@ smbfs_smb_setftime(struct smbnode *np, struct timespec *mtime,
 	smb_rq_bstart(rqp);
 	smb_rq_bend(rqp);
 	error = smb_rq_simple(rqp);
-	SMBSDEBUG("%d\n", error);
+	SMBSDEBUG(("%d\n", error));
 	smb_rq_done(rqp);
 	return error;
 }
@@ -1207,7 +1236,7 @@ smbfs_findnextLM2(struct smbfs_fctx *ctx, int limit)
 			ctx->f_rname = malloc(nmlen + 1, M_SMBFSDATA, M_WAITOK);
 			ctx->f_rnamelen = nmlen;
 		}
-		bcopy(ctx->f_name, ctx->f_rname, nmlen);
+		memcpy(ctx->f_rname, ctx->f_name, nmlen);
 		ctx->f_rname[nmlen] = 0;
 		ctx->f_flags |= SMBFS_RDD_GOTRNAME;
 	}
@@ -1308,7 +1337,7 @@ smbfs_smb_lookup(struct smbnode *dnp, const char *name, int nmlen,
 	int error;
 
 	if (dnp == NULL || (dnp->n_ino == 2 && name == NULL)) {
-		bzero(fap, sizeof(*fap));
+		memset(fap, 0, sizeof(*fap));
 		fap->fa_attr = SMB_FA_DIR;
 		fap->fa_ino = 2;
 		return 0;

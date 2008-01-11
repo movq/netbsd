@@ -1,4 +1,4 @@
-/* $NetBSD: admpci.c,v 1.1 2007/03/20 08:52:02 dyoung Exp $ */
+/* $NetBSD: admpci.c,v 1.6 2011/05/17 17:34:50 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2007 David Young.  All rights reserved.
@@ -12,9 +12,6 @@
  *    copyright notice, this list of conditions and the following
  *    disclaimer in the documentation and/or other materials provided
  *    with the distribution.
- * 3. The name of the author may not be used to endorse or promote
- *    products derived from this software without specific prior
- *    written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY
  * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
@@ -64,7 +61,7 @@
 #include "pci.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: admpci.c,v 1.1 2007/03/20 08:52:02 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: admpci.c,v 1.6 2011/05/17 17:34:50 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -144,7 +141,7 @@ static void admpci_conf_interrupt(void *, int, int, int, int, int *);
 static void *admpci_intr_establish(void *, pci_intr_handle_t, int,
     int (*)(void *), void *);
 static void admpci_intr_disestablish(void *, void *);
-static int admpci_intr_map(struct pci_attach_args *, pci_intr_handle_t *);
+static int admpci_intr_map(const struct pci_attach_args *, pci_intr_handle_t *);
 
 #ifdef	PCI_NETBSD_CONFIGURE
 static struct extent	*io_ex = NULL;
@@ -206,7 +203,7 @@ admpciattach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
-	printf(": ADM5120 Host-PCI Bridge, data %lx addr %lx, sc %p\n",
+	printf(": ADM5120 Host-PCI Bridge, data %"PRIxBSH" addr %"PRIxBSH", sc %p\n",
 	    sc->sc_datah, sc->sc_addrh, (void *)sc);
 
 #if NPCI > 0
@@ -252,7 +249,7 @@ admpciattach(struct device *parent, struct device *self, void *aux)
 	    M_DEVBUF, NULL, 0, EX_WAITOK);
 
 	pci_configure_bus(&sc->sc_pc,
-	    io_ex, mem_ex, NULL, 0, mips_dcache_align);
+	    io_ex, mem_ex, NULL, 0, mips_cache_info.mci_dcache_align);
 	extent_destroy(mem_ex);
 	extent_destroy(io_ex);
 #endif
@@ -263,7 +260,7 @@ admpciattach(struct device *parent, struct device *self, void *aux)
 	pba.pba_dmat = ma->ma_dmat;
 	pba.pba_dmat64 = NULL;
 	pba.pba_pc = &sc->sc_pc;
-	pba.pba_flags = PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;
 	pba.pba_bus = 0;
 	pba.pba_bridgetag = NULL;
 
@@ -428,7 +425,7 @@ admpci_conf_interrupt(void *v, int bus, int dev, int ipin, int swiz, int *iline)
  * XXX How to handle bridges?
  */
 static int
-admpci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+admpci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 {
 	int bus, device, function;
 

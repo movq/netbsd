@@ -1,4 +1,4 @@
-/*      $NetBSD: if_wi_pci.c,v 1.43 2007/12/09 20:28:10 jmcneill Exp $  */
+/*      $NetBSD: if_wi_pci.c,v 1.52 2010/11/23 04:36:09 christos Exp $  */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_wi_pci.c,v 1.43 2007/12/09 20:28:10 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_wi_pci.c,v 1.52 2010/11/23 04:36:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,16 +88,15 @@ struct wi_pci_softc {
 	pcitag_t psc_pcitag;
 };
 
-static int	wi_pci_match(struct device *, struct cfdata *, void *);
-static void	wi_pci_attach(struct device *, struct device *, void *);
-static int	wi_pci_enable(struct wi_softc *);
-static void	wi_pci_disable(struct wi_softc *);
+static int	wi_pci_match(device_t, cfdata_t, void *);
+static void	wi_pci_attach(device_t, device_t, void *);
+static int	wi_pci_enable(device_t, int);
 static void	wi_pci_reset(struct wi_softc *);
 
 static const struct wi_pci_product
 	*wi_pci_lookup(struct pci_attach_args *);
 
-CFATTACH_DECL(wi_pci, sizeof(struct wi_pci_softc),
+CFATTACH_DECL_NEW(wi_pci, sizeof(struct wi_pci_softc),
     wi_pci_match, wi_pci_attach, NULL, NULL);
 
 static const struct wi_pci_product {
@@ -135,32 +127,28 @@ static const struct wi_pci_product {
 };
 
 static int
-wi_pci_enable(struct wi_softc *sc)
+wi_pci_enable(device_t self, int onoff)
 {
-	struct wi_pci_softc *psc = (struct wi_pci_softc *)sc;
+	struct wi_pci_softc *psc = device_private(self);
+	struct wi_softc *sc = &psc->psc_wi;
 
-	/* establish the interrupt. */
-	sc->sc_ih = pci_intr_establish(psc->psc_pc,
-					psc->psc_ih, IPL_NET, wi_intr, sc);
-	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
-		return (EIO);
-	}
+	if (onoff) {
+		/* establish the interrupt. */
+		sc->sc_ih = pci_intr_establish(psc->psc_pc,
+		    psc->psc_ih, IPL_NET, wi_intr, sc);
+		if (sc->sc_ih == NULL) {
+			aprint_error_dev(sc->sc_dev,
+			    "couldn't establish interrupt\n");
+			return EIO;
+		}
 
-	/* reset HFA3842 MAC core */
-	if (sc->sc_reset != NULL)
-		wi_pci_reset(sc);
+		/* reset HFA3842 MAC core */
+		if (sc->sc_reset != NULL)
+			wi_pci_reset(sc);
 
-	return (0);
-}
-
-static void
-wi_pci_disable(struct wi_softc *sc)
-{
-	struct wi_pci_softc *psc = (struct wi_pci_softc *)sc;
-
-	pci_intr_disestablish(psc->psc_pc, sc->sc_ih);
+	} else
+		pci_intr_disestablish(psc->psc_pc, sc->sc_ih);
+	return 0;
 }
 
 static void
@@ -183,14 +171,14 @@ wi_pci_reset(struct wi_softc *sc)
 			break;
 
 	if (i < 0) {
-		printf("%s: PCI reset timed out\n", sc->sc_dev.dv_xname);
+		printf("%s: PCI reset timed out\n", device_xname(sc->sc_dev));
 	} else if (sc->sc_if.if_flags & IFF_DEBUG) {
 		usecs = (200000 - i) * 10;
 		secs = usecs / 1000000;
 		usecs %= 1000000;
 
 		printf("%s: PCI reset in %d.%06d seconds\n",
-                       sc->sc_dev.dv_xname, secs, usecs);
+                       device_xname(sc->sc_dev), secs, usecs);
 	}
 
 	return;
@@ -210,8 +198,7 @@ wi_pci_lookup(struct pci_attach_args *pa)
 }
 
 static int
-wi_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+wi_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -221,9 +208,9 @@ wi_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-wi_pci_attach(struct device *parent, struct device *self, void *aux)
+wi_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct wi_pci_softc *psc = (struct wi_pci_softc *)self;
+	struct wi_pci_softc *psc = device_private(self);
 	struct wi_softc *sc = &psc->psc_wi;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
@@ -233,6 +220,7 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_tag_t memt, iot, plxt, tmdt;
 	bus_space_handle_t memh, ioh, plxh, tmdh;
 
+	sc->sc_dev = self;
 	psc->psc_pc = pc;
 	psc->psc_pcitag = pa->pa_tag;
 
@@ -312,7 +300,6 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_enabled = 1;
 	sc->sc_enable = wi_pci_enable;
-	sc->sc_disable = wi_pci_disable;
 
 	sc->sc_iot = iot;
 	sc->sc_ioh = ioh;
@@ -332,7 +319,7 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", self->dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
@@ -340,14 +327,14 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 	psc->psc_ih = ih;
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, wi_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt", self->dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			printf(" at %s", intrstr);
-		printf("\n");
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
 		return;
 	}
 
-	printf("%s: interrupting at %s\n", self->dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	switch (wpp->wpp_chip) {
 	case CHIP_PLX_OTHER:
@@ -371,10 +358,10 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 		break;
 	}
 
-	printf("%s:", self->dv_xname);
+	printf("%s:", device_xname(self));
 
 	if (wi_attach(sc, 0) != 0) {
-		printf("%s: failed to attach controller\n", self->dv_xname);
+		aprint_error_dev(self, "failed to attach controller\n");
 		pci_intr_disestablish(pa->pa_pc, sc->sc_ih);
 		return;
 	}
@@ -382,8 +369,8 @@ wi_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (!wpp->wpp_chip)
 		sc->sc_reset = wi_pci_reset;
 
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "couldn't establish power handler\n");
-	else
+	if (pmf_device_register(self, NULL, NULL))
 		pmf_class_network_register(self, &sc->sc_if);
+	else
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }

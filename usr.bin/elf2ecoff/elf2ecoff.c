@@ -1,4 +1,4 @@
-/*	$NetBSD: elf2ecoff.c,v 1.22 2006/05/31 08:09:55 simonb Exp $	*/
+/*	$NetBSD: elf2ecoff.c,v 1.26 2009/12/19 10:27:13 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997 Jonathan Stone
@@ -79,8 +79,8 @@ int     debug = 0;
 int     phcmp(Elf32_Phdr * h1, Elf32_Phdr * h2);
 
 
-char   *saveRead(int file, off_t offset, off_t len, char *name);
-void    safewrite(int outfile, void *buf, off_t len, const char *msg);
+char   *saveRead(int file, off_t offset, off_t len, const char *name);
+void    safewrite(int outfile, const void *buf, off_t len, const char *msg);
 void    copy(int, int, off_t, off_t);
 void    combine(struct sect * base, struct sect * new, int paddable);
 void    translate_syms(struct elf_syms *, struct ecoff_syms *);
@@ -123,7 +123,8 @@ main(int argc, char **argv, char **envp)
 	Elf32_Shdr *sh;
 	char   *shstrtab;
 	int     strtabix, symtabix;
-	int     i, pad;
+	size_t	i;
+	int     pad;
 	struct sect text, data, bss;	/* a.out-compatible sections */
 	struct sect rdata, sdata, sbss;	/* ECOFF-only sections */
 
@@ -254,7 +255,7 @@ usage:
 		    ph[i].p_type == PT_MIPS_REGINFO) {
 
 			if (debug) {
-				fprintf(stderr, "  skipping PH %d type %d flags 0x%x\n",
+				fprintf(stderr, "  skipping PH %zu type %d flags 0x%x\n",
 				    i, ph[i].p_type, ph[i].p_flags);
 			}
 			continue;
@@ -262,7 +263,7 @@ usage:
 		/* Section types we can't handle... */
 		else
 			if (ph[i].p_type != PT_LOAD) {
-				fprintf(stderr, "Program header %d type %d can't be converted.\n",
+				fprintf(stderr, "Program header %zu type %d can't be converted.\n",
 				    i, ph[i].p_type);
 				exit(1);
 			}
@@ -277,7 +278,7 @@ usage:
 
 			if (debug) {
 				fprintf(stderr,
-				    "  combinining PH %d type %d flags 0x%x with data, ndata = %ld, nbss =%ld\n", i, ph[i].p_type, ph[i].p_flags, ndata.len, nbss.len);
+				    "  combinining PH %zu type %d flags 0x%x with data, ndata = %ld, nbss =%ld\n", i, ph[i].p_type, ph[i].p_flags, ndata.len, nbss.len);
 			}
 			combine(&data, &ndata, 0);
 			combine(&bss, &nbss, 1);
@@ -289,7 +290,7 @@ usage:
 			if (debug) {
 
 				fprintf(stderr,
-				    "  combinining PH %d type %d flags 0x%x with text, len = %ld\n",
+				    "  combinining PH %zu type %d flags 0x%x with text, len = %ld\n",
 				    i, ph[i].p_type, ph[i].p_flags, ntxt.len);
 			}
 			combine(&text, &ntxt, 0);
@@ -399,16 +400,16 @@ usage:
 	/* Write the headers... */
 	safewrite(outfile, &ep.f, sizeof(ep.f), "ep.f: write: %s\n");
 	if (debug)
-		fprintf(stderr, "wrote %d byte file header.\n", sizeof(ep.f));
+		fprintf(stderr, "wrote %zu byte file header.\n", sizeof(ep.f));
 
 	safewrite(outfile, &ep.a, sizeof(ep.a), "ep.a: write: %s\n");
 	if (debug)
-		fprintf(stderr, "wrote %d byte a.out header.\n", sizeof(ep.a));
+		fprintf(stderr, "wrote %zu byte a.out header.\n", sizeof(ep.a));
 
 	safewrite(outfile, &esecs, sizeof(esecs[0]) * nsecs,
 	    "esecs: write: %s\n");
 	if (debug)
-		fprintf(stderr, "wrote %d bytes of section headers.\n",
+		fprintf(stderr, "wrote %zu bytes of section headers.\n",
 		    sizeof(esecs[0]) * nsecs);
 
 
@@ -490,7 +491,7 @@ copy(out, in, offset, size)
 	off_t   offset, size;
 {
 	char    ibuf[4096];
-	int     remaining, cur, count;
+	size_t  remaining, cur, count;
 
 	/* Go to the start of the ELF symbol table... */
 	if (lseek(in, offset, SEEK_SET) < 0) {
@@ -550,7 +551,7 @@ phcmp(h1, h2)
 
 char
        *
-saveRead(int file, off_t offset, off_t len, char *name)
+saveRead(int file, off_t offset, off_t len, const char *name)
 {
 	char   *tmp;
 	int     count;
@@ -573,10 +574,10 @@ saveRead(int file, off_t offset, off_t len, char *name)
 }
 
 void
-safewrite(int outfile, void *buf, off_t len, const char *msg)
+safewrite(int outfile, const void *buf, off_t len, const char *msg)
 {
 	int     written;
-	written = write(outfile, (char *) buf, len);
+	written = write(outfile, buf, len);
 	if (written != len) {
 		fprintf(stderr, msg, strerror(errno));
 		exit(1);
@@ -660,7 +661,7 @@ write_ecoff_symhdr(out, ep, symhdrp, nesyms, extsymoff, extstroff, strsize)
 	symhdrp->issExtMax = strsize;
 	if (debug)
 		fprintf(stderr,
-		    "ECOFF symhdr: symhdr %x, strsize %lx, symsize %lx\n",
+		    "ECOFF symhdr: symhdr %zx, strsize %lx, symsize %lx\n",
 		    sizeof(*symhdrp), strsize,
 		    (nesyms * sizeof(struct ecoff_extsym)));
 
@@ -859,7 +860,7 @@ pad16(int fd, int size, const char *msg)
 void
 bswap32_region(int32_t* p, int len)
 {
-	int i;
+	size_t i;
 
 	for (i = 0; i < len / sizeof(int32_t); i++, p++)
 		*p = bswap32(*p);

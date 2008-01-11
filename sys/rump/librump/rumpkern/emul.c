@@ -1,9 +1,7 @@
-/*	$NetBSD: emul.c,v 1.21 2008/01/04 00:38:24 pooka Exp $	*/
+/*	$NetBSD: emul.c,v 1.150 2011/03/21 16:41:08 pooka Exp $	*/
 
 /*
- * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
- *
- * Development of this software was supported by Google Summer of Code.
+ * Copyright (c) 2007-2011 Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,13 +25,14 @@
  * SUCH DAMAGE.
  */
 
-#define malloc(a,b,c) __wrap_malloc(a,b,c)
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.150 2011/03/21 16:41:08 pooka Exp $");
 
 #include <sys/param.h>
-#include <sys/malloc.h>
 #include <sys/null.h>
 #include <sys/vnode.h>
 #include <sys/stat.h>
+#include <sys/select.h>
 #include <sys/syslog.h>
 #include <sys/namei.h>
 #include <sys/kauth.h>
@@ -41,426 +40,116 @@
 #include <sys/device.h>
 #include <sys/queue.h>
 #include <sys/file.h>
-#include <sys/filedesc.h>
-#include <sys/kthread.h>
 #include <sys/cpu.h>
 #include <sys/kmem.h>
 #include <sys/poll.h>
+#include <sys/timetc.h>
+#include <sys/tprintf.h>
+#include <sys/module.h>
+#include <sys/tty.h>
+#include <sys/reboot.h>
+#include <sys/syscallvar.h>
+#include <sys/xcall.h>
+#include <sys/sleepq.h>
 
-#include <machine/stdarg.h>
+#include <dev/cons.h>
+
+#include <rump/rumpuser.h>
 
 #include <uvm/uvm_map.h>
 
 #include "rump_private.h"
-#include "rumpuser.h"
 
-#ifdef __HAVE_TIMECOUNTER
-time_t time_second = 1;
-#else
-volatile struct timeval time = { 1, 0 };
-#endif
+/*
+ * physmem is largely unused (except for nmbcluster calculations),
+ * so pick a default value which suits ZFS.  if an application wants
+ * a very small memory footprint, it can still adjust this before
+ * calling rump_init()
+ */
+#define PHYSMEM 512*256
+int physmem = PHYSMEM;
+int nkmempages = PHYSMEM/2; /* from le chapeau */
+#undef PHYSMEM
 
-kmutex_t proclist_mutex;
-kmutex_t proclist_lock;
 struct lwp lwp0;
 struct vnode *rootvp;
-struct device *root_device;
-dev_t rootdev;
-struct vm_map *kernel_map;
-int physmem;
-int doing_shutdown;
-int ncpu = 1;
+dev_t rootdev = NODEV;
+
 const int schedppq = 1;
+int hardclock_ticks;
+bool mp_online = false;
+struct timeval boottime;
+int cold = 1;
+int boothowto = AB_SILENT;
+struct tty *constty;
 
-MALLOC_DEFINE(M_MOUNT, "mount", "vfs mount struct");
-MALLOC_DEFINE(M_UFSMNT, "UFS mount", "UFS mount structure");
-MALLOC_DEFINE(M_TEMP, "temp", "misc. temporary data buffers");
-MALLOC_DEFINE(M_DEVBUF, "devbuf", "device driver memory");
-MALLOC_DEFINE(M_VNODE, "vnodes", "Dynamically allocated vnodes");
-MALLOC_DEFINE(M_KEVENT, "kevent", "kevents/knotes");
+const struct bdevsw *bdevsw0[255];
+const struct bdevsw **bdevsw = bdevsw0;
+const int sys_cdevsws = 255;
+int max_cdevsws = 255;
 
-char hostname[MAXHOSTNAMELEN];
-size_t hostnamelen;
+const struct cdevsw *cdevsw0[255];
+const struct cdevsw **cdevsw = cdevsw0;
+const int sys_bdevsws = 255;
+int max_bdevsws = 255;
 
-u_long	bufmem_valimit;
-u_long	bufmem_hiwater;
-u_long	bufmem_lowater;
-u_long	bufmem;
-u_int	nbuf;
+int mem_no = 2;
 
-const char *panicstr;
+struct device *booted_device;
+struct device *booted_wedge;
+int booted_partition;
 
-const struct filterops seltrue_filtops;
+/* XXX: unused */
+kmutex_t tty_lock;
+krwlock_t exec_lock;
 
-void
-panic(const char *fmt, ...)
-{
-	va_list ap;
+struct lwplist alllwp = LIST_HEAD_INITIALIZER(alllwp);
 
-	va_start(ap, fmt);
-	printf("panic: ");
-	vprintf(fmt, ap);
-	va_end(ap);
-	printf("\n");
-	abort();
-}
+/* sparc doesn't sport constant page size, pretend we have 4k pages */
+#ifdef __sparc__
+int nbpg = 4096;
+int pgofset = 4096-1;
+int pgshift = 12;
+#endif
 
-void
-log(int level, const char *fmt, ...)
-{
-	va_list ap;
+/* on sun3 VM_MAX_ADDRESS is a const variable */
+/* XXX: should be moved into rump.c and initialize for sun3 and sun3x? */
+#ifdef sun3
+const vaddr_t kernbase = KERNBASE3;
+#endif
 
-	va_start(ap, fmt);
-	vprintf(fmt, ap);
-	va_end(ap);
-}
-
-void
-uprintf(const char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	vprintf(fmt, ap);
-	va_end(ap);
-}
-
-void
-printf_nolog(const char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	vprintf(fmt, ap);
-	va_end(ap);
-}
-
-int
-copyin(const void *uaddr, void *kaddr, size_t len)
-{
-
-	memcpy(kaddr, uaddr, len);
-	return 0;
-}
-
-int
-copyout(const void *kaddr, void *uaddr, size_t len)
-{
-
-	memcpy(uaddr, kaddr, len);
-	return 0;
-}
-
-int
-copystr(const void *kfaddr, void *kdaddr, size_t len, size_t *done)
-{
-
-	return copyinstr(kfaddr, kdaddr, len, done);
-}
-
-int
-copyinstr(const void *uaddr, void *kaddr, size_t len, size_t *done)
-{
-
-	strlcpy(kaddr, uaddr, len);
-	*done = strlen(kaddr);
-	return 0;
-}
-
-int
-uiomove(void *buf, size_t n, struct uio *uio)
-{
-	struct iovec *iov;
-	uint8_t *b = buf;
-	size_t cnt;
-	int rv;
-
-	if (uio->uio_vmspace != UIO_VMSPACE_SYS)
-		panic("%s: vmspace != UIO_VMSPACE_SYS", __func__);
-
-	/*
-	 * See if rump ubc code claims the offset.  This is of course
-	 * a blatant violation of abstraction levels, but let's keep
-	 * me simple & stupid for now.
-	 */
-	if (rump_ubc_magic_uiomove(buf, n, uio, &rv, NULL))
-		return rv;
-
-	while (n && uio->uio_resid) {
-		iov = uio->uio_iov;
-		cnt = iov->iov_len;
-		if (cnt == 0) {
-			uio->uio_iov++;
-			uio->uio_iovcnt--;
-			continue;
-		}
-		if (cnt > n)
-			cnt = n;
-
-		if (uio->uio_rw == UIO_READ)
-			memcpy(iov->iov_base, b, cnt);
-		else
-			memcpy(b, iov->iov_base, cnt);
-
-		iov->iov_base = (uint8_t *)iov->iov_base + cnt;
-		iov->iov_len -= cnt;
-		b += cnt;
-		uio->uio_resid -= cnt;
-		uio->uio_offset += cnt;
-		n -= cnt;
-	}
-
-	return 0;
-}
-
-void
-uio_setup_sysspace(struct uio *uio)
-{
-
-	uio->uio_vmspace = UIO_VMSPACE_SYS;
-}
-
-const struct bdevsw *
-bdevsw_lookup(dev_t dev)
-{
-
-	return (const struct bdevsw *)1;
-}
-
-devclass_t
-device_class(device_t dev)
-{
-
-	if (dev != root_device)
-		panic("%s: dev != root_device not supported", __func__);
-
-	return DV_DISK;
-}
-
-void
-getmicrouptime(struct timeval *tvp)
-{
-	int error;
-
-	rumpuser_gettimeofday(tvp, &error);
-}
-
-void
-malloc_type_attach(struct malloc_type *type)
-{
-
-	return;
-}
-
-void
-malloc_type_detach(struct malloc_type *type)
-{
-
-	return;
-}
-
-void *
-__wrap_malloc(unsigned long size, struct malloc_type *type, int flags)
-{
-	void *rv;
-
-	rv = rumpuser_malloc(size, (flags & (M_CANFAIL | M_NOWAIT)) != 0);
-	if (rv && flags & M_ZERO)
-		memset(rv, 0, size);
-
-	return rv;
-}
-
-void
-nanotime(struct timespec *ts)
-{
-	struct timeval tv;
-	int error;
-
-	rumpuser_gettimeofday(&tv, &error);
-	TIMEVAL_TO_TIMESPEC(&tv, ts);
-}
-
-/* hooray for mick, so what if I do */
-void
-getnanotime(struct timespec *ts)
-{
-
-	nanotime(ts);
-}
-
-void
-microtime(struct timeval *tv)
-{
-	int error;
-
-	rumpuser_gettimeofday(tv, &error);
-}
-
-void
-getmicrotime(struct timeval *tv)
-{
-	int error;
-
-	rumpuser_gettimeofday(tv, &error);
-}
-
-void
-bdev_strategy(struct buf *bp)
-{
-
-	panic("%s: not supported", __func__);
-}
-
-int
-bdev_type(dev_t dev)
-{
-
-	return D_DISK;
-}
-
-struct kthdesc {
-	void (*f)(void *);
-	void *arg;
-	struct lwp *mylwp;
+struct loadavg averunnable = {
+	{ 0 * FSCALE,
+	  1 * FSCALE,
+	  11 * FSCALE, },
+	FSCALE,
 };
 
-static lwpid_t curlid = 2;
+struct emul emul_netbsd = {
+	.e_name = "netbsd-rump",
+	.e_sysent = rump_sysent,
+	.e_vm_default_addr = uvm_default_mapaddr,
+#ifdef __HAVE_SYSCALL_INTERN
+	.e_syscall_intern = syscall_intern,
+#endif
+};
 
-static void *
-threadbouncer(void *arg)
-{
-	struct kthdesc *k = arg;
-	void (*f)(void *);
-	void *thrarg;
-
-	f = k->f;
-	thrarg = k->arg;
-	rumpuser_set_curlwp(k->mylwp);
-	kmem_free(k, sizeof(struct kthdesc));
-
-	f(thrarg);
-	panic("unreachable, should kthread_exit()");
-}
-
-int
-kthread_create(pri_t pri, int flags, struct cpu_info *ci,
-	void (*func)(void *), void *arg, lwp_t **newlp, const char *fmt, ...)
-{
-	struct kthdesc *k;
-	struct lwp *l;
-	int rv;
-
-	KASSERT(fmt != NULL);
-	if (ci != NULL)
-		panic("%s: bounded threads not supported", __func__);
-
-	k = kmem_alloc(sizeof(struct kthdesc), KM_SLEEP);
-	k->f = func;
-	k->arg = arg;
-	k->mylwp = l = rump_setup_curlwp(0, curlid++, 0);
-	rv = rumpuser_thread_create(threadbouncer, k);
-	if (rv)
-		return rv;
-
-	if (newlp)
-		*newlp = l;
-	return 0;
-}
-
-void
-kthread_exit(int ecode)
-{
-
-	rumpuser_thread_exit();
-}
-
-void
-callout_init(callout_t *c, u_int flags)
-{
-
-	panic("%s: not implemented", __func__);
-}
-
-void
-callout_reset(callout_t *c, int ticks, void (*func)(void *), void *arg)
-{
-
-	panic("%s: not implemented", __func__);
-}
-
-bool
-callout_stop(callout_t *c)
-{
-
-	panic("%s: not implemented", __func__);
-}
-
-struct proc *
-p_find(pid_t pid, uint flags)
-{
-
-	panic("%s: not implemented", __func__);
-}
-
-struct pgrp *
-pg_find(pid_t pid, uint flags)
-{
-
-	panic("%s: not implemented", __func__);
-}
-
-void
-kpsignal(struct proc *p, ksiginfo_t *ksi, void *data)
-{
-
-	panic("%s: not implemented", __func__);
-}
-
-void
-kpgsignal(struct pgrp *pgrp, ksiginfo_t *ksi, void *data, int checkctty)
-{
-
-	panic("%s: not implemented", __func__);
-}
-
-int
-pgid_in_session(struct proc *p, pid_t pg_id)
-{
-
-	panic("%s: not implemented", __func__);
-}
-
-int
-sigispending(struct lwp *l, int signo)
-{
-
-	return 0;
-}
-
-void
-knote_fdclose(struct lwp *l, int fd)
-{
-
-	/* since we don't add knotes, we don't have to remove them */
-}
-
-int
-seltrue_kqfilter(dev_t dev, struct knote *kn)
-{
-
-	panic("%s: not implemented", __func__);
-}
+u_int nprocs = 1;
 
 int
 kpause(const char *wmesg, bool intr, int timeo, kmutex_t *mtx)
 {
 	extern int hz;
 	int rv, error;
+	uint64_t sec, nsec;
 
 	if (mtx)
 		mutex_exit(mtx);
-	rv = rumpuser_usleep(timeo * (1000000 / hz), &error);
+
+	sec = timeo / hz;
+	nsec = (timeo % hz) * (1000000000 / hz);
+	rv = rumpuser_nanosleep(&sec, &nsec, &error);
+	
 	if (mtx)
 		mutex_enter(mtx);
 
@@ -469,3 +158,156 @@ kpause(const char *wmesg, bool intr, int timeo, kmutex_t *mtx)
 
 	return 0;
 }
+
+void
+lwp_unsleep(lwp_t *l, bool cleanup)
+{
+
+	KASSERT(mutex_owned(l->l_mutex));
+
+	(*l->l_syncobj->sobj_unsleep)(l, cleanup);
+}
+
+void
+lwp_update_creds(struct lwp *l)
+{
+	struct proc *p;
+	kauth_cred_t oldcred;
+
+	p = l->l_proc;
+	oldcred = l->l_cred;
+	l->l_prflag &= ~LPR_CRMOD;
+
+	mutex_enter(p->p_lock);
+	kauth_cred_hold(p->p_cred);
+	l->l_cred = p->p_cred;
+	mutex_exit(p->p_lock);
+
+	if (oldcred != NULL)
+		kauth_cred_free(oldcred);
+}
+
+vaddr_t
+calc_cache_size(struct vm_map *map, int pct, int va_pct)
+{
+	paddr_t t;
+
+	t = (paddr_t)physmem * pct / 100 * PAGE_SIZE;
+	if ((vaddr_t)t != t) {
+		panic("%s: needs tweak", __func__);
+	}
+	return t;
+}
+
+void
+assert_sleepable(void)
+{
+
+	/* always sleepable, although we should improve this */
+}
+
+void
+module_init_md(void)
+{
+
+	/*
+	 * Nothing for now.  However, we should load the librump
+	 * symbol table.
+	 */
+}
+
+/* us and them, after all we're only ordinary seconds */
+static void
+rump_delay(unsigned int us)
+{
+	uint64_t sec, nsec;
+	int error;
+
+	sec = us / 1000000;
+	nsec = (us % 1000000) * 1000;
+
+	if (__predict_false(sec != 0))
+		printf("WARNING: over 1s delay\n");
+
+	rumpuser_nanosleep(&sec, &nsec, &error);
+}
+void (*delay_func)(unsigned int) = rump_delay;
+
+/*
+ * Provide weak aliases for tty routines used by printf.
+ * They will be used unless the rumpkern_tty component is present.
+ */
+
+int rump_ttycheckoutq(struct tty *, int);
+int
+rump_ttycheckoutq(struct tty *tp, int wait)
+{
+
+	return 1;
+}
+__weak_alias(ttycheckoutq,rump_ttycheckoutq);
+
+int rump_tputchar(int, int, struct tty *);
+int
+rump_tputchar(int c, int flags, struct tty *tp)
+{
+
+	cnputc(c);
+	return 0;
+}
+__weak_alias(tputchar,rump_tputchar);
+
+void
+cnputc(int c)
+{
+	int error;
+
+	rumpuser_putchar(c, &error);
+}
+
+void
+cnflush(void)
+{
+
+	/* done */
+}
+
+#ifdef __HAVE_SYSCALL_INTERN
+void
+syscall_intern(struct proc *p)
+{
+
+	/* no you don't */
+}
+#endif
+
+void
+xc_send_ipi(struct cpu_info *ci)
+{
+
+	/* I'll think about the implementation if this is ever used */
+	panic("not implemented");
+}
+
+int
+trace_enter(register_t code, const register_t *args, int narg)
+{
+
+	return 0;
+}
+
+void
+trace_exit(register_t code, register_t rval[], int error)
+{
+
+	/* nada */
+}
+
+#ifdef LOCKDEBUG
+void
+turnstile_print(volatile void *obj, void (*pr)(const char *, ...))
+{
+
+	/* nada */
+}
+#endif

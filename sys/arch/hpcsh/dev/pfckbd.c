@@ -1,4 +1,4 @@
-/*	$NetBSD: pfckbd.c,v 1.23 2007/10/17 19:54:30 garbled Exp $	*/
+/*	$NetBSD: pfckbd.c,v 1.27 2009/04/05 02:29:40 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  * currently, HP Jornada 680/690, HITACHI PERSONA HPW-50PAD only.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pfckbd.c,v 1.23 2007/10/17 19:54:30 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pfckbd.c,v 1.27 2009/04/05 02:29:40 uwe Exp $");
 
 #include "debug_hpcsh.h"
 
@@ -76,10 +69,10 @@ static struct pfckbd_core {
 	void (*pc_callout)(void *);
 } pfckbd_core;
 
-static int pfckbd_match(struct device *, struct cfdata *, void *);
-static void pfckbd_attach(struct device *, struct device *, void *);
+static int pfckbd_match(device_t, cfdata_t, void *);
+static void pfckbd_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(pfckbd, sizeof(struct device),
+CFATTACH_DECL_NEW(pfckbd, 0,
     pfckbd_match, pfckbd_attach, NULL, NULL);
 
 static void pfckbd_ifsetup(struct pfckbd_core *);
@@ -108,7 +101,7 @@ static const struct {
 
 
 void
-pfckbd_cnattach()
+pfckbd_cnattach(void)
 {
 	struct pfckbd_core *pc = &pfckbd_core;
 
@@ -124,7 +117,7 @@ pfckbd_cnattach()
 }
 
 static int
-pfckbd_match(struct device *parent, struct cfdata *cf, void *aux)
+pfckbd_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	if ((cpu_product != CPU_PRODUCT_7709)
@@ -135,11 +128,12 @@ pfckbd_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-pfckbd_attach(struct device *parent, struct device *self, void *aux)
+pfckbd_attach(device_t parent, device_t self, void *aux)
 {
 	struct hpckbd_attach_args haa;
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 
 	pfckbd_core.pc_attached = 1;
 
@@ -153,6 +147,9 @@ pfckbd_attach(struct device *parent, struct device *self, void *aux)
 	callout_init(&pfckbd_core.pc_soft_ch, 0);
 	callout_reset(&pfckbd_core.pc_soft_ch, 1,
 		      pfckbd_core.pc_callout, &pfckbd_core);
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "unable to establish power handler\n");
 }
 
 static void
@@ -441,7 +438,7 @@ pfckbd_callout_hitachi(void *arg)
 }
 
 void
-pfckbd_poll_hitachi_power()
+pfckbd_poll_hitachi_power(void)
 {
 	static const struct {
 		uint16_t cc, dc, ec; uint8_t c, d, e;

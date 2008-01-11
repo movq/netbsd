@@ -1,4 +1,4 @@
-/*      $NetBSD: catman.c,v 1.26 2006/04/10 14:39:06 chuck Exp $       */
+/*      $NetBSD: catman.c,v 1.29 2009/04/15 00:40:01 lukem Exp $       */
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -141,8 +134,8 @@ setdefentries(char *m_path, char *m_add, const char *sections)
 {
 	TAG *defnewp, *sectnewp, *subp;
 	ENTRY *e_defp, *e_subp;
-	const char *p;
-	char *slashp, *machine;
+	const char *p, *slashp;
+	char *machine;
 	char buf[MAXPATHLEN * 2];
 	int i;
 
@@ -171,7 +164,7 @@ setdefentries(char *m_path, char *m_add, const char *sections)
 			err(1, "malloc");
 		for (p = sections; *p;) {
 			i = snprintf(buf, sizeof(buf), "man%c", *p++);
-			for (; *p && !isdigit((unsigned char)*p) && i < sizeof(buf) - 1; i++)
+			for (; *p && !isdigit((unsigned char)*p) && i < (int)sizeof(buf) - 1; i++)
 				buf[i] = *p++;
 			buf[i] = '\0';
 			if (addentry(sectnewp, buf, 0) < 0)
@@ -532,7 +525,7 @@ splitentry(char *s, char *first, size_t firstlen, char *second,
 		;
 	if (*c == '\0')
 		return(0);
-	if (c - s + 1 > firstlen)
+	if ((size_t)(c - s + 1) > firstlen)
 		return(0);
 	strncpy(first, s, c-s);
 	first[c-s] = '\0';

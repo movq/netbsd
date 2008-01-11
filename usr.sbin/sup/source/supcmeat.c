@@ -1,4 +1,4 @@
-/*	$NetBSD: supcmeat.c,v 1.31 2006/12/20 16:33:34 christos Exp $	*/
+/*	$NetBSD: supcmeat.c,v 1.38 2010/10/20 17:05:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -489,9 +489,9 @@ listfiles(void)
 	f = fopen(buf, "r");
 	if (f) {
 		while ((p = fgets(buf, STRINGLENGTH, f))) {
-			if ((q = index(p, '\n')))
+			if ((q = strchr(p, '\n')))
 				*q = '\0';
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			(void) Tinsert(&lastT, p, FALSE);
 		}
@@ -502,9 +502,9 @@ listfiles(void)
 	f = fopen(buf, "r");
 	if (f) {
 		while ((p = fgets(buf, STRINGLENGTH, f))) {
-			if ((q = index(p, '\n')))
+			if ((q = strchr(p, '\n')))
 				*q = '\0';
-			if (index("#;:", *p))
+			if (strchr("#;:", *p))
 				continue;
 			(void) Tinsert(&refuseT, p, FALSE);
 		}
@@ -628,8 +628,8 @@ deleteone(TREE * t, void *v __unused)
 		}
 		x = unlink(name);
 		if (x < 0) {
-			notify("SUP: Unable to delete symbolic link %s\n",
-			    name);
+			notify("SUP: Unable to delete symbolic link %s (%s)\n",
+			    name, strerror(errno));
 			t->Tflags |= FUPDATE;
 			return (SCMOK);
 		}
@@ -660,8 +660,9 @@ deleteone(TREE * t, void *v __unused)
 			}
 			runp("rm", "rm", "-rf", name, 0);
 		}
-		if (lstat(name, &sbuf) == 0) {
-			notify("SUP: Unable to delete directory %s\n", name);
+		if (rmdir(name) < 0 && errno != ENOENT) {
+			notify("SUP: Unable to delete directory %s (%s)\n",
+			    name, strerror(errno));
 			t->Tflags |= FUPDATE;
 			return (SCMOK);
 		}
@@ -684,7 +685,8 @@ deleteone(TREE * t, void *v __unused)
 	}
 	x = unlink(name);
 	if (x < 0) {
-		notify("SUP: Unable to delete file %s\n", name);
+		notify("SUP: Unable to delete file %s (%s)\n", name,
+		    strerror(errno));
 		t->Tflags |= FUPDATE;
 		return (SCMOK);
 	}
@@ -739,6 +741,7 @@ prepare(char *name, int mode, int *newp, struct stat * statp)
 	char *type;
 	char pname[MAXPATHLEN];
 	struct stat pbuf;
+	int er = 0;
 
 	if (mode == S_IFLNK)
 		*newp = (lstat(name, statp) < 0);
@@ -782,13 +785,17 @@ prepare(char *name, int mode, int *newp, struct stat * statp)
 			}
 			runp("rm", "rm", "-rf", name, 0);
 		}
-	} else
-		(void) unlink(name);
+		if (rmdir(name) < 0)
+			er = errno;
+	} else {
+		if (unlink(name) < 0)
+			er = errno;
+	}
 	if (stat(name, statp) < 0) {
 		vnotify("SUP Removed %s %s\n", type, name);
 		return (FALSE);
 	}
-	notify("SUP: Couldn't remove %s %s\n", type, name);
+	notify("SUP: Couldn't remove %s %s (%s)\n", type, name, strerror(er));
 	return (TRUE);
 }
 
@@ -814,7 +821,8 @@ recvone(TREE * t, va_list ap)
 		return (SCMOK);
 	}
 	if (prepare(t->Tname, t->Tmode & S_IFMT, &new, &sbuf)) {
-		notify("SUP: Can't prepare path for %s\n", t->Tname);
+		notify("SUP: Can't prepare path for %s (%s)\n", t->Tname,
+		    strerror(errno));
 		if (S_ISREG(t->Tmode)) {
 			x = readskip();	/* skip over file */
 			if (x != SCMOK)
@@ -858,7 +866,8 @@ recvdir(TREE * t, int new, struct stat * statp)
 			return (FALSE);
 		}
 		if (makedir(t->Tname, 0755, statp) == -1) {
-			vnotify("SUP: Can't create directory %s\n", t->Tname);
+			notify("SUP: Can't create directory %s (%s)\n",
+			    t->Tname, strerror(errno));
 			return TRUE;
 		}
 	}
@@ -918,7 +927,8 @@ recvsym(TREE * t, int new, struct stat * statp)
 	if (!new)
 		(void) unlink(t->Tname);
 	if (symlink(linkname, t->Tname) < 0 || lstat(t->Tname, statp) < 0) {
-		notify("SUP: Unable to create symbolic link %s\n", t->Tname);
+		notify("SUP: Unable to create symbolic link %s (%s)\n",
+		    t->Tname, strerror(errno));
 		return (TRUE);
 	}
 	vnotify("SUP Created symbolic link %s to %s\n", t->Tname, linkname);
@@ -1038,7 +1048,7 @@ linkone(TREE * t, void *fv)
 	int new, x;
 	char *type;
 
-	if (stat(fname, &fbuf) < 0) {	/* source file */
+	if (lstat(fname, &fbuf) < 0) {	/* source file */
 		if (thisC->Cflags & CFLIST) {
 			vnotify("SUP Would link %s to %s\n", name, fname);
 			return (SCMOK);
@@ -1047,8 +1057,7 @@ linkone(TREE * t, void *fv)
 		thisC->Cnogood = TRUE;
 		return (SCMOK);
 	}
-	if (prepare(name, S_IFREG, &new, &sbuf)) {
-		notify("SUP: Can't prepare path for link %s\n", name);
+	if (prepare(name, S_IFLNK, &new, &sbuf)) {
 		thisC->Cnogood = TRUE;
 		return (SCMOK);
 	}
@@ -1061,12 +1070,13 @@ linkone(TREE * t, void *fv)
 	}
 	(void) unlink(name);
 	type = "";
-	if ((x = link(fname, name)) < 0) {
+	if (S_ISDIR(fbuf.st_mode) || (x = link(fname, name)) < 0) {
 		type = "symbolic ";
 		x = symlink(fname, name);
 	}
 	if (x < 0 || lstat(name, &sbuf) < 0) {
-		notify("SUP: Unable to create %slink %s\n", type, name);
+		notify("SUP: Unable to create %slink %s (%s)\n", type, name,
+		    strerror(x));
 		return (TRUE);
 	}
 	vnotify("SUP Created %slink %s to %s\n", type, name, fname);
@@ -1119,8 +1129,8 @@ copyfile(char *to, char *from)
 	if (from) {		/* reading file */
 		fromf = open(from, O_RDONLY, 0);
 		if (fromf < 0) {
-			notify("SUP: Can't open %s to copy to %s: %s\n",
-			    from, to, errmsg(-1));
+			notify("SUP: Can't open %s to copy to %s (%s)\n",
+			    from, to, strerror(errno));
 			return (TRUE);
 		}
 	} else			/* reading network */
@@ -1179,7 +1189,8 @@ copyfile(char *to, char *from)
 		if (tof >= 0)
 			break;
 		/* no luck */
-		notify("SUP: Can't create %s or temp file for it\n", to);
+		notify("SUP: Can't create %s or temp file for it (%s)\n", to,
+		    strerror(errno));
 		lockout(FALSE);
 		if (fromf >= 0)
 			(void) close(fromf);
@@ -1306,8 +1317,8 @@ copyfile(char *to, char *from)
 	}
 	fromf = open(tname, O_RDONLY, 0);
 	if (fromf < 0) {
-		notify("SUP: Error in moving temp file to %s: %s\n",
-		    to, errmsg(-1));
+		notify("SUP: Error in moving temp file to %s (%s)\n",
+		    to, strerror(errno));
 		(void) unlink(tname);
 		lockout(FALSE);
 		return (TRUE);
@@ -1315,8 +1326,8 @@ copyfile(char *to, char *from)
 	tof = open(to, (O_WRONLY | O_CREAT | O_TRUNC | O_EXCL), 0600);
 	if (tof < 0) {
 		(void) close(fromf);
-		notify("SUP: Can't create %s from temp file: %s\n",
-		    to, errmsg(-1));
+		notify("SUP: Can't create %s from temp file (%s)\n",
+		    to, strerror(errno));
 		(void) unlink(tname);
 		lockout(FALSE);
 		return (TRUE);
@@ -1396,21 +1407,24 @@ finishup(int x)
 	}
 	(void) sprintf(fname, FILEWHEN, collname, relsufix);
 	if (establishdir(fname)) {
-		notify("SUP: Can't create directory for upgrade timestamp\n");
+		int oerrno = errno;
 		Tfree(&lastT);
 		if (protver < 6)
 			return;
-		done(FDONEUSRERROR, "Couldn't timestamp");
+		done(FDONEUSRERROR, "Couldn't create directory `%s' (%s)",
+			fname, strerror(oerrno));
 		(void) requestend();
 		return;
 	}
 	if (!putwhen(fname, scantime)) {
-		notify("SUP: Can't record current time in %s: %s\n",
-		    fname, errmsg(-1));
+		int oerrno = errno;
+		notify("SUP: Can't record current time in %s (%s)\n",
+		    fname, strerror(oerrno));
 		Tfree(&lastT);
 		if (protver < 6)
 			return;
-		done(FDONEUSRERROR, "Couldn't timestamp");
+		done(FDONEUSRERROR, "Couldn't timestamp `%s' (%s)",
+			fname, strerror(oerrno));
 		(void) requestend();
 		return;
 	}
@@ -1431,7 +1445,8 @@ finishup(int x)
 	(void) fclose(finishfile);
 	(void) sprintf(fname, FILELAST, collname, relsufix);
 	if (rename(tname, fname) < 0)
-		notify("SUP: Can't change %s to %s\n", tname, fname);
+		notify("SUP: Can't change %s to %s (%s)\n", tname, fname,
+		    strerror(errno));
 	(void) unlink(tname);
 	Tfree(&lastT);
 }
@@ -1446,7 +1461,7 @@ finishone(TREE * t, void *fv)
 }
 
 void
-done(int value, char *fmt, ...)
+done(int value, const char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;
@@ -1472,7 +1487,7 @@ done(int value, char *fmt, ...)
 }
 
 void
-goaway(char *fmt, ...)
+goaway(const char *fmt, ...)
 {
 	char buf[STRINGLENGTH];
 	va_list ap;

@@ -1,33 +1,51 @@
-/*	$NetBSD: ptrace.S,v 1.4 2002/07/30 06:08:00 matt Exp $	*/
+/*	$NetBSD: ptrace.S,v 1.6 2011/01/16 02:43:10 matt Exp $	*/
 
 #include "SYS.h"
+#include "assym.h"
+
+#if defined(LIBC_SCCS) && !defined(lint)
+__RCSID("$NetBSD: ptrace.S,v 1.6 2011/01/16 02:43:10 matt Exp $")
+#endif /* LIBC_SCCS && !lint */
+
+#define	XCALLFRAMELEN		((((2+5)*SZREG) + CALLFRAMELEN - 1) & -CALLFRAMELEN)
+#define	XCALLFRAME_DATA		(XCALLFRAMELEN - 1*SZREG)
+#define	XCALLFRAME_ADDR		(XCALLFRAMELEN - 2*SZREG)
+#define	XCALLFRAME_PID		(XCALLFRAMELEN - 3*SZREG)
+#define	XCALLFRAME_REQUEST	(XCALLFRAMELEN - 4*SZREG)
+#define	XCALLFRAME_R30		(XCALLFRAMELEN - 5*SZREG)
 
 ENTRY(ptrace)
 #ifdef _REENTRANT
 	mflr	%r0
-	stwu	%r1,-32(%r1)
-	stw	%r0,36(%r1)
-	stw	%r3,8(%r1)
-	stw	%r4,12(%r1)
-	stw	%r5,16(%r1)
-	stw	%r6,20(%r1)
+	stw	%r0,CALLFRAME_LR(%r1)
+	stwu	%r1,-XCALLFRAMELEN(%r1)
+	stw	%r3,XCALLFRAME_REQUEST(%r1)
+	stw	%r4,XCALLFRAME_PID(%r1)
+	stw	%r5,XCALLFRAME_ADDR(%r1)
+	stw	%r6,XCALLFRAME_DATA(%r1)
+#ifdef PIC
+	stw	%r30,XCALLFRAME_R30(%r1)
+	PIC_TOCSETUP(ptrace, %r30)
+#endif
 
 	bl	PIC_PLT(_C_LABEL(__errno))
 	li	%r7,0
 	stw	%r7,0(%r3)
 
-	lwz	%r3,8(%r1)
-	lwz	%r4,12(%r1)
-	lwz	%r5,16(%r1)
-	lwz	%r0,36(%r1)
-	lwz	%r6,20(%r1)
+#ifdef PIC
+	lwz	%r30,XCALLFRAME_R30(%r1)
+#endif
+	lwz	%r6,XCALLFRAME_DATA(%r1)
+	lwz	%r4,XCALLFRAME_PID(%r1)
+	lwz	%r5,XCALLFRAME_ADDR(%r1)
+	lwz	%r3,XCALLFRAME_REQUEST(%r1)
+	addi	%r1,%r1,XCALLFRAMELEN
+	lwz	%r0,CALLFRAME_LR(%r1)
 	mtlr	%r0
-	la	%r1,32(%r1)
 #else
 #ifdef PIC
 	mflr	%r0
-	bl	_GLOBAL_OFFSET_TABLE_@local-4
-	mflr	%r7
+	PIC_GOTSETUP(%r7)
 	lwz	%r7,_C_LABEL(errno)@got(%r7)
 	li	%r8,0
 	stw	%r8,0(%r7)
@@ -38,9 +56,6 @@ ENTRY(ptrace)
 	stw	%r8,_C_LABEL(errno)@l(%r7)
 #endif /* PIC */
 #endif /* _REENTRANT */
-	li	%r0,SYS_ptrace
-	sc
-	bso	1f
-	blr
-1:
-	b	PIC_PLT(_C_LABEL(__cerror))
+	_DOSYSCALL(ptrace)
+	bnslr
+	b	_C_LABEL(__cerror)

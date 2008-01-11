@@ -1,14 +1,27 @@
-/*	$NetBSD: load_http.c,v 1.1.1.1 2007/04/14 20:17:31 martin Exp $	*/
+/*	$NetBSD: load_http.c,v 1.4 2009/08/19 08:35:31 darrenr Exp $	*/
 
 /*
  * Copyright (C) 2006 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: load_http.c,v 1.1.2.1 2006/08/25 21:13:04 darrenr Exp
+ * Id: load_http.c,v 1.1.2.2 2009/07/23 20:01:12 darrenr Exp
  */
 
 #include "ipf.h"
+
+/*
+ * Because the URL can be included twice into the buffer, once as the
+ * full path for the "GET" and once as the "Host:", the buffer it is
+ * put in needs to be larger than 512*2 to make room for the supporting
+ * text. Why not just use snprintf and truncate? The warning about the
+ * URL being too long tells you something is wrong and does not fetch
+ * any data - just truncating the URL (with snprintf, etc) and sending
+ * that to the server is allowing an unknown and unintentioned action
+ * to happen.
+ */
+#define	MAX_URL_LEN	512
+#define	LOAD_BUFSIZE	(MAX_URL_LEN * 2 + 128)
 
 /*
  * Format expected is one addres per line, at the start of each line.
@@ -16,17 +29,19 @@
 alist_t *
 load_http(char *url)
 {
+	char *s, *t, *u, buffer[LOAD_BUFSIZE], *myurl;
 	int fd, len, left, port, endhdr, removed;
-	char *s, *t, *u, buffer[1024], *myurl;
 	alist_t *a, *rtop, *rbot;
 	struct sockaddr_in sin;
 	struct hostent *host;
+	size_t rem;
 
 	/*
 	 * More than this would just be absurd.
 	 */
-	if (strlen(url) > 512) {
-		fprintf(stderr, "load_http has a URL > 512 bytes?!\n");
+	if (strlen(url) > MAX_URL_LEN) {
+		fprintf(stderr, "load_http has a URL > %d bytes?!\n",
+			MAX_URL_LEN);
 		return NULL;
 	}
 
@@ -34,26 +49,41 @@ load_http(char *url)
 	rtop = NULL;
 	rbot = NULL;
 
-	sprintf(buffer, "GET %s HTTP/1.0\r\n", url);
-
 	myurl = strdup(url);
 	if (myurl == NULL)
 		goto done;
+
+	rem = sizeof(buffer);
+	left = snprintf(buffer, rem, "GET %s HTTP/1.0\r\n", url);
+	if (left < 0 || left > rem)
+		goto done;
+	rem -= left;
 
 	s = myurl + 7;			/* http:// */
 	t = strchr(s, '/');
 	if (t == NULL) {
 		fprintf(stderr, "load_http has a malformed URL '%s'\n", url);
+		goto done;
+	}
+	*t++ = '\0';
+
+	/*
+	 * 10 is the length of 'Host: \r\n\r\n' below.
+	 */
+	if (strlen(s) + strlen(buffer) + 10 > sizeof(buffer)) {
+		fprintf(stderr, "load_http has a malformed URL '%s'\n", url);
 		free(myurl);
 		return NULL;
 	}
-	*t++ = '\0';
 
 	u = strchr(s, '@');
 	if (u != NULL)
 		s = u + 1;		/* AUTH */
 
-	sprintf(buffer + strlen(buffer), "Host: %s\r\n\r\n", s);
+	left = snprintf(buffer + left, rem, "Host: %s\r\n\r\n", s);
+	if (left < 0 || left > rem)
+		goto done;
+	rem -= left;
 
 	u = strchr(s, ':');
 	if (u != NULL) {
@@ -69,7 +99,7 @@ load_http(char *url)
 	sin.sin_family = AF_INET;
 	sin.sin_port = htons(port);
 
-	if (isdigit(*s)) {
+	if (isdigit((unsigned char)*s)) {
 		if (inet_aton(s, &sin.sin_addr) == -1) {
 			goto done;
 		}
@@ -85,16 +115,12 @@ load_http(char *url)
 	if (fd == -1)
 		goto done;
 
-	if (connect(fd, (struct sockaddr *)&sin, sizeof(sin)) == -1) {
-		close(fd);
+	if (connect(fd, (struct sockaddr *)&sin, sizeof(sin)) == -1)
 		goto done;
-	}
 
 	len = strlen(buffer);
-	if (write(fd, buffer, len) != len) {
-		close(fd);
+	if (write(fd, buffer, len) != len)
 		goto done;
-	}
 
 	s = buffer;
 	endhdr = 0;
@@ -144,16 +170,17 @@ load_http(char *url)
 				break;
 
 			*t++ = '\0';
-			for (u = buffer; isdigit(*u) || (*u == '.'); u++)
-				;
+			for (u = buffer; isdigit((unsigned char)*u) ||
+			    (*u == '.'); u++)
+				continue;
 			if (*u == '/') {
 				char *slash;
 
 				slash = u;
 				u++;
-				while (isdigit(*u))
+				while (isdigit((unsigned char)*u))
 					u++;
-				if (!isspace(*u) && *u)
+				if (!isspace((unsigned char)*u) && *u)
 					u = slash;
 			}
 			*u = '\0';

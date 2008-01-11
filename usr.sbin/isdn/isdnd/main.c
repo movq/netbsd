@@ -27,7 +27,7 @@
  *	i4b daemon - main program entry
  *	-------------------------------
  *
- *	$Id: main.c,v 1.9 2004/10/30 08:19:30 dsl Exp $ 
+ *	$Id: main.c,v 1.11 2009/04/16 05:56:32 lukem Exp $ 
  *
  * $FreeBSD$
  *
@@ -76,7 +76,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "\n");
-	fprintf(stderr, "isdnd - i4b ISDN manager daemon, version %02d.%02d.%d, %s %s\n", VERSION, REL, STEP, __DATE__, __TIME__);
+	fprintf(stderr, "isdnd - i4b ISDN manager daemon, version %02d.%02d.%d\n", VERSION, REL, STEP);
 #ifdef DEBUG
 	fprintf(stderr, "  usage: isdnd [-c file] [-d level] [-F] [-f [-r dev] [-t termtype]]\n");
 #else
@@ -510,7 +510,7 @@ mloop(
 )
 {
 	fd_set set;
-	struct timeval timeout;
+	struct timeval timeo;
 	int ret;
 	int high_selfd;
 
@@ -557,10 +557,10 @@ mloop(
 		}
 #endif
 		
-		timeout.tv_sec = 1;
-		timeout.tv_usec = 0;
+		timeo.tv_sec = 1;
+		timeo.tv_usec = 0;
 
-		ret = select(high_selfd + 1, &set, NULL, NULL, &timeout);
+		ret = select(high_selfd + 1, &set, NULL, NULL, &timeo);
 
 		if (ret > 0)
 		{	

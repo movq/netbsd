@@ -1,4 +1,4 @@
-/*	$NetBSD: crl.c,v 1.24 2008/01/02 11:48:31 ad Exp $	*/
+/*	$NetBSD: crl.c,v 1.29 2010/12/14 23:44:49 matt Exp $	*/
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -31,22 +31,25 @@
  */
 
 /*
+ * Bugfix by Johnny Billquist 2010
+ */
+
+/*
  * TO DO (tef  7/18/85):
  *	1) change printf's to log() instead???
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: crl.c,v 1.24 2008/01/02 11:48:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: crl.c,v 1.29 2010/12/14 23:44:49 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/conf.h>
+#include <sys/cpu.h>
+#include <sys/device.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/buf.h>
 
-#include <machine/cpu.h>
-#include <machine/mtpr.h>
 #include <machine/sid.h>
 #include <machine/scb.h>
 
@@ -65,13 +68,13 @@ struct {
 	int	crl_ds;		/* saved drive status */
 } crlstat;
 
-void	crlintr __P((void *));
-void	crlattach __P((void));
-static	void crlstart __P((void));
+void	crlintr(void *);
+void	crlattach(void);
 
-dev_type_open(crlopen);
-dev_type_close(crlclose);
-dev_type_read(crlrw);
+static void crlstart(void);
+static dev_type_open(crlopen);
+static dev_type_close(crlclose);
+static dev_type_read(crlrw);
 
 const struct cdevsw crl_cdevsw = {
 	crlopen, crlclose, crlrw, crlrw, noioctl,
@@ -79,20 +82,17 @@ const struct cdevsw crl_cdevsw = {
 };
 
 struct evcnt crl_ev = EVCNT_INITIALIZER(EVCNT_TYPE_INTR, NULL, "crl", "intr");
+EVCNT_ATTACH_STATIC(crl_ev);
 
 void
-crlattach()
+crlattach(void)
 {
-	evcnt_attach_static(&crl_ev);
 	scb_vecalloc(0xF0, crlintr, NULL, SCB_ISTACK, &crl_ev);
 }	
 
 /*ARGSUSED*/
 int
-crlopen(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+crlopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	if (vax_cputype != VAX_8600)
 		return (ENXIO);
@@ -105,12 +105,8 @@ crlopen(dev, flag, mode, l)
 
 /*ARGSUSED*/
 int
-crlclose(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+crlclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-
 	brelse(crltab.crl_buf, 0);
 	crltab.crl_state = CRL_IDLE;
 	return 0;
@@ -118,14 +114,11 @@ crlclose(dev, flag, mode, l)
 
 /*ARGSUSED*/
 int
-crlrw(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+crlrw(dev_t dev, struct uio *uio, int flag)
 {
-	register struct buf *bp;
-	register int i;
-	register int s;
+	struct buf *bp;
+	int i;
+	int s;
 	int error;
 
 	if (uio->uio_resid == 0) 
@@ -160,7 +153,8 @@ crlrw(dev, uio, flag)
 		}
 		s = splconsmedia(); 
 		crlstart();
-		biowait(bp);
+                while ((bp->b_oflags & BO_DONE) == 0)
+                  (void) tsleep(bp, PRIBIO, "crlxfer", 0);
 		splx(s);
 		if (bp->b_error != 0) {
 			error = bp->b_error;
@@ -178,9 +172,9 @@ crlrw(dev, uio, flag)
 }
 
 void
-crlstart()
+crlstart(void)
 {
-	register struct buf *bp;
+	struct buf *bp;
 
 	bp = crltab.crl_buf;
 	crltab.crl_errcnt = 0;
@@ -203,10 +197,9 @@ crlstart()
 }
 
 void
-crlintr(arg)
-	void *arg;
+crlintr(void *arg)
 {
-	register struct buf *bp;
+	struct buf *bp;
 	int i;
 
 	bp = crltab.crl_buf;
@@ -222,10 +215,10 @@ crlintr(arg)
 
 				crlstat.crl_ds = mfpr(PR_STXDB);
 
-				bitmask_snprintf(crlstat.crl_cs, CRLCS_BITS,
-						 sbuf, sizeof(sbuf));
-				bitmask_snprintf(crlstat.crl_ds, CRLDS_BITS,
-						 sbuf2, sizeof(sbuf2));
+				snprintb(sbuf, sizeof(sbuf), CRLCS_BITS,
+				    crlstat.crl_cs);
+				snprintb(sbuf, sizeof(sbuf), CRLDS_BITS,
+				    crlstat.crl_ds);
 				printf("crlcs=0x%s, crlds=0x%s\n", sbuf, sbuf2);
 				break;
 			}
@@ -235,7 +228,7 @@ crlintr(arg)
 			bp->b_oflags |= BO_DONE;
 		}
 		crltab.crl_active = 0;
-		wakeup((void *)bp);
+		wakeup(bp);
 		break;
 
 	case CRL_S_XCONT:

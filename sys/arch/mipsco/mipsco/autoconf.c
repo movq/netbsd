@@ -1,6 +1,7 @@
-/*	$NetBSD: autoconf.c,v 1.18 2007/12/03 15:33:57 ad Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.24 2011/02/20 07:56:16 matt Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,45 +37,6 @@
  *
  *	@(#)autoconf.c	8.1 (Berkeley) 6/10/93
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department and Ralph Campbell.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah Hdr: autoconf.c 1.31 91/01/21
- *
- *	@(#)autoconf.c	8.1 (Berkeley) 6/10/93
- */
 
 /*
  * Setup the system to run on the current machine.
@@ -84,8 +46,9 @@
  * and the drivers are initialized.
  */
 
+#define __INTR_PRIVATE
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.18 2007/12/03 15:33:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.24 2011/02/20 07:56:16 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -109,9 +72,9 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.18 2007/12/03 15:33:57 ad Exp $");
  */
 int	cpuspeed = 25;	/* approx # instr per usec. */
 
-extern int initcpu __P((void));		/*XXX*/
+extern int initcpu(void);		/*XXX*/
 
-void	findroot __P((struct device **, int *));
+void	findroot(device_t *, int *);
 
 struct mipsco_intrhand intrtab[MAX_INTR_COOKIES];
 
@@ -123,7 +86,7 @@ struct mipsco_intrhand intrtab[MAX_INTR_COOKIES];
  * for attached scsi devices.
  */
 void
-cpu_configure()
+cpu_configure(void)
 {
   	int s;
 
@@ -137,7 +100,7 @@ cpu_configure()
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
 	findroot(&booted_device, &booted_partition);
 
@@ -154,20 +117,24 @@ int	boot_id, boot_lun, boot_part;
  * Attempt to find the device from which we were booted.
  */
 void
-findroot(devpp, partp)
-	struct device **devpp;
-	int *partp;
+findroot(device_t *devpp, int *partp)
 {
-	struct device *dv;
+	device_t dv;
+	deviter_t di;
 
-	for (dv = TAILQ_FIRST(&alldevs); dv; dv = TAILQ_NEXT(dv, dv_list)) {
+	for (dv = deviter_first(&di, DEVITER_F_ROOT_FIRST);
+	     dv != NULL;
+	     dv = deviter_next(&di)) {
 		if (device_class(dv) == boot_class &&
 		    /* XXX device_unit() abuse */
-		    device_unit(dv) == boot_id) {
-			*devpp = dv;
-			*partp = boot_part;
-			return;
-		}
+		    device_unit(dv) == boot_id)
+		    	break;
+	}
+	deviter_release(&di);
+	if (dv != NULL) {
+		*devpp = dv;
+		*partp = boot_part;
+		return;
 	}
 
 	/*
@@ -179,8 +146,7 @@ findroot(devpp, partp)
 }
 
 void
-makebootdev(cp)
-	char *cp;
+makebootdev(char *cp)
 {
 	boot_class = -1;
 	boot_id = boot_lun = boot_part = 0;

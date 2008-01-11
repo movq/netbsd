@@ -1,6 +1,7 @@
-/*	$NetBSD: locore.s,v 1.82 2007/12/03 15:34:26 ad Exp $	*/
+/*	$NetBSD: locore.s,v 1.103 2011/05/14 10:49:06 tsutsui Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1980, 1990, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,45 +37,6 @@
  *
  *	@(#)locore.s	8.6 (Berkeley) 5/27/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * from: Utah $Hdr: locore.s 1.66 92/12/22$
- *
- *	@(#)locore.s	8.6 (Berkeley) 5/27/94
- */
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_svr4.h"
@@ -83,6 +45,7 @@
 #include "opt_fpsp.h"
 #include "opt_kgdb.h"
 #include "opt_lockdebug.h"
+#include "opt_m68k_arch.h"
 
 #include "ite.h"
 #include "fd.h"
@@ -354,7 +317,7 @@ ENTRY_NOPROFILE(fpfault)
 #if defined(M68040) || defined(M68060)
 	/* always null state frame on 68040, 68060 */
 	cmpl	#FPU_68040,_C_LABEL(fputype)
-	jle	Lfptnull
+	jge	Lfptnull
 #endif
 	tstb	%a0@		| null state frame?
 	jeq	Lfptnull	| yes, safe
@@ -527,78 +490,58 @@ Lbrkpt3:
 #include <m68k/m68k/sigreturn.s>
 
 /*
- * Interrupt handlers. (auto vector.... not used)
- * original(amiga) routines:
- *	Level 0:	Spurious: ignored.
- *	Level 1:	builtin-RS232 TBE, softint (not used yet)
- *	Level 2:	keyboard (CIA-A) + DMA + SCSI
- *	Level 3:	VBL
- *	Level 4:	not used
- *	Level 5:	builtin-RS232 RBF
- *	Level 6:	Clock (CIA-B-Timers)
- *	Level 7:	Non-maskable: shouldn't be possible. ignore.
- */
-
-/* Provide a generic interrupt dispatcher, only handle hardclock (int6)
+ * Provide a generic interrupt dispatcher, only handle hardclock (int6)
  * specially, to improve performance
  */
 
-#define INTERRUPT_SAVEREG	moveml	#0xC0C0,%sp@- ; addql #1,_C_LABEL(idepth)
-#define INTERRUPT_RESTOREREG	subql #1,_C_LABEL(idepth) ; moveml	%sp@+,#0x0303
-
 ENTRY_NOPROFILE(spurintr)	/* level 0 */
 	addql	#1,_C_LABEL(intrcnt)+0
+	INTERRUPT_SAVEREG
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
 	rte				| XXX mfpcure (x680x0 hardware bug)
 
 ENTRY_NOPROFILE(kbdtimer)
 	rte
 
-ENTRY_NOPROFILE(powtrap)
-#include "pow.h"
-#if NPOW > 0
-	INTERRUPT_SAVEREG
-	jbsr	_C_LABEL(powintr)
-	INTERRUPT_RESTOREREG
-#endif
-	addql	#1,_C_LABEL(intrcnt)+48
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
-	jra	rei
-
 ENTRY_NOPROFILE(com0trap)
 #include "com.h"
-#if NXCOM > 0
 	INTERRUPT_SAVEREG
+#if NXCOM > 0
+	addql	#1,_C_LABEL(idepth)
 	movel	#0,%sp@-
 	jbsr	_C_LABEL(comintr)
 	addql	#4,%sp
-	INTERRUPT_RESTOREREG
+	subql	#1,_C_LABEL(idepth)
 #endif
-	addql	#1,_C_LABEL(intrcnt)+52
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
+	addql	#1,_C_LABEL(intrcnt)+36
 	jra	rei
 
 ENTRY_NOPROFILE(com1trap)
-#if NXCOM > 1
 	INTERRUPT_SAVEREG
+#if NXCOM > 1
+	addql	#1,_C_LABEL(idepth)
 	movel	#1,%sp@-
 	jbsr	_C_LABEL(comintr)
 	addql	#4,%sp
-	INTERRUPT_RESTOREREG
+	subql	#1,_C_LABEL(idepth)
 #endif
-	addql	#1,_C_LABEL(intrcnt)+52
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	CPUINFO_INCREMENT(CI_NINTR)
+	INTERRUPT_RESTOREREG
+	addql	#1,_C_LABEL(intrcnt)+36
 	jra	rei
 
 ENTRY_NOPROFILE(intiotrap)
+	addql	#1,_C_LABEL(idepth)
 	INTERRUPT_SAVEREG
-#if 0
-	movw	#PSL_HIGHIPL,%sr	| XXX
-#endif
 	pea	%sp@(16-(FR_HW))	| XXX
 	jbsr	_C_LABEL(intio_intr)
 	addql	#4,%sp
+	CPUINFO_INCREMENT(CI_NINTR)
 	INTERRUPT_RESTOREREG
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	subql	#1,_C_LABEL(idepth)
 	jra	rei
 
 ENTRY_NOPROFILE(lev1intr)
@@ -607,6 +550,7 @@ ENTRY_NOPROFILE(lev3intr)
 ENTRY_NOPROFILE(lev4intr)
 ENTRY_NOPROFILE(lev5intr)
 ENTRY_NOPROFILE(lev6intr)
+	addql	#1,_C_LABEL(idepth)
 	INTERRUPT_SAVEREG
 Lnotdma:
 	lea	_C_LABEL(intrcnt),%a0
@@ -617,22 +561,26 @@ Lnotdma:
 	clrw	%sp@-			|    padded to longword
 	jbsr	_C_LABEL(intrhand)	| handle interrupt
 	addql	#4,%sp			| pop SR
+	CPUINFO_INCREMENT(CI_NINTR)
 	INTERRUPT_RESTOREREG
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
+	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)
 
 ENTRY_NOPROFILE(timertrap)
-	moveml	#0xC0C0,%sp@-		| save scratch registers
-	addql	#1,_C_LABEL(intrcnt)+36	| count hardclock interrupts
+	addql	#1,_C_LABEL(idepth)
+	INTERRUPT_SAVEREG		| save scratch registers
+	addql	#1,_C_LABEL(intrcnt)+32	| count hardclock interrupts
 	lea	%sp@(16),%a1		| a1 = &clockframe
 	movl	%a1,%sp@-
 	jbsr	_C_LABEL(hardclock)	| hardclock(&frame)
 	addql	#4,%sp
-	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS | chalk up another interrupt
-	moveml	%sp@+,#0x0303		| restore scratch registers
+	CPUINFO_INCREMENT(CI_NINTR)	| chalk up another interrupt
+	INTERRUPT_RESTOREREG		| restore scratch registers
+	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)		| all done
 
 ENTRY_NOPROFILE(lev7intr)
+	addql	#1,_C_LABEL(idepth)
 	addql	#1,_C_LABEL(intrcnt)+28
 	clrl	%sp@-
 	moveml	#0xFFFF,%sp@-		| save registers
@@ -643,6 +591,7 @@ ENTRY_NOPROFILE(lev7intr)
 	movl	%a0,%usp		|   user SP
 	moveml	%sp@+,#0x7FFF		| and remaining registers
 	addql	#8,%sp			| pop SP and stack adjust
+	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)		| all done
 
 /*
@@ -792,9 +741,6 @@ ASENTRY_NOPROFILE(start)
 	RELOC(lowram, %a0)
 	movl	%a5,%a0@		| store start of physical memory
 
-	RELOC(intr_reset, %a0)
-	jbsr	%a0@			| XXX
-
 	movl	#CACHE_OFF,%d0
 	movc	%d0,%cacr		| clear and disable on-chip cache(s)
 
@@ -880,9 +826,8 @@ Lstart2:
  *
  * Is this all really necessary, or am I paranoid??
  */
-	RELOC(Sysseg, %a0)		| system segment table addr
-	movl	%a0@,%d1		| read value (a KVA)
-	addl	%a5,%d1			| convert to PA
+	RELOC(Sysseg_pa, %a0)		| system segment table addr
+	movl	%a0@,%d1		| read value (a PA)
 	RELOC(mmutype, %a0)
 	cmpl	#MMU_68040,%a0@		| 68040?
 	jne	Lmotommu1		| no, skip
@@ -952,22 +897,18 @@ Lenab1:
 /* set vector base in virtual address */
 	movl	#_C_LABEL(vectab),%d0	| set Vector Base Register
 	movc	%d0,%vbr
-/* select the software page size now */
 	lea	_ASM_LABEL(tmpstk),%sp	| temporary stack
-	jbsr	_C_LABEL(uvm_setpagesize)  | select software page size
+/* call final pmap setup */
+	jbsr	_C_LABEL(pmap_bootstrap_finalize)
+/* set kernel stack, user SP */
+	movl	_C_LABEL(lwp0uarea),%a1	| grab lwp0 uarea
+	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area  
+	movl	#USRSTACK-4,%a2
+	movl	%a2,%usp		| init user SP
+
 /* detect FPU type */
 	jbsr	_C_LABEL(fpu_probe)
 	movl	%d0,_C_LABEL(fputype)
-/* set kernel stack, user SP, and initial pcb */
-	movl	_C_LABEL(proc0paddr),%a1 | get lwp0 pcb addr
-	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area
-	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.l_addr
-	movl	%a2,_C_LABEL(curlwp)	|   and curlwp so that
-	movl	%a1,%a2@(L_ADDR)	|   we don't deref NULL in trap()
-	movl	#USRSTACK-4,%a2
-	movl	%a2,%usp		| init user SP
-	movl	%a1,_C_LABEL(curpcb)	| lwp0 is running
-
 	tstl	_C_LABEL(fputype)	| Have an FPU?
 	jeq	Lenab2			| No, skip.
 	clrl	%a1@(PCB_FPCTX)		| ensure null FP context
@@ -989,9 +930,10 @@ Lenab3:
 /* final setup for C code */
 	movl	%d7,_C_LABEL(boothowto)	| save reboot flags
 	movl	%d6,_C_LABEL(bootdev)	|   and boot device
+	jbsr	_C_LABEL(x68k_init)	| additional pre-main initialization
 
 /*
- * Create a fake exception frame so that cpu_fork() can copy it.
+ * Create a fake exception frame so that cpu_lwp_fork() can copy it.
  * main() nevers returns; we exit to user mode from a forked process
  * later on.
  */
@@ -1143,7 +1085,7 @@ Lspldone:
 /*
  * _delay(u_int N)
  *
- * Delay for at least (N/256) microsecends.
+ * Delay for at least (N/256) microseconds.
  * This routine depends on the variable:  delay_divisor
  * which should be set based on the CPU clock rate.
  */
@@ -1285,14 +1227,12 @@ GLOBAL(fputype)
 GLOBAL(protorp)
 	.long	0,0		| prototype root pointer
 
-GLOBAL(proc0paddr)
-	.long	0		| KVA of lwp0 u-area
+GLOBAL(intiobase)
+	.long	0		| KVA of base of internal IO space
 
 GLOBAL(intiolimit)
 	.long	0		| KVA of end of internal IO space
 
-GLOBAL(extiobase)
-	.long	0		| KVA of base of external IO space
 #ifdef DEBUG
 ASGLOBAL(fulltflush)
 	.long	0
@@ -1312,17 +1252,11 @@ GLOBAL(intrnames)
 	.asciz	"lev5"
 	.asciz	"lev6"
 	.asciz	"nmi"
-	.asciz	"audioerr"
 	.asciz	"clock"
-	.asciz	"scsi"
-	.asciz	"audio"
-	.asciz	"pow"
 	.asciz	"com"
-	.space	200
 GLOBAL(eintrnames)
 	.even
 
 GLOBAL(intrcnt)
-	.long	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	.space	50
+	.long	0,0,0,0,0,0,0,0,0,0
 GLOBAL(eintrcnt)

@@ -1,4 +1,4 @@
-/*	$NetBSD: libhfs.c,v 1.5 2007/12/11 12:04:23 lukem Exp $	*/
+/*	$NetBSD: libhfs.c,v 1.10 2011/02/24 23:49:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2007 The NetBSD Foundation, Inc.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: libhfs.c,v 1.5 2007/12/11 12:04:23 lukem Exp $");
+__KERNEL_RCSID(0, "$NetBSD: libhfs.c,v 1.10 2011/02/24 23:49:26 christos Exp $");
 
 #include "libhfs.h"
 
@@ -161,6 +161,7 @@ hfslib_open_volume(
 	void*		buffer;
 	void*		buffer2;	/* used as temporary pointer for realloc() */
 	int			result;
+	int		isopen = 0;
 	
 	result = 1;
 	buffer = NULL;
@@ -173,6 +174,7 @@ hfslib_open_volume(
 
 	if(hfslib_openvoldevice(out_vol, in_device, cbargs) != 0)
 		HFS_LIBERR("could not open device");
+	isopen = 1;
 
 	/*
 	 *	Read the volume header.
@@ -224,7 +226,9 @@ hfslib_open_volume(
 			break;
 			
 		default:
-			HFS_LIBERR("unrecognized volume format");
+			/* HFS_LIBERR("unrecognized volume format"); */
+			goto error;
+			break;
 	}
 
 
@@ -353,6 +357,8 @@ hfslib_open_volume(
 
 	/* FALLTHROUGH */
 error:	
+	if (result != 0 && isopen)
+		hfslib_close_volume(out_vol, cbargs);
 	if(buffer!=NULL)
 		hfslib_free(buffer, cbargs);
 
@@ -454,14 +460,11 @@ hfslib_path_to_cnid(hfs_volume* in_vol,
 		goto exit;
 	
 	/* copy only the bytes that are actually used */
-	memcpy(*out_unicode+2, path + path_offset, total_path_length*2);
+	memcpy(*out_unicode + 2, path + path_offset, total_path_length*2);
 
 	/* insert forward slash at start */
-	(*out_unicode)[0] = 0x00;
-	(*out_unicode)[1] = 0x2F;
-	ptr = (uint16_t*)*out_unicode;
-	uchar = be16tohp((void*)&ptr);
-	*(ptr-1) = uchar;
+	uchar = be16toh(0x2F);
+	memcpy(*out_unicode, &uchar, sizeof(uchar));
 
 	/* insert null char at end */
 	(*out_unicode)[total_path_length*2+2] = 0x00;
@@ -809,7 +812,7 @@ hfslib_get_file_extents(hfs_volume* in_vol,
 	hfs_file_record_t		file;
 	hfs_catalog_key_t		filekey;
 	hfs_thread_record_t	fileparent;
-	hfs_fork_t				fork;
+	hfs_fork_t		fork = {.logical_size = 0};
 	hfs_extent_record_t	nextextentrec;
 	uint32_t	numblocks;
 	uint16_t	numextents, n;

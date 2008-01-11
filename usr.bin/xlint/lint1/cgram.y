@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: cgram.y,v 1.39 2006/11/08 18:31:15 christos Exp $ */
+/* $NetBSD: cgram.y,v 1.49 2010/02/09 23:05:16 wiz Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: cgram.y,v 1.39 2006/11/08 18:31:15 christos Exp $");
+__RCSID("$NetBSD: cgram.y,v 1.49 2010/02/09 23:05:16 wiz Exp $");
 #endif
 
 #include <stdlib.h>
@@ -44,6 +44,7 @@ __RCSID("$NetBSD: cgram.y,v 1.39 2006/11/08 18:31:15 christos Exp $");
 
 #include "lint1.h"
 
+extern char *yytext;
 /*
  * Contains the level of current declaration. 0 is extern.
  * Used for symbol table entries.
@@ -52,7 +53,7 @@ int	blklev;
 
 /*
  * level for memory allocation. Normaly the same as blklev.
- * An exeption is the declaration of arguments in prototypes. Memory
+ * An exception is the declaration of arguments in prototypes. Memory
  * for these can't be freed after the declaration, but symbols must
  * be removed from the symbol table after the declaration.
  */
@@ -106,6 +107,8 @@ static inline void RESTORE(const char *file, size_t line)
 #endif
 %}
 
+%expect 3
+
 %union {
 	int	y_int;
 	val_t	*y_val;
@@ -127,6 +130,7 @@ static inline void RESTORE(const char *file, size_t line)
 %token	<y_op>		T_UNOP
 %token	<y_op>		T_INCDEC
 %token			T_SIZEOF
+%token			T_ALIGNOF
 %token	<y_op>		T_MULT
 %token	<y_op>		T_DIVOP
 %token	<y_op>		T_ADDOP
@@ -145,6 +149,8 @@ static inline void RESTORE(const char *file, size_t line)
 %token			T_COMMA
 %token			T_SEMI
 %token			T_ELLIPSE
+%token			T_REAL
+%token			T_IMAG
 
 /* storage classes (extern, static, auto, register and typedef) */
 %token	<y_scl>		T_SCLASS
@@ -176,6 +182,18 @@ static inline void RESTORE(const char *file, size_t line)
 %token			T_RETURN
 %token			T_ASM
 %token			T_SYMBOLRENAME
+%token			T_PACKED
+/* Type Attributes */
+%token <y_type>		T_ATTRIBUTE
+%token <y_type>		T_AT_ALIGNED
+%token <y_type>		T_AT_DEPRECATED
+%token <y_type>		T_AT_MAY_ALIAS
+%token <y_type>		T_AT_PACKED
+%token <y_type>		T_AT_TUINION
+%token <y_type>		T_AT_TUNION
+%token <y_type>		T_AT_UNUSED
+
+
 
 %left	T_COMMA
 %right	T_ASSIGN T_OPASS
@@ -190,7 +208,7 @@ static inline void RESTORE(const char *file, size_t line)
 %left	T_SHFTOP
 %left	T_ADDOP
 %left	T_MULT T_DIVOP
-%right	T_UNOP T_INCDEC T_SIZEOF
+%right	T_UNOP T_INCDEC T_SIZEOF T_ALIGNOF T_REAL T_IMAG
 %left	T_LPARN T_LBRACK T_STROP
 
 %token	<y_sb>		T_NAME
@@ -206,6 +224,8 @@ static inline void RESTORE(const char *file, size_t line)
 %type	<y_type>	notype_typespec
 %type	<y_type>	struct_spec
 %type	<y_type>	enum_spec
+%type	<y_type>	type_attribute
+%type	<y_type>	type_attribute_spec
 %type	<y_sym>		struct_tag
 %type	<y_sym>		enum_tag
 %type	<y_tspec>	struct
@@ -342,7 +362,7 @@ func_def:
 	  func_decl {
 		if ($1->s_type->t_tspec != FUNC) {
 			/* syntax error */
-			error(249);
+			error(249, yytext);
 			YYERROR;
 		}
 		if ($1->s_type->t_typedef) {
@@ -448,6 +468,24 @@ declaration:
 	| error T_SEMI
 	;
 
+type_attribute_spec:
+	  T_AT_DEPRECATED
+	| T_AT_ALIGNED T_LPARN constant T_RPARN
+	| T_AT_MAY_ALIAS
+	| T_AT_PACKED {
+		addpacked();
+	}
+	| T_AT_TUNION
+	| T_AT_UNUSED
+	;
+
+type_attribute:
+	  T_ATTRIBUTE T_LPARN T_LPARN type_attribute_spec T_RPARN T_RPARN
+	| T_PACKED {
+		addpacked();
+	}
+	;
+
 clrtyp:
 	  {
 		clrtyp();
@@ -467,6 +505,7 @@ declspecs:
 	| declmods typespec {
 		addtype($2);
 	  }
+	| declspecs type_attribute
 	| declspecs declmod
 	| declspecs notype_typespec {
 		addtype($2);
@@ -552,7 +591,8 @@ struct_spec:
 	;
 
 struct:
-	  T_SOU {
+	  struct type_attribute
+	| T_SOU {
 		symtyp = FTAG;
 		pushdecl($1 == STRUCT ? MOS : MOU);
 		dcs->d_offset = 0;
@@ -650,6 +690,7 @@ noclass_declspecs:
 	| noclass_declspecs notype_typespec {
 		addtype($2);
 	  }
+	| noclass_declspecs type_attribute
 	;
 
 noclass_declmods:
@@ -862,6 +903,7 @@ notype_direct_decl:
 		popdecl();
 		blklev--;
 	  }
+	| notype_direct_decl type_attribute
 	;
 
 type_decl:
@@ -891,6 +933,7 @@ type_direct_decl:
 		popdecl();
 		blklev--;
 	  }
+	| type_direct_decl type_attribute
 	;
 
 /*
@@ -1244,6 +1287,7 @@ direct_abs_decl:
 		popdecl();
 		blklev--;
 	  }
+	| direct_abs_decl type_attribute
 	;
 
 non_expr_stmnt:
@@ -1273,7 +1317,12 @@ label:
 	| T_CASE constant T_COLON {
 		label(T_CASE, NULL, $2);
 		ftflg = 1;
-	  }
+	}
+	| T_CASE constant T_ELLIPSE constant T_COLON {
+		/* XXX: We don't fill all cases */
+		label(T_CASE, NULL, $2);
+		ftflg = 1;
+	}
 	| T_DEFAULT T_COLON {
 		label(T_DEFAULT, NULL, NULL);
 		ftflg = 1;
@@ -1452,7 +1501,13 @@ do_while_expr:
 	;
 
 for_exprs:
-	  T_FOR T_LPARN opt_expr T_SEMI opt_expr T_SEMI opt_expr T_RPARN {
+	    T_FOR T_LPARN declspecs deftyp notype_init_decls T_SEMI opt_expr
+	    T_SEMI opt_expr T_RPARN {
+		c99ism(325);
+		for1(NULL, $7, $9);
+		CLRWFLGS(__FILE__, __LINE__);
+	    }
+	  | T_FOR T_LPARN opt_expr T_SEMI opt_expr T_SEMI opt_expr T_RPARN {
 		for1($3, $5, $7);
 		CLRWFLGS(__FILE__, __LINE__);
 	  }
@@ -1659,12 +1714,27 @@ term:
 			$$ = NULL;
 		}
 	  }
+	| T_REAL term {
+		$$ = build(REAL, $2, NULL);
+	  }
+	| T_IMAG term {
+		$$ = build(IMAG, $2, NULL);
+	  }
+	| T_REAL T_LPARN term T_RPARN {
+		$$ = build(REAL, $3, NULL);
+	  }
+	| T_IMAG T_LPARN term T_RPARN {
+		$$ = build(IMAG, $3, NULL);
+	  }
 	| T_SIZEOF term					%prec T_SIZEOF {
 		if (($$ = $2 == NULL ? NULL : bldszof($2->tn_type)) != NULL)
 			chkmisc($2, 0, 0, 0, 0, 0, 1);
 	  }
 	| T_SIZEOF T_LPARN type_name T_RPARN		%prec T_SIZEOF {
 		$$ = bldszof($3);
+	  }
+	| T_ALIGNOF T_LPARN type_name T_RPARN		%prec T_ALIGNOF {
+		$$ = bldalof($3);
 	  }
 	| T_LPARN type_name T_RPARN term		%prec T_UNOP {
 		$$ = cast($4, $2);
@@ -1720,7 +1790,7 @@ point_or_arrow:
 point:
 	  T_STROP {
 		if ($1 != POINT)
-			error(249);
+			error(249, yytext);
 	  }
 	;
 
@@ -1737,9 +1807,9 @@ identifier:
 
 /* ARGSUSED */
 int
-yyerror(char *msg)
+yyerror(const char *msg)
 {
-	error(249);
+	error(249, yytext);
 	if (++sytxerr >= 5)
 		norecover();
 	return (0);
@@ -1814,7 +1884,7 @@ toicon(tnode_t *tn, int required)
 }
 
 static void
-idecl(sym_t *decl, int initflg, sbuf_t *rename)
+idecl(sym_t *decl, int initflg, sbuf_t *renaming)
 {
 	char *s;
 
@@ -1823,31 +1893,31 @@ idecl(sym_t *decl, int initflg, sbuf_t *rename)
 
 	switch (dcs->d_ctx) {
 	case EXTERN:
-		if (rename != NULL) {
+		if (renaming != NULL) {
 			if (decl->s_rename != NULL)
 				LERROR("idecl()");
 
-			s = getlblk(1, rename->sb_len + 1);
-	                (void)memcpy(s, rename->sb_name, rename->sb_len + 1);
+			s = getlblk(1, renaming->sb_len + 1);
+	                (void)memcpy(s, renaming->sb_name, renaming->sb_len + 1);
 			decl->s_rename = s;
-			freeyyv(&rename, T_NAME);
+			freeyyv(&renaming, T_NAME);
 		}
 		decl1ext(decl, initflg);
 		break;
 	case ARG:
-		if (rename != NULL) {
+		if (renaming != NULL) {
 			/* symbol renaming can't be used on function arguments */
 			error(310);
-			freeyyv(&rename, T_NAME);
+			freeyyv(&renaming, T_NAME);
 			break;
 		}
 		(void)decl1arg(decl, initflg);
 		break;
 	case AUTO:
-		if (rename != NULL) {
+		if (renaming != NULL) {
 			/* symbol renaming can't be used on automatic variables */
 			error(311);
-			freeyyv(&rename, T_NAME);
+			freeyyv(&renaming, T_NAME);
 			break;
 		}
 		decl1loc(decl, initflg);

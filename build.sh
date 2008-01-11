@@ -1,7 +1,7 @@
 #! /usr/bin/env sh
-#	$NetBSD: build.sh,v 1.182 2008/01/09 11:25:58 simonb Exp $
+#	$NetBSD: build.sh,v 1.244 2011/01/26 01:18:43 pooka Exp $
 #
-# Copyright (c) 2001-2005 The NetBSD Foundation, Inc.
+# Copyright (c) 2001-2009 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. All advertising materials mentioning features or use of this software
-#    must display the following acknowledgement:
-#        This product includes software developed by the NetBSD
-#        Foundation, Inc. and its contributors.
-# 4. Neither the name of The NetBSD Foundation nor the names of its
-#    contributors may be used to endorse or promote products derived
-#    from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 # ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -50,6 +43,7 @@
 progname=${0##*/}
 toppid=$$
 results=/dev/null
+tab='	'
 trap "exit 1" 1 2 3 15
 
 bomb()
@@ -67,6 +61,29 @@ ERRORMESSAGE
 statusmsg()
 {
 	${runcmd} echo "===> $@" | tee -a "${results}"
+}
+
+statusmsg2()
+{
+	local msg
+
+	msg="${1}"
+	shift
+	case "${msg}" in
+	????????????????*)	;;
+	??????????*)		msg="${msg}      ";;
+	?????*)			msg="${msg}           ";;
+	*)			msg="${msg}                ";;
+	esac
+	case "${msg}" in
+	?????????????????????*)	;;
+	????????????????????)	msg="${msg} ";;
+	???????????????????)	msg="${msg}  ";;
+	??????????????????)	msg="${msg}   ";;
+	?????????????????)	msg="${msg}    ";;
+	????????????????)	msg="${msg}     ";;
+	esac
+	statusmsg "${msg}$*"
 }
 
 warning()
@@ -120,7 +137,7 @@ set_HOST_SH()
 	# specifying HOST_SH in the environment.
 	#
 	[ -z "${HOST_SH}" ] && HOST_SH="$(
-		(ps -p $$ -o comm | sed -ne '2s/[ \t]*$//p') 2>/dev/null )"
+		(ps -p $$ -o comm | sed -ne "2s/[ ${tab}]*\$//p") 2>/dev/null )"
 
 	# If nothing above worked, use "sh".  We will later find the
 	# first directory in the PATH that has a "sh" program.
@@ -169,14 +186,28 @@ initdefaults()
 	[ -f share/mk/bsd.own.mk ] ||
 	    bomb "src/share/mk is missing; please re-fetch the source tree"
 
-	# Find information about the build platform.  Note that "uname -p"
-	# is not part of POSIX, but NetBSD's uname -p prints MACHINE_ARCH,
-	# while uname -m prints MACHINE.
+	# Set LC_ALL=C before we try to parse the output from any command
+	setmakeenv LC_ALL C
+
+	# Find information about the build platform.  This should be
+	# kept in sync with _HOST_OSNAME, _HOST_OSREL, and _HOST_ARCH
+	# variables in share/mk/bsd.sys.mk.
+	#
+	# Note that "uname -p" is not part of POSIX, but we want uname_p
+	# to be set to the host MACHINE_ARCH, if possible.  On systems
+	# where "uname -p" fails, prints "unknown", or prints a string
+	# that does not look like an identifier, fall back to using the
+	# output from "uname -m" instead.
 	#
 	uname_s=$(uname -s 2>/dev/null)
 	uname_r=$(uname -r 2>/dev/null)
 	uname_m=$(uname -m 2>/dev/null)
-	uname_p=$(uname -p 2>/dev/null || uname -m 2>/dev/null)
+	uname_p=$(uname -p 2>/dev/null || echo "unknown")
+	case "${uname_p}" in
+	''|unknown|*[^-_A-Za-z0-9]*) uname_p="${uname_m}" ;;
+	esac
+
+	id_u=$(id -u 2>/dev/null || /usr/xpg4/bin/id -u 2>/dev/null)
 
 	# If $PWD is a valid name of the current directory, POSIX mandates
 	# that pwd return it by default which causes problems in the
@@ -219,12 +250,14 @@ initdefaults()
 	do_rebuildmake=false
 	do_removedirs=false
 	do_tools=false
+	do_cleandir=false
 	do_obj=false
 	do_build=false
 	do_distribution=false
 	do_release=false
 	do_kernel=false
 	do_releasekernel=false
+	do_modules=false
 	do_install=false
 	do_sets=false
 	do_sourcesets=false
@@ -232,6 +265,11 @@ initdefaults()
 	do_iso_image=false
 	do_iso_image_source=false
 	do_params=false
+	do_rump=false
+
+	# done_{operation}=true if given operation has been done.
+	#
+	done_rebuildmake=false
 
 	# Create scratch directory
 	#
@@ -244,16 +282,32 @@ initdefaults()
 	#
 	setmakeenv NETBSDSRCDIR "${TOP}"
 
+	# Make sure KERNOBJDIR is an absolute path if defined
+	#
+	case "${KERNOBJDIR}" in
+	''|/*)	;;
+	*)	KERNOBJDIR="${TOP}/${KERNOBJDIR}"
+		setmakeenv KERNOBJDIR "${KERNOBJDIR}"
+		;;
+	esac
+
 	# Find the version of NetBSD
 	#
 	DISTRIBVER="$(${HOST_SH} ${TOP}/sys/conf/osrelease.sh)"
+
+	# Set the BUILDSEED to NetBSD-"N"
+	#
+	setmakeenv BUILDSEED "NetBSD-$(${HOST_SH} ${TOP}/sys/conf/osrelease.sh -m)"
+
+	# Set MKARZERO to "yes"
+	#
+	setmakeenv MKARZERO "yes"
 
 	# Set various environment variables to known defaults,
 	# to minimize (cross-)build problems observed "in the field".
 	#
 	unsetmakeenv INFODIR
 	unsetmakeenv LESSCHARSET
-	setmakeenv LC_ALL C
 }
 
 getarch()
@@ -319,15 +373,27 @@ getarch()
 	evbmips|sbmips)		# no default MACHINE_ARCH
 		;;
 
-	ews4800mips|mipsco|newsmips|sgimips)
+	sgimips64)
+		makewrappermachine=${MACHINE}
+		MACHINE=${MACHINE%64}
+		MACHINE_ARCH=mips64eb
+		;;
+
+	ews4800mips|mipsco|newsmips|sgimips|emips)
 		MACHINE_ARCH=mipseb
 		;;
 
-	algor|arc|cobalt|hpcmips|playstation2|pmax)
+	algor64|arc64|cobalt64|pmax64)
+		makewrappermachine=${MACHINE}
+		MACHINE=${MACHINE%64}
+		MACHINE_ARCH=mips64el
+		;;
+
+	algor|arc|cobalt|hpcmips|pmax)
 		MACHINE_ARCH=mipsel
 		;;
 
-	evbppc64|macppc64)
+	evbppc64|macppc64|ofppc64)
 		makewrappermachine=${MACHINE}
 		MACHINE=${MACHINE%64}
 		MACHINE_ARCH=powerpc64
@@ -369,7 +435,7 @@ validatearch()
 	#
 	case "${MACHINE_ARCH}" in
 
-	alpha|arm|armeb|hppa|i386|m68000|m68k|mipse[bl]|mips64e[bl]|powerpc|powerpc64|sh[35]e[bl]|sparc|sparc64|vax|x86_64|ia64)
+	alpha|arm|armeb|hppa|i386|m68000|m68k|mipse[bl]|mips64e[bl]|powerpc|powerpc64|sh3e[bl]|sparc|sparc64|vax|x86_64|ia64)
 		;;
 
 	"")
@@ -390,6 +456,10 @@ validatearch()
 		arches="arm armeb"
 		;;
 
+	algor|arc|cobalt|pmax)
+		arches="mipsel mips64el"
+		;;
+
 	evbmips|sbmips)
 		arches="mipseb mipsel mips64eb mips64el"
 		;;
@@ -402,7 +472,7 @@ validatearch()
 		arches="sh3eb sh3el"
 		;;
 
-	macppc|evbppc)
+	macppc|evbppc|ofppc)
 		arches="powerpc powerpc64"
 		;;
 	*)
@@ -427,6 +497,10 @@ validatearch()
 	    bomb "MACHINE_ARCH '${MACHINE_ARCH}' does not support MACHINE '${MACHINE}'"
 }
 
+# nobomb_getmakevar --
+# Given the name of a make variable in $1, print make's idea of the
+# value of that variable, or return 1 if there's an error.
+#
 nobomb_getmakevar()
 {
 	[ -x "${make}" ] || return 1
@@ -438,22 +512,27 @@ _x_:
 EOF
 }
 
-raw_getmakevar()
+# nobomb_getmakevar --
+# Given the name of a make variable in $1, print make's idea of the
+# value of that variable, or bomb if there's an error.
+#
+bomb_getmakevar()
 {
-	[ -x "${make}" ] || bomb "raw_getmakevar $1: ${make} is not executable"
-	nobomb_getmakevar "$1" || bomb "raw_getmakevar $1: ${make} failed"
+	[ -x "${make}" ] || bomb "bomb_getmakevar $1: ${make} is not executable"
+	nobomb_getmakevar "$1" || bomb "bomb_getmakevar $1: ${make} failed"
 }
 
+# nobomb_getmakevar --
+# Given the name of a make variable in $1, print make's idea of the
+# value of that variable, or print a literal '$' followed by the
+# variable name if ${make} is not executable.  This is intended for use in
+# messages that need to be readable even if $make hasn't been built,
+# such as when build.sh is run with the "-n" option.
+#
 getmakevar()
 {
-	# raw_getmakevar() doesn't work properly if $make hasn't yet been
-	# built, which can happen when running with the "-n" option.
-	# getmakevar() deals with this by emitting a literal '$'
-	# followed by the variable name, instead of trying to find the
-	# variable's value.
-	#
 	if [ -x "${make}" ]; then
-		raw_getmakevar "$1"
+		bomb_getmakevar "$1"
 	else
 		echo "\$$1"
 	fi
@@ -471,20 +550,41 @@ unsetmakeenv()
 	makeenv="${makeenv} $1"
 }
 
+# Given a variable name in $1, modify the variable in place as follows:
+# For each space-separated word in the variable, call resolvepath.
+resolvepaths()
+{
+	local var="$1"
+	local val
+	eval val=\"\${${var}}\"
+	local newval=''
+	local word
+	for word in ${val}; do
+		resolvepath word
+		newval="${newval}${newval:+ }${word}"
+	done
+	eval ${var}=\"\${newval}\"
+}
+
+# Given a variable name in $1, modify the variable in place as follows:
 # Convert possibly-relative path to absolute path by prepending
 # ${TOP} if necessary.  Also delete trailing "/", if any.
 resolvepath()
 {
-	case "${OPTARG}" in
+	local var="$1"
+	local val
+	eval val=\"\${${var}}\"
+	case "${val}" in
 	/)
 		;;
 	/*)
-		OPTARG="${OPTARG%/}"
+		val="${val%/}"
 		;;
 	*)
-		OPTARG="${TOP}/${OPTARG%/}"
+		val="${TOP}/${val%/}"
 		;;
 	esac
+	eval ${var}=\"\${val}\"
 }
 
 usage()
@@ -495,10 +595,12 @@ usage()
 	fi
 	cat <<_usage_
 
-Usage: ${progname} [-EnorUux] [-a arch] [-B buildid] [-C cdextras] [-D dest]
-		[-j njob] [-M obj] [-m mach] [-N noisy] [-O obj] [-R release]
-		[-T tools] [-V var=[value]] [-w wrapper] [-X x11src] [-Z var]
-		operation [...]
+Usage: ${progname} [-EnorUux] [-a arch] [-B buildid] [-C cdextras]
+                [-D dest] [-j njob] [-M obj] [-m mach] [-N noisy]
+                [-O obj] [-R release] [-S seed] [-T tools]
+                [-V var=[value]] [-w wrapper] [-X x11src] [-Y extsrcsrc]
+                [-Z var]
+                operation [...]
 
  Build operations (all imply "obj" and "tools"):
     build               Run "make build".
@@ -509,16 +611,21 @@ Usage: ${progname} [-EnorUux] [-a arch] [-B buildid] [-C cdextras] [-D dest]
     help                Show this message and exit.
     makewrapper         Create ${toolprefix}make-\${MACHINE} wrapper and ${toolprefix}make.
                         Always performed.
+    cleandir            Run "make cleandir".  [Default unless -u is used]
     obj                 Run "make obj".  [Default unless -o is used]
     tools               Build and install tools.
     install=idir        Run "make installworld" to \`idir' to install all sets
-			except \`etc'.  Useful after "distribution" or "release"
+                        except \`etc'.  Useful after "distribution" or "release"
     kernel=conf         Build kernel with config file \`conf'
     releasekernel=conf  Install kernel built by kernel=conf to RELEASEDIR.
-    sets                Create binary sets in RELEASEDIR/MACHINE/binary/sets.
-			DESTDIR should be populated beforehand.
+    modules             Build kernel modules.
+    rumptest            Do a linktest for rump (for developers).
+    sets                Create binary sets in
+                        RELEASEDIR/RELEASEMACHINEDIR/binary/sets.
+                        DESTDIR should be populated beforehand.
     sourcesets          Create source sets in RELEASEDIR/source/sets.
-    syspkgs             Create syspkgs in RELEASEDIR/MACHINE/binary/syspkgs.
+    syspkgs             Create syspkgs in
+                        RELEASEDIR/RELEASEMACHINEDIR/binary/syspkgs.
     iso-image           Create CD-ROM image in RELEASEDIR/iso.
     iso-image-source    Create CD-ROM image with source in RELEASEDIR/iso.
     params              Display various make(1) parameters.
@@ -526,7 +633,7 @@ Usage: ${progname} [-EnorUux] [-a arch] [-B buildid] [-C cdextras] [-D dest]
  Options:
     -a arch     Set MACHINE_ARCH to arch.  [Default: deduced from MACHINE]
     -B buildId  Set BUILDID to buildId.
-    -C cdextras Set CDEXTRA to cdextras
+    -C cdextras Append cdextras to CDEXTRA variable for inclusion on CD-ROM.
     -D dest     Set DESTDIR to dest.  [Default: destdir.MACHINE]
     -E          Set "expert" mode; disables various safety checks.
                 Should not be used without expert knowledge of the build system.
@@ -535,28 +642,34 @@ Usage: ${progname} [-EnorUux] [-a arch] [-B buildid] [-C cdextras] [-D dest]
     -M obj      Set obj root directory to obj; sets MAKEOBJDIRPREFIX.
                 Unsets MAKEOBJDIR.
     -m mach     Set MACHINE to mach; not required if NetBSD native.
-    -N noisy	Set the noisyness (MAKEVERBOSE) level of the build:
-		    0	Quiet
-		    1	Operations are described, commands are suppressed
-		    2	Full output
-		[Default: 2]
+    -N noisy    Set the noisyness (MAKEVERBOSE) level of the build:
+                    0   Minimal output ("quiet")
+                    1   Describe what is occurring
+                    2   Describe what is occurring and echo the actual command
+                    3   Ignore the effect of the "@" prefix in make commands
+                    4   Trace shell commands using the shell's -x flag
+                [Default: 2]
     -n          Show commands that would be executed, but do not execute them.
     -O obj      Set obj root directory to obj; sets a MAKEOBJDIR pattern.
                 Unsets MAKEOBJDIRPREFIX.
     -o          Set MKOBJDIRS=no; do not create objdirs at start of build.
     -R release  Set RELEASEDIR to release.  [Default: releasedir]
     -r          Remove contents of TOOLDIR and DESTDIR before building.
+    -S seed     Set BUILDSEED to seed.  [Default: NetBSD-majorversion]
     -T tools    Set TOOLDIR to tools.  If unset, and TOOLDIR is not set in
                 the environment, ${toolprefix}make will be (re)built unconditionally.
     -U          Set MKUNPRIVED=yes; build without requiring root privileges,
-    		install from an UNPRIVED build with proper file permissions.
-    -u          Set MKUPDATE=yes; do not run "make clean" first.
-		Without this, everything is rebuilt, including the tools.
+                install from an UNPRIVED build with proper file permissions.
+    -u          Set MKUPDATE=yes; do not run "make cleandir" first.
+                Without this, everything is rebuilt, including the tools.
     -V v=[val]  Set variable \`v' to \`val'.
     -w wrapper  Create ${toolprefix}make script as wrapper.
                 [Default: \${TOOLDIR}/bin/${toolprefix}make-\${MACHINE}]
     -X x11src   Set X11SRCDIR to x11src.  [Default: /usr/xsrc]
-    -x          Set MKX11=yes; build X11R6 from X11SRCDIR
+    -x          Set MKX11=yes; build X11 from X11SRCDIR
+    -Y extsrcsrc
+                Set EXTSRCSRCDIR to extsrcsrc.  [Default: /usr/extsrc]
+    -y          Set MKEXTSRC=yes; build extsrc from EXTSRCSRCDIR
     -Z v        Unset ("zap") variable \`v'.
 
 _usage_
@@ -565,7 +678,7 @@ _usage_
 
 parseoptions()
 {
-	opts='a:B:bC:D:dEhi:j:k:M:m:N:nO:oR:rT:tUuV:w:xX:Z:'
+	opts='a:B:C:D:Ehj:M:m:N:nO:oR:rS:T:UuV:w:xX:yY:Z:'
 	opt_a=no
 
 	if type getopts >/dev/null 2>&1; then
@@ -605,30 +718,18 @@ parseoptions()
 			BUILDID=${OPTARG}
 			;;
 
-		-b)
-			usage "'-b' has been replaced by 'makewrapper'"
-			;;
-
 		-C)
-			eval ${optargcmd}; resolvepath
-			iso_dir=${OPTARG}
+			eval ${optargcmd}; resolvepaths OPTARG
+			CDEXTRA="${CDEXTRA}${CDEXTRA:+ }${OPTARG}"
 			;;
 
 		-D)
-			eval ${optargcmd}; resolvepath
+			eval ${optargcmd}; resolvepath OPTARG
 			setmakeenv DESTDIR "${OPTARG}"
-			;;
-
-		-d)
-			usage "'-d' has been replaced by 'distribution'"
 			;;
 
 		-E)
 			do_expertmode=true
-			;;
-
-		-i)
-			usage "'-i idir' has been replaced by 'install=idir'"
 			;;
 
 		-j)
@@ -636,13 +737,18 @@ parseoptions()
 			parallel="-j ${OPTARG}"
 			;;
 
-		-k)
-			usage "'-k conf' has been replaced by 'kernel=conf'"
-			;;
-
 		-M)
-			eval ${optargcmd}; resolvepath
-			makeobjdir="${OPTARG}"
+			eval ${optargcmd}; resolvepath OPTARG
+			case "${OPTARG}" in
+			\$*)	usage "-M argument must not begin with '$'"
+				;;
+			*\$*)	# can use resolvepath, but can't set TOP_objdir
+				resolvepath OPTARG
+				;;
+			*)	resolvepath OPTARG
+				TOP_objdir="${OPTARG}${TOP}"
+				;;
+			esac
 			unsetmakeenv MAKEOBJDIR
 			setmakeenv MAKEOBJDIRPREFIX "${OPTARG}"
 			;;
@@ -657,7 +763,7 @@ parseoptions()
 		-N)
 			eval ${optargcmd}
 			case "${OPTARG}" in
-			0|1|2)
+			0|1|2|3|4)
 				setmakeenv MAKEVERBOSE "${OPTARG}"
 				;;
 			*)
@@ -671,8 +777,14 @@ parseoptions()
 			;;
 
 		-O)
-			eval ${optargcmd}; resolvepath
-			makeobjdir="${OPTARG}"
+			eval ${optargcmd}
+			case "${OPTARG}" in
+			*\$*)	usage "-O argument must not contain '$'"
+				;;
+			*)	resolvepath OPTARG
+				TOP_objdir="${OPTARG}"
+				;;
+			esac
 			unsetmakeenv MAKEOBJDIRPREFIX
 			setmakeenv MAKEOBJDIR "\${.CURDIR:C,^$TOP,$OPTARG,}"
 			;;
@@ -682,7 +794,7 @@ parseoptions()
 			;;
 
 		-R)
-			eval ${optargcmd}; resolvepath
+			eval ${optargcmd}; resolvepath OPTARG
 			setmakeenv RELEASEDIR "${OPTARG}"
 			;;
 
@@ -691,14 +803,15 @@ parseoptions()
 			do_rebuildmake=true
 			;;
 
-		-T)
-			eval ${optargcmd}; resolvepath
-			TOOLDIR="${OPTARG}"
-			export TOOLDIR
+		-S)
+			eval ${optargcmd}
+			setmakeenv BUILDSEED "${OPTARG}"
 			;;
 
-		-t)
-			usage "'-t' has been replaced by 'tools'"
+		-T)
+			eval ${optargcmd}; resolvepath OPTARG
+			TOOLDIR="${OPTARG}"
+			export TOOLDIR
 			;;
 
 		-U)
@@ -723,17 +836,26 @@ parseoptions()
 			;;
 
 		-w)
-			eval ${optargcmd}; resolvepath
+			eval ${optargcmd}; resolvepath OPTARG
 			makewrapper="${OPTARG}"
 			;;
 
 		-X)
-			eval ${optargcmd}; resolvepath
+			eval ${optargcmd}; resolvepath OPTARG
 			setmakeenv X11SRCDIR "${OPTARG}"
 			;;
 
 		-x)
 			setmakeenv MKX11 yes
+			;;
+
+		-Y)
+			eval ${optargcmd}; resolvepath OPTARG
+			setmakeenv EXTSRCSRCDIR "${OPTARG}"
+			;;
+
+		-y)
+			setmakeenv MKEXTSRC yes
 			;;
 
 		-Z)
@@ -766,7 +888,7 @@ parseoptions()
 			usage
 			;;
 
-		makewrapper|obj|tools|build|distribution|release|sets|sourcesets|syspkgs|params)
+		makewrapper|cleandir|obj|tools|build|distribution|release|sets|sourcesets|syspkgs|params)
 			;;
 
 		iso-image)
@@ -784,11 +906,19 @@ parseoptions()
 			    bomb "Must supply a kernel name with \`${op}=...'"
 			;;
 
+		modules)
+			op=modules
+			;;
+
 		install=*)
 			arg=${op#*=}
 			op=${op%%=*}
 			[ -n "${arg}" ] ||
 			    bomb "Must supply a directory with \`install=...'"
+			;;
+
+		rump|rumptest)
+			op=${op}
 			;;
 
 		*)
@@ -840,19 +970,10 @@ sanitycheck()
 	esac
 }
 
-# Try to set a value for TOOLDIR.  This is difficult because of a cyclic
-# dependency: TOOLDIR may be affected by settings in /etc/mk.conf, so
-# we would like to use getmakevar to get the value of TOOLDIR, but we
-# can't use getmakevar before we have an up to date version of nbmake;
-# we might already have an up to date version of nbmake in TOOLDIR, but
-# we don't yet know where TOOLDIR is.
-#
-# In principle, we could break the cycle by building a copy of nbmake
-# in a temporary directory.  However, people who use the default value
-# of TOOLDIR do not like to have nbmake rebuilt every time they run
-# build.sh.
-#
-# We try to please everybody as follows:
+# print_tooldir_make --
+# Try to find and print a path to an existing
+# ${TOOLDIR}/bin/${toolprefix}make, for use by rebuildmake() before a
+# new version of ${toolprefix}make has been built.
 #
 # * If TOOLDIR was set in the environment or on the command line, use
 #   that value.
@@ -864,57 +985,142 @@ sanitycheck()
 #   in the PATH (this might accidentally find a non-NetBSD version of
 #   make, which will lead to failure in the next step);
 # * If a copy of make was found above, try to use it with
-#   nobomb_getmakevar to find the correct value for TOOLDIR;
-# * If all else fails, leave TOOLDIR unset.  Our caller is expected to
-#   be able to cope with this.
+#   nobomb_getmakevar to find the correct value for TOOLDIR, and believe the
+#   result only if it's a directory that already exists;
+# * If a value of TOOLDIR was found above, and if
+#   ${TOOLDIR}/bin/${toolprefix}make exists, print that value.
 #
-try_set_TOOLDIR()
+print_tooldir_make()
 {
-	[ -n "${TOOLDIR}" ] && return
+	local possible_TOP_OBJ
+	local possible_TOOLDIR
+	local possible_make
+	local tooldir_make
 
-	# Set guess_TOOLDIR, in the same way that <bsd.own.mk> would set
-	# TOOLDIR if /etc/mk.conf sisn't interfere.
-	local topobjdir="${TOP}"
-	[ -n "${makeobjdir}" ] && topobjdir="${topobjdir}/${makeobjdir}"
+	if [ -n "${TOOLDIR}" ]; then
+		echo "${TOOLDIR}/bin/${toolprefix}make"
+		return 0
+	fi
+
+	# Set host_ostype to something like "NetBSD-4.5.6-i386".  This
+	# is intended to match the HOST_OSTYPE variable in <bsd.own.mk>.
+	#
 	local host_ostype="${uname_s}-$(
 		echo "${uname_r}" | sed -e 's/([^)]*)//g' -e 's/ /_/g'
-		)$(
+		)-$(
 		echo "${uname_p}" | sed -e 's/([^)]*)//g' -e 's/ /_/g'
 		)"
-	local guess_TOOLDIR="${topobjdir}/tooldir.${host_ostype}"
 
-	# Look for a suitable ${toolprefix}make, nbmake, bmake, or make.
-	guess_make="${guess_TOOLDIR}/bin/${toolprefix}make"
-	[ -x "${guess_make}" ] || guess_make=""
-	: ${guess_make:=$(find_in_PATH ${toolprefix}make '')}
-	: ${guess_make:=$(find_in_PATH nbmake '')}
-	: ${guess_make:=$(find_in_PATH bmake '')}
-	: ${guess_make:=$(find_in_PATH make '')}
+	# Look in a few potential locations for
+	# ${possible_TOOLDIR}/bin/${toolprefix}make.
+	# If we find it, then set possible_make.
+	#
+	# In the usual case (without interference from environment
+	# variables or /etc/mk.conf), <bsd.own.mk> should set TOOLDIR to
+	# "${_SRC_TOP_OBJ_}/tooldir.${host_ostype}".
+	#
+	# In practice it's difficult to figure out the correct value
+	# for _SRC_TOP_OBJ_.  In the easiest case, when the -M or -O
+	# options were passed to build.sh, then ${TOP_objdir} will be
+	# the correct value.  We also try a few other possibilities, but
+	# we do not replicate all the logic of <bsd.obj.mk>.
+	#
+	for possible_TOP_OBJ in \
+		"${TOP_objdir}" \
+		"${MAKEOBJDIRPREFIX:+${MAKEOBJDIRPREFIX}${TOP}}" \
+		"${TOP}" \
+		"${TOP}/obj" \
+		"${TOP}/obj.${MACHINE}"
+	do
+		[ -n "${possible_TOP_OBJ}" ] || continue
+		possible_TOOLDIR="${possible_TOP_OBJ}/tooldir.${host_ostype}"
+		possible_make="${possible_TOOLDIR}/bin/${toolprefix}make"
+		if [ -x "${possible_make}" ]; then
+			break
+		else
+			unset possible_make
+		fi
+	done
 
-	# Use ${guess_make} with nobomb_getmakevar
-	if [ -x "${guess_make}" ]; then
-		TOOLDIR=$(make="${guess_make}" nobomb_getmakevar TOOLDIR)
-		[ -n "${TOOLDIR}" ] || unset TOOLDIR
+	# If the above didn't work, search the PATH for a suitable
+	# ${toolprefix}make, nbmake, bmake, or make.
+	#
+	: ${possible_make:=$(find_in_PATH ${toolprefix}make '')}
+	: ${possible_make:=$(find_in_PATH nbmake '')}
+	: ${possible_make:=$(find_in_PATH bmake '')}
+	: ${possible_make:=$(find_in_PATH make '')}
+
+	# At this point, we don't care whether possible_make is in the
+	# correct TOOLDIR or not; we simply want it to be usable by
+	# getmakevar to help us find the correct TOOLDIR.
+	#
+	# Use ${possible_make} with nobomb_getmakevar to try to find
+	# the value of TOOLDIR.  Believe the result only if it's
+	# a directory that already exists and contains bin/${toolprefix}make.
+	#
+	if [ -x "${possible_make}" ]; then
+		possible_TOOLDIR="$(
+			make="${possible_make}" nobomb_getmakevar TOOLDIR
+			)"
+		if [ $? = 0 ] && [ -n "${possible_TOOLDIR}" ] \
+		    && [ -d "${possible_TOOLDIR}" ];
+		then
+			tooldir_make="${possible_TOOLDIR}/bin/${toolprefix}make"
+			if [ -x "${tooldir_make}" ]; then
+				echo "${tooldir_make}"
+				return 0
+			fi
+		fi
 	fi
+	return 1
 }
 
+# rebuildmake --
+# Rebuild nbmake in a temporary directory if necessary.  Sets $make
+# to a path to the nbmake executable.  Sets done_rebuildmake=true
+# if nbmake was rebuilt.
+#
+# There is a cyclic dependency between building nbmake and choosing
+# TOOLDIR: TOOLDIR may be affected by settings in /etc/mk.conf, so we
+# would like to use getmakevar to get the value of TOOLDIR; but we can't
+# use getmakevar before we have an up to date version of nbmake; we
+# might already have an up to date version of nbmake in TOOLDIR, but we
+# don't yet know where TOOLDIR is.
+#
+# The default value of TOOLDIR also depends on the location of the top
+# level object directory, so $(getmakevar TOOLDIR) invoked before or
+# after making the top level object directory may produce different
+# results.
+#
+# Strictly speaking, we should do the following:
+#
+#    1. build a new version of nbmake in a temporary directory;
+#    2. use the temporary nbmake to create the top level obj directory;
+#    3. use $(getmakevar TOOLDIR) with the temporary nbmake to
+#       get the corect value of TOOLDIR;
+#    4. move the temporary nbmake to ${TOOLDIR}/bin/nbmake.
+#
+# However, people don't like building nbmake unnecessarily if their
+# TOOLDIR has not changed since an earlier build.  We try to avoid
+# rebuilding a temporary version of nbmake by taking some shortcuts to
+# guess a value for TOOLDIR, looking for an existing version of nbmake
+# in that TOOLDIR, and checking whether that nbmake is newer than the
+# sources used to build it.
+#
 rebuildmake()
 {
-	# Test make source file timestamps against installed ${toolprefix}make
-	# binary, if TOOLDIR is pre-set or if try_set_TOOLDIR can set it.
-	#
-	try_set_TOOLDIR
-	make="${TOOLDIR-nonexistent}/bin/${toolprefix}make"
-	if [ -x "${make}" ]; then
+	make="$(print_tooldir_make)"
+	if [ -n "${make}" ] && [ -x "${make}" ]; then
 		for f in usr.bin/make/*.[ch] usr.bin/make/lst.lib/*.[ch]; do
 			if [ "${f}" -nt "${make}" ]; then
-				statusmsg "${make} outdated (older than ${f}), needs building."
+				statusmsg "${make} outdated" \
+					"(older than ${f}), needs building."
 				do_rebuildmake=true
 				break
 			fi
 		done
 	else
-		statusmsg "No ${make}, needs building."
+		statusmsg "No \$TOOLDIR/bin/${toolprefix}make, needs building."
 		do_rebuildmake=true
 	fi
 
@@ -931,6 +1137,7 @@ rebuildmake()
 		make="${tmpdir}/${toolprefix}make"
 		${runcmd} cd "${TOP}"
 		${runcmd} rm -f usr.bin/make/*.o usr.bin/make/lst.lib/*.o
+		done_rebuildmake=true
 	fi
 }
 
@@ -940,8 +1147,8 @@ validatemakeparams()
 		TOOLCHAIN_MISSING=no
 		EXTERNAL_TOOLCHAIN=""
 	else
-		TOOLCHAIN_MISSING=$(raw_getmakevar TOOLCHAIN_MISSING)
-		EXTERNAL_TOOLCHAIN=$(raw_getmakevar EXTERNAL_TOOLCHAIN)
+		TOOLCHAIN_MISSING=$(bomb_getmakevar TOOLCHAIN_MISSING)
+		EXTERNAL_TOOLCHAIN=$(bomb_getmakevar EXTERNAL_TOOLCHAIN)
 	fi
 	if [ "${TOOLCHAIN_MISSING}" = "yes" ] && \
 	   [ -z "${EXTERNAL_TOOLCHAIN}" ]; then
@@ -966,18 +1173,39 @@ validatemakeparams()
 	MKUPDATE=$(getmakevar MKUPDATE)
 
 	if [ "${MKOBJDIRS}" != "no" ]; then
-		# If setting -M or -O to the root of an obj dir, make sure
-		# the base directory is made before continuing as <bsd.own.mk>
-		# will need this to pick up _SRC_TOP_OBJ_
+		# Create the top-level object directory.
 		#
-		if [ ! -z "${makeobjdir}" ]; then
-			${runcmd} mkdir -p "${makeobjdir}"
+		# "make obj NOSUBDIR=" can handle most cases, but it
+		# can't handle the case where MAKEOBJDIRPREFIX is set
+		# while the corresponding directory does not exist
+		# (rules in <bsd.obj.mk> would abort the build).  We
+		# therefore have to handle the MAKEOBJDIRPREFIX case
+		# without invoking "make obj".  The MAKEOBJDIR case
+		# could be handled either way, but we choose to handle
+		# it similarly to MAKEOBJDIRPREFIX.
+		#
+		if [ -n "${TOP_obj}" ]; then
+			# It must have been set by the "-M" or "-O"
+			# command line options, so there's no need to
+			# use getmakevar
+			:
+		elif [ -n "$MAKEOBJDIRPREFIX" ]; then
+			TOP_obj="$(getmakevar MAKEOBJDIRPREFIX)${TOP}"
+		elif [ -n "$MAKEOBJDIR" ]; then
+			TOP_obj="$(getmakevar MAKEOBJDIR)"
+		fi
+		if [ -n "$TOP_obj" ]; then
+			${runcmd} mkdir -p "${TOP_obj}" ||
+			    bomb "Can't create top level object directory" \
+					"${TOP_obj}"
+		else
+			${runcmd} "${make}" -m ${TOP}/share/mk obj NOSUBDIR= ||
+			    bomb "Can't create top level object directory" \
+					"using make obj"
 		fi
 
-		# make obj in tools to ensure that the objdir for the top-level
-		# of the source tree and for "tools" is available, in case the
-		# default TOOLDIR setting from <bsd.own.mk> is used, or the
-		# build.sh default DESTDIR and RELEASEDIR is to be used.
+		# make obj in tools to ensure that the objdir for "tools"
+		# is available.
 		#
 		${runcmd} cd tools
 		${runcmd} "${make}" -m ${TOP}/share/mk obj NOSUBDIR= ||
@@ -985,21 +1213,40 @@ validatemakeparams()
 		${runcmd} cd "${TOP}"
 	fi
 
-	# Find TOOLDIR, DESTDIR, and RELEASEDIR.
+	# Find TOOLDIR, DESTDIR, and RELEASEDIR, according to getmakevar,
+	# and bomb if they have changed from the values we had from the
+	# command line or environment.
 	#
-	TOOLDIR=$(getmakevar TOOLDIR)
-	statusmsg "TOOLDIR path:     ${TOOLDIR}"
-	DESTDIR=$(getmakevar DESTDIR)
-	RELEASEDIR=$(getmakevar RELEASEDIR)
-	if ! $do_expertmode; then
-		_SRC_TOP_OBJ_=$(getmakevar _SRC_TOP_OBJ_)
-		: ${DESTDIR:=${_SRC_TOP_OBJ_}/destdir.${MACHINE}}
-		: ${RELEASEDIR:=${_SRC_TOP_OBJ_}/releasedir}
-		makeenv="${makeenv} DESTDIR RELEASEDIR"
-	fi
-	export TOOLDIR DESTDIR RELEASEDIR
-	statusmsg "DESTDIR path:     ${DESTDIR}"
-	statusmsg "RELEASEDIR path:  ${RELEASEDIR}"
+	# This must be done after creating the top-level object directory.
+	#
+	for var in TOOLDIR DESTDIR RELEASEDIR
+	do
+		eval oldval=\"\$${var}\"
+		newval="$(getmakevar $var)"
+		if ! $do_expertmode; then
+			: ${_SRC_TOP_OBJ_:=$(getmakevar _SRC_TOP_OBJ_)}
+			case "$var" in
+			DESTDIR)
+				: ${newval:=${_SRC_TOP_OBJ_}/destdir.${MACHINE}}
+				makeenv="${makeenv} DESTDIR"
+				;;
+			RELEASEDIR)
+				: ${newval:=${_SRC_TOP_OBJ_}/releasedir}
+				makeenv="${makeenv} RELEASEDIR"
+				;;
+			esac
+		fi
+		if [ -n "$oldval" ] && [ "$oldval" != "$newval" ]; then
+			bomb "Value of ${var} has changed" \
+				"(was \"${oldval}\", now \"${newval}\")"
+		fi
+		eval ${var}=\"\${newval}\"
+		eval export ${var}
+		statusmsg2 "${var} path:" "${newval}"
+	done
+
+	# RELEASEMACHINEDIR is just a subdir name, e.g. "i386".
+	RELEASEMACHINEDIR=$(getmakevar RELEASEMACHINEDIR)
 
 	# Check validity of TOOLDIR and DESTDIR.
 	#
@@ -1029,14 +1276,47 @@ validatemakeparams()
 	fi
 	if ${do_build} || ${do_distribution} || ${do_release}; then
 		if ! ${do_expertmode} && \
-		    [ "$(id -u 2>/dev/null)" -ne 0 ] && \
+		    [ "$id_u" -ne 0 ] && \
 		    [ "${MKUNPRIVED}" = "no" ] ; then
 			bomb "-U or -E must be set for build as an unprivileged user."
 		fi
-        fi
+	fi
 	if ${do_releasekernel} && [ -z "${RELEASEDIR}" ]; then
 		bomb "Must set RELEASEDIR with \`releasekernel=...'"
 	fi
+
+	# Install as non-root is a bad idea.
+	#
+	if ${do_install} && [ "$id_u" -ne 0 ] ; then
+		if ${do_expertmode}; then
+			warning "Will install as an unprivileged user."
+		else
+			bomb "-E must be set for install as an unprivileged user."
+		fi
+	fi
+
+	# If a previous build.sh run used -U (and therefore created a
+	# METALOG file), then most subsequent build.sh runs must also
+	# use -U.  If DESTDIR is about to be removed, then don't perform
+	# this check.
+	#
+	case "${do_removedirs} ${removedirs} " in
+	true*" ${DESTDIR} "*)
+		# DESTDIR is about to be removed
+		;;
+	*)
+		if ( ${do_build} || ${do_distribution} || ${do_release} || \
+		    ${do_install} ) && \
+		    [ -e "${DESTDIR}/METALOG" ] && \
+		    [ "${MKUNPRIVED}" = "no" ] ; then
+			if $do_expertmode; then
+				warning "A previous build.sh run specified -U."
+			else
+				bomb "A previous build.sh run specified -U; you must specify it again now."
+			fi
+		fi
+		;;
+	esac
 }
 
 
@@ -1056,9 +1336,22 @@ createmakewrapper()
 	${runcmd} mkdir -p "${TOOLDIR}/bin" ||
 	    bomb "mkdir of '${TOOLDIR}/bin' failed"
 
+	# If we did not previously rebuild ${toolprefix}make, then
+	# check whether $make is still valid and the same as the output
+	# from print_tooldir_make.  If not, then rebuild make now.  A
+	# possible reason for this being necessary is that the actual
+	# value of TOOLDIR might be different from the value guessed
+	# before the top level obj dir was created.
+	#
+	if ! ${done_rebuildmake} && \
+	    ( [ ! -x "$make" ] || [ "$make" != "$(print_tooldir_make)" ] )
+	then
+		rebuildmake
+	fi
+
 	# Install ${toolprefix}make if it was built.
 	#
-	if ${do_rebuildmake}; then
+	if ${done_rebuildmake}; then
 		${runcmd} rm -f "${TOOLDIR}/bin/${toolprefix}make"
 		${runcmd} cp "${make}" "${TOOLDIR}/bin/${toolprefix}make" ||
 		    bomb "Failed to install \$TOOLDIR/bin/${toolprefix}make"
@@ -1091,7 +1384,7 @@ createmakewrapper()
 	eval cat <<EOF ${makewrapout}
 #! ${HOST_SH}
 # Set proper variables to allow easy "make" building of a NetBSD subtree.
-# Generated from:  \$NetBSD: build.sh,v 1.182 2008/01/09 11:25:58 simonb Exp $
+# Generated from:  \$NetBSD: build.sh,v 1.244 2011/01/26 01:18:43 pooka Exp $
 # with these arguments: ${_args}
 #
 
@@ -1116,8 +1409,19 @@ exec "\${TOOLDIR}/bin/${toolprefix}make" \${1+"\$@"}
 EOF
 	[ "${runcmd}" = "echo" ] && echo EOF
 	${runcmd} chmod +x "${makewrapper}"
-	statusmsg "makewrapper:      ${makewrapper}"
-	statusmsg "Updated ${makewrapper}"
+	statusmsg2 "Updated makewrapper:" "${makewrapper}"
+}
+
+make_in_dir()
+{
+	dir="$1"
+	op="$2"
+	${runcmd} cd "${dir}" ||
+	    bomb "Failed to cd to \"${dir}\""
+	${runcmd} "${makewrapper}" ${parallel} ${op} ||
+	    bomb "Failed to make ${op} in \"${dir}\""
+	${runcmd} cd "${TOP}" ||
+	    bomb "Failed to cd back to \"${TOP}\""
 }
 
 buildtools()
@@ -1126,17 +1430,12 @@ buildtools()
 		${runcmd} "${makewrapper}" ${parallel} obj-tools ||
 		    bomb "Failed to make obj-tools"
 	fi
-	${runcmd} cd tools
 	if [ "${MKUPDATE}" = "no" ]; then
-		${runcmd} "${makewrapper}" ${parallel} cleandir ||
-		    bomb "Failed to make cleandir tools"
+		make_in_dir tools cleandir
 	fi
-	${runcmd} "${makewrapper}" ${parallel} dependall ||
-	    bomb "Failed to make dependall tools"
-	${runcmd} "${makewrapper}" ${parallel} install ||
-	    bomb "Failed to make install tools"
+	make_in_dir tools dependall
+	make_in_dir tools install
 	statusmsg "Tools built to ${TOOLDIR}"
-	${runcmd} cd "${TOP}"
 }
 
 getkernelconf()
@@ -1149,10 +1448,7 @@ getkernelconf()
 		#
 		KERNSRCDIR="$(getmakevar KERNSRCDIR)"
 		KERNARCHDIR="$(getmakevar KERNARCHDIR)"
-		${runcmd} cd "${KERNSRCDIR}/${KERNARCHDIR}/compile"
-		${runcmd} "${makewrapper}" ${parallel} obj ||
-		    bomb "Failed to make obj in ${KERNSRCDIR}/${KERNARCHDIR}/compile"
-		${runcmd} cd "${TOP}"
+		make_in_dir "${KERNSRCDIR}/${KERNARCHDIR}/compile" obj
 	fi
 	KERNCONFDIR="$(getmakevar KERNCONFDIR)"
 	KERNOBJDIR="$(getmakevar KERNOBJDIR)"
@@ -1182,27 +1478,20 @@ buildkernel()
 		buildkernelwarned=true
 	fi
 	getkernelconf $1
-	statusmsg "Building kernel:  ${kernelconf}"
-	statusmsg "Build directory:  ${kernelbuildpath}"
+	statusmsg2 "Building kernel:" "${kernelconf}"
+	statusmsg2 "Build directory:" "${kernelbuildpath}"
 	${runcmd} mkdir -p "${kernelbuildpath}" ||
 	    bomb "Cannot mkdir: ${kernelbuildpath}"
 	if [ "${MKUPDATE}" = "no" ]; then
-		${runcmd} cd "${kernelbuildpath}"
-		${runcmd} "${makewrapper}" ${parallel} cleandir ||
-		    bomb "Failed to make cleandir in ${kernelbuildpath}"
-		${runcmd} cd "${TOP}"
+		make_in_dir "${kernelbuildpath}" cleandir
 	fi
 	[ -x "${TOOLDIR}/bin/${toolprefix}config" ] \
 	|| bomb "${TOOLDIR}/bin/${toolprefix}config does not exist. You need to \"$0 tools\" first."
 	${runcmd} "${TOOLDIR}/bin/${toolprefix}config" -b "${kernelbuildpath}" \
 		-s "${TOP}/sys" "${kernelconfpath}" ||
 	    bomb "${toolprefix}config failed for ${kernelconf}"
-	${runcmd} cd "${kernelbuildpath}"
-	${runcmd} "${makewrapper}" ${parallel} depend ||
-	    bomb "Failed to make depend in ${kernelbuildpath}"
-	${runcmd} "${makewrapper}" ${parallel} all ||
-	    bomb "Failed to make all in ${kernelbuildpath}"
-	${runcmd} cd "${TOP}"
+	make_in_dir "${kernelbuildpath}" depend
+	make_in_dir "${kernelbuildpath}" all
 
 	if [ "${runcmd}" != "echo" ]; then
 		statusmsg "Kernels built from ${kernelconf}:"
@@ -1217,16 +1506,45 @@ buildkernel()
 releasekernel()
 {
 	getkernelconf $1
-	kernelreldir="${RELEASEDIR}/${MACHINE}/binary/kernel"
+	kernelreldir="${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/kernel"
 	${runcmd} mkdir -p "${kernelreldir}"
 	kernlist=$(awk '$1 == "config" { print $2 }' ${kernelconfpath})
 	for kern in ${kernlist:-netbsd}; do
 		builtkern="${kernelbuildpath}/${kern}"
 		[ -f "${builtkern}" ] || continue
 		releasekern="${kernelreldir}/${kern}-${kernelconfname}.gz"
-		statusmsg "Kernel copy:      ${releasekern}"
-		${runcmd} gzip -c -9 < "${builtkern}" > "${releasekern}"
+		statusmsg2 "Kernel copy:" "${releasekern}"
+		if [ "${runcmd}" = "echo" ]; then
+			echo "gzip -c -9 < ${builtkern} > ${releasekern}"
+		else
+			gzip -c -9 < "${builtkern}" > "${releasekern}"
+		fi
 	done
+}
+
+buildmodules()
+{
+	setmakeenv MKBINUTILS no
+	if ! ${do_tools} && ! ${buildmoduleswarned:-false}; then
+		# Building tools every time we build modules is clearly
+		# unnecessary as well as a kernel.
+		#
+		statusmsg "Building modules without building new tools"
+		buildmoduleswarned=true
+	fi
+
+	statusmsg "Building kernel modules for NetBSD/${MACHINE} ${DISTRIBVER}"
+	if [ "${MKOBJDIRS}" != "no" ]; then
+		make_in_dir sys/modules obj ||
+		    bomb "Failed to make obj in sys/modules"
+	fi
+	if [ "${MKUPDATE}" = "no" ]; then
+		make_in_dir sys/modules cleandir
+	fi
+	${runcmd} "${makewrapper}" ${parallel} do-sys-modules ||
+	    bomb "Failed to make do-sys-modules"
+
+	statusmsg "Successful build of kernel modules for NetBSD/${MACHINE} ${DISTRIBVER}"
 }
 
 installworld()
@@ -1237,6 +1555,99 @@ installworld()
 	statusmsg "Successful installworld to ${dir}"
 }
 
+# Run rump build&link tests.
+#
+# To make this feasible for running without having to install includes and
+# libraries into destdir (i.e. quick), we only run ld.  This is possible
+# since the rump kernel is a closed namespace apart from calls to rumpuser.
+# Therefore, if ld complains only about rumpuser symbols, rump kernel
+# linking was successful.
+# 
+# We test that rump links with a number of component configurations.
+# These attempt to mimic what is encountered in the full build.
+# See list below.  The list should probably be either autogenerated
+# or managed elsewhere.  But keep it here until a better idea arises.
+#
+# Above all, note that THIS IS NOT A SUBSTITUTE FOR A FULL BUILD.
+#
+
+RUMP_LIBSETS='
+	-lrump,
+	-lrumpvfs -lrump,
+	-lrumpdev -lrump,
+	-lrumpnet -lrump,
+	-lrumpkern_tty -lrumpvfs -lrump,
+	-lrumpfs_tmpfs -lrumpvfs -lrump,
+	-lrumpfs_ffs -lrumpfs_msdos -lrumpvfs -lrumpdev_disk -lrumpdev -lrump,
+	-lrumpnet_virtif -lrumpnet_netinet -lrumpnet_net -lrumpnet -lrump,
+	-lrumpnet_sockin -lrumpfs_smbfs -lrumpdev_netsmb
+	    -lrumpkern_crypto -lrumpdev -lrumpnet -lrumpvfs -lrump,
+	-lrumpnet_sockin -lrumpfs_nfs -lrumpnet -lrumpvfs -lrump,
+	-lrumpdev_cgd -lrumpdev_raidframe -lrumpdev_disk -lrumpdev_rnd
+	    -lrumpdev_dm -lrumpdev -lrumpvfs -lrumpkern_crypto -lrump'
+dorump()
+{
+	local doclean=""
+	local doobjs=""
+
+	# we cannot link libs without building csu, and that leads to lossage
+	[ "${1}" != "rumptest" ] && bomb 'build.sh rump not yet functional. ' \
+	    'did you mean "rumptest"?'
+
+	# create obj and distrib dirs
+	if [ "${MKOBJDIRS}" != "no" ]; then
+		make_in_dir "${NETBSDSRCDIR}/etc/mtree" obj
+		make_in_dir "${NETBSDSRCDIR}/sys/rump" obj
+	fi
+	${runcmd} "${makewrapper}" ${parallel} do-distrib-dirs \
+	    || bomb 'could not create distrib-dirs'
+
+	[ "${MKUPDATE}" = "no" ] && doclean="cleandir"
+	targlist="${doclean} ${doobjs} dependall install"
+	# optimize: for test we build only static libs (3x test speedup)
+	if [ "${1}" = "rumptest" ] ; then
+		setmakeenv NOPIC 1
+		setmakeenv NOPROFILE 1
+	fi
+	for cmd in ${targlist} ; do
+		make_in_dir "${NETBSDSRCDIR}/sys/rump" ${cmd}
+	done
+
+	# if we just wanted to build & install rump, we're done
+	[ "${1}" != "rumptest" ] && return
+
+	${runcmd} cd "${NETBSDSRCDIR}/sys/rump/librump/rumpkern" \
+	    || bomb "cd to rumpkern failed"
+	md_quirks=`${runcmd} "${makewrapper}" -V '${_SYMQUIRK}'`
+	# one little, two little, three little backslashes ...
+	md_quirks="$(echo ${md_quirks} | sed 's,\\,\\\\,g'";s/'//g" )"
+	${runcmd} cd "${TOP}" || bomb "cd to ${TOP} failed"
+	tool_ld=`${runcmd} "${makewrapper}" -V '${LD}'`
+
+	local oIFS="${IFS}"
+	IFS=","
+	for set in ${RUMP_LIBSETS} ; do
+		IFS="${oIFS}"
+		${runcmd} ${tool_ld} -nostdlib -L${DESTDIR}/usr/lib	\
+		    -static --whole-archive ${set} 2>&1 -o /tmp/rumptest.$$ | \
+		      awk -v quirks="${md_quirks}" '
+			/undefined reference/ &&
+			    !/more undefined references.*follow/{
+				if (match($NF,
+				    "`(rumpuser_|__" quirks ")") == 0)
+					fails[NR] = $0
+			}
+			/cannot find -l/{fails[NR] = $0}
+			/cannot open output file/{fails[NR] = $0}
+			END{
+				for (x in fails)
+					print fails[x]
+				exit x!=0
+			}'
+		[ $? -ne 0 ] && bomb "Testlink of rump failed: ${set}"
+	done
+	statusmsg "Rump build&link tests successful"
+}
 
 main()
 {
@@ -1247,13 +1658,13 @@ main()
 	sanitycheck
 
 	build_start=$(date)
-	statusmsg "${progname} command: $0 $@"
-	statusmsg "${progname} started: ${build_start}"
-	statusmsg "NetBSD version:   ${DISTRIBVER}"
-	statusmsg "MACHINE:          ${MACHINE}"
-	statusmsg "MACHINE_ARCH:     ${MACHINE_ARCH}"
-	statusmsg "Build platform:   ${uname_s} ${uname_r} ${uname_m}"
-	statusmsg "HOST_SH:          ${HOST_SH}"
+	statusmsg2 "${progname} command:" "$0 $*"
+	statusmsg2 "${progname} started:" "${build_start}"
+	statusmsg2 "NetBSD version:"   "${DISTRIBVER}"
+	statusmsg2 "MACHINE:"          "${MACHINE}"
+	statusmsg2 "MACHINE_ARCH:"     "${MACHINE_ARCH}"
+	statusmsg2 "Build platform:"   "${uname_s} ${uname_r} ${uname_m}"
+	statusmsg2 "HOST_SH:"          "${HOST_SH}"
 
 	rebuildmake
 	validatemakeparams
@@ -1276,10 +1687,11 @@ main()
 			statusmsg "Building sets from pre-populated ${DESTDIR}"
 			${runcmd} "${makewrapper}" ${parallel} ${op} ||
 			    bomb "Failed to make ${op}"
-			statusmsg "Successful make ${op}"
+			setdir=${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/sets
+			statusmsg "Built sets to ${setdir}"
 			;;
 
-		obj|build|distribution|release|sourcesets|syspkgs|params)
+		cleandir|obj|build|distribution|release|sourcesets|syspkgs|params)
 			${runcmd} "${makewrapper}" ${parallel} ${op} ||
 			    bomb "Failed to make ${op}"
 			statusmsg "Successful make ${op}"
@@ -1287,7 +1699,7 @@ main()
 
 		iso-image|iso-image-source)
 			${runcmd} "${makewrapper}" ${parallel} \
-			    CDEXTRA=$iso_dir ${op} ||
+			    CDEXTRA="$CDEXTRA" ${op} ||
 			    bomb "Failed to make ${op}"
 			statusmsg "Successful make ${op}"
 			;;
@@ -1302,6 +1714,10 @@ main()
 			releasekernel "${arg}"
 			;;
 
+		modules)
+			buildmodules
+			;;
+
 		install=*)
 			arg=${op#*=}
 			if [ "${arg}" = "/" ] && \
@@ -1312,6 +1728,10 @@ main()
 			installworld "${arg}"
 			;;
 
+		rump|rumptest)
+			dorump "${op}"
+			;;
+
 		*)
 			bomb "Unknown operation \`${op}'"
 			;;
@@ -1319,7 +1739,7 @@ main()
 		esac
 	done
 
-	statusmsg "${progname} ended:   $(date)"
+	statusmsg2 "${progname} ended:" "$(date)"
 	if [ -s "${results}" ]; then
 		echo "===> Summary of results:"
 		sed -e 's/^===>//;s/^/	/' "${results}"

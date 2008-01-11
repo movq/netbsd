@@ -1,4 +1,4 @@
-/*	$NetBSD: db_memrw.c,v 1.22 2007/10/18 15:28:35 yamt Exp $	*/
+/*	$NetBSD: db_memrw.c,v 1.25 2009/03/10 20:05:30 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1996, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -56,7 +49,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_memrw.c,v 1.22 2007/10/18 15:28:35 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_memrw.c,v 1.25 2009/03/10 20:05:30 bouyer Exp $");
+
+#include "opt_xen.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -66,7 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_memrw.c,v 1.22 2007/10/18 15:28:35 yamt Exp $");
 
 #include <machine/db_machdep.h>
 #if defined(XEN)
-#include <machine/xenpmap.h>
+#include <xen/xenpmap.h>
 #endif
 
 #include <ddb/db_access.h>
@@ -117,11 +112,7 @@ db_write_text(vaddr_t addr, size_t size, const char *data)
 		 * Get the PTE for the page.
 		 */
 		pte = kvtopte(addr);
-#if defined(XEN)
-		oldpte = PTE_GET_MA(pte);
-#else
 		oldpte = *pte;
-#endif
 
 		if ((oldpte & PG_V) == 0) {
 			printf(" address %p not a valid page\n", dst);
@@ -134,7 +125,7 @@ db_write_text(vaddr_t addr, size_t size, const char *data)
 		if (oldpte & PG_PS)
 			pgva = (vaddr_t)dst & PG_LGFRAME;
 		else
-			pgva = x86_trunc_page(dst);
+			pgva = x86_trunc_page((vaddr_t)dst);
 
 		/*
 		 * Compute number of bytes that can be written
@@ -150,11 +141,8 @@ db_write_text(vaddr_t addr, size_t size, const char *data)
 		size -= limit;
 
 		tmppte = (oldpte & ~PG_KR) | PG_KW;
-#if defined(XEN)
-		PTE_SET_MA(pte, (pt_entry_t *)vtomach((vaddr_t)pte), tmppte);
-#else
-		*pte = tmppte;
-#endif
+		pmap_pte_set(pte, tmppte);
+		pmap_pte_flush();
 		pmap_update_pg(pgva);
 		/*
 		 * MULTIPROCESSOR: no shootdown required as the PTE continues to
@@ -171,12 +159,8 @@ db_write_text(vaddr_t addr, size_t size, const char *data)
 		/*
 		 * Restore the old PTE.
 		 */
-#if defined(XEN)
-		PTE_SET_MA(pte, (pt_entry_t *)vtomach((vaddr_t)pte), oldpte);
-#else
-		*pte = oldpte;
-#endif
-
+		pmap_pte_set(pte, oldpte);
+		pmap_pte_flush();
 #if 0 
 		/*
 		 * XXXSMP Not clear if this is needed for 100% correctness.

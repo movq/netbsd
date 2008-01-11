@@ -1,4 +1,4 @@
-/*	$NetBSD: rfcomm_session.c,v 1.11 2007/11/03 17:20:17 plunky Exp $	*/
+/*	$NetBSD: rfcomm_session.c,v 1.17 2010/11/17 20:19:25 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,12 +32,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rfcomm_session.c,v 1.11 2007/11/03 17:20:17 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rfcomm_session.c,v 1.17 2010/11/17 20:19:25 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/mbuf.h>
 #include <sys/proc.h>
+#include <sys/socketvar.h>
 #include <sys/systm.h>
 #include <sys/types.h>
 
@@ -94,8 +95,7 @@ struct rfcomm_session_list
 struct rfcomm_session_list
 	rfcomm_session_listen = LIST_HEAD_INITIALIZER(rfcomm_session_listen);
 
-POOL_INIT(rfcomm_credit_pool, sizeof(struct rfcomm_credit),
-		0, 0, 0, "rfcomm_credit", NULL, IPL_SOFTNET);
+static struct pool rfcomm_credit_pool;
 
 /*
  * RFCOMM System Parameters (see section 5.3)
@@ -151,6 +151,14 @@ static const uint8_t crctable[256] = {	/* reversed, 8-bit, poly=0x07 */
 
 #define FCS(f, d)	crctable[(f) ^ (d)]
 
+void
+rfcomm_init(void)
+{
+
+	pool_init(&rfcomm_credit_pool, sizeof(struct rfcomm_credit),
+	    0, 0, 0, "rfcomm_credit", NULL, IPL_SOFTNET);
+}
+
 /*
  * rfcomm_session_alloc(list, sockaddr)
  *
@@ -162,6 +170,7 @@ rfcomm_session_alloc(struct rfcomm_session_list *list,
 			struct sockaddr_bt *laddr)
 {
 	struct rfcomm_session *rs;
+	struct sockopt sopt;
 	int err;
 
 	rs = malloc(sizeof(*rs), M_BLUETOOTH, M_NOWAIT | M_ZERO);
@@ -182,7 +191,10 @@ rfcomm_session_alloc(struct rfcomm_session_list *list,
 		return NULL;
 	}
 
-	(void)l2cap_getopt(rs->rs_l2cap, SO_L2CAP_OMTU, &rs->rs_mtu);
+	sockopt_init(&sopt, BTPROTO_L2CAP, SO_L2CAP_OMTU, 0);
+	(void)l2cap_getopt(rs->rs_l2cap, &sopt);
+	(void)sockopt_get(&sopt, &rs->rs_mtu, sizeof(rs->rs_mtu));
+	sockopt_destroy(&sopt);
 
 	if (laddr->bt_psm == L2CAP_PSM_ANY)
 		laddr->bt_psm = L2CAP_PSM_RFCOMM;
@@ -228,8 +240,6 @@ rfcomm_session_free(struct rfcomm_session *rs)
 
 	rs->rs_flags |= RFCOMM_SESSION_FREE;
 
-	callout_destroy(&rs->rs_timeout);
-
 	/* throw away any remaining credit notes */
 	while ((credit = SIMPLEQ_FIRST(&rs->rs_credits)) != NULL) {
 		SIMPLEQ_REMOVE_HEAD(&rs->rs_credits, rc_next);
@@ -241,6 +251,7 @@ rfcomm_session_free(struct rfcomm_session *rs)
 	/* Goodbye! */
 	LIST_REMOVE(rs, rs_next);
 	l2cap_detach(&rs->rs_l2cap);
+	callout_destroy(&rs->rs_timeout);
 	free(rs, M_BLUETOOTH);
 }
 
@@ -293,11 +304,10 @@ rfcomm_session_timeout(void *arg)
 {
 	struct rfcomm_session *rs = arg;
 	struct rfcomm_dlc *dlc;
-	int s;
 
 	KASSERT(rs != NULL);
 
-	s = splsoftnet();
+	mutex_enter(bt_lock);
 	callout_ack(&rs->rs_timeout);
 
 	if (rs->rs_state != RFCOMM_SESSION_OPEN) {
@@ -315,7 +325,7 @@ rfcomm_session_timeout(void *arg)
 		DPRINTF("expiring\n");
 		rfcomm_session_free(rs);
 	}
-	splx(s);
+	mutex_exit(bt_lock);
 }
 
 /***********************************************************************
@@ -336,6 +346,7 @@ static void
 rfcomm_session_connected(void *arg)
 {
 	struct rfcomm_session *rs = arg;
+	struct sockopt sopt;
 
 	DPRINTF("Connected\n");
 
@@ -348,7 +359,10 @@ rfcomm_session_connected(void *arg)
 	 * We must take note of the L2CAP MTU because currently
 	 * the L2CAP implementation can only do Basic Mode.
 	 */
-	l2cap_getopt(rs->rs_l2cap, SO_L2CAP_OMTU, &rs->rs_mtu);
+	sockopt_init(&sopt, BTPROTO_L2CAP, SO_L2CAP_OMTU, 0);
+	(void)l2cap_getopt(rs->rs_l2cap, &sopt);
+	(void)sockopt_get(&sopt, &rs->rs_mtu, sizeof(rs->rs_mtu));
+	sockopt_destroy(&sopt);
 
 	rs->rs_mtu -= 6; /* (RFCOMM overhead could be this big) */
 	if (rs->rs_mtu < RFCOMM_MTU_MIN) {
@@ -374,6 +388,13 @@ rfcomm_session_disconnected(void *arg, int err)
 	struct rfcomm_dlc *dlc;
 
 	DPRINTF("Disconnected\n");
+
+	/*
+	 * If we have any DLCs outstanding in the unlikely case that the
+	 * L2CAP channel disconnected normally, close them with an error
+	 */
+	if (err == 0)
+		err = ECONNRESET;
 
 	rs->rs_state = RFCOMM_SESSION_CLOSED;
 
@@ -802,7 +823,7 @@ rfcomm_session_recv_disc(struct rfcomm_session *rs, int dlci)
 		return;
 	}
 
-	rfcomm_dlc_close(dlc, ECONNRESET);
+	rfcomm_dlc_close(dlc, 0);
 	rfcomm_session_send_frame(rs, RFCOMM_FRAME_UA, dlci);
 }
 
@@ -1358,7 +1379,8 @@ rfcomm_session_recv_mcc_pn(struct rfcomm_session *rs, int cr, struct mbuf *m)
 
 		callout_stop(&dlc->rd_timeout);
 
-		if (pn.mtu > RFCOMM_MTU_MAX || pn.mtu > dlc->rd_mtu) {
+		/* reject invalid or unacceptable MTU */
+		if (pn.mtu < RFCOMM_MTU_MIN || pn.mtu > dlc->rd_mtu) {
 			dlc->rd_state = RFCOMM_DLC_WAIT_DISCONNECT;
 			err = rfcomm_session_send_frame(rs, RFCOMM_FRAME_DISC,
 							pn.dlci);

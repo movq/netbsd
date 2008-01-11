@@ -1,7 +1,11 @@
-/*	$NetBSD: aria.c,v 1.28 2007/10/19 12:00:14 ad Exp $	*/
+/*	$NetBSD: aria.c,v 1.33 2010/07/27 05:38:18 jakllsch Exp $	*/
 
 /*-
- * Copyright (c) 1995, 1996, 1998 Roland C. Dowdeswell.  All rights reserved.
+ * Copyright (c) 1995, 1996, 1998 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Roland C. Dowdeswell.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,22 +15,18 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Roland C. Dowdeswell.
- * 4. The name of the authors may not be used to endorse or promote products
- *      derived from this software without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 /*-
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.28 2007/10/19 12:00:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.33 2010/07/27 05:38:18 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -134,8 +134,8 @@ struct aria_softc {
 	int	sc_sendcmd_err;
 };
 
-int	ariaprobe(struct device *, struct cfdata *, void *);
-void	ariaattach(struct device *, struct device *, void *);
+int	ariaprobe(device_t, cfdata_t, void *);
+void	ariaattach(device_t, device_t, void *);
 void	ariaclose(void *);
 int	ariaopen(void *, int);
 int	ariareset(bus_space_tag_t, bus_space_handle_t);
@@ -238,7 +238,7 @@ const struct audio_hw_if aria_hw_if = {
  * Probe for the aria hardware.
  */
 int
-ariaprobe(struct device *parent, struct cfdata *cf, void *aux)
+ariaprobe(device_t parent, cfdata_t cf, void *aux)
 {
 	bus_space_handle_t ioh;
 	struct isa_attach_args *ia;
@@ -395,7 +395,7 @@ aria_do_kludge(
  * pseudo-device driver.
  */
 void
-ariaattach(struct device *parent, struct device *self, void *aux)
+ariaattach(device_t parent, device_t self, void *aux)
 {
 	bus_space_handle_t ioh;
 	struct aria_softc *sc;
@@ -406,7 +406,7 @@ ariaattach(struct device *parent, struct device *self, void *aux)
 	ia = aux;
 	if (bus_space_map(ia->ia_iot, ia->ia_io[0].ir_addr, ARIADSP_NPORT,
 	    0, &ioh))
-		panic("%s: can map io port range", self->dv_xname);
+		panic("%s: can map io port range", device_xname(self));
 
 	sc->sc_iot = ia->ia_iot;
 	sc->sc_ioh = ioh;
@@ -415,7 +415,7 @@ ariaattach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_AUDIO, aria_intr, sc);
 
-	DPRINTF(("isa_intr_establish() returns (%x)\n", (unsigned) sc->sc_ih));
+	DPRINTF(("isa_intr_establish() returns (%p)\n", sc->sc_ih));
 
 	i = aria_getdspmem(sc, ARIAA_HARDWARE_A);
 
@@ -1081,7 +1081,7 @@ aria_intr(void *arg)
 	DPRINTF(("aria_intr\n"));
 
 	if ((sc->sc_open & ARIAR_OPEN_PLAY) && (pdata!=NULL)) {
-		DPRINTF(("aria_intr play=(%x)\n", (unsigned) pdata));
+		DPRINTF(("aria_intr play=(%p)\n", pdata));
 		address = 0x8000 - 2*(sc->sc_blocksize);
 		address+= aria_getdspmem(sc, ARIAA_PLAY_FIFO_A);
 		bus_space_write_2(iot, ioh, ARIADSP_DMAADDRESS, address);
@@ -1092,7 +1092,7 @@ aria_intr(void *arg)
 	}
 
 	if ((sc->sc_open & ARIAR_OPEN_RECORD) && (rdata!=NULL)) {
-		DPRINTF(("aria_intr record=(%x)\n", (unsigned) rdata));
+		DPRINTF(("aria_intr record=(%p)\n", rdata));
 		address = 0x8000 - (sc->sc_blocksize);
 		address+= aria_getdspmem(sc, ARIAA_REC_FIFO_A);
 		bus_space_write_2(iot, ioh, ARIADSP_DMAADDRESS, address);

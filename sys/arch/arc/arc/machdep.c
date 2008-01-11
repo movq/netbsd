@@ -1,7 +1,8 @@
-/*	$NetBSD: machdep.c,v 1.110 2008/01/09 20:38:34 wiz Exp $	*/
+/*	$NetBSD: machdep.c,v 1.123 2011/02/20 07:52:42 matt Exp $	*/
 /*	$OpenBSD: machdep.c,v 1.36 1999/05/22 21:22:19 weingart Exp $	*/
 
 /*
+ * Copyright (c) 1988 University of Utah.
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -36,54 +37,14 @@
  *
  *	from: @(#)machdep.c	8.3 (Berkeley) 1/12/94
  */
-/*
- * Copyright (c) 1988 University of Utah.
- *
- * This code is derived from software contributed to Berkeley by
- * the Systems Programming Group of the University of Utah Computer
- * Science Department, The Mach Operating System project at
- * Carnegie-Mellon University and Ralph Campbell.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	from: @(#)machdep.c	8.3 (Berkeley) 1/12/94
- */
-
-/* from: Utah Hdr: machdep.c 1.63 91/04/24 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.110 2008/01/09 20:38:34 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.123 2011/02/20 07:52:42 matt Exp $");
 
-#include "fs_mfs.h"
 #include "opt_ddb.h"
 #include "opt_ddbparam.h"
 #include "opt_md.h"
+#include "opt_modular.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,7 +61,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.110 2008/01/09 20:38:34 wiz Exp $");
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <sys/tty.h>
-#include <sys/user.h>
 #include <sys/exec.h>
 #include <uvm/uvm_extern.h>
 #include <sys/mount.h>
@@ -108,9 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.110 2008/01/09 20:38:34 wiz Exp $");
 #include <sys/syscallargs.h>
 #include <sys/kcore.h>
 #include <sys/ksyms.h>
-#ifdef MFS
 #include <ufs/mfs/mfs_extern.h>		/* mfs_initminiroot() */
-#endif
 
 #include <machine/bootinfo.h>
 #include <machine/cpu.h>
@@ -167,8 +125,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.110 2008/01/09 20:38:34 wiz Exp $");
 struct cpu_info cpu_info_store;
 
 /* maps for VM objects */
-struct vm_map *exec_map = NULL;
-struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	maxmem;			/* max memory per process */
@@ -207,18 +163,7 @@ void mach_init(int, char *[], u_int, void *);
 const char *firmware_getenv(const char *env);
 void arc_sysreset(bus_addr_t, bus_size_t);
 
-/*
- * safepri is a safe priority for sleep to set for a spin-wait
- * during autoconfiguration or after a panic.
- * Used as an argument to splx().
- * XXX disables interrupt 5 to disable mips3 on-chip clock.
- */
-int	safepri = MIPS3_PSL_LOWIPL;
-
-const uint32_t *ipl_sr_bits;
-
 extern char kernel_text[], edata[], end[];
-extern struct user *proc0paddr;
 
 /*
  * Do all the stuff that locore normally does before calling main().
@@ -233,8 +178,7 @@ mach_init(int argc, char *argv[], u_int bim, void *bip)
 	int i;
 	paddr_t kernstartpfn, kernendpfn, first, last;
 	char *kernend;
-	vaddr_t v;
-#if NKSYMS > 0 || defined(DDB) || defined(LKM)
+#if NKSYMS > 0 || defined(DDB) || defined(MODULAR)
 	char *ssym = NULL;
 	char *esym = NULL;
 	struct btinfo_symtab *bi_syms;
@@ -256,7 +200,7 @@ mach_init(int argc, char *argv[], u_int bim, void *bip)
 		bootinfo_msg = "no bootinfo found. (old bootblocks?)\n";
 
 	/* clear the BSS segment in kernel code */
-#if NKSYM > 0 || defined(DDB) || defined(LKM)
+#if NKSYM > 0 || defined(DDB) || defined(MODULAR)
 	bi_syms = lookup_bootinfo(BTINFO_SYMTAB);
 
 	/* check whether there is valid bootinfo symtab info */
@@ -380,7 +324,7 @@ mach_init(int argc, char *argv[], u_int bim, void *bip)
 	 *
 	 * This may clobber PTEs needed by the BIOS.
 	 */
-	mips_vector_init();
+	mips_vector_init(NULL, false);
 
 	/*
 	 * Map critical I/O spaces (e.g. for console printf(9)) on KSEG2.
@@ -398,31 +342,26 @@ mach_init(int argc, char *argv[], u_int bim, void *bip)
 	curcpu()->ci_cycles_per_hz = (curcpu()->ci_cpu_freq + hz / 2) / hz;
 	curcpu()->ci_divisor_delay =
 	    ((curcpu()->ci_cpu_freq + 500000) / 1000000);
-	if (mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT) {
+	curcpu()->ci_cctr_freq = curcpu()->ci_cpu_freq;
+	if (mips_options.mips_cpu_flags & CPU_MIPS_DOUBLE_COUNT) {
 		curcpu()->ci_cycles_per_hz /= 2;
 		curcpu()->ci_divisor_delay /= 2;
+		curcpu()->ci_cctr_freq /= 2;
 	}
-	MIPS_SET_CI_RECIPROCAL(curcpu());
 	sprintf(cpu_model, "%s %s%s",
 	    platform->vendor, platform->model, platform->variant);
 
-#ifdef MFS
 	/*
 	 * Check to see if a mini-root was loaded into memory. It resides
 	 * at the start of the next page just after the end of BSS.
 	 */
 	if (boothowto & RB_MINIROOT)
 		kernend += round_page(mfs_initminiroot(kernend));
-#endif
 
-#if NKSYMS || defined(DDB) || defined(LKM)
+#if NKSYMS || defined(DDB) || defined(MODULAR)
 	/* init symbols if present */
 	if (esym)
-		ksyms_init(esym - ssym, ssym, esym);
-#ifdef SYMTAB_SPACE
-	else
-		ksyms_init(0, NULL, NULL);
-#endif
+		ksyms_addsyms_elf(esym - ssym, ssym, esym);
 #endif
 
 	maxmem = physmem;
@@ -495,20 +434,16 @@ mach_init(int argc, char *argv[], u_int bim, void *bip)
 	pmap_bootstrap();
 
 	/*
-	 * Allocate space for proc0's USPACE.
+	 * Allocate uarea page for lwp0 and set it.
 	 */
-	v = uvm_pageboot_alloc(USPACE);
-	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	mips_init_lwp0_uarea();
 }
 
 void
 mips_machdep_cache_config(void)
 {
 
-	mips_sdcache_size = arc_cpu_l2cache_size;
+	mips_cache_info.mci_sdcache_size = arc_cpu_l2cache_size;
 }
 
 /*
@@ -580,13 +515,6 @@ cpu_startup(void)
 	minaddr = 0;
 
 	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
-
-	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
@@ -637,8 +565,7 @@ cpu_reboot(int howto, char *bootstr)
 {
 
 	/* take a snap shot before clobbering any registers */
-	if (curlwp)
-		savectx((struct user *)curpcb);
+	savectx(curpcb);
 
 #ifdef DEBUG
 	if (panicstr)
@@ -668,6 +595,8 @@ cpu_reboot(int howto, char *bootstr)
 		dumpsys();
 
 	doshutdownhooks();
+
+	pmf_system_shutdown(boothowto);
 
 	if (howto & RB_HALT) {
 		printf("\n");

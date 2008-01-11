@@ -1,4 +1,4 @@
-/*	$NetBSD: getpwent.c,v 1.9 2005/03/31 12:56:49 he Exp $	*/
+/*	$NetBSD: getpwent.c,v 1.12 2011/01/12 23:34:00 joerg Exp $	*/
 
 /*
  * Copyright (c) 1987, 1988, 1989, 1993, 1994, 1995
@@ -40,6 +40,7 @@
 #ifdef __weak_alias
 #define endpwent		_endpwent
 #define getpwent		_getpwent
+#define getpwent_r		_getpwent_r
 #define getpwuid		_getpwuid
 #define getpwnam		_getpwnam
 #define setpwent		_setpwent
@@ -48,13 +49,15 @@
 #define getpwnam_r		_getpwnam_r
 
 __weak_alias(endpwent,_endpwent)
-__weak_alias(getpwent,_getpwent)
-__weak_alias(getpwuid,_getpwuid)
-__weak_alias(getpwnam,_getpwnam)
 __weak_alias(setpwent,_setpwent)
 __weak_alias(setpassent,_setpassent)
-__weak_alias(getpwuid_r,_getpwuid_r)
-__weak_alias(getpwnam_r,_getpwnam_r)
+
+__weak_alias(getpwent,__getpwent50)
+__weak_alias(getpwent_r,__getpwent_r50)
+__weak_alias(getpwuid,__getpwuid50)
+__weak_alias(getpwnam,__getpwnam50)
+__weak_alias(getpwuid_r,__getpwuid_r50)
+__weak_alias(getpwnam_r,__getpwnam_r50)
 #endif
 
 #include <sys/param.h>
@@ -88,6 +91,22 @@ getpwent(void)
 	    !pwscan(0, 0, NULL, &_pw_passwd, pwline, sizeof(pwline)))
 		return (NULL);
 	return (&_pw_passwd);
+}
+
+int
+getpwent_r(struct passwd *pwres, char *buf, size_t bufsiz,
+    struct passwd **pwd)
+{
+	int rval;
+
+	if (!_pw_fp && !pwstart())
+		return 1;
+	rval = !pwscan(0, 0, NULL, pwres, buf, bufsiz);
+	if (rval)
+		*pwd = NULL;
+	else
+		*pwd = pwres;
+	return rval;
 }
 
 struct passwd *

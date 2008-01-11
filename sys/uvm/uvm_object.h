@@ -1,7 +1,6 @@
-/*	$NetBSD: uvm_object.h,v 1.24 2008/01/02 11:49:18 ad Exp $	*/
+/*	$NetBSD: uvm_object.h,v 1.30 2011/02/02 15:13:34 chuck Exp $	*/
 
 /*
- *
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
  * All rights reserved.
  *
@@ -13,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Charles D. Cranor and
- *      Washington University.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -41,6 +34,9 @@
  * uvm_object.h
  */
 
+#include <sys/rbtree.h>
+#include <uvm/uvm_pglist.h>
+
 /*
  * uvm_object: all that is left of mach objects.
  */
@@ -50,7 +46,8 @@ struct uvm_object {
 	const struct uvm_pagerops *pgops;	/* pager ops */
 	struct pglist		memq;		/* pages in this object */
 	int			uo_npages;	/* # of pages in memq */
-	int			uo_refs;	/* reference count */
+	unsigned		uo_refs;	/* reference count */
+	struct rb_tree		rb_tree;	/* tree of pages */
 };
 
 /*
@@ -102,6 +99,8 @@ extern const struct uvm_pagerops aobj_pager;
 #define	UVM_OBJ_IS_AOBJ(uobj)						\
 	((uobj)->pgops == &aobj_pager)
 
+extern const rb_tree_ops_t uvm_page_tree_ops;
+
 #define	UVM_OBJ_INIT(uobj, ops, refs)					\
 	do {								\
 		mutex_init(&(uobj)->vmobjlock, MUTEX_DEFAULT, IPL_NONE);\
@@ -109,12 +108,24 @@ extern const struct uvm_pagerops aobj_pager;
 		TAILQ_INIT(&(uobj)->memq);				\
 		(uobj)->uo_npages = 0;					\
 		(uobj)->uo_refs = (refs);				\
+		rb_tree_init(&(uobj)->rb_tree, &uvm_page_tree_ops);	\
 	} while (/* CONSTCOND */ 0)
 
+#ifdef DIAGNOSTIC
+#define	UVM_OBJ_DESTROY(uobj)						\
+	do {								\
+		voff_t _xo = 0;						\
+		void *_xn;						\
+		mutex_destroy(&(uobj)->vmobjlock);			\
+		_xn = rb_tree_find_node_geq(&(uobj)->rb_tree, &_xo);	\
+		KASSERT(_xn == NULL);					\
+	} while (/* CONSTCOND */ 0)
+#else
 #define	UVM_OBJ_DESTROY(uobj)						\
 	do {								\
 		mutex_destroy(&(uobj)->vmobjlock);			\
 	} while (/* CONSTCOND */ 0)
+#endif	/* DIAGNOSTIC */
 
 #endif /* _KERNEL */
 

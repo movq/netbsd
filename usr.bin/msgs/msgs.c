@@ -1,4 +1,4 @@
-/*	$NetBSD: msgs.c,v 1.18 2003/08/07 11:15:17 agc Exp $	*/
+/*	$NetBSD: msgs.c,v 1.20 2009/04/12 14:31:02 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -31,15 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1980, 1993\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)msgs.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: msgs.c,v 1.18 2003/08/07 11:15:17 agc Exp $");
+__RCSID("$NetBSD: msgs.c,v 1.20 2009/04/12 14:31:02 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -109,7 +109,7 @@ typedef	char	bool;
 
 FILE	*msgsrc;
 FILE	*newmsg;
-char	*sep = "-";
+const char *sep = "-";
 char	inbuf[BUFSIZ];
 char	fname[MAXPATHLEN];
 char	cmdbuf[MAXPATHLEN + 16];
@@ -139,7 +139,7 @@ int	Lpp = 0;
 time_t	t;
 time_t	keep;
 
-void	ask __P((char *));
+void	ask __P((const char *));
 void	gfrsub __P((FILE *));
 int	linecnt __P((FILE *));
 int	main __P((int, char *[]));
@@ -742,7 +742,7 @@ next(buf)
 
 void
 ask(prompt)
-	char *prompt;
+	const char *prompt;
 {
 	char	inch;
 	int	n, cmsg;

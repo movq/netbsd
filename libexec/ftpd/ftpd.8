@@ -1,6 +1,6 @@
-.\"	$NetBSD: ftpd.8,v 1.78 2007/06/10 20:24:31 christos Exp $
+.\"	$NetBSD: ftpd.8,v 1.85 2009/05/01 10:53:27 wiz Exp $
 .\"
-.\" Copyright (c) 1997-2007 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1997-2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -14,13 +14,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -63,7 +56,7 @@
 .\"
 .\"     @(#)ftpd.8	8.2 (Berkeley) 4/19/94
 .\"
-.Dd June 10, 2007
+.Dd May 1, 2009
 .Dt FTPD 8
 .Os
 .Sh NAME
@@ -74,7 +67,7 @@ Internet File Transfer Protocol server
 .Nm
 .Op Fl 46DdHlnQqrsUuWwX
 .Op Fl a Ar anondir
-.Op Fl C Ar user
+.Op Fl C Ar user Ns Op @ Ns Ar host
 .Op Fl c Ar confdir
 .Op Fl e Ar emailaddr
 .Op Fl h Ar hostname
@@ -112,12 +105,17 @@ This can also be specified with the
 .Xr ftpd.conf 5
 .Sy chroot
 directive.
-.It Fl C Ar user
+.It Fl C Ar user Ns Op @ Ns Ar host
 Check whether
 .Ar user
+.Po
+as if connecting from
+.Ar host ,
+if provided
+.Pc
 would be granted access under
 the restrictions given in
-.Xr ftpusers 5
+.Xr ftpusers 5 ,
 and exit without attempting a connection.
 .Nm
 exits with an exit code of 0 if access would be granted, or 1 otherwise.
@@ -280,8 +278,7 @@ style
 .Pa xferlog
 file suitable for input into a third-party log analysis tool with a command
 similar to:
-.Dl "grep 'xferlog: ' /var/log/xferlog | \e"
-.Dl "\ \ \ sed -e 's/^.*xferlog: //' \*[Gt] wuxferlog"
+.Dl "sed -ne 's/^.*xferlog: //p' /var/log/xferlog \*[Gt] wuxferlog"
 .El
 .Pp
 The file
@@ -315,7 +312,7 @@ server currently supports the following
 .Tn FTP
 requests.
 The case of the requests is ignored.
-.Bl -column "Request" -offset indent
+.Bl -column "Request" "Description" -offset indent
 .It Sy Request Ta Sy Description
 .It ABOR Ta "abort previous command"
 .It ACCT Ta "specify account (ignored)"
@@ -369,7 +366,7 @@ The following non-standard or
 .Ux
 specific commands are supported by the SITE request.
 .Pp
-.Bl -column Request -offset indent
+.Bl -column Request Description -offset indent
 .It Sy Request Ta Sy Description
 .It CHMOD Ta "change mode of a file, e.g. ``SITE CHMOD 755 filename''"
 .It HELP Ta "give help information."
@@ -382,21 +379,22 @@ specific commands are supported by the SITE request.
 The following
 .Tn FTP
 requests (as specified in
-.Cm RFC 959 )
+.Cm RFC 959
+and
+.Cm RFC 2228 )
 are recognized, but are not implemented:
 .Sy ACCT ,
-.Sy SMNT ,
+.Sy ADAT ,
+.Sy AUTH ,
+.Sy CCC ,
+.Sy CONF ,
+.Sy ENC ,
+.Sy MIC ,
+.Sy PBSZ ,
+.Sy PROT ,
+.Sy REIN ,
 and
-.Sy REIN .
-.Sy MDTM
-and
-.Sy SIZE
-are not specified in
-.Cm RFC 959 ,
-but will appear in the
-next updated
-.Tn FTP
-RFC.
+.Sy SMNT .
 .Pp
 The
 .Nm
@@ -425,7 +423,7 @@ authenticates users according to five rules.
 .Bl -enum -offset indent
 .It
 The login name must be in the password data base,
-.Pa /etc/pwd.db ,
+.Xr passwd 5 ,
 and not have a null password.
 In this case a password must be provided by the client before any
 file operations may be performed.
@@ -465,6 +463,10 @@ to the directory specified in the
 .Sy chroot
 directive (if set),
 or to the home directory of the user.
+This facility may also be triggered by enabling the boolean
+.Sy ftp-chroot
+in
+.Xr login.conf 5 .
 However, the user must still supply a password.
 This feature is intended as a compromise between a fully anonymous account
 and a fully privileged account.
@@ -729,6 +731,7 @@ Login history database.
 .Xr ftpchroot 5 ,
 .Xr ftpd.conf 5 ,
 .Xr ftpusers 5 ,
+.Xr login.conf 5 ,
 .Xr syslogd 8
 .Sh STANDARDS
 .Nm
@@ -857,3 +860,12 @@ directive
 .Sy upload ,
 then this directory cannot be abused by the user in this way, so it
 should be safe to create.
+.Pp
+To avoid possible denial-of-service attacks,
+.Sy SIZE
+requests against files larger than 10240 bytes will be denied if
+the current transfer
+.Sy TYPE
+is
+.Sq Li A
+(ASCII).

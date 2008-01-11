@@ -1,7 +1,7 @@
-/*	$NetBSD: cpuctl.c,v 1.2 2008/01/09 00:01:33 tnn Exp $	*/
+/*	$NetBSD: cpuctl.c,v 1.15 2009/04/23 01:36:56 lukem Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cpuctl.c,v 1.2 2008/01/09 00:01:33 tnn Exp $");
+__RCSID("$NetBSD: cpuctl.c,v 1.15 2009/04/23 01:36:56 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -56,23 +49,32 @@ __RCSID("$NetBSD: cpuctl.c,v 1.2 2008/01/09 00:01:33 tnn Exp $");
 #include <unistd.h>
 #include <util.h>
 #include <time.h>
+#include <sched.h>
+
+#include "cpuctl.h"
 
 u_int	getcpuid(char **);
 int	main(int, char **);
 void	usage(void);
 
+void	cpu_identify(char **);
 void	cpu_list(char **);
 void	cpu_offline(char **);
 void	cpu_online(char **);
+void	cpu_intr(char **);
+void	cpu_nointr(char **);
 
 struct cmdtab {
 	const char	*label;
 	int	takesargs;
 	void	(*func)(char **);
 } const cpu_cmdtab[] = {
+	{ "identify", 1, cpu_identify },
 	{ "list", 0, cpu_list },
 	{ "offline", 1, cpu_offline },
 	{ "online", 1, cpu_online },
+	{ "intr", 1, cpu_intr },
+	{ "nointr", 1, cpu_nointr },
 	{ NULL, 0, NULL },
 };
 
@@ -111,9 +113,12 @@ usage(void)
 {
 	const char *progname = getprogname();
 
-	fprintf(stderr, "usage: %s list\n", progname);
-	fprintf(stderr, "       %s offline cpuid\n", progname);
-	fprintf(stderr, "       %s online cpuid\n", progname);
+	fprintf(stderr, "usage: %s identify cpuno\n", progname);
+	fprintf(stderr, "       %s list\n", progname);
+	fprintf(stderr, "       %s offline cpuno\n", progname);
+	fprintf(stderr, "       %s online cpuno\n", progname);
+	fprintf(stderr, "       %s intr cpuno\n", progname);
+	fprintf(stderr, "       %s nointr cpuno\n", progname);
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }
@@ -144,15 +149,82 @@ cpu_offline(char **argv)
 		err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
 }
 
+void
+cpu_intr(char **argv)
+{
+	cpustate_t cs;
+
+	cs.cs_id = getcpuid(argv);
+	if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
+		err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
+	cs.cs_intr = true;
+	if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0)
+		err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
+}
+
+void
+cpu_nointr(char **argv)
+{
+	cpustate_t cs;
+
+	cs.cs_id = getcpuid(argv);
+	if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
+		err(EXIT_FAILURE, "IOC_CPU_GETSTATE");
+	cs.cs_intr = false;
+	if (ioctl(fd, IOC_CPU_SETSTATE, &cs) < 0) {
+		if (errno == EOPNOTSUPP) {
+			warnx("interrupt control not supported on "
+			    "this platform");
+		} else
+			err(EXIT_FAILURE, "IOC_CPU_SETSTATE");
+	}
+}
+
+void
+cpu_identify(char **argv)
+{
+	char name[32];
+	unsigned int id, np;
+	cpuset_t *cpuset;
+
+	np = sysconf(_SC_NPROCESSORS_CONF);
+	id = getcpuid(argv);
+	snprintf(name, sizeof(name), "cpu%u", id);
+
+	if (np != 0) {
+		cpuset = cpuset_create();
+		if (cpuset == NULL)
+			err(EXIT_FAILURE, "cpuset_create");
+		cpuset_zero(cpuset);
+		cpuset_set(id, cpuset);
+		if (_sched_setaffinity(0, 0, cpuset_size(cpuset), cpuset) < 0) {
+			if (errno == EPERM) {
+				printf("Cannot bind to target CPU.  Output "
+				    "may not accurately describe the target.\n"
+				    "Run as root to allow binding.\n\n");
+			} else { 
+				err(EXIT_FAILURE, "_sched_setaffinity");
+			}
+		}
+		cpuset_destroy(cpuset);
+	}
+	identifycpu(name);
+}
+
 u_int
 getcpuid(char **argv)
 {
 	char *argp;
 	u_int id;
+	long np;
 
-	id = (int)strtoul(argv[0], &argp, 0);
+	id = (u_int)strtoul(argv[0], &argp, 0);
 	if (*argp != '\0')
 		usage();
+
+	np = sysconf(_SC_NPROCESSORS_CONF);
+	if (id >= (u_long)np)
+		errx(EXIT_FAILURE, "Invalid CPU number");
 
 	return id;
 }
@@ -163,19 +235,22 @@ cpu_list(char **argv)
 	const char *state, *intr;
 	cpustate_t cs;
 	u_int cnt, i;
+	time_t lastmod;
+	char ibuf[16], *ts;
 	
 	if (ioctl(fd, IOC_CPU_GETCOUNT, &cnt) < 0)
 		err(EXIT_FAILURE, "IOC_CPU_GETCOUNT");
 
-	printf("ID   Unbound LWPs Interrupts     Last change\n");
- 	printf("---- ------------ -------------- ----------------------------\n");
+	printf(
+"Num  HwId Unbound LWPs Interrupts Last change              #Intr\n"
+"---- ---- ------------ ---------- ------------------------ -----\n");
 
 	for (i = 0; i < cnt; i++) {
 		cs.cs_id = i;
-		if (ioctl(fd, IOC_CPU_MAPID, &cs.cs_id) < 0)
-			err(EXIT_FAILURE, "IOC_CPU_MAPID");
 		if (ioctl(fd, IOC_CPU_GETSTATE, &cs) < 0)
 			err(EXIT_FAILURE, "IOC_CPU_GETINFO");
+		if (ioctl(fd, IOC_CPU_MAPID, &cs.cs_id) < 0)
+			err(EXIT_FAILURE, "IOC_CPU_MAPID");
 		if (cs.cs_online)
 			state = "online";
 		else
@@ -184,7 +259,46 @@ cpu_list(char **argv)
 			intr = "intr";
 		else
 			intr = "nointr";
-		printf("%-4d %-12s %-12s   %s", cs.cs_id, state,
-		   intr, asctime(localtime(&cs.cs_lastmod)));
+		if (cs.cs_intrcnt == 0)
+			strcpy(ibuf, "?");
+		else
+			snprintf(ibuf, sizeof(ibuf), "%d", cs.cs_intrcnt - 1);
+		lastmod = (time_t)cs.cs_lastmod |
+		    ((time_t)cs.cs_lastmodhi << 32);
+		ts = asctime(localtime(&lastmod));
+		ts[strlen(ts) - 1] = '\0';
+		printf("%-4d %-4x %-12s %-10s %s %s\n", i, cs.cs_id, state,
+		   intr, ts, ibuf);
 	}
 }
+
+int
+aprint_normal(const char *fmt, ...)
+{
+	va_list ap;
+	int rv;
+
+	va_start(ap, fmt);
+	rv = vfprintf(stdout, fmt, ap);
+	va_end(ap);
+
+	return rv;
+}
+__strong_alias(aprint_verbose,aprint_normal)
+__strong_alias(aprint_error,aprint_normal)
+
+int
+aprint_normal_dev(const char *dev, const char *fmt, ...)
+{
+	va_list ap;
+	int rv;
+
+	printf("%s: ", dev);
+	va_start(ap, fmt);
+	rv = vfprintf(stdout, fmt, ap);
+	va_end(ap);
+
+	return rv;
+}
+__strong_alias(aprint_verbose_dev,aprint_normal_dev)
+__strong_alias(aprint_error_dev,aprint_normal_dev)

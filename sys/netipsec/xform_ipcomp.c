@@ -1,4 +1,4 @@
-/*	$NetBSD: xform_ipcomp.c,v 1.16 2007/12/29 14:56:35 degroote Exp $	*/
+/*	$NetBSD: xform_ipcomp.c,v 1.28 2011/05/06 21:48:46 drochner Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/xform_ipcomp.c,v 1.1.4.1 2003/01/24 05:11:36 sam Exp $	*/
 /* $OpenBSD: ip_ipcomp.c,v 1.1 2001/07/05 12:08:52 jjbg Exp $ */
 
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xform_ipcomp.c,v 1.16 2007/12/29 14:56:35 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xform_ipcomp.c,v 1.28 2011/05/06 21:48:46 drochner Exp $");
 
 /* IP payload compression protocol (IPComp), see RFC 2393 */
 #include "opt_inet.h"
@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: xform_ipcomp.c,v 1.16 2007/12/29 14:56:35 degroote E
 #include <sys/kernel.h>
 #include <sys/protosw.h>
 #include <sys/sysctl.h>
+#include <sys/socketvar.h> /* for softnet_lock */
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -53,6 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: xform_ipcomp.c,v 1.16 2007/12/29 14:56:35 degroote E
 
 #include <net/route.h>
 #include <netipsec/ipsec.h>
+#include <netipsec/ipsec_private.h>
 #include <netipsec/xform.h>
 
 #ifdef INET6
@@ -72,8 +74,9 @@ __KERNEL_RCSID(0, "$NetBSD: xform_ipcomp.c,v 1.16 2007/12/29 14:56:35 degroote E
 #include <opencrypto/deflate.h>
 #include <opencrypto/xform.h>
 
+percpu_t *ipcompstat_percpu;
+
 int	ipcomp_enable = 1;
-struct	ipcompstat ipcompstat;
 
 #ifdef __FreeBSD__
 SYSCTL_DECL(_net_inet_ipcomp);
@@ -86,14 +89,14 @@ SYSCTL_STRUCT(_net_inet_ipcomp, IPSECCTL_STATS,
 static int ipcomp_input_cb(struct cryptop *crp);
 static int ipcomp_output_cb(struct cryptop *crp);
 
-struct comp_algo *
+const struct comp_algo *
 ipcomp_algorithm_lookup(int alg)
 {
 	if (alg >= IPCOMP_ALG_MAX)
 		return NULL;
 	switch (alg) {
 	case SADB_X_CALG_DEFLATE:
-		return &comp_algo_deflate;
+		return &comp_algo_deflate_nogrow;
 	}
 	return NULL;
 }
@@ -102,10 +105,11 @@ ipcomp_algorithm_lookup(int alg)
  * ipcomp_init() is called when an CPI is being set up.
  */
 static int
-ipcomp_init(struct secasvar *sav, struct xformsw *xsp)
+ipcomp_init(struct secasvar *sav, const struct xformsw *xsp)
 {
-	struct comp_algo *tcomp;
+	const struct comp_algo *tcomp;
 	struct cryptoini cric;
+	int ses;
 
 	/* NB: algorithm really comes in alg_enc and not alg_comp! */
 	tcomp = ipcomp_algorithm_lookup(sav->alg_enc);
@@ -119,10 +123,11 @@ ipcomp_init(struct secasvar *sav, struct xformsw *xsp)
 	sav->tdb_compalgxform = tcomp;
 
 	/* Initialize crypto session */
-	bzero(&cric, sizeof (cric));
+	memset(&cric, 0, sizeof (cric));
 	cric.cri_alg = sav->tdb_compalgxform->type;
 
-	return crypto_newsession(&sav->tdb_cryptoid, &cric, crypto_support);
+	ses = crypto_newsession(&sav->tdb_cryptoid, &cric, crypto_support);
+	return ses;
 }
 
 /*
@@ -142,7 +147,7 @@ ipcomp_zeroize(struct secasvar *sav)
  * ipcomp_input() gets called to uncompress an input packet
  */
 static int
-ipcomp_input(struct mbuf *m, struct secasvar *sav, int skip, int protoff)
+ipcomp_input(struct mbuf *m, const struct secasvar *sav, int skip, int protoff)
 {
 	struct tdb_crypto *tc;
 	struct cryptodesc *crdc;
@@ -156,7 +161,7 @@ ipcomp_input(struct mbuf *m, struct secasvar *sav, int skip, int protoff)
 	if (crp == NULL) {
 		m_freem(m);
 		DPRINTF(("ipcomp_input: no crypto descriptors\n"));
-		ipcompstat.ipcomps_crypto++;
+		IPCOMP_STATINC(IPCOMP_STAT_CRYPTO);
 		return ENOBUFS;
 	}
 	/* Get IPsec-specific opaque pointer */
@@ -165,7 +170,7 @@ ipcomp_input(struct mbuf *m, struct secasvar *sav, int skip, int protoff)
 		m_freem(m);
 		crypto_freereq(crp);
 		DPRINTF(("ipcomp_input: cannot allocate tdb_crypto\n"));
-		ipcompstat.ipcomps_crypto++;
+		IPCOMP_STATINC(IPCOMP_STAT_CRYPTO);
 		return ENOBUFS;
 	}
 	crdc = crp->crp_desc;
@@ -181,6 +186,7 @@ ipcomp_input(struct mbuf *m, struct secasvar *sav, int skip, int protoff)
 
 	/* Crypto operation descriptor */
 	crp->crp_ilen = m->m_pkthdr.len - (skip + hlen);
+	crp->crp_olen = MCLBYTES; /* hint to decompression code */
 	crp->crp_flags = CRYPTO_F_IMBUF;
 	crp->crp_buf = m;
 	crp->crp_callback = ipcomp_input_cb;
@@ -250,10 +256,11 @@ ipcomp_input_cb(struct cryptop *crp)
 #endif
 
 	s = splsoftnet();
+	mutex_enter(softnet_lock);
 
 	sav = KEY_ALLOCSA(&tc->tc_dst, tc->tc_proto, tc->tc_spi, sport, dport);
 	if (sav == NULL) {
-		ipcompstat.ipcomps_notdb++;
+		IPCOMP_STATINC(IPCOMP_STAT_NOTDB);
 		DPRINTF(("ipcomp_input_cb: SA expired while in crypto\n"));
 		error = ENOBUFS;		/*XXX*/
 		goto bad;
@@ -262,7 +269,7 @@ ipcomp_input_cb(struct cryptop *crp)
 	saidx = &sav->sah->saidx;
 	IPSEC_ASSERT(saidx->dst.sa.sa_family == AF_INET ||
 		saidx->dst.sa.sa_family == AF_INET6,
-		("ah_input_cb: unexpected protocol family %u",
+		("ipcomp_input_cb: unexpected protocol family %u",
 		 saidx->dst.sa.sa_family));
 
 	/* Check for crypto errors */
@@ -273,23 +280,28 @@ ipcomp_input_cb(struct cryptop *crp)
 
 		if (crp->crp_etype == EAGAIN) {
 			KEY_FREESAV(&sav);
+			mutex_exit(softnet_lock);
 			splx(s);
 			return crypto_dispatch(crp);
 		}
 
-		ipcompstat.ipcomps_noxform++;
+		IPCOMP_STATINC(IPCOMP_STAT_NOXFORM);
 		DPRINTF(("ipcomp_input_cb: crypto error %d\n", crp->crp_etype));
 		error = crp->crp_etype;
 		goto bad;
 	}
 	/* Shouldn't happen... */
 	if (m == NULL) {
-		ipcompstat.ipcomps_crypto++;
+		IPCOMP_STATINC(IPCOMP_STAT_CRYPTO);
 		DPRINTF(("ipcomp_input_cb: null mbuf returned from crypto\n"));
 		error = EINVAL;
 		goto bad;
 	}
-	ipcompstat.ipcomps_hist[sav->alg_comp]++;
+	IPCOMP_STATINC(IPCOMP_STAT_HIST + sav->alg_comp);
+
+	/* Update the counters */
+	IPCOMP_STATADD(IPCOMP_STAT_IBYTES, m->m_pkthdr.len - skip - hlen);
+
 
 	clen = crp->crp_olen;		/* Length of data after processing */
 
@@ -301,7 +313,7 @@ ipcomp_input_cb(struct cryptop *crp)
 	m->m_pkthdr.len = clen + hlen + skip;
 
 	if (m->m_len < skip + hlen && (m = m_pullup(m, skip + hlen)) == 0) {
-		ipcompstat.ipcomps_hdrops++;		/*XXX*/
+		IPCOMP_STATINC(IPCOMP_STAT_HDROPS);	/*XXX*/
 		DPRINTF(("ipcomp_input_cb: m_pullup failed\n"));
 		error = EINVAL;				/*XXX*/
 		goto bad;
@@ -310,11 +322,19 @@ ipcomp_input_cb(struct cryptop *crp)
 	/* Keep the next protocol field */
 	addr = (uint8_t*) mtod(m, struct ip *) + skip;
 	nproto = ((struct ipcomp *) addr)->comp_nxt;
+	if (nproto == IPPROTO_IPCOMP || nproto == IPPROTO_AH || nproto == IPPROTO_ESP) {
+		IPCOMP_STATINC(IPCOMP_STAT_HDROPS);
+		DPRINTF(("ipcomp_input_cb: nested ipcomp, IPCA %s/%08lx\n",
+			 ipsec_address(&sav->sah->saidx.dst),
+			 (u_long) ntohl(sav->spi)));
+		error = EINVAL;
+		goto bad;
+	}
 
 	/* Remove the IPCOMP header */
 	error = m_striphdr(m, skip, hlen);
 	if (error) {
-		ipcompstat.ipcomps_hdrops++;
+		IPCOMP_STATINC(IPCOMP_STAT_HDROPS);
 		DPRINTF(("ipcomp_input_cb: bad mbuf chain, IPCA %s/%08lx\n",
 			 ipsec_address(&sav->sah->saidx.dst),
 			 (u_long) ntohl(sav->spi)));
@@ -327,11 +347,13 @@ ipcomp_input_cb(struct cryptop *crp)
 	IPSEC_COMMON_INPUT_CB(m, sav, skip, protoff, NULL);
 
 	KEY_FREESAV(&sav);
+	mutex_exit(softnet_lock);
 	splx(s);
 	return error;
 bad:
 	if (sav)
 		KEY_FREESAV(&sav);
+	mutex_exit(softnet_lock);
 	splx(s);
 	if (m)
 		m_freem(m);
@@ -354,8 +376,8 @@ ipcomp_output(
     int protoff
 )
 {
-	struct secasvar *sav;
-	struct comp_algo *ipcompx;
+	const struct secasvar *sav;
+	const struct comp_algo *ipcompx;
 	int error, ralen, hlen, maxpacketsize;
 	struct cryptodesc *crdc;
 	struct cryptop *crp;
@@ -371,13 +393,13 @@ ipcomp_output(
     
     /* Don't process the packet if it is too short */
 	if (ralen < ipcompx->minlen) {
-		ipcompstat.ipcomps_minlen++;
+		IPCOMP_STATINC(IPCOMP_STAT_MINLEN);
 		return ipsec_process_done(m,isr);
 	}
 
 	hlen = IPCOMP_HLENGTH;
 
-	ipcompstat.ipcomps_output++;
+	IPCOMP_STATINC(IPCOMP_STAT_OUTPUT);
 
 	/* Check for maximum packet size violations. */
 	switch (sav->sah->saidx.dst.sa.sa_family) {
@@ -392,7 +414,7 @@ ipcomp_output(
 		break;
 #endif /* INET6 */
 	default:
-		ipcompstat.ipcomps_nopf++;
+		IPCOMP_STATINC(IPCOMP_STAT_NOPF);
 		DPRINTF(("ipcomp_output: unknown/unsupported protocol family %d"
 		    ", IPCA %s/%08lx\n",
 		    sav->sah->saidx.dst.sa.sa_family,
@@ -402,7 +424,7 @@ ipcomp_output(
 		goto bad;
 	}
 	if (skip + hlen + ralen > maxpacketsize) {
-		ipcompstat.ipcomps_toobig++;
+		IPCOMP_STATINC(IPCOMP_STAT_TOOBIG);
 		DPRINTF(("ipcomp_output: packet in IPCA %s/%08lx got too big "
 		    "(len %u, max len %u)\n",
 		    ipsec_address(&sav->sah->saidx.dst),
@@ -413,11 +435,11 @@ ipcomp_output(
 	}
 
 	/* Update the counters */
-	ipcompstat.ipcomps_obytes += m->m_pkthdr.len - skip;
+	IPCOMP_STATADD(IPCOMP_STAT_OBYTES, m->m_pkthdr.len - skip);
 
 	m = m_clone(m);
 	if (m == NULL) {
-		ipcompstat.ipcomps_hdrops++;
+		IPCOMP_STATINC(IPCOMP_STAT_HDROPS);
 		DPRINTF(("ipcomp_output: cannot clone mbuf chain, IPCA %s/%08lx\n",
 		    ipsec_address(&sav->sah->saidx.dst),
 		    (u_long) ntohl(sav->spi)));
@@ -430,7 +452,7 @@ ipcomp_output(
 	/* Get crypto descriptors */
 	crp = crypto_getreq(1);
 	if (crp == NULL) {
-		ipcompstat.ipcomps_crypto++;
+		IPCOMP_STATINC(IPCOMP_STAT_CRYPTO);
 		DPRINTF(("ipcomp_output: failed to acquire crypto descriptor\n"));
 		error = ENOBUFS;
 		goto bad;
@@ -450,7 +472,7 @@ ipcomp_output(
 	tc = (struct tdb_crypto *) malloc(sizeof(struct tdb_crypto),
 		M_XDATA, M_NOWAIT|M_ZERO);
 	if (tc == NULL) {
-		ipcompstat.ipcomps_crypto++;
+		IPCOMP_STATINC(IPCOMP_STAT_CRYPTO);
 		DPRINTF(("ipcomp_output: failed to allocate tdb_crypto\n"));
 		crypto_freereq(crp);
 		error = ENOBUFS;
@@ -502,11 +524,12 @@ ipcomp_output_cb(struct cryptop *crp)
 	rlen = crp->crp_ilen - skip;
 
 	s = splsoftnet();
+	mutex_enter(softnet_lock);
 
 	isr = tc->tc_isr;
 	sav = KEY_ALLOCSA(&tc->tc_dst, tc->tc_proto, tc->tc_spi, 0, 0);
 	if (sav == NULL) {
-		ipcompstat.ipcomps_notdb++;
+		IPCOMP_STATINC(IPCOMP_STAT_NOTDB);
 		DPRINTF(("ipcomp_output_cb: SA expired while in crypto\n"));
 		error = ENOBUFS;		/*XXX*/
 		goto bad;
@@ -521,28 +544,29 @@ ipcomp_output_cb(struct cryptop *crp)
 
 		if (crp->crp_etype == EAGAIN) {
 			KEY_FREESAV(&sav);
+			mutex_exit(softnet_lock);
 			splx(s);
 			return crypto_dispatch(crp);
 		}
-		ipcompstat.ipcomps_noxform++;
+		IPCOMP_STATINC(IPCOMP_STAT_NOXFORM);
 		DPRINTF(("ipcomp_output_cb: crypto error %d\n", crp->crp_etype));
 		error = crp->crp_etype;
 		goto bad;
 	}
 	/* Shouldn't happen... */
 	if (m == NULL) {
-		ipcompstat.ipcomps_crypto++;
+		IPCOMP_STATINC(IPCOMP_STAT_CRYPTO);
 		DPRINTF(("ipcomp_output_cb: bogus return buffer from crypto\n"));
 		error = EINVAL;
 		goto bad;
 	}
-	ipcompstat.ipcomps_hist[sav->alg_comp]++;
+	IPCOMP_STATINC(IPCOMP_STAT_HIST + sav->alg_comp);
 
 	if (rlen > crp->crp_olen) {
 		/* Inject IPCOMP header */
 		mo = m_makespace(m, skip, IPCOMP_HLENGTH, &roff);
 		if (mo == NULL) {
-			ipcompstat.ipcomps_wrap++;
+			IPCOMP_STATINC(IPCOMP_STAT_WRAP);
 			DPRINTF(("ipcomp_output: failed to inject IPCOMP header for "
 					 "IPCA %s/%08lx\n",
 						ipsec_address(&sav->sah->saidx.dst),
@@ -592,7 +616,7 @@ ipcomp_output_cb(struct cryptop *crp)
 			break;
 #endif /* INET6 */
 		default:
-			ipcompstat.ipcomps_nopf++;
+			IPCOMP_STATINC(IPCOMP_STAT_NOPF);
 			DPRINTF(("ipcomp_output: unknown/unsupported protocol "
 			    "family %d, IPCA %s/%08lx\n",
 			    sav->sah->saidx.dst.sa.sa_family,
@@ -603,7 +627,7 @@ ipcomp_output_cb(struct cryptop *crp)
 		}
 	} else {
 		/* compression was useless, we have lost time */
-		ipcompstat.ipcomps_uselesscomp++;
+		IPCOMP_STATINC(IPCOMP_STAT_USELESS);
 		DPRINTF(("ipcomp_output_cb: compression was useless : initial size was %d"
 				   	"and compressed size is %d\n", rlen, crp->crp_olen));
 	}
@@ -616,11 +640,13 @@ ipcomp_output_cb(struct cryptop *crp)
 	/* NB: m is reclaimed by ipsec_process_done. */
 	error = ipsec_process_done(m, isr);
 	KEY_FREESAV(&sav);
+	mutex_exit(softnet_lock);
 	splx(s);
 	return error;
 bad:
 	if (sav)
 		KEY_FREESAV(&sav);
+	mutex_exit(softnet_lock);
 	splx(s);
 	if (m)
 		m_freem(m);
@@ -639,6 +665,7 @@ static struct xformsw ipcomp_xformsw = {
 INITFN void
 ipcomp_attach(void)
 {
+	ipcompstat_percpu = percpu_alloc(sizeof(uint64_t) * IPCOMP_NSTATS);
 	xform_register(&ipcomp_xformsw);
 }
 

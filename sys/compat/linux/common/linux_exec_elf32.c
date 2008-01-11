@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_elf32.c,v 1.80 2007/10/19 12:16:39 ad Exp $	*/
+/*	$NetBSD: linux_exec_elf32.c,v 1.84 2010/09/11 20:49:28 chs Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.80 2007/10/19 12:16:39 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.84 2010/09/11 20:49:28 chs Exp $");
 
 #ifndef ELFSIZE
 /* XXX should die */
@@ -73,6 +66,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.80 2007/10/19 12:16:39 ad Exp
 #include <compat/linux/common/linux_util.h>
 #include <compat/linux/common/linux_exec.h>
 #include <compat/linux/common/linux_machdep.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 
 #include <compat/linux/linux_syscallargs.h>
 #include <compat/linux/linux_syscall.h>
@@ -226,10 +221,7 @@ out:
  * Look for a .gnu_debuglink, specific to x86_64 interpeter
  */
 int
-ELFNAME2(linux,debuglink_signature)(l, epp, eh)
-	struct lwp *l;
-	struct exec_package *epp;
-	Elf_Ehdr *eh;
+ELFNAME2(linux,debuglink_signature)(struct lwp *l, struct exec_package *epp, Elf_Ehdr *eh)
 {
 	size_t shsize;
 	int strndx;
@@ -291,11 +283,7 @@ out:
 #endif
 
 int
-ELFNAME2(linux,signature)(l, epp, eh, itp)
-	struct lwp *l;
-	struct exec_package *epp;
-	Elf_Ehdr *eh;
-	char *itp;
+ELFNAME2(linux,signature)(struct lwp *l, struct exec_package *epp, Elf_Ehdr *eh, char *itp)
 {
 	size_t i;
 	Elf_Phdr *ph;
@@ -395,6 +383,7 @@ ELFNAME2(linux,probe)(struct lwp *l, struct exec_package *epp, void *eh,
 		if ((error = emul_find_interp(l, epp, itp)))
 			return (error);
 	}
+	epp->ep_flags |= EXEC_FORCEAUX;
 	DPRINTF(("linux_probe: returning 0\n"));
 	return 0;
 }

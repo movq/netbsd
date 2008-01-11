@@ -1,4 +1,4 @@
-/*	$NetBSD: hypervisor_machdep.c,v 1.4 2007/12/20 23:46:11 ad Exp $	*/
+/*	$NetBSD: hypervisor_machdep.c,v 1.14 2011/03/30 21:53:58 jym Exp $	*/
 
 /*
  *
@@ -13,11 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Christian Limpach.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -59,33 +54,53 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hypervisor_machdep.c,v 1.4 2007/12/20 23:46:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hypervisor_machdep.c,v 1.14 2011/03/30 21:53:58 jym Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/kmem.h>
+
+#include <uvm/uvm_extern.h>
+
+#include <machine/vmparam.h>
+#include <machine/pmap.h>
 
 #include <xen/xen.h>
 #include <xen/hypervisor.h>
 #include <xen/evtchn.h>
+#include <xen/xenpmap.h>
 
 #include "opt_xen.h"
+
+/*
+ * arch-dependent p2m frame lists list (L3 and L2)
+ * used by Xen for save/restore mappings
+ */
+static unsigned long * l3_p2m_page;
+static unsigned long * l2_p2m_page;
+static int l2_p2m_page_size; /* size of L2 page, in pages */
+
+static void build_p2m_frame_list_list(void);
+static void update_p2m_frame_list_list(void);
 
 // #define PORT_DEBUG 4
 // #define EARLY_DEBUG_EVENT
 
 int stipending(void);
 int
-stipending()
+stipending(void)
 {
-	uint32_t l1;
+	unsigned long l1;
 	unsigned long l2;
 	unsigned int l1i, l2i, port;
 	volatile shared_info_t *s = HYPERVISOR_shared_info;
 	struct cpu_info *ci;
+	volatile struct vcpu_info *vci;
 	int ret;
 
 	ret = 0;
 	ci = curcpu();
+	vci = ci->ci_vcpu;
 
 #if 0
 	if (HYPERVISOR_shared_info->events)
@@ -105,19 +120,15 @@ stipending()
 	 * we're only called after STIC, so we know that we'll have to
 	 * STI at the end
 	 */
-	while (s->vcpu_info[0].evtchn_upcall_pending) {
+	while (vci->evtchn_upcall_pending) {
 		cli();
-		s->vcpu_info[0].evtchn_upcall_pending = 0;
+		vci->evtchn_upcall_pending = 0;
 		/* NB. No need for a barrier here -- XCHG is a barrier
 		 * on x86. */
-#ifdef XEN3
-		l1 = xen_atomic_xchg(&s->vcpu_info[0].evtchn_pending_sel, 0);
-#else
-		l1 = xen_atomic_xchg(&s->evtchn_pending_sel, 0);
-#endif
-		while ((l1i = ffs(l1)) != 0) {
+		l1 = xen_atomic_xchg(&vci->evtchn_pending_sel, 0);
+		while ((l1i = xen_ffs(l1)) != 0) {
 			l1i--;
-			l1 &= ~(1 << l1i);
+			l1 &= ~(1UL << l1i);
 
 			l2 = s->evtchn_pending[l1i] & ~s->evtchn_mask[l1i];
 			/*
@@ -126,11 +137,11 @@ stipending()
 			 */
 			xen_atomic_setbits_l(&s->evtchn_mask[l1i], l2);
 			xen_atomic_clearbits_l(&s->evtchn_pending[l1i], l2);
-			while ((l2i = ffs(l2)) != 0) {
+			while ((l2i = xen_ffs(l2)) != 0) {
 				l2i--;
-				l2 &= ~(1 << l2i);
+				l2 &= ~(1UL << l2i);
 
-				port = (l1i << 5) + l2i;
+				port = (l1i << LONG_SHIFT) + l2i;
 				if (evtsource[port]) {
 					hypervisor_set_ipending(
 					    evtsource[port]->ev_imask,
@@ -141,8 +152,10 @@ stipending()
 						ret = 1;
 				}
 #ifdef DOM0OPS
-				else
-					xenevt_event(port);
+				else  {
+					/* set pending event */
+					xenevt_setipending(l1i, l2i);
+				}
 #endif
 			}
 		}
@@ -163,14 +176,16 @@ stipending()
 void
 do_hypervisor_callback(struct intrframe *regs)
 {
-	uint32_t l1;
+	unsigned long l1;
 	unsigned long l2;
 	unsigned int l1i, l2i, port;
 	volatile shared_info_t *s = HYPERVISOR_shared_info;
 	struct cpu_info *ci;
+	volatile struct vcpu_info *vci;
 	int level;
 
 	ci = curcpu();
+	vci = ci->ci_vcpu;
 	level = ci->ci_ilevel;
 
 	// DDD printf("do_hypervisor_callback\n");
@@ -182,35 +197,31 @@ do_hypervisor_callback(struct intrframe *regs)
 	}
 #endif
 
-	while (s->vcpu_info[0].evtchn_upcall_pending) {
-		s->vcpu_info[0].evtchn_upcall_pending = 0;
+	while (vci->evtchn_upcall_pending) {
+		vci->evtchn_upcall_pending = 0;
 		/* NB. No need for a barrier here -- XCHG is a barrier
 		 * on x86. */
-#ifdef XEN3
-		l1 = xen_atomic_xchg(&s->vcpu_info[0].evtchn_pending_sel, 0);
-#else
-		l1 = xen_atomic_xchg(&s->evtchn_pending_sel, 0);
-#endif
-		while ((l1i = ffs(l1)) != 0) {
+		l1 = xen_atomic_xchg(&vci->evtchn_pending_sel, 0);
+		while ((l1i = xen_ffs(l1)) != 0) {
 			l1i--;
-			l1 &= ~(1 << l1i);
+			l1 &= ~(1UL << l1i);
 
 			l2 = s->evtchn_pending[l1i] & ~s->evtchn_mask[l1i];
 			/*
 			 * mask and clear the pending events.
 			 * Doing it here for all event that will be processed
 			 * avoids a race with stipending (which can be called
-			 * though evtchn_do_event->splx) that could cause an event to
-			 * be both processed and marked pending.
+			 * though evtchn_do_event->splx) that could cause an
+			 * event to be both processed and marked pending.
 			 */
 			xen_atomic_setbits_l(&s->evtchn_mask[l1i], l2);
 			xen_atomic_clearbits_l(&s->evtchn_pending[l1i], l2);
 
-			while ((l2i = ffs(l2)) != 0) {
+			while ((l2i = xen_ffs(l2)) != 0) {
 				l2i--;
-				l2 &= ~(1 << l2i);
+				l2 &= ~(1UL << l2i);
 
-				port = (l1i << 5) + l2i;
+				port = (l1i << LONG_SHIFT) + l2i;
 #ifdef PORT_DEBUG
 				if (port == PORT_DEBUG)
 					printf("do_hypervisor_callback event %d\n", port);
@@ -218,8 +229,18 @@ do_hypervisor_callback(struct intrframe *regs)
 				if (evtsource[port])
 					call_evtchn_do_event(port, regs);
 #ifdef DOM0OPS
-				else
-					xenevt_event(port);
+				else  {
+					if (ci->ci_ilevel < IPL_HIGH) {
+						/* fast path */
+						int oipl = ci->ci_ilevel;
+						ci->ci_ilevel = IPL_HIGH;
+						call_xenevt_event(port);
+						ci->ci_ilevel = oipl;
+					} else {
+						/* set pending event */
+						xenevt_setipending(l1i, l2i);
+					}
+				}
 #endif
 			}
 		}
@@ -228,11 +249,7 @@ do_hypervisor_callback(struct intrframe *regs)
 #ifdef DIAGNOSTIC
 	if (level != ci->ci_ilevel)
 		printf("hypervisor done %08x level %d/%d ipending %08x\n",
-#ifdef XEN3
-		    (uint)HYPERVISOR_shared_info->vcpu_info[0].evtchn_pending_sel,
-#else
-		    (uint)HYPERVISOR_shared_info->evtchn_pending_sel,
-#endif
+		    (uint)vci->evtchn_pending_sel,
 		    level, ci->ci_ilevel, ci->ci_ipending);
 #endif
 }
@@ -241,6 +258,8 @@ void
 hypervisor_unmask_event(unsigned int ev)
 {
 	volatile shared_info_t *s = HYPERVISOR_shared_info;
+	volatile struct vcpu_info *vci = curcpu()->ci_vcpu;
+
 #ifdef PORT_DEBUG
 	if (ev == PORT_DEBUG)
 		printf("hypervisor_unmask_event %d\n", ev);
@@ -253,13 +272,9 @@ hypervisor_unmask_event(unsigned int ev)
 	 * interrupt edge' if the channel is masked.
 	 */
 	if (xen_atomic_test_bit(&s->evtchn_pending[0], ev) && 
-#ifdef XEN3
-	    !xen_atomic_test_and_set_bit(&s->vcpu_info[0].evtchn_pending_sel, ev>>5)) {
-#else
-	    !xen_atomic_test_and_set_bit(&s->evtchn_pending_sel, ev>>5)) {
-#endif
-		xen_atomic_set_bit(&s->vcpu_info[0].evtchn_upcall_pending, 0);
-		if (!s->vcpu_info[0].evtchn_upcall_mask)
+	    !xen_atomic_test_and_set_bit(&vci->evtchn_pending_sel, ev>>LONG_SHIFT)) {
+		xen_atomic_set_bit(&vci->evtchn_upcall_pending, 0);
+		if (!vci->evtchn_upcall_mask)
 			hypervisor_force_callback();
 	}
 }
@@ -291,7 +306,7 @@ hypervisor_clear_event(unsigned int ev)
 void
 hypervisor_enable_ipl(unsigned int ipl)
 {
-	u_int32_t l1, l2;
+	u_long l1, l2;
 	int l1i, l2i;
 	struct cpu_info *ci = curcpu();
 
@@ -303,25 +318,25 @@ hypervisor_enable_ipl(unsigned int ipl)
 
 	l1 = ci->ci_isources[ipl]->ipl_evt_mask1;
 	ci->ci_isources[ipl]->ipl_evt_mask1 = 0;
-	while ((l1i = ffs(l1)) != 0) {
+	while ((l1i = xen_ffs(l1)) != 0) {
 		l1i--;
-		l1 &= ~(1 << l1i);
+		l1 &= ~(1UL << l1i);
 		l2 = ci->ci_isources[ipl]->ipl_evt_mask2[l1i];
 		ci->ci_isources[ipl]->ipl_evt_mask2[l1i] = 0;
-		while ((l2i = ffs(l2)) != 0) {
+		while ((l2i = xen_ffs(l2)) != 0) {
 			int evtch;
 
 			l2i--;
-			l2 &= ~(1 << l2i);
+			l2 &= ~(1UL << l2i);
 
-			evtch = (l1i << 5) + l2i;
+			evtch = (l1i << LONG_SHIFT) + l2i;
 			hypervisor_enable_event(evtch);
 		}
 	}
 }
 
 void
-hypervisor_set_ipending(u_int32_t iplmask, int l1, int l2)
+hypervisor_set_ipending(uint32_t iplmask, int l1, int l2)
 {
 	int ipl;
 	struct cpu_info *ci = curcpu();
@@ -337,6 +352,99 @@ hypervisor_set_ipending(u_int32_t iplmask, int l1, int l2)
 	ipl = ffs(iplmask);
 	KASSERT(ipl > 0);
 	ipl--;
-	ci->ci_isources[ipl]->ipl_evt_mask1 |= 1 << l1;
-	ci->ci_isources[ipl]->ipl_evt_mask2[l1] |= 1 << l2;
+	ci->ci_isources[ipl]->ipl_evt_mask1 |= 1UL << l1;
+	ci->ci_isources[ipl]->ipl_evt_mask2[l1] |= 1UL << l2;
+}
+
+void
+hypervisor_machdep_attach(void)
+{
+ 	/* dom0 does not require the arch-dependent P2M translation table */
+	if ( !xendomain_is_dom0() ) {
+		build_p2m_frame_list_list();
+	}
+}
+
+/*
+ * Generate the p2m_frame_list_list table,
+ * needed for guest save/restore
+ */
+static void
+build_p2m_frame_list_list(void)
+{
+        int fpp; /* number of page (frame) pointer per page */
+        unsigned long max_pfn;
+        /*
+         * The p2m list is composed of three levels of indirection,
+         * each layer containing MFNs pointing to lower level pages
+         * The indirection is used to convert a given PFN to its MFN
+         * Each N level page can point to @fpp (N-1) level pages
+         * For example, for x86 32bit, we have:
+         * - PAGE_SIZE: 4096 bytes
+         * - fpp: 1024 (one L3 page can address 1024 L2 pages)
+         * A L1 page contains the list of MFN we are looking for
+         */
+        max_pfn = xen_start_info.nr_pages;
+        fpp = PAGE_SIZE / sizeof(xen_pfn_t);
+
+        /* we only need one L3 page */
+        l3_p2m_page = (vaddr_t *)uvm_km_alloc(kernel_map, PAGE_SIZE,
+	    PAGE_SIZE, UVM_KMF_WIRED | UVM_KMF_NOWAIT);
+        if (l3_p2m_page == NULL)
+                panic("could not allocate memory for l3_p2m_page");
+
+        /*
+         * Determine how many L2 pages we need for the mapping
+         * Each L2 can map a total of @fpp L1 pages
+         */
+        l2_p2m_page_size = howmany(max_pfn, fpp);
+
+        l2_p2m_page = (vaddr_t *)uvm_km_alloc(kernel_map,
+	    l2_p2m_page_size * PAGE_SIZE,
+	    PAGE_SIZE, UVM_KMF_WIRED | UVM_KMF_NOWAIT);
+        if (l2_p2m_page == NULL)
+                panic("could not allocate memory for l2_p2m_page");
+
+        /* We now have L3 and L2 pages ready, update L1 mapping */
+        update_p2m_frame_list_list();
+
+}
+
+/*
+ * Update the L1 p2m_frame_list_list mapping (during guest boot or resume)
+ */
+static void
+update_p2m_frame_list_list(void)
+{
+        int i;
+        int fpp; /* number of page (frame) pointer per page */
+        unsigned long max_pfn;
+
+        max_pfn = xen_start_info.nr_pages;
+        fpp = PAGE_SIZE / sizeof(xen_pfn_t);
+
+        for (i = 0; i < l2_p2m_page_size; i++) {
+                /*
+                 * Each time we start a new L2 page,
+                 * store its MFN in the L3 page
+                 */
+                if ((i % fpp) == 0) {
+                        l3_p2m_page[i/fpp] = vtomfn(
+                                (vaddr_t)&l2_p2m_page[i]);
+                }
+                /*
+                 * we use a shortcut
+                 * since @xpmap_phys_to_machine_mapping array
+                 * already contains PFN to MFN mapping, we just
+                 * set the l2_p2m_page MFN pointer to the MFN of the
+                 * according frame of @xpmap_phys_to_machine_mapping
+                 */
+                l2_p2m_page[i] = vtomfn((vaddr_t)
+                        &xpmap_phys_to_machine_mapping[i*fpp]);
+        }
+
+        HYPERVISOR_shared_info->arch.pfn_to_mfn_frame_list_list =
+                                        vtomfn((vaddr_t)l3_p2m_page);
+        HYPERVISOR_shared_info->arch.max_pfn = max_pfn;
+
 }

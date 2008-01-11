@@ -1,4 +1,4 @@
-/*	NetBSD: pci_machdep.c,v 1.12 2001/06/19 11:56:27 nonaka Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.6 2010/12/13 16:19:03 matt Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -59,12 +59,6 @@
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pciconf.h>
 
-#define	PCI_MODE1_ENABLE	0x80000000UL
-#define	PCI_MODE1_ADDRESS_REG	(PREP_BUS_SPACE_IO + 0xcf8)
-#define	PCI_MODE1_DATA_REG	(PREP_BUS_SPACE_IO + 0xcfc)
-
-#define	PCI_CBIO		0x10
-
 void
 ibmnws_pci_get_chipset_tag_indirect(pci_chipset_tag_t pc)
 {
@@ -98,7 +92,7 @@ ibmnws_pci_get_chipset_tag_indirect(pci_chipset_tag_t pc)
 }
 
 int
-ibmnws_pci_bus_maxdevs(pci_chipset_tag_t pct, int busno)
+ibmnws_pci_bus_maxdevs(void *v, int busno)
 {
 
 	/*

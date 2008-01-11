@@ -1,4 +1,4 @@
-/* $NetBSD: vrecu.c,v 1.6 2005/12/11 12:17:34 christos Exp $ */
+/* $NetBSD: vrecu.c,v 1.9 2009/09/14 13:41:15 tsutsui Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vrecu.c,v 1.6 2005/12/11 12:17:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vrecu.c,v 1.9 2009/09/14 13:41:15 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -72,8 +65,8 @@ static int pcic_vrip_intr(void *);
 
 struct pcic_vrip_softc {
 	struct pcic_softc	sc_pcic;	/* real pcic softc */
-	u_int16_t		sc_intr_mask;
-	u_int16_t		sc_intr_valid;
+	uint16_t		sc_intr_mask;
+	uint16_t		sc_intr_valid;
 	struct intrhand {
 		int	(*ih_fun)(void *);
 		void	*ih_arg;
@@ -112,8 +105,8 @@ pcic_vrip_match(struct device *parent, struct cfdata *match, void *aux)
 static void
 pcic_vrip_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct pcic_softc	*sc = (void *) self;
-	struct pcic_vrip_softc	*vsc = (void *) self;
+	struct pcic_vrip_softc	*vsc = device_private(self);
+	struct pcic_softc	*sc = &vsc->sc_pcic;
 	struct vrip_attach_args	*va = aux;
 	bus_space_handle_t	ioh;
 	bus_space_handle_t	memh;
@@ -125,9 +118,9 @@ pcic_vrip_attach(struct device *parent, struct device *self, void *aux)
 		vsc->sc_intrhand[i].ih_fun = NULL;
 
 	if ((sc->ih = vrip_intr_establish(va->va_vc, va->va_unit, 0,
-					  IPL_NET, pcic_vrip_intr, sc))
+					  IPL_NET, pcic_vrip_intr, vsc))
 	    == NULL) {
-		printf("%s: can't establish interrupt", sc->dev.dv_xname);
+		printf(": can't establish interrupt");
 	}
 
         /* Map i/o space. */
@@ -210,8 +203,8 @@ pcic_vrip_chip_intr_establish(pcmcia_chipset_handle_t pch,
 
 
 	h = (struct pcic_handle *) pch;
-	sc = (struct pcic_softc *) h->ph_parent;
-	vsc = (struct pcic_vrip_softc *) h->ph_parent;
+	vsc = device_private(h->ph_parent);
+	sc = &vsc->sc_pcic;
 
 
 	ih = &vsc->sc_intrhand[irq];
@@ -246,8 +239,8 @@ pcic_vrip_chip_intr_disestablish(pcmcia_chipset_handle_t pch, void *arg)
 	int	r;
 
 	h = (struct pcic_handle *) pch;
-	sc = (struct pcic_softc *) h->ph_parent;
-	vsc = (struct pcic_vrip_softc *) h->ph_parent;
+	vsc = device_private(h->ph_parent);
+	sc = &vsc->sc_pcic;
 
 	if (ih != &vsc->sc_intrhand[h->ih_irq])
 		panic("pcic_vrip_chip_intr_disestablish: bad handler");
@@ -277,10 +270,10 @@ pcic_vrip_chip_intr_disestablish(pcmcia_chipset_handle_t pch, void *arg)
 static int
 pcic_vrip_intr(void *arg)
 {
-	struct pcic_softc	*sc = arg;
 	struct pcic_vrip_softc	*vsc = arg;
+	struct pcic_softc	*sc = &vsc->sc_pcic;
 	int			i;
-	u_int16_t		r;
+	uint16_t		r;
 
 	r = bus_space_read_2(sc->iot, sc->ioh, ECU_INTSTAT_REG_W)
 		& ~vsc->sc_intr_mask;

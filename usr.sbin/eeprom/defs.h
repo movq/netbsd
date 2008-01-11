@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.10 2007/03/01 16:49:48 garbled Exp $	*/
+/*	$NetBSD: defs.h,v 1.13 2009/04/29 09:13:58 nakayama Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  * the function that handles that value.
  */
 struct	keytabent {
-	char	*kt_keyword;		/* keyword for this entry */
+	const char *kt_keyword;		/* keyword for this entry */
 	u_int	kt_offset;		/* offset into prom of value */
 	void	(*kt_handler) (struct keytabent *, char *);
 					/* handler function for this entry */
@@ -78,7 +71,7 @@ struct	keytabent {
  * vice-versa.
  */
 struct	strvaltabent {
-	char	*sv_str;		/* the string ... */
+	const char *sv_str;		/* the string ... */
 	u_char	sv_val;			/* ... and the value */
 };
 
@@ -90,7 +83,7 @@ struct	opiocdesc;
  * `just print' or don't know how to deal with.
  */
 struct	extabent {
-	char	*ex_keyword;		/* keyword for this entry */
+	const char *ex_keyword;		/* keyword for this entry */
 	void	(*ex_handler) (struct extabent *,
 		    struct opiocdesc *, char *);
 					/* handler function for this entry */
@@ -99,7 +92,7 @@ struct	extabent {
 
 #ifdef USE_OPENFIRM
 struct	extabent {
-	char	*ex_keyword;		/* keyword for this entry */
+	const char *ex_keyword;		/* keyword for this entry */
 	void	(*ex_handler) (struct extabent *,
 		    struct ofiocdesc *, char *);
 					/* handler function for this entry */
@@ -108,7 +101,7 @@ struct	extabent {
 
 #ifdef USE_PREPNVRAM
 struct	extabent {
-	char	*ex_keyword;		/* keyword for this entry */
+	const char *ex_keyword;		/* keyword for this entry */
 	void	(*ex_handler) (struct extabent *,
 		    struct pnviocdesc *, char *);
 					/* handler function for this entry */

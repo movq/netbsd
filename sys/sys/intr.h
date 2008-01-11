@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.6 2007/12/03 17:14:59 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.9 2009/11/25 14:28:49 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,8 +61,13 @@ void	softint_dispatch(lwp_t *, int);
 #define	SOFTINT_NET	0x0003
 #define	SOFTINT_MPSAFE	0x0100
 
+/* Implementation private flags. */
+#define	SOFTINT_PENDING	0x1000
+#define	SOFTINT_ACTIVE	0x2000
+
 #define	SOFTINT_COUNT	0x0004
 #define	SOFTINT_LVLMASK	0x00ff
+#define	SOFTINT_IMPMASK	0xf000
 
 extern u_int	softint_timing;
 extern int	safepri;
@@ -81,19 +79,15 @@ extern int	safepri;
 #define	IPL_BIO		IPL_VM
 #define	IPL_NET		IPL_VM
 #define	IPL_TTY		IPL_VM
-#define	IPL_LPT		IPL_VM
 #define	IPL_AUDIO	IPL_VM
 #define	IPL_CLOCK	IPL_SCHED
-#define	IPL_IPI		IPL_HIGH
 #define	IPL_SERIAL	IPL_HIGH
 
 #define	splbio()	splvm()
 #define	splnet()	splvm()
 #define	spltty()	splvm()
-#define	spllpt()	splvm()
 #define	splaudio()	splvm()
 #define	splclock()	splsched()
-#define	splipi()	splhigh()
 #define	splserial()	splhigh()
 
 #endif	/* _KERNEL */

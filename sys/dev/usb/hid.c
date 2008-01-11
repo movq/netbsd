@@ -1,4 +1,4 @@
-/*	$NetBSD: hid.c,v 1.27 2007/09/08 07:46:13 plunky Exp $	*/
+/*	$NetBSD: hid.c,v 1.32 2011/05/24 18:11:34 joerg Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/hid.c,v 1.11 1999/11/17 22:33:39 n_hibma Exp $ */
 
 /*
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.27 2007/09/08 07:46:13 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.32 2011/05/24 18:11:34 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,8 +47,8 @@ __KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.27 2007/09/08 07:46:13 plunky Exp $");
 #include <dev/usb/hid.h>
 
 #ifdef UHIDEV_DEBUG
-#define DPRINTF(x)	if (uhidevdebug) logprintf x
-#define DPRINTFN(n,x)	if (uhidevdebug>(n)) logprintf x
+#define DPRINTF(x)	if (uhidevdebug) printf x
+#define DPRINTFN(n,x)	if (uhidevdebug>(n)) printf x
 extern int uhidevdebug;
 #else
 #define DPRINTF(x)
@@ -185,7 +178,6 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 		case 2:
 			dval = *data++;
 			dval |= *data++ << 8;
-			dval = /*(int16_t)*/ dval;
 			break;
 		case 4:
 			dval = *data++;
@@ -434,30 +426,43 @@ hid_locate(const void *desc, int size, u_int32_t u, u_int8_t id, enum hid_kind k
 	return (0);
 }
 
+long
+hid_get_data(const u_char *buf, const struct hid_location *loc)
+{
+	u_int hsize = loc->size;
+	u_long data;
+
+	if (hsize == 0)
+		return (0);
+
+	data = hid_get_udata(buf, loc);
+	if (data < (1 << (hsize - 1)))
+		return (data);
+	return data - (1 << hsize);
+}
+
 u_long
-hid_get_data(u_char *buf, struct hid_location *loc)
+hid_get_udata(const u_char *buf, const struct hid_location *loc)
 {
 	u_int hpos = loc->pos;
 	u_int hsize = loc->size;
-	u_int32_t data;
-	int i, s;
-
-	DPRINTFN(10, ("hid_get_data: loc %d/%d\n", hpos, hsize));
+	u_int i, num, off;
+	u_long data;
 
 	if (hsize == 0)
 		return (0);
 
 	data = 0;
-	s = hpos / 8;
-	for (i = hpos; i < hpos+hsize; i += 8)
-		data |= buf[i / 8] << ((i / 8 - s) * 8);
+	off = hpos / 8;
+	num = (hpos + hsize + 7) / 8 - off;
+
+	for (i = 0; i < num; i++)
+		data |= buf[off + i] << (i * 8);
+
 	data >>= hpos % 8;
 	data &= (1 << hsize) - 1;
-	hsize = 32 - hsize;
-	/* Sign extend */
-	data = ((int32_t)data << hsize) >> hsize;
-	DPRINTFN(10,("hid_get_data: loc %d/%d = %lu\n",
-		    loc->pos, loc->size, (long)data));
+
+	DPRINTFN(10,("hid_get_udata: loc %d/%d = %lu\n", hpos, hsize, data));
 	return (data);
 }
 

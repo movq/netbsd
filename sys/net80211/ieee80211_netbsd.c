@@ -1,4 +1,4 @@
-/* $NetBSD: ieee80211_netbsd.c,v 1.14 2007/03/04 06:03:19 christos Exp $ */
+/* $NetBSD: ieee80211_netbsd.c,v 1.17 2008/11/12 12:36:28 ad Exp $ */
 /*-
  * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
@@ -30,7 +30,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_freebsd.c,v 1.8 2005/08/08 18:46:35 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.14 2007/03/04 06:03:19 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.17 2008/11/12 12:36:28 ad Exp $");
 #endif
 
 /*
@@ -458,7 +458,7 @@ cleanup:
 /*
  * Setup sysctl(3) MIB, net.ieee80211.*
  *
- * TBD condition CTLFLAG_PERMANENT on being an LKM or not
+ * TBD condition CTLFLAG_PERMANENT on being a module or not
  */
 SYSCTL_SETUP(sysctl_ieee80211, "sysctl ieee80211 subtree setup")
 {
@@ -500,6 +500,27 @@ ieee80211_node_dectestref(struct ieee80211_node *ni)
 	splx(s);
 	return rc;
 }
+
+void
+ieee80211_drain_ifq(struct ifqueue *ifq)
+{
+	struct ieee80211_node *ni;
+	struct mbuf *m;
+
+	for (;;) {
+		IF_DEQUEUE(ifq, m);
+		if (m == NULL)
+			break;
+
+		ni = (struct ieee80211_node *)m->m_pkthdr.rcvif;
+		KASSERT(ni != NULL);
+		ieee80211_free_node(ni);
+		m->m_pkthdr.rcvif = NULL;
+
+		m_freem(m);
+	}
+}
+
 
 void
 if_printf(struct ifnet *ifp, const char *fmt, ...)
@@ -652,10 +673,11 @@ ieee80211_notify_node_join(struct ieee80211com *ic, struct ieee80211_node *ni, i
 			RTM_IEEE80211_ASSOC : RTM_IEEE80211_REASSOC,
 			&iev, sizeof(iev));
 		if_link_state_change(ifp, LINK_STATE_UP);
-	} else if (newassoc) {
-		/* fire off wireless event only for new station */
+	} else {
 		IEEE80211_ADDR_COPY(iev.iev_addr, ni->ni_macaddr);
-		rt_ieee80211msg(ifp, RTM_IEEE80211_JOIN, &iev, sizeof(iev));
+		rt_ieee80211msg(ifp, newassoc ?
+		    RTM_IEEE80211_JOIN : RTM_IEEE80211_REJOIN,
+		    &iev, sizeof(iev));
 	}
 }
 

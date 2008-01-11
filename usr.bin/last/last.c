@@ -1,4 +1,4 @@
-/*	$NetBSD: last.c,v 1.31 2007/10/05 07:27:42 lukem Exp $	*/
+/*	$NetBSD: last.c,v 1.34 2010/06/05 03:24:01 dholland Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993, 1994
@@ -31,16 +31,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT(
-"@(#) Copyright (c) 1987, 1993, 1994\n\
-	The Regents of the University of California.  All rights reserved.\n");
+__COPYRIGHT("@(#) Copyright (c) 1987, 1993, 1994\
+ The Regents of the University of California.  All rights reserved.");
 #endif /* not lint */
 
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)last.c	8.2 (Berkeley) 4/2/94";
 #endif
-__RCSID("$NetBSD: last.c,v 1.31 2007/10/05 07:27:42 lukem Exp $");
+__RCSID("$NetBSD: last.c,v 1.34 2010/06/05 03:24:01 dholland Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -93,11 +92,11 @@ __RCSID("$NetBSD: last.c,v 1.31 2007/10/05 07:27:42 lukem Exp $");
 #define MAXUTMP		1024
 
 typedef struct arg {
-	char	*name;			/* argument */
+	const char	*name;		/* argument */
 #define	HOST_TYPE	-2
 #define	TTY_TYPE	-3
 #define	USER_TYPE	-4
-	int	type;			/* type of arg */
+	int		type;		/* type of arg */
 	struct arg	*next;		/* linked list pointer */
 } ARG;
 static ARG	*arglist;		/* head of linked list */
@@ -116,10 +115,10 @@ static int	xflag;			/* Assume file is wtmpx format */
 
 int	 main(int, char *[]);
 
-static void	 addarg(int, char *);
+static void	 addarg(int, const char *);
 static TTY	*addtty(const char *);
 static void	 hostconv(char *);
-static char	*ttyconv(char *);
+static const char *ttyconv(char *);
 #ifdef SUPPORT_UTMPX
 static void	 wtmpx(const char *, int, int, int, int);
 #endif
@@ -149,7 +148,7 @@ main(int argc, char *argv[])
 {
 	int ch;
 	char *p;
-	char	*file = NULL;
+	const char *file = NULL;
 	int namesize = UT_NAMESIZE;
 	int linesize = UT_LINESIZE;
 	int hostsize = UT_HOSTSIZE;
@@ -272,7 +271,7 @@ main(int argc, char *argv[])
  *	add an entry to a linked list of arguments
  */
 static void
-addarg(int type, char *arg)
+addarg(int type, const char *arg)
 {
 	ARG *cur;
 
@@ -289,7 +288,7 @@ addarg(int type, char *arg)
  *	add an entry to a linked list of ttys
  */
 static TTY *
-addtty(const char *ttyname)
+addtty(const char *tty)
 {
 	TTY *cur;
 
@@ -297,7 +296,7 @@ addtty(const char *ttyname)
 		err(EXIT_FAILURE, "malloc failure");
 	cur->next = ttylist;
 	cur->logout = currentout;
-	memmove(cur->tty, ttyname, sizeof(cur->tty));
+	memmove(cur->tty, tty, sizeof(cur->tty));
 	return (ttylist = cur);
 }
 
@@ -331,7 +330,7 @@ hostconv(char *arg)
  * ttyconv --
  *	convert tty to correct name.
  */
-static char *
+static const char *
 ttyconv(char *arg)
 {
 	char *mval;
@@ -363,6 +362,10 @@ fmttime(time_t t, int flags)
 	static char tbuf[TBUFLEN];
 
 	tm = (flags & GMT) ? gmtime(&t) : localtime(&t);
+	if (tm == NULL) {
+		strcpy(tbuf, "????");
+		return tbuf;
+	}
 	strftime(tbuf, sizeof(tbuf),
 	    (flags & TIMEONLY)
 	     ? (flags & FULLTIME ? LTFMTS : TFMTS)

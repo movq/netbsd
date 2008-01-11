@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic.h,v 1.6 2007/11/30 17:13:10 ad Exp $	*/
+/*	$NetBSD: atomic.h,v 1.11 2009/11/20 02:17:07 christos Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -40,10 +33,11 @@
 #define	_SYS_ATOMIC_H_
 
 #include <sys/types.h>
-#if !defined(_KERNEL)
+#if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <stdint.h>
 #endif
 
+__BEGIN_DECLS
 /*
  * Atomic ADD
  */
@@ -97,6 +91,17 @@ void *		atomic_cas_ptr(volatile void *, void *, void *);
 uint64_t	atomic_cas_64(volatile uint64_t *, uint64_t, uint64_t);
 
 /*
+ * Non-interlocked atomic COMPARE-AND-SWAP.
+ */
+uint32_t	atomic_cas_32_ni(volatile uint32_t *, uint32_t, uint32_t);
+unsigned int	atomic_cas_uint_ni(volatile unsigned int *, unsigned int,
+				   unsigned int);
+unsigned long	atomic_cas_ulong_ni(volatile unsigned long *, unsigned long,
+				    unsigned long);
+void *		atomic_cas_ptr_ni(volatile void *, void *, void *);
+uint64_t	atomic_cas_64_ni(volatile uint64_t *, uint64_t, uint64_t);
+
+/*
  * Atomic SWAP
  */
 uint32_t	atomic_swap_32(volatile uint32_t *, uint32_t);
@@ -143,5 +148,7 @@ void		membar_exit(void);
 void		membar_producer(void);
 void		membar_consumer(void);
 void		membar_sync(void);
+
+__END_DECLS
 
 #endif /* ! _SYS_ATOMIC_H_ */

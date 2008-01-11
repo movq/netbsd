@@ -1,4 +1,4 @@
-/*	$NetBSD: mbuf.c,v 1.26 2007/11/10 12:05:08 yamt Exp $	*/
+/*	$NetBSD: mbuf.c,v 1.30 2010/12/13 21:15:30 pooka Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)mbuf.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: mbuf.c,v 1.26 2007/11/10 12:05:08 yamt Exp $");
+__RCSID("$NetBSD: mbuf.c,v 1.30 2010/12/13 21:15:30 pooka Exp $");
 #endif
 #endif /* not lint */
 
@@ -55,6 +55,7 @@ __RCSID("$NetBSD: mbuf.c,v 1.26 2007/11/10 12:05:08 yamt Exp $");
 #include <err.h>
 #include <stdbool.h>
 #include "netstat.h"
+#include "prog_ops.h"
 
 #define	YES	1
 
@@ -63,8 +64,8 @@ struct pool mbpool, mclpool;
 struct pool_allocator mbpa, mclpa;
 
 static struct mbtypes {
-	int	mt_type;
-	char	*mt_name;
+	int		mt_type;
+	const char	*mt_name;
 } mbtypes[] = {
 	{ MT_DATA,	"data" },
 	{ MT_OOBDATA,	"oob data" },
@@ -97,7 +98,7 @@ mbpr(mbaddr, msizeaddr, mclbaddr, mbpooladdr, mclpooladdr)
 	struct mbtypes *mp;
 	size_t len;
 	void *data;
-	struct mowner *mo;
+	struct mowner_user *mo;
 	int mclbytes, msize;
 
 	if (nmbtypes != 256) {
@@ -109,7 +110,7 @@ mbpr(mbaddr, msizeaddr, mclbaddr, mbpooladdr, mclpooladdr)
 
 	if (use_sysctl) {
 		size_t mbstatlen = sizeof(mbstat);
-		if (sysctl(mbstats_ctl,
+		if (prog_sysctl(mbstats_ctl,
 			    sizeof(mbstats_ctl) / sizeof(mbstats_ctl[0]),
 			    &mbstat, &mbstatlen, NULL, 0) < 0) {
 			warn("mbstat: sysctl failed");
@@ -202,22 +203,24 @@ dump_drain:
 	if (!use_sysctl)
 		return;
 
-	if (sysctl(mowners_ctl, sizeof(mowners_ctl)/sizeof(mowners_ctl[0]),
-		    NULL, &len, NULL, 0) < 0) {
+	if (prog_sysctl(mowners_ctl,
+	    sizeof(mowners_ctl)/sizeof(mowners_ctl[0]),
+	    NULL, &len, NULL, 0) < 0) {
 		if (errno == ENOENT)
 			return;
 		warn("mowners: sysctl test");
 		return;
 	}
-	len += 10 * sizeof(mo);		/* add some slop */
+	len += 10 * sizeof(*mo);		/* add some slop */
 	data = malloc(len);
 	if (data == NULL) {
 		warn("malloc(%lu)", (u_long)len);
 		return;
 	}
 
-	if (sysctl(mowners_ctl, sizeof(mowners_ctl)/sizeof(mowners_ctl[0]),
-		    data, &len, NULL, 0) < 0) {
+	if (prog_sysctl(mowners_ctl,
+	    sizeof(mowners_ctl)/sizeof(mowners_ctl[0]),
+	    data, &len, NULL, 0) < 0) {
 		warn("mowners: sysctl get");
 		free(data);
 		return;
@@ -227,14 +230,17 @@ dump_drain:
 	    len -= sizeof(*mo), mo++) {
 		char buf[32];
 		if (vflag == 1 &&
-		    mo->mo_claims == 0 &&
-		    mo->mo_ext_claims == 0 &&
-		    mo->mo_cluster_claims == 0)
+		    mo->mo_counter[MOWNER_COUNTER_CLAIMS] == 0 &&
+		    mo->mo_counter[MOWNER_COUNTER_EXT_CLAIMS] == 0 &&
+		    mo->mo_counter[MOWNER_COUNTER_CLUSTER_CLAIMS] == 0)
 			continue;
 		if (vflag == 0 &&
-		    mo->mo_claims == mo->mo_releases &&
-		    mo->mo_ext_claims == mo->mo_ext_releases &&
-		    mo->mo_cluster_claims == mo->mo_cluster_releases)
+		    mo->mo_counter[MOWNER_COUNTER_CLAIMS] ==
+		    mo->mo_counter[MOWNER_COUNTER_RELEASES] &&
+		    mo->mo_counter[MOWNER_COUNTER_EXT_CLAIMS] ==
+		    mo->mo_counter[MOWNER_COUNTER_EXT_RELEASES] &&
+		    mo->mo_counter[MOWNER_COUNTER_CLUSTER_CLAIMS] ==
+		    mo->mo_counter[MOWNER_COUNTER_CLUSTER_RELEASES])
 			continue;
 		snprintf(buf, sizeof(buf), "%16s %-13s",
 		    mo->mo_name, mo->mo_descr);
@@ -245,21 +251,24 @@ dump_drain:
 		}
 		printf("%30s %-8s %10lu %10lu %10lu\n",
 		    buf, "inuse",
-		    mo->mo_claims - mo->mo_releases,
-		    mo->mo_ext_claims - mo->mo_ext_releases,
-		    mo->mo_cluster_claims - mo->mo_cluster_releases);
+		    mo->mo_counter[MOWNER_COUNTER_CLAIMS] -
+		    mo->mo_counter[MOWNER_COUNTER_RELEASES],
+		    mo->mo_counter[MOWNER_COUNTER_EXT_CLAIMS] -
+		    mo->mo_counter[MOWNER_COUNTER_EXT_RELEASES],
+		    mo->mo_counter[MOWNER_COUNTER_CLUSTER_CLAIMS] -
+		    mo->mo_counter[MOWNER_COUNTER_CLUSTER_RELEASES]);
 		lines++;
 		if (vflag) {
 			printf("%30s %-8s %10lu %10lu %10lu\n",
 			    "", "claims",
-			    mo->mo_claims,
-			    mo->mo_ext_claims,
-			    mo->mo_cluster_claims);
+			    mo->mo_counter[MOWNER_COUNTER_CLAIMS],
+			    mo->mo_counter[MOWNER_COUNTER_EXT_CLAIMS],
+			    mo->mo_counter[MOWNER_COUNTER_CLUSTER_CLAIMS]);
 			printf("%30s %-8s %10lu %10lu %10lu\n",
 			    "", "releases",
-			    mo->mo_releases,
-			    mo->mo_ext_releases,
-			    mo->mo_cluster_releases);
+			    mo->mo_counter[MOWNER_COUNTER_RELEASES],
+			    mo->mo_counter[MOWNER_COUNTER_EXT_RELEASES],
+			    mo->mo_counter[MOWNER_COUNTER_CLUSTER_RELEASES]);
 			lines += 2;
 		}
 	}

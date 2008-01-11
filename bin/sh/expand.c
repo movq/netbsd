@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.78 2007/03/25 06:29:26 apb Exp $	*/
+/*	$NetBSD: expand.c,v 1.83 2009/11/27 10:50:04 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)expand.c	8.5 (Berkeley) 5/15/95";
 #else
-__RCSID("$NetBSD: expand.c,v 1.78 2007/03/25 06:29:26 apb Exp $");
+__RCSID("$NetBSD: expand.c,v 1.83 2009/11/27 10:50:04 tsutsui Exp $");
 #endif
 #endif /* not lint */
 
@@ -372,7 +372,7 @@ expari(int flag)
 	 */
 /* SPACE_NEEDED is enough for all digits, plus possible "-", plus 2 (why?) */
 #define SPACE_NEEDED ((sizeof(intmax_t) * CHAR_BIT + 2) / 3 + 1 + 2)
-	CHECKSTRSPACE(SPACE_NEEDED - 2, expdest);
+	CHECKSTRSPACE((int)(SPACE_NEEDED - 2), expdest);
 	USTPUTC('\0', expdest);
 	start = stackblock();
 	p = expdest - 1;
@@ -475,8 +475,8 @@ expbackq(union node *cmd, int quoted, int flag)
 	if (quoted == 0)
 		recordregion(startloc, dest - stackblock(), 0);
 	TRACE(("evalbackq: size=%d: \"%.*s\"\n",
-		(dest - stackblock()) - startloc,
-		(dest - stackblock()) - startloc,
+		(int)((dest - stackblock()) - startloc),
+		(int)((dest - stackblock()) - startloc),
 		stackblock() + startloc));
 	expdest = dest;
 	INTON;
@@ -493,10 +493,21 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 	int c = 0;
 	int saveherefd = herefd;
 	struct nodelist *saveargbackq = argbackq;
-	int amount;
+	int amount, how;
 
 	herefd = -1;
-	argstr(p, 0);
+	switch (subtype) {
+	case VSTRIMLEFT:
+	case VSTRIMLEFTMAX:
+	case VSTRIMRIGHT:
+	case VSTRIMRIGHTMAX:
+		how = (varflags & VSQUOTE) ? 0 : EXP_CASE;
+		break;
+	default:
+		how = 0;
+		break;
+	}
+	argstr(p, how);
 	STACKSTRNUL(expdest);
 	herefd = saveherefd;
 	argbackq = saveargbackq;
@@ -517,7 +528,8 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 			outfmt(&errout, "%s\n", startp);
 			error((char *)NULL);
 		}
-		error("%.*s: parameter %snot set", p - str - 1,
+		error("%.*s: parameter %snot set",
+		      (int)(p - str - 1),
 		      str, (varflags & VSNUL) ? "null or "
 					      : nullstr);
 		/* NOTREACHED */
@@ -650,7 +662,8 @@ again: /* jump here after setting a variable with ${var=text} */
 		case VSTRIMRIGHT:
 		case VSTRIMRIGHTMAX:
 		case VSLENGTH:
-			error("%.*s: parameter not set", p - var - 1, var);
+			error("%.*s: parameter not set",
+			    (int)(p - var - 1), var);
 			/* NOTREACHED */
 		}
 	}
@@ -1552,7 +1565,7 @@ wordexpcmd(int argc, char **argv)
 	out1c('\0');
 	for (i = 1, len = 0; i < argc; i++)
 		len += strlen(argv[i]);
-	out1fmt("%zd", len);
+	out1fmt("%zu", len);
 	out1c('\0');
 	for (i = 1; i < argc; i++) {
 		out1str(argv[i]);

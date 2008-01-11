@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_open.c,v 1.21 2007/02/03 23:46:09 christos Exp $	*/
+/*	$NetBSD: bt_open.c,v 1.25 2011/04/17 23:12:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -32,14 +32,12 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#if defined(LIBC_SCCS) && !defined(lint)
-#if 0
-static char sccsid[] = "@(#)bt_open.c	8.10 (Berkeley) 8/17/94";
-#else
-__RCSID("$NetBSD: bt_open.c,v 1.21 2007/02/03 23:46:09 christos Exp $");
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
 #endif
-#endif /* LIBC_SCCS and not lint */
+
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: bt_open.c,v 1.25 2011/04/17 23:12:38 christos Exp $");
 
 /*
  * Implementation of btree access method for 4.4BSD.
@@ -393,7 +391,7 @@ static int
 tmp(void)
 {
 	sigset_t set, oset;
-	size_t len;
+	int len;
 	int fd;
 	char *envtmp;
 	char path[PATH_MAX];
@@ -405,8 +403,10 @@ tmp(void)
 
 	len = snprintf(path,
 	    sizeof(path), "%s/bt.XXXXXX", envtmp ? envtmp : _PATH_TMP);
-	if (len >= sizeof(path))
+	if (len < 0 || (size_t)len >= sizeof(path)) {
+		errno = ENAMETOOLONG;
 		return -1;
+	}
 	
 	(void)sigfillset(&set);
 	(void)sigprocmask(SIG_BLOCK, &set, &oset);
@@ -421,11 +421,11 @@ tmp(void)
 static int
 byteorder(void)
 {
-	u_int32_t x;
-	u_char *p;
+	uint32_t x;
+	uint8_t *p;
 
 	x = 0x01020304;
-	p = (u_char *)(void *)&x;
+	p = (uint8_t *)(void *)&x;
 	switch (*p) {
 	case 1:
 		return (BIG_ENDIAN);

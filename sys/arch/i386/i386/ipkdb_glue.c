@@ -1,4 +1,4 @@
-/*	$NetBSD: ipkdb_glue.c,v 1.8 2005/12/24 20:07:10 perry Exp $	*/
+/*	$NetBSD: ipkdb_glue.c,v 1.14 2010/04/28 19:17:03 dyoung Exp $	*/
 
 /*
  * Copyright (C) 2000 Wolfgang Solfrank.
@@ -31,7 +31,7 @@
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipkdb_glue.c,v 1.8 2005/12/24 20:07:10 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipkdb_glue.c,v 1.14 2010/04/28 19:17:03 dyoung Exp $");
 
 #include "opt_ipkdb.h"
 
@@ -42,6 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: ipkdb_glue.c,v 1.8 2005/12/24 20:07:10 perry Exp $")
 
 #include <machine/ipkdb.h>
 #include <machine/psl.h>
+#include <machine/cpufunc.h>
 
 int ipkdbregs[NREG];
 
@@ -57,28 +58,26 @@ int ne_pci_ipkdb_attach(struct ipkdb_if *, bus_space_tag_t,		/* XXX */
 static char ipkdb_mode = IPKDB_CMD_EXIT;
 
 void
-ipkdbinit()
+ipkdbinit(void)
 {
 }
 
 int
-ipkdb_poll()
+ipkdb_poll(void)
 {
 	/* For now */
 	return 0;
 }
 
 void
-ipkdb_trap()
+ipkdb_trap(void)
 {
 	ipkdb_mode = IPKDB_CMD_STEP;
-	__asm volatile ("pushf; pop %%eax; orl %0,%%eax; push %%eax; popf"
-			  :: "i"(PSL_T));
+	x86_write_flags(x86_read_flags() | PSL_T);
 }
 
 int
-ipkdb_trap_glue(frame)
-	struct trapframe frame;
+ipkdb_trap_glue(struct trapframe frame)
 {
 	if (ISPL(frame.tf_cs) != SEL_KPL)
 		return 0;
@@ -87,7 +86,7 @@ ipkdb_trap_glue(frame)
 	    || (ipkdb_mode != IPKDB_CMD_STEP && frame.tf_trapno == T_TRCTRAP))
 		return 0;
 
-	__asm volatile ("cli");		/* Interrupts need to be disabled while in IPKDB */
+	x86_disable_intr();		/* Interrupts need to be disabled while in IPKDB */
 	ipkdbregs[EAX] = frame.tf_eax;
 	ipkdbregs[ECX] = frame.tf_ecx;
 	ipkdbregs[EDX] = frame.tf_edx;
@@ -133,8 +132,7 @@ ipkdb_trap_glue(frame)
 }
 
 int
-ipkdbif_init(kip)
-	struct ipkdb_if *kip;
+ipkdbif_init(struct ipkdb_if *kip)
 {
 #ifdef IPKDB_NE_PCI
 	pci_mode_detect();	/* XXX */
@@ -143,7 +141,7 @@ ipkdbif_init(kip)
 #error You must specify the IPKDB_NE_PCISLOT to use IPKDB_NE_PCI.
 #endif
 
-	if (ne_pci_ipkdb_attach(kip, X86_BUS_SPACE_IO, NULL, 0,
+	if (ne_pci_ipkdb_attach(kip, x86_bus_space_io, NULL, 0,
 	    IPKDB_NE_PCISLOT) == 0) {
 		printf("IPKDB on %s\n", kip->name);
 		return 0;

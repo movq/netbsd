@@ -1,4 +1,4 @@
-/* $NetBSD: radeonfb.c,v 1.24 2007/12/01 17:00:41 ad Exp $ */
+/*	$NetBSD: radeonfb.c,v 1.44 2011/05/11 00:17:55 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -70,9 +70,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeonfb.c,v 1.24 2007/12/01 17:00:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeonfb.c,v 1.44 2011/05/11 00:17:55 dyoung Exp $");
 
-#define RADEONFB_DEFAULT_DEPTH 32
+#define RADEONFB_DEFAULT_DEPTH 8
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,22 +90,24 @@ __KERNEL_RCSID(0, "$NetBSD: radeonfb.c,v 1.24 2007/12/01 17:00:41 ad Exp $");
 #include <dev/videomode/videomode.h>
 #include <dev/videomode/edidvar.h>
 #include <dev/wscons/wsdisplay_vconsvar.h>
+#include <dev/pci/wsdisplay_pci.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
+#include <dev/pci/pciio.h>
 #include <dev/pci/radeonfbreg.h>
 #include <dev/pci/radeonfbvar.h>
 #include "opt_radeonfb.h"
 
-static int radeonfb_match(struct device *, struct cfdata *, void *);
-static void radeonfb_attach(struct device *, struct device *, void *);
+static int radeonfb_match(device_t, cfdata_t, void *);
+static void radeonfb_attach(device_t, device_t, void *);
 static int radeonfb_ioctl(void *, void *, unsigned long, void *, int,
     struct lwp *);
 static paddr_t radeonfb_mmap(void *, void *, off_t, int);
 static int radeonfb_scratch_test(struct radeonfb_softc *, int, uint32_t);
 static void radeonfb_loadbios(struct radeonfb_softc *,
-    struct pci_attach_args *);
+    const struct pci_attach_args *);
 
 static uintmax_t radeonfb_getprop_num(struct radeonfb_softc *, const char *,
     uintmax_t);
@@ -162,11 +164,15 @@ static void radeonfb_copyrows(void *, int, int, int);
 static void radeonfb_copycols(void *, int, int, int, int);
 static void radeonfb_cursor(void *, int, int, int);
 static void radeonfb_putchar(void *, int, int, unsigned, long);
+static void radeonfb_putchar_wrapper(void *, int, int, unsigned, long);
 static int radeonfb_allocattr(void *, int, int, int, long *);
 
 static int radeonfb_get_backlight(struct radeonfb_display *);
 static int radeonfb_set_backlight(struct radeonfb_display *, int);
 static void radeonfb_lvds_callout(void *);
+
+static void radeonfb_brightness_up(device_t);
+static void radeonfb_brightness_down(device_t);
 
 static struct videomode *radeonfb_best_refresh(struct videomode *,
     struct videomode *);
@@ -177,7 +183,7 @@ static const struct videomode *radeonfb_port_mode(struct radeonfb_softc *,
 
 static int radeonfb_drm_print(void *, const char *);
 
-#ifdef	RADEON_DEBUG
+#ifdef	RADEONFB_DEBUG
 int	radeon_debug = 1;
 #define	DPRINTF(x)	\
 	if (radeon_debug) printf x
@@ -195,6 +201,8 @@ int	radeon_debug = 1;
 /* any reasonably modern display should handle this */
 #define	RADEON_DEFAULT_MODE	"1024x768x60"
 #endif
+
+extern const u_char rasops_cmap[768];
 
 const char	*radeonfb_default_mode = RADEON_DEFAULT_MODE;
 
@@ -216,7 +224,7 @@ static struct wsscreen_descr radeonfb_stdscreen = {
 	0, 0,		/* ncols, nrows */
 	NULL,		/* textops */
 	8, 16,		/* fontwidth, fontheight */
-	WSSCREEN_WSCOLORS, /* capabilities */
+	WSSCREEN_WSCOLORS | WSSCREEN_REVERSE, /* capabilities */
 	0,		/* modecookie */
 };
 
@@ -406,9 +414,9 @@ CFATTACH_DECL(radeonfb, sizeof (struct radeonfb_softc),
     radeonfb_match, radeonfb_attach, NULL, NULL);
 
 static int
-radeonfb_match(struct device *parent, struct cfdata *match, void *aux)
+radeonfb_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct pci_attach_args	*pa = aux;
+	const struct pci_attach_args	*pa = aux;
 	int			i;
 
 	if (PCI_VENDOR(pa->pa_id) != PCI_VENDOR_ATI)
@@ -423,14 +431,14 @@ radeonfb_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-radeonfb_attach(struct device *parent, struct device *dev, void *aux)
+radeonfb_attach(device_t parent, device_t dev, void *aux)
 {
-	struct radeonfb_softc	*sc = (struct radeonfb_softc *)dev;
-	struct pci_attach_args	*pa = aux;
+	struct radeonfb_softc	*sc = device_private(dev);
+	const struct pci_attach_args	*pa = aux;
 	const char		*mptr;
 	bus_size_t		bsz;
 	pcireg_t		screg;
-	int			i, j, fg, bg, ul;
+	int			i, j, fg, bg, ul, flags;
 	uint32_t		v;
 
 	sc->sc_id = pa->pa_id;
@@ -456,7 +464,7 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 
 	/* enable memory and IO access */
 	screg = pci_conf_read(sc->sc_pc, sc->sc_pt, PCI_COMMAND_STATUS_REG);
-	screg |= PCI_FLAGS_IO_ENABLED | PCI_FLAGS_MEM_ENABLED;
+	screg |= PCI_COMMAND_IO_ENABLE | PCI_COMMAND_MEM_ENABLE;
 	pci_conf_write(sc->sc_pc, sc->sc_pt, PCI_COMMAND_STATUS_REG, screg);
 
 	/*
@@ -528,6 +536,14 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 		goto error;
 	}
 
+	if (pci_mapreg_info(sc->sc_pc, sc->sc_pt, PCI_MAPREG_ROM,
+	     PCI_MAPREG_TYPE_ROM, &sc->sc_romaddr, &sc->sc_romsz, &flags) != 0)
+	{
+		aprint_error("%s: unable to find ROM!\n", XNAME(sc));
+		goto error;
+	}
+	sc->sc_romt = sc->sc_memt;
+
 	/* scratch register test... */
 	if (radeonfb_scratch_test(sc, RADEON_BIOS_0_SCRATCH, 0x55555555) ||
 	    radeonfb_scratch_test(sc, RADEON_BIOS_0_SCRATCH, 0xaaaaaaaa)) {
@@ -537,6 +553,7 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 
 	PRINTREG(RADEON_BIOS_4_SCRATCH);
 	PRINTREG(RADEON_FP_GEN_CNTL);
+	sc->sc_fp_gen_cntl = GET32(sc, RADEON_FP_GEN_CNTL);
 	PRINTREG(RADEON_FP2_GEN_CNTL);
 	PRINTREG(RADEON_TMDS_CNTL);
 	PRINTREG(RADEON_TMDS_TRANSMITTER_CNTL);
@@ -556,10 +573,9 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 
 	radeonfb_loadbios(sc, pa);
 
-#ifdef	RADEON_BIOS_INIT
+#ifdef	RADEONFB_BIOS_INIT
 	if (radeonfb_bios_init(sc)) {
 		aprint_error("%s: BIOS inititialization failed\n", XNAME(sc));
-		goto error;
 	}
 #endif
 
@@ -650,7 +666,18 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 	    RADEON_FP_TMDS_EN |
 		RADEON_FP_CRTC_DONT_SHADOW_VPAR |
 		RADEON_FP_CRTC_DONT_SHADOW_HEND);
-	CLR32(sc, RADEON_FP_GEN_CNTL, RADEON_FP_SEL_CRTC2);
+	/*
+	 * XXX
+	 * no idea why this is necessary - if I do not clear this bit on my
+	 * iBook G4 the screen remains black, even though it's already clear.
+	 * It needs to be set on my Sun XVR-100 for the DVI port to work
+	 */
+
+	if (sc->sc_fp_gen_cntl & RADEON_FP_SEL_CRTC2) {
+		SET32(sc, RADEON_FP_GEN_CNTL, RADEON_FP_SEL_CRTC2);
+	} else
+		CLR32(sc, RADEON_FP_GEN_CNTL, RADEON_FP_SEL_CRTC2);
+
 	if (HAS_CRTC2(sc))
 		SET32(sc, RADEON_FP2_GEN_CNTL, RADEON_FP2_SRC_SEL_CRTC2);
 
@@ -790,7 +817,7 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 			goto error;
 		}
 
-		printf("init engine\n");
+		DPRINTF("init engine\n");
 		/* XXX: this seems suspicious - per display engine
 		   initialization? */
 		radeonfb_engine_init(dp);
@@ -809,7 +836,9 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 
 		dp->rd_vd.init_screen = radeonfb_init_screen;
 
-		dp->rd_console = 1;
+		dp->rd_console = 0;
+		prop_dictionary_get_bool(device_properties(&sc->sc_dev),
+		    "is_console", &dp->rd_console);
 
 		dp->rd_vscreen.scr_flags |= VCONS_SCREEN_IS_STATIC;
 
@@ -840,25 +869,16 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 #endif
 		if (dp->rd_console) {
 
+			radeonfb_modeswitch(dp);
 			wsdisplay_cnattach(dp->rd_wsscreens, ri, 0, 0,
 			    defattr);
 #ifdef SPLASHSCREEN
-			splash_render(&dp->rd_splash,
-			    SPLASH_F_CENTER|SPLASH_F_FILL);
+			if (splash_render(&dp->rd_splash,
+			    SPLASH_F_CENTER|SPLASH_F_FILL) == 0)
+				SCREEN_DISABLE_DRAWING(&dp->rd_vscreen);
+			else
 #endif
-
-#ifdef SPLASHSCREEN_PROGRESS
-			dp->rd_progress.sp_top = (dp->rd_virty / 8) * 7;
-			dp->rd_progress.sp_width = (dp->rd_virtx / 4) * 3;
-			dp->rd_progress.sp_left = (dp->rd_virtx -
-			    dp->rd_progress.sp_width) / 2;
-			dp->rd_progress.sp_height = 20;
-			dp->rd_progress.sp_state = -1;
-			dp->rd_progress.sp_si = &dp->rd_splash;
-			splash_progress_init(&dp->rd_progress);
-			SCREEN_DISABLE_DRAWING(&dp->rd_vscreen);
-#endif
-
+				vcons_replay_msgbuf(&dp->rd_vscreen);
 		} else {
 
 			/*
@@ -871,9 +891,9 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 
 			radeonfb_modeswitch(dp);
 #ifdef SPLASHSCREEN
-			splash_render(&dp->rd_splash,
-			    SPLASH_F_CENTER|SPLASH_F_FILL);
-			SCREEN_DISABLE_DRAWING(&dp->rd_vscreen);
+			if (splash_render(&dp->rd_splash,
+			    SPLASH_F_CENTER|SPLASH_F_FILL) == 0)
+				SCREEN_DISABLE_DRAWING(&dp->rd_vscreen);
 #endif
 		}
 
@@ -883,6 +903,7 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 		aa.accesscookie = &dp->rd_vd;
 
 		config_found(&sc->sc_dev, &aa, wsemuldisplaydevprint);
+		
 		radeonfb_blank(dp, 0);
 		
 		/* Initialise delayed lvds operations for backlight. */
@@ -890,6 +911,20 @@ radeonfb_attach(struct device *parent, struct device *dev, void *aux)
 		callout_setfunc(&dp->rd_bl_lvds_co,
 				radeonfb_lvds_callout, dp);
 	}
+
+	/*
+	 * if we have console output via firmware like on sparc64 it may
+	 * interfere with DAC programming so program the palette again
+	 * here after we took over
+	 */
+	radeonfb_init_palette(sc, 0); 
+	if (HAS_CRTC2(sc))
+		radeonfb_init_palette(sc, 1);
+	                                
+	pmf_event_register(dev, PMFE_DISPLAY_BRIGHTNESS_UP,
+	    radeonfb_brightness_up, TRUE);
+	pmf_event_register(dev, PMFE_DISPLAY_BRIGHTNESS_DOWN,
+	    radeonfb_brightness_down, TRUE);
 
 	config_found_ia(dev, "drm", aux, radeonfb_drm_print);
 
@@ -910,8 +945,8 @@ static int
 radeonfb_drm_print(void *aux, const char *pnp)
 {
 	if (pnp)
-		aprint_normal("direct rendering for %s", pnp);
-	return (UNSUPP);
+		aprint_normal("drm at %s", pnp);
+	return (UNCONF);
 }
 
 int
@@ -981,6 +1016,7 @@ radeonfb_ioctl(void *v, void *vs,
 			if ((dp->rd_wsmode == WSDISPLAYIO_MODE_EMUL) &&
 			    (dp->rd_vd.active)) {
 				radeonfb_engine_init(dp);
+				radeonfb_init_palette(sc, dp == &sc->sc_displays[0] ? 0 : 1);
 				radeonfb_modeswitch(dp);
 				vcons_redraw_screen(dp->rd_vd.active);
 			}
@@ -1018,15 +1054,6 @@ radeonfb_ioctl(void *v, void *vs,
 #else
 		return ENODEV;
 #endif
-	case WSDISPLAYIO_SPROGRESS:
-#if defined(SPLASHSCREEN) && defined(SPLASHSCREEN_PROGRESS)
-		dp->rd_progress.sp_force = 1;
-		splash_progress_update(&dp->rd_progress);
-		dp->rd_progress.sp_force = 0;
-		return 0;
-#else
-		return ENODEV;
-#endif
 	case WSDISPLAYIO_GETPARAM:
 		param = (struct wsdisplay_param *)d;
 		if (param->param == WSDISPLAYIO_PARAM_BACKLIGHT) {
@@ -1044,6 +1071,15 @@ radeonfb_ioctl(void *v, void *vs,
 		}
 		return EPASSTHROUGH;
 
+	/* PCI config read/write passthrough. */
+	case PCI_IOC_CFGREAD:
+	case PCI_IOC_CFGWRITE:
+		return pci_devioctl(sc->sc_pc, sc->sc_pt, cmd, d, flag, l);
+
+	case WSDISPLAYIO_GET_BUSID:
+		return wsdisplayio_busid_pci(&sc->sc_dev, sc->sc_pc,
+		    sc->sc_pt, d);
+
 	default:
 		return EPASSTHROUGH;
 	}
@@ -1055,9 +1091,6 @@ radeonfb_mmap(void *v, void *vs, off_t offset, int prot)
 	struct vcons_data	*vd;
 	struct radeonfb_display	*dp;
 	struct radeonfb_softc	*sc;
-#ifdef RADEONFB_MMAP_BARS
-	struct lwp *me;
-#endif
 	paddr_t			pa;
 
 	vd = (struct vcons_data *)v;
@@ -1066,7 +1099,6 @@ radeonfb_mmap(void *v, void *vs, off_t offset, int prot)
 
 	/* XXX: note that we don't allow mapping of registers right now */
 	/* XXX: this means that the XFree86 radeon driver won't work */
-
 	if ((offset >= 0) && (offset < (dp->rd_virty * dp->rd_stride))) {
 		pa = bus_space_mmap(sc->sc_memt,
 		    sc->sc_memaddr + dp->rd_offset + offset, 0,
@@ -1079,13 +1111,10 @@ radeonfb_mmap(void *v, void *vs, off_t offset, int prot)
 	 * restrict all other mappings to processes with superuser privileges
 	 * or the kernel itself
 	 */
-	me = curlwp;
-	if (me != NULL) {
-		if (kauth_authorize_generic(me->l_cred, KAUTH_GENERIC_ISSUSER,
-		    NULL) != 0) {
-			printf("%s: mmap() rejected.\n", sc->sc_dev.dv_xname);
-			return -1;
-		}
+	if (kauth_authorize_generic(kauth_cred_get(), KAUTH_GENERIC_ISSUSER,
+	    NULL) != 0) {
+		aprint_error_dev(&sc->sc_dev, "mmap() rejected.\n");
+		return -1;
 	}
 
 	if ((offset >= sc->sc_regaddr) && 
@@ -1100,11 +1129,18 @@ radeonfb_mmap(void *v, void *vs, off_t offset, int prot)
 		    BUS_SPACE_MAP_LINEAR);
 	}
 
-#ifdef macppc
+	if ((offset >= sc->sc_romaddr) && 
+	    (offset < sc->sc_romaddr + sc->sc_romsz)) {
+		return bus_space_mmap(sc->sc_memt, offset, 0, prot, 
+		    BUS_SPACE_MAP_LINEAR);
+	}
+
+#ifdef PCI_MAGIC_IO_RANGE
 	/* allow mapping of IO space */
-	if ((offset >= 0xf2000000) && (offset < 0xf2800000)) {
-		pa = bus_space_mmap(sc->sc_iot, offset - 0xf2000000, 0, prot, 
-		    0);	
+	if ((offset >= PCI_MAGIC_IO_RANGE) &&
+	    (offset < PCI_MAGIC_IO_RANGE + 0x10000)) {
+		pa = bus_space_mmap(sc->sc_iot, offset - PCI_MAGIC_IO_RANGE,
+		    0, prot, 0);	
 		return pa;
 	}	
 #endif /* macppc */
@@ -1115,7 +1151,7 @@ radeonfb_mmap(void *v, void *vs, off_t offset, int prot)
 }
 
 static void
-radeonfb_loadbios(struct radeonfb_softc *sc, struct pci_attach_args *pa)
+radeonfb_loadbios(struct radeonfb_softc *sc, const struct pci_attach_args *pa)
 {
 	bus_space_tag_t		romt;
 	bus_space_handle_t	romh, biosh;
@@ -1399,7 +1435,7 @@ radeonfb_calc_dividers(struct radeonfb_softc *sc, uint32_t dotclock,
 }
 
 #if 0
-#ifdef RADEON_DEBUG
+#ifdef RADEONFB_DEBUG
 static void
 dump_buffer(const char *pfx, void *buffer, unsigned int size)
 {
@@ -1582,13 +1618,11 @@ nobios:
 		if ((edid_data = prop_dictionary_get(device_properties(
 		    &sc->sc_dev), "EDID")) != NULL) {
 
-			aprint_normal("%s: using static EDID\n",
-			    sc->sc_dev.dv_xname);
+			aprint_normal_dev(&sc->sc_dev, "using static EDID\n");
 			memcpy(edid, prop_data_data_nocopy(edid_data), 128);
 			if (edid_parse(edid, eip) == 0) {
 
 				sc->sc_ports[i].rp_edid_valid = 1;
-				edid_print(eip);
 			}
 		}
 		/* if we didn't find any we'll try to talk to the monitor */
@@ -1851,7 +1885,7 @@ radeonfb_modeswitch(struct radeonfb_display *dp)
 	int			i;
 
 	/* blank the display while we switch modes */
-	//radeonfb_blank(dp, 1);
+	radeonfb_blank(dp, 1);
 
 #if 0
 	SET32(sc, RADEON_CRTC_EXT_CNTL,
@@ -1876,7 +1910,7 @@ radeonfb_modeswitch(struct radeonfb_display *dp)
 		radeonfb_setcrtc(dp, i);
 
 	/* activate the display */
-	//radeonfb_blank(dp, 0);
+	radeonfb_blank(dp, 0);
 }
 
 void
@@ -2147,7 +2181,7 @@ radeonfb_init_screen(void *cookie, struct vcons_screen *scr, int existing,
 	 * XXX: font selection should be based on properties, with some
 	 * normal/reasonable default.
 	 */
-	ri->ri_caps = WSSCREEN_WSCOLORS;
+	ri->ri_caps = WSSCREEN_WSCOLORS | WSSCREEN_REVERSE;
 
 	/* initialize and look for an initial font */
 	rasops_init(ri, dp->rd_virty/8, dp->rd_virtx/8);
@@ -2156,6 +2190,7 @@ radeonfb_init_screen(void *cookie, struct vcons_screen *scr, int existing,
 		    dp->rd_virtx / ri->ri_font->fontwidth);
 
 	/* enable acceleration */
+	dp->rd_putchar = ri->ri_ops.putchar;
 	ri->ri_ops.copyrows = radeonfb_copyrows;
 	ri->ri_ops.copycols = radeonfb_copycols;
 	ri->ri_ops.eraserows = radeonfb_eraserows;
@@ -2163,6 +2198,8 @@ radeonfb_init_screen(void *cookie, struct vcons_screen *scr, int existing,
 	ri->ri_ops.allocattr = radeonfb_allocattr;
 	if (!IS_R300(dp->rd_softc)) {
 		ri->ri_ops.putchar = radeonfb_putchar;
+	} else {
+		ri->ri_ops.putchar = radeonfb_putchar_wrapper;
 	}
 	ri->ri_ops.cursor = radeonfb_cursor;
 }
@@ -2289,11 +2326,28 @@ radeonfb_init_palette(struct radeonfb_softc *sc, int crtc)
 		CLR32(sc, RADEON_DAC_CNTL2, RADEON_DAC2_PALETTE_ACC_CTL);
 
 	PUT32(sc, RADEON_PALETTE_INDEX, 0);
-	for (i = 0; i <= CLUT_WIDTH; ++i) {
-		PUT32(sc, RADEON_PALETTE_30_DATA,
-		    (CLUT_COLOR(i) << 10) |
-		    (CLUT_COLOR(i) << 20) |
-		    (CLUT_COLOR(i)));
+	if (sc->sc_displays[crtc].rd_bpp == 0)
+		sc->sc_displays[crtc].rd_bpp = RADEONFB_DEFAULT_DEPTH;
+
+	if (sc->sc_displays[crtc].rd_bpp == 8) {
+		/* ANSI palette */
+		int j = 0;
+
+                for (i = 0; i <= CLUT_WIDTH; ++i) {
+                	PUT32(sc, RADEON_PALETTE_30_DATA,
+				(rasops_cmap[j] << 22) |
+				(rasops_cmap[j + 1] << 12) |
+				(rasops_cmap[j + 2] << 2));
+			j += 3;
+		}
+	} else {
+		/* linear ramp */
+		for (i = 0; i <= CLUT_WIDTH; ++i) {
+			PUT32(sc, RADEON_PALETTE_30_DATA,
+			    (CLUT_COLOR(i) << 10) |
+			    (CLUT_COLOR(i) << 20) |
+			    (CLUT_COLOR(i)));
+		}
 	}
 
 	CLR32(sc, RADEON_DAC_CNTL2, RADEON_DAC2_PALETTE_ACC_CTL);
@@ -2326,21 +2380,28 @@ radeonfb_putchar(void *cookie, int row, int col, u_int c, long attr)
 	struct rasops_info	*ri = cookie;
 	struct vcons_screen	*scr = ri->ri_hw;
 	struct radeonfb_display	*dp = scr->scr_cookie;
+	struct wsdisplay_font	*font = PICK_FONT(ri, c);
 	uint32_t		x, y, w, h;
-	uint32_t		bg, fg;
+	uint32_t		bg, fg, flg;
 	uint8_t			*data;
 
 	if (dp->rd_wsmode != WSDISPLAYIO_MODE_EMUL)
 		return;
 
-	if (!CHAR_IN_FONT(c, ri->ri_font))
+	if (!CHAR_IN_FONT(c, font))
 		return;
 
-	w = ri->ri_font->fontwidth;
-	h = ri->ri_font->fontheight;
+	w = font->fontwidth;
+	h = font->fontheight;
 
-	bg = ri->ri_devcmap[(attr >> 16) & 0xf];
-	fg = ri->ri_devcmap[(attr >> 24) & 0xf];
+	flg = attr & 0xff;
+	if (flg & WSATTR_REVERSE) {
+		fg = ri->ri_devcmap[(attr >> 16) & 0xf];
+		bg = ri->ri_devcmap[(attr >> 24) & 0xf];
+	} else {
+		bg = ri->ri_devcmap[(attr >> 16) & 0xf];
+		fg = ri->ri_devcmap[(attr >> 24) & 0xf];
+	}
 
 	x = ri->ri_xorigin + col * w;
 	y = ri->ri_yorigin + row * h;
@@ -2348,14 +2409,30 @@ radeonfb_putchar(void *cookie, int row, int col, u_int c, long attr)
 	if (c == 0x20) {
 		radeonfb_rectfill(dp, x, y, w, h, bg);
 	} else {
-		data = (uint8_t *)ri->ri_font->data +
-		    (c - ri->ri_font->firstchar) * ri->ri_fontscale;
+		data = (uint8_t *)font->data +
+		    (c - font->firstchar) * ri->ri_fontscale;
 
 		radeonfb_setup_mono(dp, x, y, w, h, fg, bg);
 		radeonfb_feed_bytes(dp, ri->ri_fontscale, data);
 	}
 }
 
+/*
+ * wrapper for software character drawing
+ * just sync the engine and call rasops*_putchar()
+ */
+
+static void
+radeonfb_putchar_wrapper(void *cookie, int row, int col, u_int c, long attr)
+{
+	struct rasops_info	*ri = cookie;
+	struct vcons_screen	*scr = ri->ri_hw;
+	struct radeonfb_display	*dp = scr->scr_cookie;
+
+	radeonfb_engine_idle(dp->rd_softc);
+	dp->rd_putchar(ri, row, col, c, attr);
+}
+	
 static void
 radeonfb_eraserows(void *cookie, int row, int nrows, long fillattr)
 {
@@ -2695,6 +2772,7 @@ radeonfb_engine_init(struct radeonfb_display *dp)
 {
 	struct radeonfb_softc	*sc = dp->rd_softc;
 	uint32_t		pitch;
+	volatile uint32_t	junk;
 
 	/* no 3D */
 	PUT32(sc, RADEON_RB3D_CNTL, 0);
@@ -2723,6 +2801,7 @@ radeonfb_engine_init(struct radeonfb_display *dp)
 #else
 	CLR32(sc, RADEON_DP_DATATYPE, RADEON_HOST_BIG_ENDIAN_EN);
 #endif
+	junk = GET32(sc, RADEON_DP_DATATYPE);
 
 	/* default scissors -- no clipping */
 	radeonfb_wait_fifo(sc, 1);
@@ -3326,21 +3405,38 @@ radeonfb_pickres(struct radeonfb_display *dp, uint16_t *x, uint16_t *y,
 				continue;
 
 			if (!valid) {
-				/* initialize starting list */
-				for (j = 0; j < ep->edid_nmodes; j++) {
-					/*
-					 * ignore resolutions that are
-					 * too big for the radeon
-					 */
-					if (ep->edid_modes[j].hdisplay >
-					    dp->rd_softc->sc_maxx)
-						continue;
-					if (ep->edid_modes[j].vdisplay >
-					    dp->rd_softc->sc_maxy)
-						continue;
+				/*
+				 * Pick the preferred mode for this port
+				 * if available.
+				 */
+				if (ep->edid_preferred_mode) {
+					struct videomode *vmp = 
+						ep->edid_preferred_mode;
 
-					modes[nmodes] = ep->edid_modes[j];
-					nmodes++;
+					if ((vmp->hdisplay <= 
+					     dp->rd_softc->sc_maxx) && 
+					    (vmp->vdisplay <= 
+					     dp->rd_softc->sc_maxy))
+						modes[nmodes++] = *vmp;
+				} else {
+
+					/* initialize starting list */
+					for (j = 0; j < ep->edid_nmodes; j++) {
+						/*
+						 * ignore resolutions that are
+						 * too big for the radeon
+						 */
+						if (ep->edid_modes[j].hdisplay >
+						    dp->rd_softc->sc_maxx)
+							continue;
+						if (ep->edid_modes[j].vdisplay >
+						    dp->rd_softc->sc_maxy)
+							continue;
+
+						modes[nmodes] = 
+							ep->edid_modes[j];
+						nmodes++;
+					}
 				}
 				valid = 1;
 			} else {
@@ -3488,4 +3584,30 @@ static void radeonfb_lvds_callout(void *arg)
 	dp->rd_bl_lvds_val = 0;
 
 	splx(s);
+}
+
+static void
+radeonfb_brightness_up(device_t dev)
+{
+	struct radeonfb_softc *sc = device_private(dev);
+	int level;
+
+	/* we assume the main display is the first one - need a better way */
+	if (sc->sc_ndisplays < 1) return;
+	level = radeonfb_get_backlight(&sc->sc_displays[0]);
+	level = min(RADEONFB_BACKLIGHT_MAX, level + 5);
+	radeonfb_set_backlight(&sc->sc_displays[0], level);
+}
+
+static void
+radeonfb_brightness_down(device_t dev)
+{
+	struct radeonfb_softc *sc = device_private(dev);
+	int level;
+
+	/* we assume the main display is the first one - need a better way */
+	if (sc->sc_ndisplays < 1) return;
+	level = radeonfb_get_backlight(&sc->sc_displays[0]);
+	level = max(0, level - 5);
+	radeonfb_set_backlight(&sc->sc_displays[0], level);
 }

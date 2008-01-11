@@ -1,4 +1,4 @@
-.\" $NetBSD: gem.4,v 1.5 2008/01/05 20:31:18 jdc Exp $
+.\" $NetBSD: gem.4,v 1.10 2010/01/15 19:24:49 joerg Exp $
 .\"
 .\" Copyright (c) 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -11,13 +11,6 @@
 .\" 2. Redistributions in binary form must reproduce the above copyright
 .\"    notice, this list of conditions and the following disclaimer in the
 .\"    documentation and/or other materials provided with the distribution.
-.\" 3. All advertising materials mentioning features or use of this software
-.\"    must display the following acknowledgement:
-.\"        This product includes software developed by the NetBSD
-.\"        Foundation, Inc. and its contributors.
-.\" 4. Neither the name of The NetBSD Foundation nor the names of its
-.\"    contributors may be used to endorse or promote products derived
-.\"    from this software without specific prior written permission.
 .\"
 .\" THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
 .\" ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -31,7 +24,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd December 18, 2007
+.Dd September 15, 2008
 .Dt GEM 4
 .Os
 .Sh NAME
@@ -54,7 +47,7 @@ well as many Sun UltraSPARCs.
 Cards supported by this driver include:
 .Bl -bullet -compact -offset indent
 .It
-Sun GEM gigabit ethernet (including SX fibre variants)
+Sun GEM gigabit ethernet (SX fibre variants)
 .It
 Sun ERI 10/100
 .It
@@ -78,13 +71,22 @@ for information on how to enable this feature.
 .Rs
 .%T "GEM Gigabit Ethernet ASIC Specification"
 .%A Sun Microsystems
-.%O http://www.sun.com/processors/manuals/ge.pdf
+.%U http://www.sun.com/processors/manuals/ge.pdf
+.Re
+.Rs
+.%T "Sbus GEM Specification"
+.%A Sun Microsystems
+.%U http://mediacast.sun.com/users/Barton808/media/gem_sbus-1.pdf
 .Re
 .Sh HISTORY
 The
 .Nm
 device driver appeared in
 .Nx 1.6 .
+Support for PCI SX fibre cards was added in
+.Nx 5.0 .
+Support for SBus SX fibre cards was added in
+.Nx 5.0 .
 .Sh AUTHORS
 .An -nosplit
 The
@@ -92,10 +94,19 @@ The
 driver was written by
 .An Eduardo Horvath
 .Aq eeh@NetBSD.org .
+SX fibre support was added by
+.An Julian Coleman
+.Aq jdc@NetBSD.org .
 The man page was written by
 .An Thomas Klausner
 .Aq wiz@NetBSD.org .
 .Sh BUGS
+The hardware checksumming support does not support IPv4 UDP, although this was
+allowed prior to
+.Nx 5.0 .
+Also, the hardware IPv4 TCP receive checksumming support has bugs, so this is
+disabled.
+.Pp
 On the SX fibre variants of the hardware, the link will stay down if there is
 a duplex mismatch.
 Also, packet transmission may fail when in

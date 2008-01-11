@@ -1,4 +1,4 @@
-/*	$NetBSD: dvma.c,v 1.33 2007/03/04 06:00:54 christos Exp $	*/
+/*	$NetBSD: dvma.c,v 1.36 2009/12/11 13:52:57 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.33 2007/03/04 06:00:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.36 2009/12/11 13:52:57 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.33 2007/03/04 06:00:54 christos Exp $");
 #include <sys/extent.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
-#include <sys/user.h>
 #include <sys/core.h>
 #include <sys/exec.h>
 
@@ -191,7 +183,7 @@ dvma_mapin(void *kva, int len, int canwait /* ignored */)
 	seg_len = (vsize_t)len;
 	seg_off = seg_kva & SEGOFSET;
 	seg_kva -= seg_off;
-	seg_len = m68k_round_seg(seg_len + seg_off);
+	seg_len = sun3_round_seg(seg_len + seg_off);
 
 	s = splvm();
 
@@ -253,7 +245,7 @@ dvma_mapout(void *dma, int len)
 	seg_len = (vsize_t)len;
 	seg_off = seg_dma & SEGOFSET;
 	seg_dma -= seg_off;
-	seg_len = m68k_round_seg(seg_len + seg_off);
+	seg_len = sun3_round_seg(seg_len + seg_off);
 
 	s = splvm();
 

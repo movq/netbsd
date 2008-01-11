@@ -1,7 +1,8 @@
-.\"	$NetBSD: pam_strerror.3,v 1.4 2006/02/05 02:37:45 christos Exp $
+.\"	$NetBSD: pam_strerror.3,v 1.7 2010/03/20 11:24:29 wiz Exp $
 .\"
 .\"-
 .\" Copyright (c) 2001-2003 Networks Associates Technology, Inc.
+.\" Copyright (c) 2004-2007 Dag-Erling Smørgrav
 .\" All rights reserved.
 .\"
 .\" This software was developed for the FreeBSD Project by ThinkSec AS and
@@ -35,7 +36,7 @@
 .\"
 .\" $P4$
 .\"
-.Dd June 16, 2005
+.Dd March 20, 2010
 .Dt PAM_STRERROR 3
 .Os
 .Sh NAME
@@ -47,16 +48,22 @@
 .In sys/types.h
 .In security/pam_appl.h
 .Ft "const char *"
-.Fn pam_strerror "pam_handle_t *pamh" "int error_number"
+.Fn pam_strerror "const pam_handle_t *pamh" "int error_number"
 .Sh DESCRIPTION
 The
 .Nm
 function returns a pointer to a string containing a
 textual description of the error indicated by the
 .Fa error_number
-argument, in the context of the PAM transaction described by the
-.Fa pamh
 argument.
+The
+.Fa pamh
+argument is ignored.
+For compatibility with other implementations, it should be either a
+valid PAM handle returned by a previous call to
+.Fn pam_start ,
+or
+.Dv NULL .
 .Sh RETURN VALUES
 The
 .Nm
@@ -76,7 +83,7 @@ The
 function and this manual page were developed for the
 .Fx
 Project by ThinkSec AS and Network Associates Laboratories, the
-Security Research Division of Network Associates, Inc.& under
+Security Research Division of Network Associates, Inc.\& under
 DARPA/SPAWAR contract N66001-01-C-8035
 .Pq Dq CBOSS ,
 as part of the DARPA CHATS research program.

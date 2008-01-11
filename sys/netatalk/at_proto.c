@@ -1,4 +1,4 @@
-/*	$NetBSD: at_proto.c,v 1.15 2007/08/30 02:17:36 dyoung Exp $	*/
+/*	$NetBSD: at_proto.c,v 1.17 2011/03/31 19:40:52 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at_proto.c,v 1.15 2007/08/30 02:17:36 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at_proto.c,v 1.17 2011/03/31 19:40:52 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,6 +50,9 @@ __KERNEL_RCSID(0, "$NetBSD: at_proto.c,v 1.15 2007/08/30 02:17:36 dyoung Exp $")
 
 DOMAIN_DEFINE(atalkdomain);	/* forward declare and add to link set */
 
+PR_WRAP_USRREQ(ddp_usrreq)
+#define	ddp_usrreq	ddp_usrreq_wrapper
+
 const struct protosw atalksw[] = {
     {
 	.pr_type = SOCK_DGRAM,
@@ -70,7 +73,7 @@ struct domain atalkdomain = {
 	.dom_dispose = NULL,
 	.dom_protosw = atalksw,
 	.dom_protoswNPROTOSW = &atalksw[__arraycount(atalksw)],
-	.dom_rtattach = rn_inithead,
+	.dom_rtattach = rt_inithead,
 	.dom_rtoffset = 32,
 	.dom_maxrtkey = sizeof(struct sockaddr_at),
 	.dom_ifattach = NULL,

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcictl.c,v 1.11 2007/02/08 23:27:07 hubertf Exp $	*/
+/*	$NetBSD: pcictl.c,v 1.17 2011/02/25 21:40:48 jmcneill Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -63,8 +63,7 @@ struct command {
 	int open_flags;
 };
 
-int	main(int, char *[]);
-void	usage(void);
+static void	usage(void);
 
 int	pcifd;
 
@@ -73,11 +72,10 @@ struct pciio_businfo pci_businfo;
 const	char *dvname;
 char	dvname_store[MAXPATHLEN];
 const	char *cmdname;
-const	char *argnames;
 int	print_numbers = 0;
 
-void	cmd_list(int, char *[]);
-void	cmd_dump(int, char *[]);
+static void	cmd_list(int, char *[]);
+static void	cmd_dump(int, char *[]);
 
 const struct command commands[] = {
 	{ "list",
@@ -90,15 +88,15 @@ const struct command commands[] = {
 	  cmd_dump,
 	  O_RDONLY },
 
-	{ 0 },
+	{ 0, 0, 0, 0 },
 };
 
-int	parse_bdf(const char *);
+static int	parse_bdf(const char *);
 
-void	scan_pci(int, int, int, void (*)(u_int, u_int, u_int));
+static void	scan_pci(int, int, int, void (*)(u_int, u_int, u_int));
 
-void	scan_pci_list(u_int, u_int, u_int);
-void	scan_pci_dump(u_int, u_int, u_int);
+static void	scan_pci_list(u_int, u_int, u_int);
+static void	scan_pci_dump(u_int, u_int, u_int);
 
 int
 main(int argc, char *argv[])
@@ -120,29 +118,27 @@ main(int argc, char *argv[])
 		if (strcmp(cmdname, commands[i].cmd_name) == 0)
 			break;
 	if (commands[i].cmd_name == NULL)
-		errx(1, "unknown command: %s", cmdname);
-
-	argnames = commands[i].arg_names;
+		errx(EXIT_FAILURE, "unknown command: %s", cmdname);
 
 	/* Open the device. */
 	if ((strchr(dvname, '/') == NULL) &&
 	    (snprintf(dvname_store, sizeof(dvname_store), _PATH_DEV "%s",
-	     dvname) < sizeof(dvname_store)))
+	     dvname) < (int)sizeof(dvname_store)))
 		dvname = dvname_store;
 	pcifd = open(dvname, commands[i].open_flags);
 	if (pcifd < 0)
-		err(1, "%s", dvname);
+		err(EXIT_FAILURE, "%s", dvname);
 
 	/* Make sure the device is a PCI bus. */
 	if (ioctl(pcifd, PCI_IOC_BUSINFO, &pci_businfo) != 0)
-		errx(1, "%s: not a PCI bus device", dvname);
+		errx(EXIT_FAILURE, "%s: not a PCI bus device", dvname);
 
 	(*commands[i].cmd_func)(argc, argv);
-	exit(0);
+	exit(EXIT_SUCCESS);
 }
 
-void
-usage()
+static void
+usage(void)
 {
 	int i;
 
@@ -154,16 +150,16 @@ usage()
 		fprintf(stderr, "\t%s %s\n", commands[i].cmd_name,
 		    commands[i].arg_names);
 
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
-void
+static void
 cmd_list(int argc, char *argv[])
 {
 	int bus, dev, func;
 	int ch;
 
-	bus = pci_businfo.busno;
+	bus = -1;
 	dev = func = -1;
 
 	while ((ch = getopt(argc, argv, "nb:d:f:")) != -1) {
@@ -193,7 +189,7 @@ cmd_list(int argc, char *argv[])
 	scan_pci(bus, dev, func, scan_pci_list);
 }
 
-void
+static void
 cmd_dump(int argc, char *argv[])
 {
 	int bus, dev, func;
@@ -225,16 +221,16 @@ cmd_dump(int argc, char *argv[])
 		usage();
 
 	if (bus == -1)
-		errx(1, "dump: wildcard bus number not permitted");
+		errx(EXIT_FAILURE, "dump: wildcard bus number not permitted");
 	if (dev == -1)
-		errx(1, "dump: must specify a device number");
+		errx(EXIT_FAILURE, "dump: must specify a device number");
 	if (func == -1)
-		errx(1, "dump: wildcard function number not permitted");
+		errx(EXIT_FAILURE, "dump: wildcard function number not permitted");
 
 	scan_pci(bus, dev, func, scan_pci_dump);
 }
 
-int
+static int
 parse_bdf(const char *str)
 {
 	long value;
@@ -245,13 +241,13 @@ parse_bdf(const char *str)
 		return (-1);
 
 	value = strtol(str, &end, 0);
-	if(*end != '\0') 
-		errx(1, "\"%s\" is not a number", str);
+	if (*end != '\0') 
+		errx(EXIT_FAILURE, "\"%s\" is not a number", str);
 
 	return value;
 }
 
-void
+static void
 scan_pci(int busarg, int devarg, int funcarg, void (*cb)(u_int, u_int, u_int))
 {
 	u_int busmin, busmax;
@@ -309,7 +305,7 @@ scan_pci(int busarg, int devarg, int funcarg, void (*cb)(u_int, u_int, u_int))
 	}
 }
 
-void
+static void
 scan_pci_list(u_int bus, u_int dev, u_int func)
 {
 	pcireg_t id, class;
@@ -329,7 +325,7 @@ scan_pci_list(u_int bus, u_int dev, u_int func)
 	}
 }
 
-void
+static void
 scan_pci_dump(u_int bus, u_int dev, u_int func)
 {
 

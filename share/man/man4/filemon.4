@@ -1,0 +1,156 @@
+.\"	$NetBSD: filemon.4,v 1.4 2011/04/04 07:17:08 wiz Exp $
+.\"
+.\" Copyright (c) 2011, Juniper Networks, Inc.
+.\"
+.\" Redistribution and use in source and binary forms, with or without
+.\" modification, are permitted provided that the following conditions
+.\" are met:
+.\" 1. Redistributions of source code must retain the above copyright
+.\"    notice, this list of conditions and the following disclaimer.
+.\" 2. Redistributions in binary form must reproduce the above copyright
+.\"    notice, this list of conditions and the following disclaimer in the
+.\"    documentation and/or other materials provided with the distribution.
+.\"
+.\" THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+.\" "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+.\" LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+.\" A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+.\" OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+.\" SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+.\" LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+.\" DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+.\" THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+.\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+.\" OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+.\"
+.Dd April 1, 2011
+.Dt FILEMON 4
+.Os
+.Sh NAME
+.Nm filemon
+.Nd track interesting system calls
+.Sh SYNOPSIS
+.In filemon.h
+.Sh DESCRIPTION
+.Nm
+provides a means for tracking the successful system calls performed by a process.
+It is used by
+.Xr make 1
+to track the activities of build scripts, for the purpose of automatically
+learning dependencies.
+.Pp
+The data captured by
+.Nm
+for the command
+.Bd -literal -offset indent
+cat /etc/motd
+.Ed
+.Pp
+looks like:
+.Bd -literal -offset indent
+# filemon version 2
+# Target pid 7437
+V 2
+E 21848 /bin/cat
+R 21848 /lib/libc.so.12
+R 21848 /etc/motd
+X 21848 0
+# Bye bye
+.Ed
+.Pp
+Most records follow the format:
+.Bd -literal -offset indent
+type pid data
+.Ed
+.Pp
+where
+.Ar type
+is one of the list below, and unless otherwise specified,
+.Ar data
+is a pathname.
+.Bl -tag -width Ds -offset indent
+.It Dv C
+.Xr chdir 2 .
+.It Dv D
+.Xr unlink 2 .
+.It Dv E
+.Xr exec 3 .
+.It Dv F
+.Xr fork 2 ,
+.Xr vfork 2 ;
+.Ar data
+is the process id of the child.
+.It Dv L
+.Xr link 2 ,
+.Xr symlink 2 ;
+.Ar data
+is two pathnames.
+.It Dv M
+.Xr rename 2 ;
+.Ar data
+is two pathnames.
+.It Dv R
+.Xr open 2
+read-only.
+.It Dv W
+.Xr open 2
+for writing or read-write.
+.It Dv X
+.Xr exit 3 ;
+.Ar data
+is the exit status.
+.It Dv V
+indicates the version of
+.Nm .
+.El
+.Sh FILES
+.Bd -literal
+/dev/filemon
+.Ed
+.Sh EXAMPLES
+The following example demonstrates the basic usage of
+.Nm :
+.Pp
+.Bd -literal -offset indent
+#include <filemon.h>
+
+pid_d pid;
+int fd, tfd;
+int status;
+
+filemon_fd = open("/dev/filemon", O_RDWR);
+temp_fd = mkstemp("/tmp/filemon.XXXXXXX");
+/* give filemon the temp file to use */
+ioctl(filemon_fd, FILEMON_SET_FD, &temp_fd);
+/* children do not need these once they exec */
+fcntl(filemon_fd, F_SETFD, 1);
+fcntl(temp_fd, F_SETFD, 1);
+
+pid = fork();
+switch(pid) {
+ case -1:
+     err(1, "cannot fork");
+     break;
+ case 0:
+     pid = getpid();
+     /* tell filemon to monitor this process */
+     ioctl(filemon_fd, FILEMON_SET_PID, &pid);
+     execvp(...);
+     _exit(1);
+     break;
+ default:
+     status = wait();
+     close(filemon_fd);
+     lseek(temp_fd, SEEK_SET, 0);
+     /* read the captured syscalls from temp_fd */
+     close(temp_fd);
+     break;
+}
+.Ed
+.Pp
+It is possible to achieve almost equivalent results with
+.Xr dtrace 1
+though on many systems this requires elevated privileges.
+.Sh HISTORY
+.Nm
+was contributed by Juniper Networks.

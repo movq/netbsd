@@ -1,4 +1,4 @@
-/*	$NetBSD: clock_pcctwo.c,v 1.12 2008/01/07 14:39:28 tsutsui Exp $	*/
+/*	$NetBSD: clock_pcctwo.c,v 1.16 2009/05/12 14:38:26 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock_pcctwo.c,v 1.12 2008/01/07 14:39:28 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock_pcctwo.c,v 1.16 2009/05/12 14:38:26 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -59,8 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: clock_pcctwo.c,v 1.12 2008/01/07 14:39:28 tsutsui Ex
 #include <dev/mvme/pcctworeg.h>
 
 
-int clock_pcctwo_match(struct device *, struct cfdata *, void *);
-void clock_pcctwo_attach(struct device *, struct device *, void *);
+int clock_pcctwo_match(device_t, cfdata_t, void *);
+void clock_pcctwo_attach(device_t, device_t, void *);
 
 struct clock_pcctwo_softc {
 	struct device sc_dev;
@@ -85,10 +78,7 @@ static uint32_t clock_pcctwo_count;
 
 /* ARGSUSED */
 int
-clock_pcctwo_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+clock_pcctwo_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pcctwo_attach_args *pa = aux;
 
@@ -106,10 +96,7 @@ clock_pcctwo_match(parent, cf, aux)
 
 /* ARGSUSED */
 void
-clock_pcctwo_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+clock_pcctwo_attach(device_t parent, device_t self, void *aux)
 {
 	struct clock_pcctwo_softc *sc;
 	struct pcctwo_attach_args *pa;
@@ -140,10 +127,7 @@ clock_pcctwo_attach(parent, self, aux)
 }
 
 void
-clock_pcctwo_initclocks(arg, prof_us, stat_us)
-	void *arg;
-	int prof_us;
-	int stat_us;
+clock_pcctwo_initclocks(void *arg, int prof_us, int stat_us)
 {
 	struct clock_pcctwo_softc *sc;
 
@@ -208,8 +192,7 @@ clock_pcctwo_getcount(struct timecounter *tc)
 }
 
 int
-clock_pcctwo_profintr(frame)
-	void *frame;
+clock_pcctwo_profintr(void *frame)
 {
 	u_int8_t cr;
 	u_int32_t tc;
@@ -236,8 +219,7 @@ clock_pcctwo_profintr(frame)
 }
 
 int
-clock_pcctwo_statintr(frame)
-	void *frame;
+clock_pcctwo_statintr(void *frame)
 {
 
 	/* Disable the timer interrupt while we handle it. */
@@ -260,8 +242,7 @@ clock_pcctwo_statintr(frame)
 
 /* ARGSUSED */
 void
-clock_pcctwo_shutdown(arg)
-	void *arg;
+clock_pcctwo_shutdown(void *arg)
 {
 
 	/* Make sure the timer interrupts are turned off. */

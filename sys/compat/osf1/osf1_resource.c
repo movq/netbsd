@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_resource.c,v 1.11 2007/12/20 23:03:03 dsl Exp $ */
+/* $NetBSD: osf1_resource.c,v 1.14 2009/03/29 01:02:50 mrg Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_resource.c,v 1.11 2007/12/20 23:03:03 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_resource.c,v 1.14 2009/03/29 01:02:50 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +72,9 @@ osf1_sys_getrlimit(struct lwp *l, const struct osf1_sys_getrlimit_args *uap, reg
 	case OSF1_RLIMIT_NOFILE:
 		SCARG(&a, which) = RLIMIT_NOFILE;
 		break;
-	case OSF1_RLIMIT_AS:		/* unhandled */
+	case OSF1_RLIMIT_AS:
+		SCARG(&a, which) = RLIMIT_AS;
+		break;
 	default:
 		return (EINVAL);
 	}
@@ -87,20 +89,21 @@ int
 osf1_sys_getrusage(struct lwp *l, const struct osf1_sys_getrusage_args *uap, register_t *retval)
 {
 	struct osf1_rusage osf1_rusage;
-	struct rusage *ru;
+	struct rusage ru;
 	struct proc *p = l->l_proc;
 
 
 	switch (SCARG(uap, who)) {
 	case OSF1_RUSAGE_SELF:
-		ru = &p->p_stats->p_ru;
-		mutex_enter(&p->p_smutex);
-		calcru(p, &ru->ru_utime, &ru->ru_stime, NULL, NULL);
-		mutex_exit(&p->p_smutex);
+		mutex_enter(p->p_lock);
+		ru = p->p_stats->p_ru;
+		calcru(p, &ru.ru_utime, &ru.ru_stime, NULL, NULL);
+		rulwps(p, &ru);
+		mutex_exit(p->p_lock);
 		break;
 
 	case OSF1_RUSAGE_CHILDREN:
-		ru = &p->p_stats->p_cru;
+		ru = p->p_stats->p_cru;
 		break;
 
 	case OSF1_RUSAGE_THREAD:		/* XXX not supported */
@@ -108,7 +111,7 @@ osf1_sys_getrusage(struct lwp *l, const struct osf1_sys_getrusage_args *uap, reg
 		return (EINVAL);
 	}
 
-	osf1_cvt_rusage_from_native(ru, &osf1_rusage);
+	osf1_cvt_rusage_from_native(&ru, &osf1_rusage);
 
 	return copyout(&osf1_rusage, SCARG(uap, rusage), sizeof osf1_rusage);
 }
@@ -140,7 +143,9 @@ osf1_sys_setrlimit(struct lwp *l, const struct osf1_sys_setrlimit_args *uap, reg
 	case OSF1_RLIMIT_NOFILE:
 		SCARG(&a, which) = RLIMIT_NOFILE;
 		break;
-	case OSF1_RLIMIT_AS:		/* unhandled */
+	case OSF1_RLIMIT_AS:
+		SCARG(&a, which) = RLIMIT_AS;
+		break;
 	default:
 		return (EINVAL);
 	}

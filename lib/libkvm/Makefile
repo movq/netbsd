@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.44 2007/05/28 12:06:20 tls Exp $
+#	$NetBSD: Makefile,v 1.47 2011/02/14 18:27:24 matt Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/4/93
 
 USE_FORT?= yes	# used primarily by setgid programs
@@ -6,10 +6,7 @@ USE_FORT?= yes	# used primarily by setgid programs
 USE_SHLIBDIR=	yes
 
 LIB=	kvm
-CPPFLAGS+=-DLIBC_SCCS -I${NETBSDSRCDIR}/sys
-.if ${MACHINE_ARCH} == "i386"
-LINTFLAGS+=-w
-.endif
+CPPFLAGS+=-DLIBC_SCCS -I${NETBSDSRCDIR}/sys -D_KMEMUSER
 
 SRCS=	kvm.c kvm_file.c kvm_getloadavg.c kvm_proc.c
 
@@ -19,7 +16,9 @@ SRCS=	kvm.c kvm_file.c kvm_getloadavg.c kvm_proc.c
 # the dispatch on ${MACHINE} should be done at run time (see m68k).
 
 .include <bsd.own.mk>
-.if exists(kvm_${MACHINE_ARCH}.c)
+.if exists(kvm_${KVM_MACHINE_ARCH}.c)
+SRCS+=	kvm_${KVM_MACHINE_ARCH}.c
+.elif exists(kvm_${MACHINE_ARCH}.c)
 SRCS+=	kvm_${MACHINE_ARCH}.c
 .elif  exists(kvm_${MACHINE_CPU}.c)
 SRCS+=	kvm_${MACHINE_CPU}.c
@@ -27,6 +26,11 @@ SRCS+=	kvm_${MACHINE_CPU}.c
 .BEGIN:
 	@echo no kvm_xx.c for ${MACHINE_ARCH} nor ${MACHINE_CPU}
 	@false
+.endif
+
+.if ${MACHINE_ARCH} == "i386"
+LINTFLAGS+=-w
+SRCS+=	kvm_i386pae.c # Hook PAE support in the i386 build
 .endif
 
 # Additional modules needed for m68k

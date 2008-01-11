@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.38 2007/12/11 08:59:57 martin Exp $ */
+/*	$NetBSD: psl.h,v 1.48 2011/05/25 12:01:30 mrg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -179,8 +179,8 @@
 #define TSTATE_CCR		0xff00000000LL
 #define TSTATE_CCR_SHIFT	32
 
-#define PSRCC_TO_TSTATE(x)	(((int64_t)(x)&PSR_ICC)<<(TSTATE_CCR_SHIFT-19))
-#define TSTATECCR_TO_PSR(x)	(((x)&TSTATE_CCR)>>(TSTATE_CCR_SHIFT-19))
+#define PSRCC_TO_TSTATE(x)	(((int64_t)(x)&PSR_ICC)<<(TSTATE_CCR_SHIFT-20))
+#define TSTATECCR_TO_PSR(x)	(((x)&TSTATE_CCR)>>(TSTATE_CCR_SHIFT-20))
 
 /*
  * These are here to simplify life.
@@ -202,8 +202,8 @@
 
 #define TSTATE_BITS "\20\14IG\13MG\12CLE\11TLE\10\7MM\6RED\5PEF\4AM\3PRIV\2IE\1AG"
 
-#define TSTATE_KERN	((TSTATE_KERN)<<TSTATE_PSTATE_SHIFT)
-#define TSTATE_USER	((TSTATE_USER)<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_KERN	((PSTATE_KERN)<<TSTATE_PSTATE_SHIFT)
+#define TSTATE_USER	((PSTATE_USER)<<TSTATE_PSTATE_SHIFT)
 /*
  * SPARC V9 VER version register.
  *
@@ -223,6 +223,28 @@
 #define VER_MAXTL	0x000000000000ff00LL
 #define VER_MAXTL_SHIFT	8
 #define VER_MAXWIN	0x000000000000001fLL
+
+#define MANUF_FUJITSU		0x04 /* Fujitsu SPARC64 */
+#define MANUF_SUN		0x17 /* Sun UltraSPARC */
+
+#define IMPL_SPARC64		0x01 /* SPARC64 */
+#define IMPL_SPARC64_II		0x02 /* SPARC64-II */
+#define IMPL_SPARC64_III	0x03 /* SPARC64-III */
+#define IMPL_SPARC64_IV		0x04 /* SPARC64-IV */
+#define IMPL_ZEUS		0x05 /* SPARC64-V */
+#define IMPL_OLYMPUS_C		0x06 /* SPARC64-VI */
+#define IMPL_JUPITER		0x07 /* SPARC64-VII */
+
+#define IMPL_SPITFIRE		0x10 /* UltraSPARC-I */
+#define IMPL_BLACKBIRD		0x11 /* UltraSPARC-II */
+#define IMPL_SABRE		0x12 /* UltraSPARC-IIi */
+#define IMPL_HUMMINGBIRD	0x13 /* UltraSPARC-IIe */
+#define IMPL_CHEETAH		0x14 /* UltraSPARC-III */
+#define IMPL_CHEETAH_PLUS	0x15 /* UltraSPARC-III+ */
+#define IMPL_JALAPENO		0x16 /* UltraSPARC-IIIi */
+#define IMPL_JAGUAR		0x18 /* UltraSPARC-IV */
+#define IMPL_PANTHER		0x19 /* UltraSPARC-IV+ */
+#define IMPL_SERRANO		0x22 /* UltraSPARC-IIIi+ */
 
 /*
  * Here are a few things to help us transition between user and kernel mode:
@@ -251,44 +273,68 @@
 /*
  * Inlines for manipulating privileged registers
  */
-static __inline int
-getpstate(void)
-{
-	int pstate;
-
-	__asm volatile("rdpr %%pstate,%0" : "=r" (pstate));
-	return (pstate);
+#define SPARC64_GETPR_DEF(pr, type)	\
+static __inline type get##pr(void)					\
+{									\
+	type pr;							\
+	__asm volatile("rdpr %%" #pr ",%0" : "=r" (pr));		\
+	return pr;							\
+}
+#define SPARC64_SETPR_DEF(pr, type)	\
+static __inline void set##pr(type pr)					\
+{									\
+	__asm volatile("wrpr %0,0,%%" #pr : : "r" (pr) : "memory");	\
 }
 
-static __inline void
-setpstate(int newpstate)
-{
-	__asm volatile("wrpr %0,0,%%pstate" : : "r" (newpstate) : "memory");
+#ifdef __arch64__
+#define SPARC64_GETPR64_DEF(pr)	SPARC64_GETPR_DEF(pr, uint64_t)
+#define SPARC64_SETPR64_DEF(pr)	SPARC64_SETPR_DEF(pr, uint64_t)
+#else
+#define SPARC64_GETPR64_DEF(pr)	\
+static __inline uint64_t get##pr(void)					\
+{									\
+	uint32_t _hi, _lo;						\
+	__asm volatile("rdpr %%" #pr ",%0; srl %0,0,%1; srlx %0,32,%0"	\
+		: "=r" (_hi), "=r" (_lo));				\
+	return ((uint64_t)_hi << 32) | _lo;				\
 }
-
-static __inline int
-getcwp(void)
-{
-	int cwp;
-
-	__asm volatile("rdpr %%cwp,%0" : "=r" (cwp));
-	return (cwp);
+#define SPARC64_SETPR64_DEF(pr)	\
+static __inline void set##pr(uint64_t pr)				\
+{									\
+	uint32_t _hi = pr >> 32, _lo = pr;				\
+	__asm volatile("sllx %1,32,%0; or %0,%2,%0; wrpr %0,0,%%" #pr	\
+		       : "=&r" (_hi) /* scratch register */		\
+		       : "r" (_hi), "r" (_lo) : "memory");		\
 }
+#endif
 
-static __inline void
-setcwp(int newcwp)
-{
-	__asm volatile("wrpr %0,0,%%cwp" : : "r" (newcwp) : "memory");
-}
+/* Tick Register (PR 4) */
+SPARC64_GETPR64_DEF(tick)			/* gettick() */
+SPARC64_SETPR64_DEF(tick)			/* settick() */
 
-static __inline uint64_t
-getver(void)
-{
-	uint64_t ver;
+/* Processor State Register (PR 6) */
+SPARC64_GETPR_DEF(pstate, int)			/* getpstate() */
+SPARC64_SETPR_DEF(pstate, int)			/* setpstate() */
 
-	__asm volatile("rdpr %%ver,%0" : "=r" (ver));
-	return (ver);
-}
+/* Trap Level Register (PR 7) */
+SPARC64_GETPR_DEF(tl, int)			/* gettl() */
+
+/* Current Window Pointer Register (PR 9) */
+SPARC64_GETPR_DEF(cwp, int)			/* getcwp() */
+SPARC64_SETPR_DEF(cwp, int)			/* setcwp() */
+
+/* Version Register (PR 31) */
+SPARC64_GETPR64_DEF(ver)			/* getver() */
+
+/* Some simple macros to check the cpu type. */
+#define GETVER_CPU_IMPL()	((getver() & VER_IMPL) >> VER_IMPL_SHIFT)
+#define GETVER_CPU_MANUF()	((getver() & VER_MANUF) >> VER_MANUF_SHIFT)
+#define CPU_IS_SPITFIRE()	(GETVER_CPU_IMPL() == IMPL_SPITFIRE)
+#define CPU_IS_USIIIi()		((GETVER_CPU_IMPL() == IMPL_JALAPENO) || \
+				 (GETVER_CPU_IMPL() == IMPL_SERRANO))
+#define CPU_IS_USIII_UP()	(GETVER_CPU_IMPL() >= IMPL_CHEETAH)
+#define CPU_IS_SPARC64_V_UP()	(GETVER_CPU_MANUF() == MANUF_FUJITSU && \
+				 GETVER_CPU_IMPL() >= IMPL_ZEUS)
 
 static __inline int
 intr_disable(void)
@@ -296,7 +342,7 @@ intr_disable(void)
 	int pstate = getpstate();
 
 	setpstate(pstate & ~PSTATE_IE);
-	return (pstate);
+	return pstate;
 }
 
 static __inline void
@@ -371,7 +417,7 @@ typedef struct {
 	ipl_t _ipl;
 } ipl_cookie_t;
 
-static inline ipl_cookie_t
+static __inline ipl_cookie_t
 makeiplcookie(ipl_t ipl)
 {
 
@@ -388,10 +434,10 @@ splraiseipl(ipl_cookie_t icookie)
 	 * NetBSD/sparc64's IPL_* constants equate directly to the
 	 * corresponding PIL_* names; no need to map them here.
 	 */
-	__asm __volatile("rdpr %%pil,%0" : "=r" (oldpil));
+	__asm volatile("rdpr %%pil,%0" : "=r" (oldpil));
 	if (newpil <= oldpil)
 		return (oldpil);
-	__asm __volatile("wrpr %0,0,%%pil" : : "r" (newpil) : "memory");
+	__asm volatile("wrpr %0,0,%%pil" : : "r" (newpil) : "memory");
 	return (oldpil);
 }
 
@@ -430,8 +476,6 @@ SPLHOLD(splstatclock, PIL_STATCLOCK)
 SPLHOLD(splsched, PIL_SCHED)
 SPLHOLD(spllock, PIL_LOCK)
 
-SPLHOLD(splipi, PIL_HIGH)
-
 SPLHOLD(splhigh, PIL_HIGH)
 
 /* splx does not have a return value */
@@ -452,7 +496,6 @@ SPLHOLD(splhigh, PIL_HIGH)
 #define	spllock()	spllockX(__FILE__, __LINE__)
 #define	splhigh()	splhighX(__FILE__, __LINE__)
 #define splx(x)		splxX((x),__FILE__, __LINE__)
-#define splipi()	splhighX(__FILE__, __LINE__)
 
 static __inline void splxX(int newpil, const char *file, int line)
 #else

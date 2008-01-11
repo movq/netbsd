@@ -1,4 +1,4 @@
-# $NetBSD: md.acorn32,v 1.22 2007/02/19 15:56:43 he Exp $
+# $NetBSD: md.acorn32,v 1.24 2008/08/22 13:42:19 lukem Exp $
 #./usr/include/acorn32/devmap.h		comp-c-include
 ./usr/include/acorn32				comp-c-include
 ./usr/include/acorn32/ansi.h			comp-c-include
@@ -26,7 +26,7 @@
 ./usr/include/acorn32/int_mwgwtypes.h		comp-c-include
 ./usr/include/acorn32/int_types.h		comp-c-include
 ./usr/include/acorn32/intr.h			comp-c-include
-./usr/include/acorn32/ipkdb.h			comp-c-include
+./usr/include/acorn32/ipkdb.h			comp-obsolete		obsolete
 ./usr/include/acorn32/joystick.h		comp-c-include
 ./usr/include/acorn32/kbd.h			comp-obsolete		obsolete
 ./usr/include/acorn32/limits.h			comp-c-include
@@ -55,3 +55,4 @@
 ./usr/include/acorn32/vmparam.h			comp-c-include
 ./usr/include/acorn32/wchar_limits.h		comp-c-include
 ./usr/include/ieeefp.h				comp-c-include
+./usr/libdata/debug/usr/bin/fdformat.debug	comp-util-debug		debug

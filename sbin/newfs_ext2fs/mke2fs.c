@@ -1,7 +1,7 @@
-/*	$NetBSD: mke2fs.c,v 1.7 2007/12/14 13:19:35 tsutsui Exp $	*/
+/*	$NetBSD: mke2fs.c,v 1.14 2010/09/10 15:51:20 tsutsui Exp $	*/
 
-/*
- * Copyright (c) 2007 Izumi Tsutsui.
+/*-
+ * Copyright (c) 2007 Izumi Tsutsui.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -66,11 +64,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *	notice, this list of conditions and the following disclaimer in the
  *	documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *	must display the following acknowledgement:
- *	This product includes software developed by Manuel Bouyer.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -99,8 +92,7 @@
  *	- Design and Implementation of the Second Extended Filesystem
  *		http://e2fsprogs.sourceforge.net/ext2intro.html
  *	- Linux Documentation "The Second Extended Filesystem"
- *		src/linux/Documentation/filesystems/ext2.txt
- *		    in the Linux kernel distribution
+ *		http://www.kernel.org/doc/Documentation/filesystems/ext2.txt
  */
 
 #include <sys/cdefs.h>
@@ -108,7 +100,7 @@
 #if 0
 static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: mke2fs.c,v 1.7 2007/12/14 13:19:35 tsutsui Exp $");
+__RCSID("$NetBSD: mke2fs.c,v 1.14 2010/09/10 15:51:20 tsutsui Exp $");
 #endif
 #endif /* not lint */
 
@@ -240,9 +232,15 @@ mke2fs(const char *fsys, int fi, int fo)
 		 * and Linux seems to set the same values to them.
 		 */
 		errx(EXIT_FAILURE,
-		    "block size (%u) can't be diffrent from "
+		    "block size (%u) can't be different from "
 		    "fragment size (%u)\n",
 		    bsize, fsize);
+	}
+
+	/* variable inodesize is REV1 feature */
+	if (Oflag == 0 && inodesize != EXT2_REV0_DINODE_SIZE) {
+		errx(EXIT_FAILURE, "GOOD_OLD_REV file system format"
+		    " doesn't support %d byte inode\n", inodesize);
 	}
 
 	sblock.e2fs.e2fs_log_bsize = ilog2(bsize) - LOG_MINBSIZE;
@@ -254,10 +252,10 @@ mke2fs(const char *fsys, int fi, int fo)
 	sblock.e2fs_qbmask = sblock.e2fs_bsize - 1;
 	sblock.e2fs_bmask = ~sblock.e2fs_qbmask;
 	sblock.e2fs_fsbtodb = ilog2(sblock.e2fs_bsize) - ilog2(sectorsize);
-	sblock.e2fs_ipb = sblock.e2fs_bsize / EXT2_DINODE_SIZE;
+	sblock.e2fs_ipb = sblock.e2fs_bsize / inodesize;
 
 	/*
-	 * Ext2fs preseves BBSIZE (1024 bytes) space at the top for
+	 * Ext2fs preserves BBSIZE (1024 bytes) space at the top for
 	 * bootloader (though it is not enough at all for our bootloader).
 	 * If bsize == BBSIZE we have to preserve one block.
 	 * If bsize > BBSIZE, the first block already contains BBSIZE space
@@ -285,7 +283,7 @@ mke2fs(const char *fsys, int fi, int fo)
 	/*
 	 * While many people claim that ext2fs is a (bad) clone of ufs/ffs,
 	 * it isn't actual ffs so maybe we should call it "block group"
-	 * as their native name rather than ffs delived "cylinder group."
+	 * as their native name rather than ffs derived "cylinder group."
 	 * But we'll use the latter here since other kernel sources use it.
 	 * (I also agree "cylinder" based allocation is obsolete though)
 	 */
@@ -303,7 +301,7 @@ mke2fs(const char *fsys, int fi, int fo)
 		num_inodes = UINT16_MAX * ncg;	/* ext2bgd_nifree is uint16_t */
 
 	inodes_per_cg = num_inodes / ncg;
-	iblocks_per_cg = howmany(EXT2_DINODE_SIZE * inodes_per_cg, bsize);
+	iblocks_per_cg = howmany(inodesize * inodes_per_cg, bsize);
 
 	/* Check that the last cylinder group has enough space for inodes */
 	minblocks_per_cg =
@@ -370,7 +368,7 @@ mke2fs(const char *fsys, int fi, int fo)
 	/*
 	 * Maybe we can use E2FS_OS_FREEBSD here and it would be more proper,
 	 * but the purpose of this newfs_ext2fs(8) command is to provide
-	 * a filesystem which can be recognized by firmwares on some
+	 * a filesystem which can be recognized by firmware on some
 	 * Linux based appliances that can load bootstrap files only from
 	 * (their native) ext2fs, and anyway we will (and should) try to
 	 * act like them as much as possible.
@@ -406,7 +404,7 @@ mke2fs(const char *fsys, int fi, int fo)
 	sblock.e2fs.e2fs_rgid = getegid();
 
 	sblock.e2fs.e2fs_first_ino = EXT2_FIRSTINO;
-	sblock.e2fs.e2fs_inode_size = EXT2_DINODE_SIZE;
+	sblock.e2fs.e2fs_inode_size = inodesize;
 
 	/* e2fs_block_group_nr is set on writing superblock to each group */
 
@@ -567,7 +565,7 @@ mke2fs(const char *fsys, int fi, int fo)
 
 		/*
 		 * Ensure there is nothing that looks like a filesystem
-		 * superbock anywhere other than where ours will be.
+		 * superblock anywhere other than where ours will be.
 		 * If fsck_ext2fs finds the wrong one all hell breaks loose!
 		 *
 		 * XXX: needs to check how fsck_ext2fs programs even
@@ -734,7 +732,7 @@ initcg(uint cylno)
 	 * Initialize inode bitmap.
 	 *
 	 *  Assume e2fs_ipg is a multiple of NBBY since
-	 *  it's a multible of e2fs_ipb (as we did above).
+	 *  it's a multiple of e2fs_ipb (as we did above).
 	 *  Note even (possibly smaller) the last group has the same e2fs_ipg.
 	 */
 	i = sblock.e2fs.e2fs_ipg / NBBY;
@@ -756,11 +754,11 @@ initcg(uint cylno)
 	 *       to override these generated numbers.
 	 */
 	memset(buf, 0, sblock.e2fs_bsize);
-	dp = (struct ext2fs_dinode *)buf;
 	for (i = 0; i < sblock.e2fs_itpg; i++) {
 		for (j = 0; j < sblock.e2fs_ipb; j++) {
+			dp = (struct ext2fs_dinode *)(buf + inodesize * j);
 			/* h2fs32() just for consistency */
-			dp[j].e2di_gen = h2fs32(arc4random());
+			dp->e2di_gen = h2fs32(arc4random());
 		}
 		wtfs(fsbtodb(&sblock, gd[cylno].ext2bgd_i_tables + i),
 		    sblock.e2fs_bsize, buf);
@@ -820,7 +818,7 @@ zap_old_sblock(daddr_t sec)
 	 * The sector might contain boot code, so we must validate it
 	 *
 	 * XXX: ext2fs won't preserve data after SBOFF,
-	 *      but first_dblock could have a differnt value.
+	 *      but first_dblock could have a different value.
 	 */
 	rdfs(sec, sizeof(oldfs), &oldfs);
 	for (fsm = fs_magics;; fsm++) {
@@ -941,7 +939,7 @@ fsinit(const struct timeval *tv)
 	node.e2di_mtime = tv->tv_sec;
 	node.e2di_gid = getegid();
 	node.e2di_nlink = PREDEFDIR;
-	/* e2di_nblock is a number of disk block, not ext2fs block */
+	/* e2di_nblock is a number of disk blocks, not ext2fs blocks */
 	node.e2di_nblock = fsbtodb(&sblock, nblks_lostfound);
 	node.e2di_blocks[0] = alloc(sblock.e2fs_bsize, node.e2di_mode);
 	if (node.e2di_blocks[0] == 0) {
@@ -1039,7 +1037,7 @@ copy_dir(struct ext2fs_direct *dir, struct ext2fs_direct *dbuf)
 /*
  * void init_resizeino(const struct timeval *tv);
  *
- *	Initialize the EXT2_RESEIZE_INO inode to prereserve
+ *	Initialize the EXT2_RESEIZE_INO inode to preserve
  *	reserved group descriptor blocks for future growth of this ext2fs.
  */
 void
@@ -1101,7 +1099,7 @@ init_resizeino(const struct timeval *tv)
 	 * have block numbers of actual reserved group descriptors
 	 * allocated at block group zero. This means e2fs_reserved_ngdb
 	 * blocks are reserved as the second level dindirect reference
-	 * blocks, and they acutually contain block numbers of indirect
+	 * blocks, and they actually contain block numbers of indirect
 	 * references. It may be safe since they don't have to keep any
 	 * data yet.
 	 *
@@ -1354,8 +1352,8 @@ iput(struct ext2fs_dinode *ip, ino_t ino)
 	d = fsbtodb(&sblock, ino_to_fsba(&sblock, ino));
 	rdfs(d, sblock.e2fs_bsize, bp);
 
-	dp = (struct ext2fs_dinode *)bp;
-	dp += ino_to_fsbo(&sblock, ino);
+	dp = (struct ext2fs_dinode *)(bp +
+	    inodesize * ino_to_fsbo(&sblock, ino));
 	e2fs_isave(ip, dp);
 	/* e2fs_i_bswap() doesn't swap e2di_blocks addrs */
 	if ((ip->e2di_mode & EXT2_IFMT) != EXT2_IFLNK) {

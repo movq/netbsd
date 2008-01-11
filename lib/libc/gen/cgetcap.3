@@ -1,4 +1,4 @@
-.\"	$NetBSD: cgetcap.3,v 1.3 2005/06/17 02:10:45 enami Exp $
+.\"	$NetBSD: cgetcap.3,v 1.6 2009/08/19 15:43:02 joerg Exp $
 .\"
 .\" Copyright (c) 1992, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	@(#)getcap.3	8.4 (Berkeley) 5/13/94
 .\"
-.Dd April 23, 2004
+.Dd February 1, 2008
 .Dt CGETCAP 3
 .Os
 .Sh NAME
@@ -45,7 +45,8 @@
 .Nm cgetustr ,
 .Nm cgetfirst ,
 .Nm cgetnext ,
-.Nm cgetclose
+.Nm cgetclose ,
+.Nm cexpandtc
 .Nd capability database access routines
 .Sh LIBRARY
 .Lb libc
@@ -71,6 +72,8 @@
 .Fn cgetnext "char **buf" "const char * const *db_array"
 .Ft int
 .Fn cgetclose "void"
+.Ft void
+.Fn csetexpandtc "int expandtc"
 .Sh DESCRIPTION
 .Fn cgetent
 extracts the capability
@@ -387,6 +390,11 @@ file in which the
 .Qq tc
 is declared and all subsequent files in the file array.
 .Pp
+.Fn csetexpandtc
+can be used to control if
+.Qq tc
+expansion is performed or not.
+.Pp
 When a database is searched for a capability record, the first matching
 record in the search is returned.
 When a record is scanned for a capability, the first matching
@@ -526,17 +534,17 @@ Non-printable
 codes, new lines, and colons may be conveniently represented by the use
 of escape sequences:
 .Bl -column "\e\|X,X\e\|X" "(ASCII octal nnn)"
-^X	('\fIX\fP' \*[Am] 037)	control-\fIX\fP
-\e\|b, \e\|B	(ASCII 010)	backspace
-\e\|t, \e\|T	(ASCII 011)	tab
-\e\|n, \e\|N	(ASCII 012)	line feed (newline)
-\e\|f, \e\|F	(ASCII 014)	form feed
-\e\|r, \e\|R	(ASCII 015)	carriage return
-\e\|e, \e\|E	(ASCII 027)	escape
-\e\|c, \e\|C	(:)	colon
-\e\|\e	(\e\|)	back slash
-\e\|^	(^)	caret
-\e\|\fInnn\fP	(ASCII octal \fInnn\fP)
+.It ^X	('\fIX\fP' \*[Am] 037)	control-\fIX\fP
+.It \e\|b, \e\|B	(ASCII 010)	backspace
+.It \e\|t, \e\|T	(ASCII 011)	tab
+.It \e\|n, \e\|N	(ASCII 012)	line feed (newline)
+.It \e\|f, \e\|F	(ASCII 014)	form feed
+.It \e\|r, \e\|R	(ASCII 015)	carriage return
+.It \e\|e, \e\|E	(ASCII 027)	escape
+.It \e\|c, \e\|C	(:)	colon
+.It \e\|\e	(\e\|)	back slash
+.It \e\|^	(^)	caret
+.It \e\|\fInnn\fP	(ASCII octal \fInnn\fP)
 .El
 .Pp
 A

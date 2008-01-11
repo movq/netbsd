@@ -26,9 +26,9 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)strdup.3	8.1 (Berkeley) 6/9/93
-.\"	$NetBSD: strdup.3,v 1.15 2006/10/16 08:48:45 wiz Exp $
+.\"	$NetBSD: strdup.3,v 1.18 2009/01/29 10:15:39 wiz Exp $
 .\"
-.Dd August 12, 2006
+.Dd January 28, 2009
 .Dt STRDUP 3
 .Os
 .Sh NAME
@@ -93,8 +93,17 @@ for any of the errors specified for the library function
 .Xr malloc 3 ,
 .Xr strcpy 3 ,
 .Xr strlen 3
+.Sh STANDARDS
+The
+.Fn strdup
+function conforms to
+.St -p1003.1-2001 .
 .Sh HISTORY
 The
 .Fn strdup
 function first appeared in
 .Bx 4.4 .
+The
+.Fn strndup
+function was added in
+.Nx 4.0 .

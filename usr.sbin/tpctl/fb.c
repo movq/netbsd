@@ -1,4 +1,4 @@
-/*	$NetBSD: fb.c,v 1.2 2003/07/08 23:33:50 uwe Exp $	*/
+/*	$NetBSD: fb.c,v 1.4 2008/05/10 15:31:05 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 TAKEMRUA Shin
@@ -41,7 +41,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: fb.c,v 1.2 2003/07/08 23:33:50 uwe Exp $");
+__RCSID("$NetBSD: fb.c,v 1.4 2008/05/10 15:31:05 martin Exp $");
 #endif /* not lint */
 
 #define INVALID_CACHE -1

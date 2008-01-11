@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.c,v 1.9 2005/04/07 16:28:40 christos Exp $	*/
+/*	$NetBSD: msg.c,v 1.11 2011/05/24 12:49:11 joerg Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: msg.c,v 1.9 2005/04/07 16:28:40 christos Exp $");
+__RCSID("$NetBSD: msg.c,v 1.11 2011/05/24 12:49:11 joerg Exp $");
 #endif
 
 #include <stdio.h>
@@ -52,13 +52,13 @@ static	const	char *msgs[] = {
 	"%s declared( %s ), but never used or defined",		      /* 2 */
 	"%s multiply defined  \t%s  ::  %s",			      /* 3 */
 	"%s value used inconsistently  \t%s  ::  %s",		      /* 4 */
-	"%s value declared inconsistently  \t%s  ::  %s",	      /* 5 */
+	"%s value declared inconsistently (%s != %s) \t%s  ::  %s",   /* 5 */
 	"%s, arg %d used inconsistently  \t%s[%s]  ::  %s[%s]",	      /* 6 */
 	"%s: variable # of args  \t%s  ::  %s",			      /* 7 */
 	"%s returns value which is always ignored",		      /* 8 */
 	"%s returns value which is sometimes ignored",		      /* 9 */
 	"%s value is used( %s ), but none returned",		      /* 10 */
-	"%s, arg %d declared inconsistently  \t%s :: %s",	      /* 11 */
+	"%s, arg %d declared inconsistently (%s != %s)\t%s :: %s",    /* 11 */
 	"%s: variable # of args declared  \t%s  ::  %s",	      /* 12 */
 	"%s: malformed format string  \t%s",			      /* 13 */
 	"%s, arg %d inconsistent with format  \t%s",		      /* 14 */
@@ -131,7 +131,7 @@ mkpos(pos_t *posp)
 	if (len > blen)
 		buf = xrealloc(buf, blen = len);
 	if (line != 0) {
-		(void)sprintf(buf, "%s%s(%hu)",
+		(void)sprintf(buf, "%s%s(%d)",
 			      fn, qm ? "?" : "", line);
 	} else {
 		(void)sprintf(buf, "%s", fn);

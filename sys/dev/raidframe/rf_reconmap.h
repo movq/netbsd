@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_reconmap.h,v 1.10 2005/12/11 12:23:37 christos Exp $	*/
+/*	$NetBSD: rf_reconmap.h,v 1.12 2011/05/10 07:04:17 mrg Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -38,6 +38,9 @@
 
 #include "rf_threadstuff.h"
 
+/* the number of recon units in the status table. */
+#define RF_RECONMAP_SIZE 32
+
 /*
  * Main reconstruction status descriptor.
  */
@@ -49,11 +52,19 @@ struct RF_ReconMap_s {
 	RF_ReconUnitCount_t totalRUs;	/* total recon units on disk */
 	RF_ReconUnitCount_t spareRUs;	/* total number of spare RUs on failed
 					 * disk */
+	RF_ReconUnitCount_t low_ru;     /* lowest reconstruction unit number in
+					   the status array */
+	RF_ReconUnitCount_t high_ru;    /* highest reconstruction unit number
+					   in the status array */
+	RF_ReconUnitCount_t head;       /* the position in the array where
+					   low_ru is found */
+	RF_ReconUnitCount_t status_size; /* number of recon units in status */
 	RF_StripeCount_t totalParityStripes;	/* total number of parity
 						 * stripes in array */
 	RF_ReconMapListElem_t **status;	/* array of ptrs to list elements */
 	struct pool elem_pool;          /* pool of RF_ReconMapListElem_t's */
-	RF_DECLARE_MUTEX(mutex)
+	rf_declare_mutex2(mutex);
+	rf_declare_cond2(cv);
 	int lock;                       /* 1 if someone has the recon map
 					   locked, 0 otherwise */
 };

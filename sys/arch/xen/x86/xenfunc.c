@@ -1,4 +1,4 @@
-/*	$NetBSD: xenfunc.c,v 1.2 2007/11/22 16:17:06 bouyer Exp $	*/
+/*	$NetBSD: xenfunc.c,v 1.11 2010/07/24 00:45:56 jym Exp $	*/
 
 /*
  *
@@ -13,11 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Christian Limpach.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -30,6 +25,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: xenfunc.c,v 1.11 2010/07/24 00:45:56 jym Exp $");
 
 #include <sys/param.h>
 
@@ -51,30 +49,34 @@
 #endif
 
 void xen_set_ldt(vaddr_t, uint32_t);
-void xen_update_descriptor(union descriptor *, union descriptor *);
 
 void 
 invlpg(vaddr_t addr)
 {
 	int s = splvm();
 	xpq_queue_invlpg(addr);
-	xpq_flush_queue();
 	splx(s);
 }  
 
-#ifndef __x86_64__
 void
 lldt(u_short sel)
 {
+#ifndef __x86_64__
+	struct cpu_info *ci;
 
+	ci = curcpu();
+
+	if (ci->ci_curldt == sel)
+		return;
 	/* __PRINTK(("ldt %x\n", IDXSELN(sel))); */
 	if (sel == GSEL(GLDT_SEL, SEL_KPL))
 		xen_set_ldt((vaddr_t)ldt, NLDT);
 	else
-		xen_set_ldt(cpu_info_primary.ci_gdt[IDXSELN(sel)].ld.ld_base,
-		    cpu_info_primary.ci_gdt[IDXSELN(sel)].ld.ld_entries);
-}
+		xen_set_ldt(ci->ci_gdt[IDXSELN(sel)].ld.ld_base,
+		    ci->ci_gdt[IDXSELN(sel)].ld.ld_entries);
+	ci->ci_curldt = sel;
 #endif
+}
 
 void
 ltr(u_short sel)
@@ -83,12 +85,12 @@ ltr(u_short sel)
 }
 
 void
-lcr0(u_int val)
+lcr0(u_long val)
 {
 	__PRINTK(("XXX lcr0 not supported\n"));
 }
 
-u_int
+u_long
 rcr0(void)
 {
 	__PRINTK(("XXX rcr0 not supported\n"));
@@ -101,7 +103,6 @@ lcr3(vaddr_t val)
 {
 	int s = splvm();
 	xpq_queue_pt_switch(xpmap_ptom_masked(val));
-	xpq_flush_queue();
 	splx(s);
 }
 #endif
@@ -111,7 +112,6 @@ tlbflush(void)
 {
 	int s = splvm();
 	xpq_queue_tlb_flush();
-	xpq_flush_queue();
 	splx(s);
 }
 
@@ -147,9 +147,5 @@ wbinvd(void)
 vaddr_t
 rcr2(void)
 {
-#ifdef XEN3
-	return HYPERVISOR_shared_info->vcpu_info[0].arch.cr2; /* XXX curcpu */
-#else
-	return 0;
-#endif
+	return curcpu()->ci_vcpu->arch.cr2;
 }

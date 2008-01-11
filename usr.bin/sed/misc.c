@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.c,v 1.9 2006/06/18 05:16:41 gdamore Exp $	*/
+/*	$NetBSD: misc.c,v 1.11 2010/02/19 16:35:27 tnn Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "@(#)misc.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: misc.c,v 1.9 2006/06/18 05:16:41 gdamore Exp $");
+__RCSID("$NetBSD: misc.c,v 1.11 2010/02/19 16:35:27 tnn Exp $");
 #endif
 #endif /* not lint */
 
@@ -96,7 +96,7 @@ __RCSID("$NetBSD: misc.c,v 1.9 2006/06/18 05:16:41 gdamore Exp $");
  * malloc with result test
  */
 void *
-xmalloc(u_int size)
+xmalloc(size_t size)
 {
 	void *p;
 
@@ -109,7 +109,7 @@ xmalloc(u_int size)
  * realloc with result test
  */
 void *
-xrealloc(void *p, u_int size)
+xrealloc(void *p, size_t size)
 {
 	if (p == NULL)			/* Compatibility hack. */
 		return (xmalloc(size));
@@ -127,12 +127,13 @@ xrealloc(void *p, u_int size)
 char *
 strregerror(int errcode, regex_t *preg)
 {
+	char buf[1];
 	static char *oe;
 	size_t s;
 
 	if (oe != NULL)
 		free(oe);
-	s = regerror(errcode, preg, "", 0);
+	s = regerror(errcode, preg, buf, 0);
 	oe = xmalloc(s);
 	(void)regerror(errcode, preg, oe, s);
 	return (oe);

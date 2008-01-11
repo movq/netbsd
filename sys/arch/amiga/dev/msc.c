@@ -1,4 +1,4 @@
-/*	$NetBSD: msc.c,v 1.40 2007/11/19 18:51:37 ad Exp $ */
+/*	$NetBSD: msc.c,v 1.43 2011/04/24 16:26:52 rmind Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.40 2007/11/19 18:51:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.43 2011/04/24 16:26:52 rmind Exp $");
 
 #include "msc.h"
 
@@ -104,7 +104,6 @@ __KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.40 2007/11/19 18:51:37 ad Exp $");
 #include <sys/tty.h>
 #include <sys/proc.h>
 #include <sys/file.h>
-#include <sys/malloc.h>
 #include <sys/uio.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
@@ -348,7 +347,7 @@ mscopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 	if (!msc_tty[ttyn]) {
 
-		tp = ttymalloc();
+		tp = tty_alloc();
 		tty_attach(tp);
 		msc_tty[ttyn] = tp;
 		msc_tty[ttyn+1] = (struct tty *)NULL;
@@ -438,7 +437,7 @@ mscopen(dev_t dev, int flag, int mode, struct lwp *l)
 #if DEBUG_CD
 		printf("msc%d: %d waiting for CD\n", msc->unit, MSCLINE(dev));
 #endif
-		error = ttysleep(tp, &tp->t_rawq.c_cv, true, 0);
+		error = ttysleep(tp, &tp->t_rawcv, true, 0);
 		tp->t_wopen--;
 
 		if (error) {
@@ -1202,7 +1201,7 @@ mscinitcard(struct zbus_args *zap)
 	(void)mlm->ResetBoard;
 
 	/* wait until speed detector has finished */
-	for (bcount = 0; bcount < 200; bcount++) {
+	for (bcount = 0; bcount < 2000; bcount++) {
 		delay(10000);
 		if (mlm->Common.Crystal)
 			break;

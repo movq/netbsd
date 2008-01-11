@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_frag.h,v 1.4 2007/04/14 20:34:36 martin Exp $	*/
+/*	$NetBSD: ip_frag.h,v 1.6 2009/08/19 08:36:10 darrenr Exp $	*/
 
 /*
  * Copyright (C) 1993-2001 by Darren Reed.
@@ -6,7 +6,7 @@
  * See the IPFILTER.LICENCE file for details on licencing.
  *
  * @(#)ip_frag.h	1.5 3/24/96
- * Id: ip_frag.h,v 2.23.2.5 2006/12/23 11:11:47 darrenr Exp
+ * Id: ip_frag.h,v 2.23.2.7 2009/01/01 03:53:17 darrenr Exp
  */
 
 #ifndef _NETINET_IP_FRAG_H_
@@ -29,14 +29,14 @@ typedef	struct	ipfr	{
 	 * therefore important for this set to remain together.
 	 */
 	void	*ipfr_ifp;
-	struct	in_addr	ipfr_src;
-	struct	in_addr	ipfr_dst;
+	i6addr_t ipfr_src;
+	i6addr_t ipfr_dst;
 	u_32_t	ipfr_optmsk;
 	u_short	ipfr_secmsk;
 	u_short	ipfr_auth;
-	u_short	ipfr_id;
-	u_char	ipfr_p;
-	u_char	ipfr_tos;
+	u_32_t	ipfr_id;
+	u_32_t	ipfr_p;
+	u_32_t	ipfr_tos;
 	u_32_t	ipfr_pass;
 } ipfr_t;
 
@@ -89,8 +89,8 @@ extern	void	fr_forgetnat __P((void *));
 extern	void	fr_fragclear __P((void));
 extern	void	fr_fragexpire __P((void));
 
-#if     defined(_KERNEL) && ((BSD >= 199306) || SOLARIS || defined(__sgi) \
-	        || defined(__osf__) || (defined(__sgi) && (IRIX >= 60500)))
+#if defined(_KERNEL) && ((defined(BSD) && (BSD >= 199306)) || SOLARIS || \
+    defined(__sgi) || defined(__osf__) || (defined(__sgi) && (IRIX >= 60500)))
 # if defined(SOLARIS2) && (SOLARIS2 < 7)
 extern	void	fr_slowtimer __P((void));
 # else

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.13 2007/03/04 05:59:44 christos Exp $	*/
+/*	$NetBSD: bus.h,v 1.15 2009/08/23 14:28:09 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -128,6 +121,7 @@ struct dreamcast_bus_space {
 			    bus_size_t);
 	int		(*dbs_subregion)(void *, bus_space_handle_t,
 			    bus_size_t, bus_size_t, bus_space_handle_t *);
+	paddr_t		(*dbs_mmap)(void *, bus_addr_t, off_t, int, int);
 
 	/* allocation/deallocation */
 	int		(*dbs_alloc)(void *, bus_addr_t, bus_addr_t,
@@ -277,6 +271,8 @@ do {									\
 	(*(t)->dbs_unmap)((t)->dbs_cookie, (h), (s))
 #define	bus_space_subregion(t, h, o, s, hp)				\
 	(*(t)->dbs_subregion)((t)->dbs_cookie, (h), (o), (s), (hp))
+#define	bus_space_mmap(t, a, o, p, f)				\
+	(*(t)->dbs_mmap)((t)->dbs_cookie, (a), (o), (p), (f))
 
 #endif /* _KERNEL */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_syscall.c,v 1.41 2008/01/05 12:53:53 dsl Exp $	*/
+/*	$NetBSD: linux_syscall.c,v 1.50 2009/11/21 03:11:00 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.41 2008/01/05 12:53:53 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.50 2009/11/21 03:11:00 rmind Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
@@ -46,9 +39,9 @@ __KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.41 2008/01/05 12:53:53 dsl Exp $
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
+#include <sys/syscallvar.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -69,7 +62,6 @@ void
 linux_syscall_intern(struct proc *p)
 {
 
-	p->p_trace_enabled = trace_is_enabled(p);
 	p->p_md.md_syscall = linux_syscall;
 }
 
@@ -86,7 +78,6 @@ linux_syscall(struct trapframe *frame)
 	int error;
 	register_t code, args[6], rval[2];
 
-	uvmexp.syscalls++;
 	l = curlwp;
 	LWP_CACHE_CREDS(l, l->l_proc);
 
@@ -108,19 +99,15 @@ linux_syscall(struct trapframe *frame)
 	rval[0] = 0;
 	rval[1] = 0;
 
-	KERNEL_LOCK(1, l);
-
 	if (__predict_false(l->l_proc->p_trace_enabled)) {
-		error = trace_enter(code, code, NULL, args);
+		error = trace_enter(code, args, callp->sy_narg);
 		if (__predict_true(error == 0)) {
-			error = (*callp->sy_call)(l, args, rval);
+			error = sy_call(callp, l, args, rval);
 			code = frame->tf_eax & (LINUX_SYS_NSYSENT - 1);
-			trace_exit(code, args, rval, error);
+			trace_exit(code, rval, error);
 		}
 	} else
-		error = (*callp->sy_call)(l, args, rval);
-
-	KERNEL_UNLOCK_LAST(l);
+		error = sy_call(callp, l, args, rval);
 
 	if (__predict_true(error == 0)) {
 		frame->tf_eax = rval[0];

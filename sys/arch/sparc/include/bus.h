@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.53 2007/03/04 06:00:44 christos Exp $	*/
+/*	$NetBSD: bus.h,v 1.56 2009/05/26 03:30:25 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -252,6 +245,7 @@ static void	*bus_intr_establish2(
 				void (*)(void));	/*optional fast vector*/
 
 
+
 static __inline int
 bus_space_map(t, a, s, f, hp)
 	bus_space_tag_t	t;
@@ -359,7 +353,7 @@ void	bus_space_free(bus_space_tag_t t, bus_space_handle_t bsh,
 #define BUS_SPACE_MAP_BUS1	0x0100	/* placeholders for bus functions... */
 #define BUS_SPACE_MAP_BUS2	0x0200
 #define BUS_SPACE_MAP_BUS3	0x0400
-#define BUS_SPACE_MAP_BUS4	0x0800
+#define BUS_SPACE_MAP_LARGE	0x0800	/* map outside IODEV range */
 
 
 /* flags for bus_space_barrier() */

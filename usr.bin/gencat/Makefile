@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2003/05/18 07:57:34 lukem Exp $
+#	$NetBSD: Makefile,v 1.9 2009/04/14 22:15:20 lukem Exp $
 
 PROG=	gencat
 MAN=	gencat.1

@@ -1,4 +1,4 @@
-/*	$NetBSD: deq.c,v 1.3 2007/01/17 23:05:49 macallan Exp $	*/
+/*	$NetBSD: deq.c,v 1.8 2010/12/20 00:25:37 matt Exp $	*/
 
 /*-
  * Copyright (C) 2005 Michael Lorenz
@@ -32,15 +32,13 @@
  */
  
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: deq.c,v 1.3 2007/01/17 23:05:49 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: deq.c,v 1.8 2010/12/20 00:25:37 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-
-#include <uvm/uvm_extern.h>
 
 #include <dev/ofw/openfirm.h>
 #include <dev/i2c/i2cvar.h>
@@ -49,43 +47,41 @@ __KERNEL_RCSID(0, "$NetBSD: deq.c,v 1.3 2007/01/17 23:05:49 macallan Exp $");
 #include <macppc/dev/ki2cvar.h>
 #include <macppc/dev/deqvar.h>
 
-static void deq_attach(struct device *, struct device *, void *);
-static int deq_match(struct device *, struct cfdata *, void *);
+static void deq_attach(device_t, device_t, void *);
+static int deq_match(device_t, struct cfdata *, void *);
 
-CFATTACH_DECL(deq, sizeof(struct deq_softc),
+CFATTACH_DECL_NEW(deq, sizeof(struct deq_softc),
     deq_match, deq_attach, NULL, NULL);
 
 int
-deq_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+deq_match(device_t parent, struct cfdata *cf, void *aux)
 {
 	struct ki2c_confargs *ka = aux;
-	char compat[32];
+	char buf[32];
 	
-	if (strcmp(ka->ka_name, "deq") != 0)
-		return 0;
-
-	memset(compat, 0, sizeof(compat));
-	if(OF_getprop(ka->ka_node, "i2c-address", compat, sizeof(compat)))
-		return 1;
+	if (strcmp(ka->ka_name, "deq") == 0) {
+		if (OF_getprop(ka->ka_node, "i2c-address", buf, sizeof(buf)))
+			return 1;
+	} else if (strcmp(ka->ka_name, "codec") == 0) {
+		if (OF_getprop(ka->ka_node, "compatible", buf, sizeof(buf)))
+			if (strcmp(buf, "tas3004") == 0)
+				return 1;
+	}
 	return 0;
 }
 
 void
-deq_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+deq_attach(device_t parent, device_t self, void *aux)
 {
-	struct deq_softc *sc = (struct deq_softc *)self;
+	struct deq_softc *sc = device_private(self);
 	struct ki2c_confargs *ka = aux;
 	int node;
 
+	sc->sc_dev = self;
 	node = ka->ka_node;
 	sc->sc_node = node;
 	sc->sc_parent = parent;
 	sc->sc_address = ka->ka_addr & 0xfe;
 	sc->sc_i2c = ka->ka_tag;
-	printf(" Apple Digital Equalizer, addr 0x%x\n", sc->sc_address);
+	aprint_normal(" Apple Digital Equalizer, addr 0x%x\n", sc->sc_address);
 }

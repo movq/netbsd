@@ -1,4 +1,4 @@
-/*	$NetBSD: uscanner.c,v 1.59 2007/12/05 17:19:56 pooka Exp $	*/
+/*	$NetBSD: uscanner.c,v 1.68 2010/11/03 22:34:24 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uscanner.c,v 1.59 2007/12/05 17:19:56 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uscanner.c,v 1.68 2010/11/03 22:34:24 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,7 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: uscanner.c,v 1.59 2007/12/05 17:19:56 pooka Exp $");
 #include <sys/fcntl.h>
 #include <sys/filio.h>
 #endif
-#include <sys/tty.h>
 #include <sys/file.h>
 #if defined(__FreeBSD__) && __FreeBSD_version >= 500014
 #include <sys/selinfo.h>
@@ -73,8 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: uscanner.c,v 1.59 2007/12/05 17:19:56 pooka Exp $");
 #include <dev/usb/usbdevs.h>
 
 #ifdef USCANNER_DEBUG
-#define DPRINTF(x)	if (uscannerdebug) logprintf x
-#define DPRINTFN(n,x)	if (uscannerdebug>(n)) logprintf x
+#define DPRINTF(x)	if (uscannerdebug) printf x
+#define DPRINTFN(n,x)	if (uscannerdebug>(n)) printf x
 int	uscannerdebug = 0;
 #else
 #define DPRINTF(x)
@@ -223,7 +215,7 @@ static const struct uscan_info uscanner_devs[] = {
 #define	USCANNER_BUFFERSIZE	1024
 
 struct uscanner_softc {
-	USBBASEDEVICE		sc_dev;		/* base device */
+	device_t		sc_dev;		/* base device */
 	usbd_device_handle	sc_udev;
 	usbd_interface_handle	sc_iface;
 
@@ -303,28 +295,40 @@ Static void uscanner_do_close(struct uscanner_softc *);
 
 #define USCANNERUNIT(n) (minor(n))
 
-USB_DECLARE_DRIVER(uscanner);
+int             uscanner_match(device_t, cfdata_t, void *);
+void            uscanner_attach(device_t, device_t, void *);
+int             uscanner_detach(device_t, int);
+int             uscanner_activate(device_t, enum devact);
+extern struct cfdriver uscanner_cd;
+CFATTACH_DECL_NEW(uscanner, sizeof(struct uscanner_softc), uscanner_match, uscanner_attach, uscanner_detach, uscanner_activate);
 
-USB_MATCH(uscanner)
+int 
+uscanner_match(device_t parent, cfdata_t match, void *aux)
 {
-	USB_MATCH_START(uscanner, uaa);
+	struct usb_attach_arg *uaa = aux;
 
 	return (uscanner_lookup(uaa->vendor, uaa->product) != NULL ?
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
 
-USB_ATTACH(uscanner)
+void 
+uscanner_attach(device_t parent, device_t self, void *aux)
 {
-	USB_ATTACH_START(uscanner, sc, uaa);
+	struct uscanner_softc *sc = device_private(self);
+	struct usb_attach_arg *uaa = aux;
 	usb_interface_descriptor_t *id = 0;
 	usb_endpoint_descriptor_t *ed, *ed_bulkin = NULL, *ed_bulkout = NULL;
 	char *devinfop;
 	int i;
 	usbd_status err;
 
+	sc->sc_dev = self;
+
+	aprint_naive("\n");
+	aprint_normal("\n");
+
 	devinfop = usbd_devinfo_alloc(uaa->device, 0);
-	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
 	sc->sc_dev_flags = uscanner_lookup(uaa->vendor, uaa->product)->flags;
@@ -333,10 +337,9 @@ USB_ATTACH(uscanner)
 
 	err = usbd_set_config_no(uaa->device, 1, 1); /* XXX */
 	if (err) {
-		printf("%s: setting config no failed\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "setting config no failed\n");
 		sc->sc_dying = 1;
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 
 	/* XXX We only check the first interface */
@@ -344,20 +347,21 @@ USB_ATTACH(uscanner)
 	if (!err && sc->sc_iface)
 	    id = usbd_get_interface_descriptor(sc->sc_iface);
 	if (err || id == 0) {
-		printf("%s: could not get interface descriptor, err=%d,id=%p\n",
-		       USBDEVNAME(sc->sc_dev), err, id);
+		aprint_error_dev(self,
+		    "could not get interface descriptor, err=%d,id=%p\n",
+		    err, id);
 		sc->sc_dying = 1;
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 
 	/* Find the two first bulk endpoints */
 	for (i = 0 ; i < id->bNumEndpoints; i++) {
 		ed = usbd_interface2endpoint_descriptor(sc->sc_iface, i);
 		if (ed == 0) {
-			printf("%s: could not read endpoint descriptor\n",
-			       USBDEVNAME(sc->sc_dev));
+			aprint_error_dev(self,
+			    "could not read endpoint descriptor\n");
 			sc->sc_dying = 1;
-			USB_ATTACH_ERROR_RETURN;
+			return;
 		}
 
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN
@@ -374,10 +378,10 @@ USB_ATTACH(uscanner)
 
 	/* Verify that we got something sensible */
 	if (ed_bulkin == NULL || ed_bulkout == NULL) {
-		printf("%s: bulk-in and/or bulk-out endpoint not found\n",
-			USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self,
+		    "bulk-in and/or bulk-out endpoint not found\n");
 		sc->sc_dying = 1;
-		USB_ATTACH_ERROR_RETURN;
+		return;
 	}
 
 	sc->sc_bulkin = ed_bulkin->bEndpointAddress;
@@ -385,14 +389,14 @@ USB_ATTACH(uscanner)
 
 #ifdef __FreeBSD__
 	/* the main device, ctrl endpoint */
-	make_dev(&uscanner_cdevsw, USBDEVUNIT(sc->sc_dev),
-		UID_ROOT, GID_OPERATOR, 0644, "%s", USBDEVNAME(sc->sc_dev));
+	make_dev(&uscanner_cdevsw, device_unit(sc->sc_dev),
+		UID_ROOT, GID_OPERATOR, 0644, "%s", device_xname(sc->sc_dev));
 #endif
-
+	selinit(&sc->sc_selq);
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
-			   USBDEV(sc->sc_dev));
+			   sc->sc_dev);
 
-	USB_ATTACH_SUCCESS_RETURN;
+	return;
 }
 
 int
@@ -403,7 +407,9 @@ uscanneropen(dev_t dev, int flag, int mode,
 	int unit = USCANNERUNIT(dev);
 	usbd_status err;
 
-	USB_GET_SC_OPEN(uscanner, unit, sc);
+	sc = device_lookup_private(&uscanner_cd, unit);
+	if (sc == NULL)
+		return ENXIO;
 
  	DPRINTFN(5, ("uscanneropen: flag=%d, mode=%d, unit=%d\n",
 		     flag, mode, unit));
@@ -429,7 +435,7 @@ uscanneropen(dev_t dev, int flag, int mode,
 				     USBD_EXCLUSIVE_USE, &sc->sc_bulkin_pipe);
 		if (err) {
 			printf("%s: cannot open bulk-in pipe (addr %d)\n",
-			       USBDEVNAME(sc->sc_dev), sc->sc_bulkin);
+			       device_xname(sc->sc_dev), sc->sc_bulkin);
 			uscanner_do_close(sc);
 			return (EIO);
 		}
@@ -439,7 +445,7 @@ uscanneropen(dev_t dev, int flag, int mode,
 				     USBD_EXCLUSIVE_USE, &sc->sc_bulkout_pipe);
 		if (err) {
 			printf("%s: cannot open bulk-out pipe (addr %d)\n",
-			       USBDEVNAME(sc->sc_dev), sc->sc_bulkout);
+			       device_xname(sc->sc_dev), sc->sc_bulkout);
 			uscanner_do_close(sc);
 			return (EIO);
 		}
@@ -465,9 +471,9 @@ uscannerclose(dev_t dev, int flag, int mode,
 {
 	struct uscanner_softc *sc;
 
-	USB_GET_SC(uscanner, USCANNERUNIT(dev), sc);
+	sc = device_lookup_private(&uscanner_cd, USCANNERUNIT(dev));
 
-	DPRINTFN(5, ("uscannerclose: flag=%d, mode=%d, unit=%d\n",
+	DPRINTFN(5, ("uscannerclose: flag=%d, mode=%d, unit=%"PRId32"\n",
 		     flag, mode, USCANNERUNIT(dev)));
 
 #ifdef DIAGNOSTIC
@@ -526,7 +532,7 @@ uscanner_do_read(struct uscanner_softc *sc, struct uio *uio, int flag)
 	usbd_status err;
 	int error = 0;
 
-	DPRINTFN(5, ("%s: uscannerread\n", USBDEVNAME(sc->sc_dev)));
+	DPRINTFN(5, ("%s: uscannerread\n", device_xname(sc->sc_dev)));
 
 	if (sc->sc_dying)
 		return (EIO);
@@ -564,12 +570,12 @@ uscannerread(dev_t dev, struct uio *uio, int flag)
 	struct uscanner_softc *sc;
 	int error;
 
-	USB_GET_SC(uscanner, USCANNERUNIT(dev), sc);
+	sc = device_lookup_private(&uscanner_cd, USCANNERUNIT(dev));
 
 	sc->sc_refcnt++;
 	error = uscanner_do_read(sc, uio, flag);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeup(USBDEV(sc->sc_dev));
+		usb_detach_wakeup(sc->sc_dev);
 
 	return (error);
 }
@@ -581,7 +587,7 @@ uscanner_do_write(struct uscanner_softc *sc, struct uio *uio, int flag)
 	int error = 0;
 	usbd_status err;
 
-	DPRINTFN(5, ("%s: uscanner_do_write\n", USBDEVNAME(sc->sc_dev)));
+	DPRINTFN(5, ("%s: uscanner_do_write\n", device_xname(sc->sc_dev)));
 
 	if (sc->sc_dying)
 		return (EIO);
@@ -614,37 +620,36 @@ uscannerwrite(dev_t dev, struct uio *uio, int flag)
 	struct uscanner_softc *sc;
 	int error;
 
-	USB_GET_SC(uscanner, USCANNERUNIT(dev), sc);
+	sc = device_lookup_private(&uscanner_cd, USCANNERUNIT(dev));
 
 	sc->sc_refcnt++;
 	error = uscanner_do_write(sc, uio, flag);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeup(USBDEV(sc->sc_dev));
+		usb_detach_wakeup(sc->sc_dev);
 	return (error);
 }
 
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 int
-uscanner_activate(device_ptr_t self, enum devact act)
+uscanner_activate(device_t self, enum devact act)
 {
-	struct uscanner_softc *sc = (struct uscanner_softc *)self;
+	struct uscanner_softc *sc = device_private(self);
 
 	switch (act) {
-	case DVACT_ACTIVATE:
-		return (EOPNOTSUPP);
-
 	case DVACT_DEACTIVATE:
 		sc->sc_dying = 1;
-		break;
+		return 0;
+	default:
+		return EOPNOTSUPP;
 	}
-	return (0);
 }
 #endif
 
-USB_DETACH(uscanner)
+int 
+uscanner_detach(device_t self, int flags)
 {
-	USB_DETACH_START(uscanner, sc);
-	int s;
+	struct uscanner_softc *sc = device_private(self);
+	int             s;
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 	int maj, mn;
 #elif defined(__FreeBSD__)
@@ -670,7 +675,7 @@ USB_DETACH(uscanner)
 	s = splusb();
 	if (--sc->sc_refcnt >= 0) {
 		/* Wait for processes to go away. */
-		usb_detach_wait(USBDEV(sc->sc_dev));
+		usb_detach_wait(sc->sc_dev);
 	}
 	splx(s);
 
@@ -689,7 +694,7 @@ USB_DETACH(uscanner)
 	vdevgone(maj, mn, mn + USB_MAX_ENDPOINTS - 1, VCHR);
 #elif defined(__FreeBSD__)
 	/* destroy the device for the control endpoint */
-	dev = makedev(USCANNER_CDEV_MAJOR, USBDEVUNIT(sc->sc_dev));
+	dev = makedev(USCANNER_CDEV_MAJOR, device_unit(sc->sc_dev));
 	vp = SLIST_FIRST(&dev->si_hlist);
 	if (vp)
 		VOP_REVOKE(vp, REVOKEALL);
@@ -697,7 +702,8 @@ USB_DETACH(uscanner)
 #endif
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-			   USBDEV(sc->sc_dev));
+			   sc->sc_dev);
+	seldestroy(&sc->sc_selq);
 
 	return (0);
 }
@@ -708,7 +714,7 @@ uscannerpoll(dev_t dev, int events, struct lwp *l)
 	struct uscanner_softc *sc;
 	int revents = 0;
 
-	USB_GET_SC(uscanner, USCANNERUNIT(dev), sc);
+	sc = device_lookup_private(&uscanner_cd, USCANNERUNIT(dev));
 
 	if (sc->sc_dying)
 		return (POLLHUP);
@@ -741,7 +747,7 @@ uscannerkqfilter(dev_t dev, struct knote *kn)
 	struct uscanner_softc *sc;
 	struct klist *klist;
 
-	USB_GET_SC(uscanner, USCANNERUNIT(dev), sc);
+	sc = device_lookup_private(&uscanner_cd, USCANNERUNIT(dev));
 
 	if (sc->sc_dying)
 		return (ENXIO);

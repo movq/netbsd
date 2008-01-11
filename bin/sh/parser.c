@@ -1,4 +1,4 @@
-/*	$NetBSD: parser.c,v 1.66 2007/12/15 19:44:37 perry Exp $	*/
+/*	$NetBSD: parser.c,v 1.79 2010/12/13 16:54:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)parser.c	8.7 (Berkeley) 5/16/95";
 #else
-__RCSID("$NetBSD: parser.c,v 1.66 2007/12/15 19:44:37 perry Exp $");
+__RCSID("$NetBSD: parser.c,v 1.79 2010/12/13 16:54:04 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -93,7 +93,7 @@ int needprompt;			/* true if interactive and at start of line */
 int lasttoken;			/* last token read */
 MKINIT int tokpushback;		/* last token pushed back */
 char *wordtext;			/* text of last word returned by readtoken */
-MKINIT int checkkwd;            /* 1 == check for kwds, 2 == also eat newlines */
+MKINIT int checkkwd;		/* 1 == check for kwds, 2 == also eat newlines */
 struct nodelist *backquotelist;
 union node *redirnode;
 struct heredoc *heredoc;
@@ -101,7 +101,7 @@ int quoteflag;			/* set if (part of) last token was quoted */
 int startlinno;			/* line # where last token started */
 
 
-STATIC union node *list(int);
+STATIC union node *list(int, int);
 STATIC union node *andor(void);
 STATIC union node *pipeline(void);
 STATIC union node *command(void);
@@ -142,12 +142,12 @@ parsecmd(int interact)
 	if (t == TNL)
 		return NULL;
 	tokpushback++;
-	return list(1);
+	return list(1, 0);
 }
 
 
 STATIC union node *
-list(int nlflag)
+list(int nlflag, int erflag)
 {
 	union node *n1, *n2, *n3;
 	int tok;
@@ -207,7 +207,7 @@ list(int nlflag)
 				pungetc();		/* push back EOF on input */
 			return n1;
 		default:
-			if (nlflag)
+			if (nlflag || erflag)
 				synexpect(-1);
 			tokpushback++;
 			return n1;
@@ -325,22 +325,22 @@ command(void)
 	case TIF:
 		n1 = (union node *)stalloc(sizeof (struct nif));
 		n1->type = NIF;
-		n1->nif.test = list(0);
+		n1->nif.test = list(0, 0);
 		if (readtoken() != TTHEN)
 			synexpect(TTHEN);
-		n1->nif.ifpart = list(0);
+		n1->nif.ifpart = list(0, 0);
 		n2 = n1;
 		while (readtoken() == TELIF) {
 			n2->nif.elsepart = (union node *)stalloc(sizeof (struct nif));
 			n2 = n2->nif.elsepart;
 			n2->type = NIF;
-			n2->nif.test = list(0);
+			n2->nif.test = list(0, 0);
 			if (readtoken() != TTHEN)
 				synexpect(TTHEN);
-			n2->nif.ifpart = list(0);
+			n2->nif.ifpart = list(0, 0);
 		}
 		if (lasttoken == TELSE)
-			n2->nif.elsepart = list(0);
+			n2->nif.elsepart = list(0, 0);
 		else {
 			n2->nif.elsepart = NULL;
 			tokpushback++;
@@ -354,12 +354,12 @@ command(void)
 		int got;
 		n1 = (union node *)stalloc(sizeof (struct nbinary));
 		n1->type = (lasttoken == TWHILE)? NWHILE : NUNTIL;
-		n1->nbinary.ch1 = list(0);
+		n1->nbinary.ch1 = list(0, 0);
 		if ((got=readtoken()) != TDO) {
 TRACE(("expecting DO got %s %s\n", tokname[got], got == TWORD ? wordtext : ""));
 			synexpect(TDO);
 		}
-		n1->nbinary.ch2 = list(0);
+		n1->nbinary.ch2 = list(0, 0);
 		if (readtoken() != TDONE)
 			synexpect(TDONE);
 		checkkwd = 1;
@@ -408,7 +408,7 @@ TRACE(("expecting DO got %s %s\n", tokname[got], got == TWORD ? wordtext : ""));
 			t = TEND;
 		else
 			synexpect(-1);
-		n1->nfor.body = list(0);
+		n1->nfor.body = list(0, 0);
 		if (readtoken() != t)
 			synexpect(t);
 		checkkwd = 1;
@@ -450,7 +450,7 @@ TRACE(("expecting DO got %s %s\n", tokname[got], got == TWORD ? wordtext : ""));
 			if (lasttoken != TRP) {
 				synexpect(TRP);
 			}
-			cp->nclist.body = list(0);
+			cp->nclist.body = list(0, 0);
 
 			checkkwd = 2;
 			if ((t = readtoken()) != TESAC) {
@@ -472,14 +472,14 @@ TRACE(("expecting DO got %s %s\n", tokname[got], got == TWORD ? wordtext : ""));
 	case TLP:
 		n1 = (union node *)stalloc(sizeof (struct nredir));
 		n1->type = NSUBSHELL;
-		n1->nredir.n = list(0);
+		n1->nredir.n = list(0, 0);
 		n1->nredir.redirect = NULL;
 		if (readtoken() != TRP)
 			synexpect(TRP);
 		checkkwd = 1;
 		break;
 	case TBEGIN:
-		n1 = list(0);
+		n1 = list(0, 0);
 		if (readtoken() != TEND)
 			synexpect(TEND);
 		checkkwd = 1;
@@ -814,8 +814,6 @@ xxreadtoken(void)
 	startlinno = plinno;
 	for (;;) {	/* until token or start of word found */
 		c = pgetc_macro();
-		if (c == ' ' || c == '\t')
-			continue;		/* quick check for white space first */
 		switch (c) {
 		case ' ': case '\t':
 			continue;
@@ -924,7 +922,7 @@ readtoken1(int firstc, char const *syn, char *eofmark, int striptabs)
 	int * volatile dblquotep = NULL;
 	volatile size_t maxnest = 32;
 	volatile int dblquote;
-	volatile int varnest;	/* levels of variables expansion */
+	volatile size_t varnest;	/* levels of variables expansion */
 	volatile int arinest;	/* levels of arithmetic expansion */
 	volatile int parenlevel;	/* levels of parens in arithmetic */
 	volatile int oldstyle;
@@ -1120,7 +1118,7 @@ readtoken1(int firstc, char const *syn, char *eofmark, int striptabs)
 endword:
 	if (syntax == ARISYNTAX)
 		synerror("Missing '))'");
-	if (syntax != BASESYNTAX && ! parsebackquote && eofmark == NULL)
+	if (syntax != BASESYNTAX && /* ! parsebackquote && */ eofmark == NULL)
 		synerror("Unterminated quoted string");
 	if (varnest != 0) {
 		startlinno = plinno;
@@ -1170,7 +1168,7 @@ checkend: {
 
 				p = line;
 				for (q = eofmark + 1 ; *q && *p == *q ; p++, q++);
-				if (*p == '\n' && *q == '\0') {
+				if ((*p == '\0' || *p == '\n') && *q == '\0') {
 					c = PEOF;
 					plinno++;
 					needprompt = doprompt;
@@ -1463,7 +1461,7 @@ done:
 	} else
 		saveprompt = 0;
 
-	n = list(0);
+	n = list(0, oldstyle);
 
 	if (oldstyle)
 		doprompt = saveprompt;

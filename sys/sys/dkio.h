@@ -1,4 +1,4 @@
-/*	$NetBSD: dkio.h,v 1.14 2007/08/17 11:05:03 pavel Exp $	*/
+/*	$NetBSD: dkio.h,v 1.17 2011/01/18 19:52:24 matt Exp $	*/
 
 /*
  * Copyright (c) 1987, 1988, 1993
@@ -42,7 +42,11 @@
 #define DIOCGDINFO	_IOR('d', 101, struct disklabel)/* get */
 #define DIOCSDINFO	_IOW('d', 102, struct disklabel)/* set */
 #define DIOCWDINFO	_IOW('d', 103, struct disklabel)/* set, update disk */
+
+#ifdef _KERNEL
+#define DIOCGDINFO32	(DIOCGDINFO - (sizeof(uint32_t) << IOCPARM_SHIFT))
 #define DIOCGPART	_IOW('d', 104, struct partinfo)	/* get partition */
+#endif
 
 #if defined(__HAVE_OLD_DISKLABEL) && defined(_KERNEL)
 #define ODIOCGDINFO	_IOR('d', 101, struct olddisklabel)/* get */
@@ -101,5 +105,8 @@
 
 		/* get disk-info dictionary */
 #define	DIOCGDISKINFO	_IOR('d', 127, struct plistref)
+
+
+#define	DIOCTUR		_IOR('d', 128, int)	/* test unit ready */
 
 #endif /* _SYS_DKIO_H_ */

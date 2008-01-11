@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_tftproot.c,v 1.2 2008/01/02 19:26:45 yamt Exp $ */
+/*	$NetBSD: subr_tftproot.c,v 1.10 2009/08/23 12:10:50 manu Exp $ */
 
 /*-
  * Copyright (c) 2007 Emmanuel Dreyfus, all rights reserved.
@@ -39,7 +39,7 @@
 #include "opt_md.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_tftproot.c,v 1.2 2008/01/02 19:26:45 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_tftproot.c,v 1.10 2009/08/23 12:10:50 manu Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -117,11 +117,10 @@ struct tftproot_handle {
 int tftproot_dhcpboot(struct device *);
 
 static int tftproot_getfile(struct tftproot_handle *, struct lwp *);
-static int tftproot_recv __P((struct mbuf*, void*));
+static int tftproot_recv(struct mbuf*, void*);
 
 int
-tftproot_dhcpboot(bootdv)
-	struct device *bootdv;
+tftproot_dhcpboot(struct device *bootdv)
 {
 	struct nfs_diskless *nd = NULL;
 	struct ifnet *ifp = NULL;
@@ -134,9 +133,12 @@ tftproot_dhcpboot(bootdv)
 		IFNET_FOREACH(ifp)
 			if (strcmp(rootspec, ifp->if_xname) == 0)
 				break;
-	} else if ((bootdv != NULL && device_class(bootdv) == DV_IFNET)) {
+	} 
+
+	if ((ifp == NULL) &&
+	    (bootdv != NULL && device_class(bootdv) == DV_IFNET)) {
 		IFNET_FOREACH(ifp)
-			if (strcmp(bootdv->dv_xname, ifp->if_xname) == 0)
+			if (strcmp(device_xname(bootdv), ifp->if_xname) == 0)
 				break;
 	}
 
@@ -145,10 +147,7 @@ tftproot_dhcpboot(bootdv)
 		goto out;
 	}
 
-	for (dv = TAILQ_FIRST(&alldevs); dv != NULL;
-	     dv = TAILQ_NEXT(dv, dv_list))
-		if (strcmp(dv->dv_xname, ifp->if_xname) == 0)
-			break;
+	dv = device_find_by_xname(ifp->if_xname);
 
 	if ((dv == NULL) || (device_class(dv) != DV_IFNET)) {
 		DPRINTF(("%s():%d cannot find device for interface %s\n",
@@ -182,7 +181,7 @@ tftproot_dhcpboot(bootdv)
 
 	printf("tftproot: bootfile=%s\n", nd->nd_bootfile);
 
-	bzero(&trh, sizeof(trh));
+	memset(&trh, 0, sizeof(trh));
 	trh.trh_nd = nd;
 	trh.trh_block = 1;
 
@@ -202,9 +201,7 @@ out:
 }
 
 static int 
-tftproot_getfile(trh, l)
-	struct tftproot_handle *trh;
-	struct lwp *l;
+tftproot_getfile(struct tftproot_handle *trh, struct lwp *l)
 {
 	struct socket *so = NULL;
 	struct mbuf *m_serv = NULL;
@@ -218,7 +215,7 @@ tftproot_getfile(trh, l)
 	char *cp;
 	/* struct device *dv; */
 	
-	if ((error = socreate(AF_INET, &so, SOCK_DGRAM, 0, l)) != 0) {
+	if ((error = socreate(AF_INET, &so, SOCK_DGRAM, 0, l, NULL)) != 0) {
 		DPRINTF(("%s():%d socreate returned %d\n", 
 		    __func__, __LINE__, error));
 		goto out;
@@ -353,9 +350,7 @@ out:
 }
 
 static int
-tftproot_recv(m, ctx)
-	struct mbuf *m;
-	void *ctx;
+tftproot_recv(struct mbuf *m, void *ctx)
 {
 	struct tftproot_handle *trh = ctx;
 	struct tftphdr *tftp;

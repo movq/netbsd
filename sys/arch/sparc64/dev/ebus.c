@@ -1,4 +1,4 @@
-/*	$NetBSD: ebus.c,v 1.50 2006/02/13 21:47:11 cdi Exp $	*/
+/*	$NetBSD: ebus.c,v 1.56 2011/03/18 09:52:54 mrg Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ebus.c,v 1.50 2006/02/13 21:47:11 cdi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ebus.c,v 1.56 2011/03/18 09:52:54 mrg Exp $");
 
 #include "opt_ddb.h"
 
@@ -48,7 +46,9 @@ __KERNEL_RCSID(0, "$NetBSD: ebus.c,v 1.50 2006/02/13 21:47:11 cdi Exp $");
 #define EDB_CHILD	0x02
 #define	EDB_INTRMAP	0x04
 #define EDB_BUSMAP	0x08
-int ebus_debug = 0;
+#define EDB_BUSDMA	0x10
+#define EDB_INTR	0x20
+int ebus_debug = 0x0;
 #define DPRINTF(l, s)   do { if (ebus_debug & l) printf s; } while (0)
 #else
 #define DPRINTF(l, s)
@@ -72,31 +72,9 @@ int ebus_debug = 0;
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
 
-#include <sparc64/dev/iommureg.h>
-#include <sparc64/dev/iommuvar.h>
-#include <sparc64/dev/psychoreg.h>
-#include <sparc64/dev/psychovar.h>
 #include <dev/ebus/ebusreg.h>
 #include <dev/ebus/ebusvar.h>
-#include <sparc64/sparc64/cache.h>
-
-struct ebus_softc {
-	struct device			sc_dev;
-
-	int				sc_node;
-
-	bus_space_tag_t			sc_memtag;	/* from pci */
-	bus_space_tag_t			sc_iotag;	/* from pci */
-	bus_space_tag_t			sc_childbustag;	/* pass to children */
-	bus_dma_tag_t			sc_dmatag;
-
-	struct ebus_ranges		*sc_range;
-	struct ebus_interrupt_map	*sc_intmap;
-	struct ebus_interrupt_map_mask	sc_intmapmask;
-
-	int				sc_nrange;	/* counters */
-	int				sc_nintmap;
-};
+#include <sparc64/dev/ebusvar.h>
 
 int	ebus_match(struct device *, struct cfdata *, void *);
 void	ebus_attach(struct device *, struct device *, void *);
@@ -104,18 +82,9 @@ void	ebus_attach(struct device *, struct device *, void *);
 CFATTACH_DECL(ebus, sizeof(struct ebus_softc),
     ebus_match, ebus_attach, NULL, NULL);
 
-bus_space_tag_t ebus_alloc_bus_tag(struct ebus_softc *, int);
-
-int	ebus_setup_attach_args(struct ebus_softc *, int,
-	    struct ebus_attach_args *);
-void	ebus_destroy_attach_args(struct ebus_attach_args *);
-int	ebus_print(void *, const char *);
-void	ebus_find_ino(struct ebus_softc *, struct ebus_attach_args *);
-
 /*
  * here are our bus space and bus DMA routines.
  */
-static paddr_t ebus_bus_mmap(bus_space_tag_t, bus_addr_t, off_t, int, int);
 static int _ebus_bus_map(bus_space_tag_t, bus_addr_t, bus_size_t, int, vaddr_t,
 	bus_space_handle_t *);
 static void *ebus_intr_establish(bus_space_tag_t, int, int, int (*)(void *),
@@ -171,10 +140,11 @@ ebus_attach(struct device *parent, struct device *self, void *aux)
 	int node, nmapmask, error;
 	char devinfo[256];
 
-	printf("\n");
+	aprint_normal("\n");
+	aprint_naive("\n");
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	printf("%s: %s, revision 0x%02x\n", self->dv_xname, devinfo,
+	aprint_normal_dev(self, "%s, revision 0x%02x\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
 	sc->sc_memtag = pa->pa_memt;
@@ -230,7 +200,7 @@ ebus_attach(struct device *parent, struct device *self, void *aux)
 		char *name = prom_getpropstring(node, "name");
 
 		if (ebus_setup_attach_args(sc, node, &eba) != 0) {
-			printf("ebus_attach: %s: incomplete\n", name);
+			aprint_error("ebus_attach: %s: incomplete\n", name);
 			continue;
 		} else {
 			DPRINTF(EDB_CHILD, ("- found child `%s', attaching\n",
@@ -461,7 +431,7 @@ _ebus_bus_map(bus_space_tag_t t, bus_addr_t ba, bus_size_t size, int flags,
 	return (EINVAL);
 }
 
-static paddr_t
+paddr_t
 ebus_bus_mmap(bus_space_tag_t t, bus_addr_t paddr, off_t off, int prot,
 	int flags)
 {
