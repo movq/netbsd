@@ -1,5 +1,5 @@
 /*
- * $Id: openpam_attr.h,v 1.1 2008/01/27 00:54:59 christos Exp $
+ * $Id: openpam_attr.h,v 1.1.1.1 2008/01/27 00:54:59 christos Exp $
  */
 
 #ifndef SECURITY_PAM_ATTRIBUTES_H_INCLUDED
