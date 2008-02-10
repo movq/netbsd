@@ -1,4 +1,4 @@
-/*      $Id: local2.c,v 1.1 2008/02/10 20:04:53 ragge Exp $    */
+/*      $Id: local2.c,v 1.1.1.1 2008/02/10 20:04:53 ragge Exp $    */
 /*
  * Copyright (c) 2007 Gregory McGarry (g.mcgarry@ieee.org).
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
