@@ -1,7 +1,7 @@
-/* 	$NetBSD: pathnames.h,v 1.1.2.1 2007/12/08 22:05:05 mjf Exp $ */
+/* 	$NetBSD: pathnames.h,v 1.1.2.2 2008/02/18 22:07:02 mjf Exp $ */
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -31,5 +31,5 @@
 
 #include <paths.h>
 
-#define _PATH_TEST_CONFIG "test.cfg"
+#define _PATH_CONFIG "/etc/devfsd.conf"
 #define _PATH_DCTL "/dev/dctl"
