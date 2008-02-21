@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.own.mk,v 1.502 2008/02/09 19:31:36 jmmv Exp $
+#	$NetBSD: bsd.own.mk,v 1.505 2008/03/31 02:42:27 lukem Exp $
 
 .if !defined(_BSD_OWN_MK_)
 _BSD_OWN_MK_=1
@@ -516,11 +516,14 @@ dependall:	.NOTMAIN realdepend .MAKE
 # Supported NO* options (if defined, MK* will be forced to "no",
 # regardless of user's mk.conf setting).
 #
+# Source makefiles should set NO*, and not MK*, and must do so before
+# including bsd.own.mk.
+#
 .for var in \
-	CRYPTO DOC HTML LINKLIB LINT MAN NLS OBJ PIC PICINSTALL PROFILE \
-	SHARE STATICLIB
-.if defined(NO${var})
-MK${var}:=	no
+	NOCRYPTO NODOC NOHTML NOLINKLIB NOLINT NOMAN NONLS NOOBJ NOPIC \
+	NOPICINSTALL NOPROFILE NOSHARE NOSTATICLIB
+.if defined(${var})
+MK${var:S/^NO//}:=	no
 .endif
 .endfor
 
@@ -537,31 +540,31 @@ MK${var}:=	yes
 # MK* options which default to "yes".
 #
 .for var in \
-	BFD BINUTILS \
-	CATPAGES CRYPTO CVS \
-	DOC \
-	GCC GCCCMDS GDB \
-	HESIOD HTML \
-	IEEEFP INET6 INFO IPFILTER ISCSI \
-	KERBEROS \
-	LINKLIB LINT \
-	MAN \
-	NLS \
-	OBJ \
-	PAM PF PIC PICINSTALL PICLIB POSTFIX PROFILE \
-	SHARE SKEY STATICLIB \
-	YP
-MK${var}?=	yes
+	MKBFD MKBINUTILS \
+	MKCATPAGES MKCRYPTO MKCVS \
+	MKDOC \
+	MKGCC MKGCCCMDS MKGDB \
+	MKHESIOD MKHTML \
+	MKIEEEFP MKINET6 MKINFO MKIPFILTER MKISCSI \
+	MKKERBEROS \
+	MKLINKLIB MKLINT \
+	MKMAN \
+	MKNLS \
+	MKOBJ \
+	MKPAM MKPF MKPIC MKPICINSTALL MKPICLIB MKPOSTFIX MKPROFILE \
+	MKSHARE MKSKEY MKSTATICLIB \
+	MKYP
+${var}?=	yes
 .endfor
 
 #
 # MK* options which default to "no".
 #
 .for var in \
-	CRYPTO_IDEA CRYPTO_MDC2 CRYPTO_RC5 DEBUG DEBUGLIB \
-	MANZ MODULAR OBJDIRS PRIVATELIB PUFFS SOFTFLOAT \
-	UNPRIVED UPDATE X11
-MK${var}?=	no
+	MKCRYPTO_IDEA MKCRYPTO_MDC2 MKCRYPTO_RC5 MKDEBUG MKDEBUGLIB \
+	MKMANZ MKMODULAR MKOBJDIRS MKPRIVATELIB MKPUFFS MKSOFTFLOAT \
+	MKUNPRIVED MKUPDATE MKX11
+${var}?=no
 .endfor
 
 #
@@ -641,33 +644,39 @@ HOST_INSTALL_SYMLINK?=	${INSTALL} ${SYMLINK} ${RENAME}
 #
 # USE_* options which default to "no" and will be forced to "no" if their
 # corresponding MK* variable is set to "no".
-# (The latter is implemented using the .for loop in the next block.)
 #
+.for var in USE_SKEY
+.if (${${var:S/USE_/MK/}} == "no")
+${var}:= no
+.else
+${var}?= no
+.endif
+.endfor
 
 #
 # USE_* options which default to "yes" unless their corresponding MK*
 # variable is set to "no".
 #
-.for var in HESIOD INET6 KERBEROS PAM SKEY YP
-.if (${MK${var}} == "no")
-USE_${var}:= no
+.for var in USE_HESIOD USE_INET6 USE_KERBEROS USE_PAM USE_YP
+.if (${${var:S/USE_/MK/}} == "no")
+${var}:= no
 .else
-USE_${var}?= yes
+${var}?= yes
 .endif
 .endfor
 
 #
 # USE_* options which default to "yes".
 #
-.for var in JEMALLOC
-USE_${var}?= yes
+.for var in USE_JEMALLOC
+${var}?= yes
 .endfor
 
 #
 # USE_* options which default to "no".
 #
 #.for var in
-#USE_${var}?= no
+#${var}?= no
 #.endfor
 
 #
