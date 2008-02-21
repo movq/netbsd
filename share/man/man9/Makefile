@@ -1,4 +1,4 @@
-#       $NetBSD: Makefile,v 1.258 2007/12/09 20:37:42 jmcneill Exp $
+#       $NetBSD: Makefile,v 1.261 2008/04/02 14:49:31 xtraeme Exp $
 
 #	Makefile for section 9 (kernel function and variable) manual pages.
 
@@ -346,7 +346,7 @@ MLINKS+=mbuf.9 m_get.9 mbuf.9 m_getclr.9 mbuf.9 m_gethdr.9 mbuf.9 m_devget.9 \
 	mbuf.9 M_MOVE_PKTHDR.9 \
 	mbuf.9 M_ALIGN.9 mbuf.9 MH_ALIGN.9 mbuf.9 M_LEADINGSPACE.9 \
 	mbuf.9 M_TRAILINGSPACE.9 mbuf.9 M_PREPEND.9 mbuf.9 MCHTYPE.9 \
-	mbuf.9 MEXTREMOVE.9 mbuf.9 MFREE.9
+	mbuf.9 MFREE.9
 MLINKS+=mca.9 mca_intr_establish.9 \
 	mca.9 mca_intr_disestablish.9 \
 	mca.9 mca_intr_evcnt.9 \
@@ -503,9 +503,11 @@ MLINKS+=rwlock.9 rw.9 rwlock.9 rw_init.9 rwlock.9 rw_destroy.9 \
 	rwlock.9 rw_tryenter.9 rwlock.9 rw_tryupgrade.9 \
 	rwlock.9 rw_downgrade.9 rwlock.9 rw_read_held.9 \
 	rwlock.9 rw_write_held.9 rwlock.9 rw_lock_held.9
-MAN+=	selrecord.9
-MLINKS+=selrecord.9 selwakeup.9 \
-	selrecord.9 selnotify.9
+MAN+=	select.9
+MLINKS+=select.9 selinit.9 \
+	select.9 seldestroy.9 \
+	select.9 selrecord.9 \
+	select.9 selnotify.9
 MLINKS+=setjmp.9 longjmp.9
 MLINKS+=shutdownhook_establish.9 shutdownhook_disestablish.9
 MLINKS+=signal.9 siginit.9 \
@@ -560,6 +562,12 @@ MLINKS+=sysctl.9 old_sysctl.9 \
 	sysctl.9 sysctl_query.9 \
 	sysctl.9 sysctl_teardown.9 \
 	sysctl.9 sysctl_unlock.9
+MLINKS+=sysmon_envsys.9 sysmon_envsys_create.9 \
+	sysmon_envsys.9 sysmon_envsys_destroy.9 \
+	sysmon_envsys.9 sysmon_envsys_register.9 \
+	sysmon_envsys.9 sysmon_envsys_unregister.9 \
+	sysmon_envsys.9 sysmon_envsys_sensor_attach.9 \
+	sysmon_envsys.9 sysmon_envsys_sensor_detach.9
 MLINKS+=time_second.9 boottime.9 time_second.9 time_uptime.9
 MLINKS+=tc.9 tc_intr_establish.9 \
 	tc.9 tc_intr_disestablish.9 \
