@@ -1,4 +1,4 @@
-#	$NetBSD: BRANCHES,v 1.241 2008/02/21 17:23:24 skrll Exp $
+#	$NetBSD: BRANCHES,v 1.239 2008/02/05 09:31:44 yamt Exp $
 #
 # This file contains a list of branches that exist in the NetBSD CVS
 # tree and their current state.
@@ -338,19 +338,6 @@ Notes:		http://www.kame.net
 		integration effort.  The branch is not actively used, as I
 		(itojun) use patch(1) and diff(1) for the KAME syncs.
 
-Branch:		keiichi-mipv6
-Description:	Developing Mobile IPv6 function
-Status:		Active
-Start Date:	21 Feb 2008
-End Date:	
-Base Tag:	keiichi-mipv6-base
-Maintainer:	Keiichi Shima <keiichi@netbsd.org>
-Scope:		sys, sbin, libc/net, distrib/sets, share/man/
-Notes:		http://www.mobileip.jp/
-		Work on developing Mobile IPv6/NEMO BS functions and
-		related MIPv6 based advanced functions on NetBSD.
-		Please consult keiichi for joining this activity.
-
 Branch:		kent-audio2
 Description:	In-kernel audio mixer
 Status:		Active
@@ -419,18 +406,6 @@ Base Tag:	mjf-ufs-trans-base
 Maintainer:	Matt Fleming <mjf@NetBSD.org>
 Scope:		kernel
 Notes:
-
-Branch:		nick-net80211-sync
-Description:	sync of net80211 with FreeBSD
-Status:		Active
-Start Date:	21 February 2008
-End Date:
-Base Tag:	nick-net80211-base
-Maintainer:	Nick Hudson <skrll@NetBSD.org>
-Scope:		sys/
-Notes:		Sync'ing net80211 with FreeBSD and drivers update. The branch is
-		currently only the kernel, but will likely extend to some userland
-		areas.
 
 Branch:	  	pkgviews
 Description:  	package views, enabling multiple conflicting packages to co-exist
